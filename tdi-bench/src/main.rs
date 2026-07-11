@@ -1,5 +1,6 @@
 use tdi_core::{
-    Action, State, TableSystem, TdiSignature, explore, uniform_future_block_entropy_bits,
+    Action, State, TableSystem, TdiSignature, analyze_recovery, explore,
+    uniform_future_block_entropy_bits,
 };
 
 fn cycle_four() -> Result<TableSystem, String> {
@@ -41,6 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pairs = two_cycles()?;
     let initial = State::new(0, 2)?;
     let actions = [Action::Noop, Action::Noop];
+    let perturbation = Action::Flip { node: 1 };
 
     let cycle_entropy = uniform_future_block_entropy_bits(&cycle, Action::Noop, 8)
         .map_err(|error| format!("cycle entropy failed: {error:?}"))?;
@@ -60,17 +62,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .map_err(|error| format!("pairs signature failed: {error:?}"))?;
 
-    println!("TDI-1 adversarial demonstration");
-    println!("cycle-4 block entropy   : {cycle_entropy:.1} bits");
-    println!("two-cycles entropy      : {pairs_entropy:.1} bits");
+    let cycle_recovery = analyze_recovery(&cycle, initial, perturbation, 16)
+        .map_err(|error| format!("cycle recovery failed: {error:?}"))?;
+
+    let pairs_recovery = analyze_recovery(&pairs, initial, perturbation, 16)
+        .map_err(|error| format!("pairs recovery failed: {error:?}"))?;
+
+    println!("TDI-1 adversarial recovery demonstration");
+    println!("cycle-4 block entropy    : {cycle_entropy:.1} bits");
+    println!("two-cycles block entropy : {pairs_entropy:.1} bits");
     println!(
-        "cycle-4 return profile  : {:?}",
+        "cycle-4 return profile   : {:?}",
         cycle_signature.return_profile()
     );
     println!(
         "two-cycles return profile: {:?}",
         pairs_signature.return_profile()
     );
+    println!("cycle-4 recovered        : {}", cycle_recovery.recovered());
+    println!("two-cycles recovered     : {}", pairs_recovery.recovered());
 
     Ok(())
 }
