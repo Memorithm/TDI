@@ -4,6 +4,7 @@
 
 mod action;
 mod baseline;
+mod dynamics;
 mod explorer;
 mod signature;
 mod state;
@@ -13,6 +14,7 @@ pub use action::Action;
 pub use baseline::{
     BaselineError, uniform_future_block_distribution, uniform_future_block_entropy_bits,
 };
+pub use dynamics::{OrbitAnalysis, OrbitError, analyze_orbit};
 pub use explorer::{ExploreError, ReachabilityReport, explore};
 pub use signature::{ExactRatio, SignatureError, TdiSignature};
 pub use state::{State, StateError};
