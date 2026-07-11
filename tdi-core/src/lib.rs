@@ -1,14 +1,11 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+#![forbid(unsafe_code)]
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+//! Noyau mathématique et algorithmique du benchmark TDI-1.
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+mod action;
+mod state;
+mod system;
+
+pub use action::Action;
+pub use state::{State, StateError};
+pub use system::TransitionSystem;
