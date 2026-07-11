@@ -5,6 +5,9 @@ version = 4
 [[package]]
 name = "tdi-bench"
 version = "0.1.0"
+dependencies = [
+ "tdi-core",
+]
 
 [[package]]
 name = "tdi-core"
