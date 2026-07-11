@@ -6,6 +6,7 @@ mod action;
 mod baseline;
 mod dynamics;
 mod explorer;
+mod recovery;
 mod signature;
 mod state;
 mod system;
@@ -16,6 +17,7 @@ pub use baseline::{
 };
 pub use dynamics::{OrbitAnalysis, OrbitError, analyze_orbit};
 pub use explorer::{ExploreError, ReachabilityReport, explore};
+pub use recovery::{RecoveryAnalysis, RecoveryError, analyze_recovery};
 pub use signature::{ExactRatio, SignatureError, TdiSignature};
 pub use state::{State, StateError};
 pub use system::{TableSystem, TableSystemError, TransitionSystem};
