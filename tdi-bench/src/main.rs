@@ -1,4 +1,4 @@
-use tdi_core::{Action, State, TableSystem, explore};
+use tdi_core::{Action, State, TableSystem, TdiSignature, explore};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let zero = State::new(0b00, 2)?;
@@ -16,17 +16,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .insert(one, Action::Noop, vec![three])
         .map_err(|error| format!("cannot insert transition: {error:?}"))?;
     system
-        .insert(two, Action::Noop, vec![three])
+        .insert(two, Action::Noop, vec![zero])
         .map_err(|error| format!("cannot insert transition: {error:?}"))?;
 
     let report = explore(&system, zero, &[Action::Noop, Action::Noop])
         .map_err(|error| format!("exploration failed: {error:?}"))?;
 
-    println!("TDI-1 exact reachability");
-    println!("depth 1 states : {:?}", report.reachable_count(1));
-    println!("depth 1 paths  : {:?}", report.path_count(1));
-    println!("depth 2 states : {:?}", report.reachable_count(2));
-    println!("depth 2 paths  : {:?}", report.path_count(2));
+    let signature = TdiSignature::from_report(&report)
+        .map_err(|error| format!("signature failed: {error:?}"))?;
+
+    println!("TDI-1 exact prospective signature");
+    println!("reachable profile : {:?}", signature.reachable_profile());
+    println!("path profile      : {:?}", signature.path_profile());
+
+    let returns: Vec<String> = signature
+        .return_profile()
+        .iter()
+        .map(|ratio| format!("{}/{}", ratio.numerator(), ratio.denominator()))
+        .collect();
+
+    println!("return profile    : {returns:?}");
 
     Ok(())
 }
