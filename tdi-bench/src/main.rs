@@ -1,41 +1,76 @@
-use tdi_core::{Action, State, TableSystem, TdiSignature, explore};
+use tdi_core::{
+    Action, State, TableSystem, TdiSignature, explore, uniform_future_block_entropy_bits,
+};
+
+fn cycle_four() -> Result<TableSystem, String> {
+    let mut system =
+        TableSystem::new(2).map_err(|error| format!("cannot create cycle-4: {error:?}"))?;
+
+    for (source, target) in [(0, 1), (1, 2), (2, 3), (3, 0)] {
+        system
+            .insert(
+                State::new(source, 2).map_err(|error| error.to_string())?,
+                Action::Noop,
+                vec![State::new(target, 2).map_err(|error| error.to_string())?],
+            )
+            .map_err(|error| format!("cannot insert cycle-4 transition: {error:?}"))?;
+    }
+
+    Ok(system)
+}
+
+fn two_cycles() -> Result<TableSystem, String> {
+    let mut system =
+        TableSystem::new(2).map_err(|error| format!("cannot create two-cycles: {error:?}"))?;
+
+    for (source, target) in [(0, 1), (1, 0), (2, 3), (3, 2)] {
+        system
+            .insert(
+                State::new(source, 2).map_err(|error| error.to_string())?,
+                Action::Noop,
+                vec![State::new(target, 2).map_err(|error| error.to_string())?],
+            )
+            .map_err(|error| format!("cannot insert two-cycles transition: {error:?}"))?;
+    }
+
+    Ok(system)
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let zero = State::new(0b00, 2)?;
-    let one = State::new(0b01, 2)?;
-    let two = State::new(0b10, 2)?;
-    let three = State::new(0b11, 2)?;
+    let cycle = cycle_four()?;
+    let pairs = two_cycles()?;
+    let initial = State::new(0, 2)?;
+    let actions = [Action::Noop, Action::Noop];
 
-    let mut system = TableSystem::new(2)
-        .map_err(|error| format!("cannot create transition system: {error:?}"))?;
+    let cycle_entropy = uniform_future_block_entropy_bits(&cycle, Action::Noop, 8)
+        .map_err(|error| format!("cycle entropy failed: {error:?}"))?;
 
-    system
-        .insert(zero, Action::Noop, vec![one, two])
-        .map_err(|error| format!("cannot insert transition: {error:?}"))?;
-    system
-        .insert(one, Action::Noop, vec![three])
-        .map_err(|error| format!("cannot insert transition: {error:?}"))?;
-    system
-        .insert(two, Action::Noop, vec![zero])
-        .map_err(|error| format!("cannot insert transition: {error:?}"))?;
+    let pairs_entropy = uniform_future_block_entropy_bits(&pairs, Action::Noop, 8)
+        .map_err(|error| format!("pairs entropy failed: {error:?}"))?;
 
-    let report = explore(&system, zero, &[Action::Noop, Action::Noop])
-        .map_err(|error| format!("exploration failed: {error:?}"))?;
+    let cycle_signature = TdiSignature::from_report(
+        &explore(&cycle, initial, &actions)
+            .map_err(|error| format!("cycle exploration failed: {error:?}"))?,
+    )
+    .map_err(|error| format!("cycle signature failed: {error:?}"))?;
 
-    let signature = TdiSignature::from_report(&report)
-        .map_err(|error| format!("signature failed: {error:?}"))?;
+    let pairs_signature = TdiSignature::from_report(
+        &explore(&pairs, initial, &actions)
+            .map_err(|error| format!("pairs exploration failed: {error:?}"))?,
+    )
+    .map_err(|error| format!("pairs signature failed: {error:?}"))?;
 
-    println!("TDI-1 exact prospective signature");
-    println!("reachable profile : {:?}", signature.reachable_profile());
-    println!("path profile      : {:?}", signature.path_profile());
-
-    let returns: Vec<String> = signature
-        .return_profile()
-        .iter()
-        .map(|ratio| format!("{}/{}", ratio.numerator(), ratio.denominator()))
-        .collect();
-
-    println!("return profile    : {returns:?}");
+    println!("TDI-1 adversarial demonstration");
+    println!("cycle-4 block entropy   : {cycle_entropy:.1} bits");
+    println!("two-cycles entropy      : {pairs_entropy:.1} bits");
+    println!(
+        "cycle-4 return profile  : {:?}",
+        cycle_signature.return_profile()
+    );
+    println!(
+        "two-cycles return profile: {:?}",
+        pairs_signature.return_profile()
+    );
 
     Ok(())
 }
