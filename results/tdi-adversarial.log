@@ -1,0 +1,7 @@
+TDI-1 adversarial recovery demonstration
+cycle-4 block entropy    : 2.0 bits
+two-cycles block entropy : 2.0 bits
+cycle-4 return profile   : [ExactRatio { numerator: 0, denominator: 1 }, ExactRatio { numerator: 0, denominator: 1 }]
+two-cycles return profile: [ExactRatio { numerator: 0, denominator: 1 }, ExactRatio { numerator: 1, denominator: 1 }]
+cycle-4 recovered        : true
+two-cycles recovered     : false

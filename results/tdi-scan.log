@@ -1,0 +1,19 @@
+TDI-1 exhaustive deterministic scan
+systems analyzed          : 256
+entropy buckets            : 5
+same-entropy opposite outcomes : 4904
+pairs separated by TDI profile : 3716
+
+RECOVERED WITNESS
+  system id      : 1
+  transitions    : [1, 0, 0, 0]
+  entropy        : 0.811278124459 bits
+  recovered      : true
+  return profile : [(0, 1), (0, 1)]
+
+FAILED WITNESS
+  system id      : 32
+  transitions    : [0, 0, 2, 0]
+  entropy        : 0.811278124459 bits
+  recovered      : false
+  return profile : [(1, 1), (1, 1)]

@@ -1,0 +1,40 @@
+Generating training systems...
+Generating untouched holdout systems...
+
+TDI-1 untouched holdout evaluation
+width             : 3
+training systems  : 12000
+holdout systems   : 4000
+training recovered: 8720
+holdout recovered : 2865
+
+ENTROPY ONLY
+  accuracy          : 0.716250
+  balanced accuracy : 0.500000
+  Brier score       : 0.200117
+  average precision : 0.760675
+
+TDI RETURN PROFILE
+  accuracy          : 0.812000
+  balanced accuracy : 0.706496
+  Brier score       : 0.144390
+  average precision : 0.827000
+
+ENTROPY + TDI
+  accuracy          : 0.814750
+  balanced accuracy : 0.692721
+  Brier score       : 0.141205
+  average precision : 0.854758
+
+TDI AUPRC gain over entropy      : 0.066325
+combined AUPRC gain over entropy : 0.094083
+TDI Brier improvement            : 0.055728
+combined Brier improvement       : 0.058912
+
+Bootstrap apparié déterministe : 2000 réplications
+IC 95 % gain AUPRC TDI: [0.051310, 0.080562] (médiane 0.066138)
+IC 95 % amélioration Brier TDI: [0.050331, 0.061267] (médiane 0.055780)
+IC 95 % gain AUPRC combiné: [0.081111, 0.106507] (médiane 0.093957)
+IC 95 % amélioration Brier combiné: [0.053399, 0.064276] (médiane 0.058929)
+
+CRITÈRE PRÉENREGISTRÉ TDI-1 : RÉUSSI

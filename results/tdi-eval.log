@@ -1,0 +1,25 @@
+TDI-1 leave-one-out predictive evaluation
+systems  : 256
+recovered: 188
+failed   : 68
+
+ENTROPY ONLY
+  accuracy          : 0.687500
+  balanced accuracy : 0.468085
+  Brier score       : 0.190466
+  average precision : 0.802612
+
+TDI RETURN PROFILE
+  accuracy          : 0.882812
+  balanced accuracy : 0.779412
+  Brier score       : 0.097820
+  average precision : 0.894798
+
+ENTROPY + TDI
+  accuracy          : 0.890625
+  balanced accuracy : 0.803504
+  Brier score       : 0.095877
+  average precision : 0.919627
+
+AUPRC gain over entropy : 0.117015
+Brier improvement       : 0.094589
