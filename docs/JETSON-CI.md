@@ -52,6 +52,21 @@ Shared Rust installation:
 /mnt/nvme/github-runners/home/.rustup
 ```
 
+The workflow uses this persistent installation directly. It does not
+download a Rust toolchain during each job and does not depend on a remote
+Cargo cache action.
+
+Persistent build directories:
+
+```text
+/mnt/nvme/github-runners/cache/tdi/formatting
+/mnt/nvme/github-runners/cache/tdi/tests
+/mnt/nvme/github-runners/cache/tdi/clippy
+```
+
+The only external action retained by the workflow is
+`actions/checkout@v5`.
+
 ## Services
 
 ```text
@@ -134,4 +149,7 @@ The four-runner configuration has been validated by:
 - one job assigned per runner;
 - a deliberate runner shutdown;
 - automatic systemd/watchdog recovery;
-- restoration to GitHub `online` status.
+- restoration to GitHub `online` status;
+- successful execution using the persistent shared Rust toolchain;
+- successful warm-cache execution of all four jobs in parallel, with every
+  job completing in less than one minute.
