@@ -4,3 +4,11 @@ members = [
     "tdi-core",
     "tdi-bench",
 ]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"

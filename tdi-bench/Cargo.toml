@@ -1,7 +1,12 @@
 [package]
 name = "tdi-bench"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Reproducible benchmarks for the TDI-1 prospective information hypothesis"
+
+[lints]
+workspace = true
 
 [dependencies]
 tdi-core = { path = "../tdi-core" }
