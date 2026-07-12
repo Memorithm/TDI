@@ -1,0 +1,62 @@
+Scanning 50625 exhaustive branching systems...
+
+TDI-2 exhaustive branching scan
+width                    : 2
+systems                  : 50625
+observation horizon      : 2
+outcome horizon          : 6
+fully recovered          : 4693
+not fully recovered      : 45932
+distinct final overlaps  : 3549
+
+FINAL OVERLAP SUMMARY
+  zero overlap    : 1632
+  partial overlap : 44300
+  full overlap    : 4693
+
+20 MOST FREQUENT FINAL OVERLAPS
+  63/64      : 4714
+  1/1       : 4693
+  0/1       : 1632
+  728/729     : 1146
+  31/32      : 1066
+  7/8       : 822
+  727/729     : 494
+  57/64      : 412
+  665/729     : 396
+  23327/23328   : 368
+  29/32      : 276
+  1/2       : 272
+  51/64      : 252
+  15/16      : 236
+  59/64      : 236
+  43/64      : 234
+  61/64      : 228
+  13/16      : 224
+  3/4       : 222
+  364/729     : 212
+
+ENTROPY PROFILE
+  buckets                  : 749
+  mixed-outcome buckets    : 85
+  records in mixed buckets : 18873
+
+MATCHED-HORIZON TOPOLOGY
+  buckets                  : 824
+  mixed-outcome buckets    : 73
+  records in mixed buckets : 13605
+
+ENTROPY + TOPOLOGY
+  buckets                  : 1481
+  mixed-outcome buckets    : 83
+  records in mixed buckets : 12513
+
+EARLY OVERLAP PROFILE
+  buckets                  : 160
+  mixed-outcome buckets    : 12
+  records in mixed buckets : 19138
+
+ENTROPY + TOPOLOGY + OVERLAP
+  buckets                  : 3779
+  mixed-outcome buckets    : 51
+  records in mixed buckets : 5680
