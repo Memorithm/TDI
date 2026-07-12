@@ -1,0 +1,62 @@
+Generating preregistered TDI-2 training systems...
+Generating untouched in-distribution holdout...
+Generating untouched out-of-distribution holdout...
+
+TDI-2 preregistered continuous evaluation
+training width          : 3
+OOD width               : 4
+training systems        : 12000
+holdout systems         : 4000
+OOD holdout systems     : 4000
+observation horizon     : 2
+outcome horizon         : 6
+ridge lambda            : 1
+training excluded       : 55
+holdout excluded        : 24
+OOD excluded            : 0
+training next seed      : 12055
+holdout next seed       : 1004024
+OOD next seed           : 2004000
+
+HOLDOUT PRINCIPAL — WIDTH 3
+
+BASELINE APPARIÉE
+  MSE      : 0.001816873
+  MAE      : 0.018304843
+  R²       : 0.393556075
+  Spearman : 0.411338780
+
+BASELINE + TDI-2
+  MSE      : 0.001579275
+  MAE      : 0.017156635
+  R²       : 0.472862476
+  Spearman : 0.557910624
+
+amélioration MSE          : 0.000237598
+réduction relative MSE    : 13.077285 %
+amélioration MAE          : 0.001148208
+
+HOLDOUT HORS DISTRIBUTION — WIDTH 4
+
+BASELINE APPARIÉE
+  MSE      : 0.157274396
+  MAE      : 0.372795169
+  R²       : -109506.813463054
+  Spearman : -0.507018418
+
+BASELINE + TDI-2
+  MSE      : 0.147526127
+  MAE      : 0.366151366
+  R²       : -102719.239290951
+  Spearman : -0.489819920
+
+amélioration MSE          : 0.009748269
+réduction relative MSE    : 6.198256 %
+amélioration MAE          : 0.006643803
+
+Bootstrap apparié déterministe : 2000 réplications
+IC 95 % amélioration MSE TDI-2: [0.000162544, 0.000315743] (médiane 0.000236356)
+IC 95 % amélioration MAE TDI-2: [0.000788787, 0.001495130] (médiane 0.001151804)
+
+CRITÈRE PRINCIPAL TDI-2 CONTINU : RÉUSSI
+CONFIRMATION HORS DISTRIBUTION  : RÉUSSIE

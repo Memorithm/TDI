@@ -91,14 +91,52 @@ impl ExactRatio {
         Self::new(self.numerator, denominator)
     }
 
-    /// Comparaison rationnelle exacte avec détection des dépassements.
+    /// Comparaison rationnelle exacte sans produit croisé.
+    ///
+    /// L’algorithme utilise les quotients successifs de l’algorithme
+    /// d’Euclide. Il évite ainsi tout dépassement intermédiaire, même lorsque
+    /// les produits croisés dépasseraient `u128`.
     #[must_use]
     pub fn checked_cmp(self, other: Self) -> Option<std::cmp::Ordering> {
-        let left = self.numerator.checked_mul(other.denominator)?;
+        let mut left_numerator = self.numerator;
+        let mut left_denominator = self.denominator;
+        let mut right_numerator = other.numerator;
+        let mut right_denominator = other.denominator;
+        let mut reversed = false;
 
-        let right = other.numerator.checked_mul(self.denominator)?;
+        loop {
+            let left_quotient = left_numerator / left_denominator;
+            let right_quotient = right_numerator / right_denominator;
 
-        Some(left.cmp(&right))
+            if left_quotient != right_quotient {
+                let ordering = left_quotient.cmp(&right_quotient);
+
+                return Some(if reversed {
+                    ordering.reverse()
+                } else {
+                    ordering
+                });
+            }
+
+            let left_remainder = left_numerator % left_denominator;
+            let right_remainder = right_numerator % right_denominator;
+
+            if left_remainder == 0 || right_remainder == 0 {
+                let ordering = left_remainder.cmp(&right_remainder);
+
+                return Some(if reversed {
+                    ordering.reverse()
+                } else {
+                    ordering
+                });
+            }
+
+            left_numerator = left_denominator;
+            left_denominator = left_remainder;
+            right_numerator = right_denominator;
+            right_denominator = right_remainder;
+            reversed = !reversed;
+        }
     }
 }
 
@@ -192,6 +230,21 @@ mod tests {
     #[test]
     fn rejects_zero_denominator() {
         assert_eq!(ExactRatio::new(1, 0), None);
+    }
+
+    #[test]
+    fn compares_large_ratios_without_cross_product_overflow() {
+        let maximum = u128::MAX;
+
+        let left = ExactRatio::new(maximum - 1, maximum).expect("valid ratio");
+
+        let right = ExactRatio::new(maximum - 2, maximum - 1).expect("valid ratio");
+
+        assert_eq!(left.checked_cmp(right), Some(std::cmp::Ordering::Greater));
+
+        assert_eq!(right.checked_cmp(left), Some(std::cmp::Ordering::Less));
+
+        assert_eq!(left.checked_cmp(left), Some(std::cmp::Ordering::Equal));
     }
 
     #[test]
