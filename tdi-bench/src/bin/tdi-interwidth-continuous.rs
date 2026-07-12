@@ -1252,10 +1252,18 @@ mod tests {
 
     #[test]
     fn preregistered_seed_offsets_are_disjoint() {
-        assert!(TRAIN_WIDTH_3_SEED_OFFSET < HOLDOUT_WIDTH_3_SEED_OFFSET);
-        assert!(HOLDOUT_WIDTH_3_SEED_OFFSET < TRAIN_WIDTH_4_SEED_OFFSET);
-        assert!(TRAIN_WIDTH_4_SEED_OFFSET < HOLDOUT_WIDTH_4_SEED_OFFSET);
-        assert!(HOLDOUT_WIDTH_4_SEED_OFFSET < OOD_WIDTH_5_SEED_OFFSET);
+        let offsets = [
+            TRAIN_WIDTH_3_SEED_OFFSET,
+            HOLDOUT_WIDTH_3_SEED_OFFSET,
+            TRAIN_WIDTH_4_SEED_OFFSET,
+            HOLDOUT_WIDTH_4_SEED_OFFSET,
+            OOD_WIDTH_5_SEED_OFFSET,
+        ];
+
+        assert!(
+            offsets.windows(2).all(|pair| pair[0] < pair[1]),
+            "preregistered seed offsets must be strictly increasing"
+        );
     }
 
     #[test]
