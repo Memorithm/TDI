@@ -29,8 +29,25 @@ jobs:
       CARGO_TARGET_DIR: /mnt/nvme/github-runners/cache/tdi/formatting
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
+      - name: Checkout repository
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git init .
+
+          git remote remove origin 2>/dev/null || true
+          git remote add origin             "https://github.com/${GITHUB_REPOSITORY}.git"
+
+          AUTH_HEADER="$(
+            printf 'x-access-token:%s' "$GITHUB_TOKEN" |
+              base64 -w 0
+          )"
+
+          git             -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH_HEADER}"             fetch               --no-tags               --prune               --depth=1               origin               "$GITHUB_REF"
+
+          git checkout             --force             --detach             "$GITHUB_SHA"
+
+          git clean -ffdx
 
       - name: Configure shared Rust
         run: |
@@ -51,8 +68,25 @@ jobs:
       CARGO_TARGET_DIR: /mnt/nvme/github-runners/cache/tdi/tests
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
+      - name: Checkout repository
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git init .
+
+          git remote remove origin 2>/dev/null || true
+          git remote add origin             "https://github.com/${GITHUB_REPOSITORY}.git"
+
+          AUTH_HEADER="$(
+            printf 'x-access-token:%s' "$GITHUB_TOKEN" |
+              base64 -w 0
+          )"
+
+          git             -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH_HEADER}"             fetch               --no-tags               --prune               --depth=1               origin               "$GITHUB_REF"
+
+          git checkout             --force             --detach             "$GITHUB_SHA"
+
+          git clean -ffdx
 
       - name: Configure shared Rust
         run: |
@@ -72,8 +106,25 @@ jobs:
       CARGO_TARGET_DIR: /mnt/nvme/github-runners/cache/tdi/clippy
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
+      - name: Checkout repository
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git init .
+
+          git remote remove origin 2>/dev/null || true
+          git remote add origin             "https://github.com/${GITHUB_REPOSITORY}.git"
+
+          AUTH_HEADER="$(
+            printf 'x-access-token:%s' "$GITHUB_TOKEN" |
+              base64 -w 0
+          )"
+
+          git             -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH_HEADER}"             fetch               --no-tags               --prune               --depth=1               origin               "$GITHUB_REF"
+
+          git checkout             --force             --detach             "$GITHUB_SHA"
+
+          git clean -ffdx
 
       - name: Configure shared Rust
         run: |
@@ -92,8 +143,25 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
+      - name: Checkout repository
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git init .
+
+          git remote remove origin 2>/dev/null || true
+          git remote add origin             "https://github.com/${GITHUB_REPOSITORY}.git"
+
+          AUTH_HEADER="$(
+            printf 'x-access-token:%s' "$GITHUB_TOKEN" |
+              base64 -w 0
+          )"
+
+          git             -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH_HEADER}"             fetch               --no-tags               --prune               --depth=1               origin               "$GITHUB_REF"
+
+          git checkout             --force             --detach             "$GITHUB_SHA"
+
+          git clean -ffdx
 
       - name: Verify preregistration hashes
         run: |
