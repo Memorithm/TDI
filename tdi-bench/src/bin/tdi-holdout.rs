@@ -23,12 +23,43 @@ const BOOTSTRAP_SEED: u64 = 0x5444_4931_2026_0712;
 struct Record {
     entropy_key: u64,
     return_profile: Vec<(u128, u128)>,
+    reference_transient_len: usize,
+    reference_period: usize,
+    perturbed_transient_len: usize,
+    perturbed_period: usize,
     recovered: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct CombinedKey {
     entropy_key: u64,
+    return_profile: Vec<(u128, u128)>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct OrbitKey {
+    reference_transient_len: usize,
+    reference_period: usize,
+    perturbed_transient_len: usize,
+    perturbed_period: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct EntropyOrbitKey {
+    entropy_key: u64,
+    orbit: OrbitKey,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct OrbitTdiKey {
+    orbit: OrbitKey,
+    return_profile: Vec<(u128, u128)>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct FullKey {
+    entropy_key: u64,
+    orbit: OrbitKey,
     return_profile: Vec<(u128, u128)>,
 }
 
@@ -148,8 +179,43 @@ fn analyze_seed(seed: u64) -> Result<Record, String> {
     Ok(Record {
         entropy_key: entropy.to_bits(),
         return_profile,
+        reference_transient_len: recovery.reference_orbit().transient_len(),
+        reference_period: recovery.reference_orbit().period(),
+        perturbed_transient_len: recovery.perturbed_orbit().transient_len(),
+        perturbed_period: recovery.perturbed_orbit().period(),
         recovered: recovery.recovered(),
     })
+}
+
+fn orbit_key(record: &Record) -> OrbitKey {
+    OrbitKey {
+        reference_transient_len: record.reference_transient_len,
+        reference_period: record.reference_period,
+        perturbed_transient_len: record.perturbed_transient_len,
+        perturbed_period: record.perturbed_period,
+    }
+}
+
+fn entropy_orbit_key(record: &Record) -> EntropyOrbitKey {
+    EntropyOrbitKey {
+        entropy_key: record.entropy_key,
+        orbit: orbit_key(record),
+    }
+}
+
+fn orbit_tdi_key(record: &Record) -> OrbitTdiKey {
+    OrbitTdiKey {
+        orbit: orbit_key(record),
+        return_profile: record.return_profile.clone(),
+    }
+}
+
+fn full_key(record: &Record) -> FullKey {
+    FullKey {
+        entropy_key: record.entropy_key,
+        orbit: orbit_key(record),
+        return_profile: record.return_profile.clone(),
+    }
 }
 
 fn generate_records(start_seed: u64, count: u64) -> Result<Vec<Record>, String> {
@@ -436,6 +502,11 @@ fn main() -> Result<(), String> {
         return_profile: record.return_profile.clone(),
     });
 
+    let orbit_model = fit_model(&training, orbit_key);
+    let entropy_orbit_model = fit_model(&training, entropy_orbit_key);
+    let orbit_tdi_model = fit_model(&training, orbit_tdi_key);
+    let full_model = fit_model(&training, full_key);
+
     let entropy_probabilities: Vec<f64> = test
         .iter()
         .map(|record| predict(&entropy_model, &record.entropy_key))
@@ -459,11 +530,35 @@ fn main() -> Result<(), String> {
         })
         .collect();
 
+    let orbit_probabilities: Vec<f64> = test
+        .iter()
+        .map(|record| predict(&orbit_model, &orbit_key(record)))
+        .collect();
+
+    let entropy_orbit_probabilities: Vec<f64> = test
+        .iter()
+        .map(|record| predict(&entropy_orbit_model, &entropy_orbit_key(record)))
+        .collect();
+
+    let orbit_tdi_probabilities: Vec<f64> = test
+        .iter()
+        .map(|record| predict(&orbit_tdi_model, &orbit_tdi_key(record)))
+        .collect();
+
+    let full_probabilities: Vec<f64> = test
+        .iter()
+        .map(|record| predict(&full_model, &full_key(record)))
+        .collect();
+
     let entropy = calculate_metrics(&test, &entropy_probabilities);
 
     let tdi = calculate_metrics(&test, &tdi_probabilities);
 
     let combined = calculate_metrics(&test, &combined_probabilities);
+    let orbit = calculate_metrics(&test, &orbit_probabilities);
+    let entropy_orbit = calculate_metrics(&test, &entropy_orbit_probabilities);
+    let orbit_tdi = calculate_metrics(&test, &orbit_tdi_probabilities);
+    let full = calculate_metrics(&test, &full_probabilities);
 
     let training_positive = training.iter().filter(|record| record.recovered).count();
 
@@ -481,10 +576,22 @@ fn main() -> Result<(), String> {
     print_metrics("ENTROPY ONLY", entropy);
     println!();
 
+    print_metrics("ORBIT BASELINE", orbit);
+    println!();
+
+    print_metrics("ENTROPY + ORBIT", entropy_orbit);
+    println!();
+
     print_metrics("TDI RETURN PROFILE", tdi);
     println!();
 
     print_metrics("ENTROPY + TDI", combined);
+    println!();
+
+    print_metrics("ORBIT + TDI", orbit_tdi);
+    println!();
+
+    print_metrics("ENTROPY + ORBIT + TDI", full);
     println!();
 
     println!(
@@ -507,6 +614,26 @@ fn main() -> Result<(), String> {
         entropy.brier - combined.brier
     );
 
+    println!(
+        "TDI AUPRC gain over orbit        : {:.6}",
+        orbit_tdi.average_precision - orbit.average_precision
+    );
+
+    println!(
+        "TDI Brier improvement over orbit : {:.6}",
+        orbit.brier - orbit_tdi.brier
+    );
+
+    println!(
+        "incremental AUPRC over entropy + orbit : {:.6}",
+        full.average_precision - entropy_orbit.average_precision
+    );
+
+    println!(
+        "incremental Brier over entropy + orbit : {:.6}",
+        entropy_orbit.brier - full.brier
+    );
+
     println!();
     println!(
         "Bootstrap apparié déterministe : \
@@ -519,6 +646,12 @@ fn main() -> Result<(), String> {
     let (combined_auprc_ci, combined_brier_ci) =
         paired_bootstrap(&test, &entropy_probabilities, &combined_probabilities);
 
+    let (orbit_tdi_auprc_ci, orbit_tdi_brier_ci) =
+        paired_bootstrap(&test, &orbit_probabilities, &orbit_tdi_probabilities);
+
+    let (full_auprc_ci, full_brier_ci) =
+        paired_bootstrap(&test, &entropy_orbit_probabilities, &full_probabilities);
+
     print_interval("IC 95 % gain AUPRC TDI", tdi_auprc_ci);
 
     print_interval("IC 95 % amélioration Brier TDI", tdi_brier_ci);
@@ -527,19 +660,54 @@ fn main() -> Result<(), String> {
 
     print_interval("IC 95 % amélioration Brier combiné", combined_brier_ci);
 
+    print_interval(
+        "IC 95 % gain AUPRC TDI sur baseline orbitale",
+        orbit_tdi_auprc_ci,
+    );
+
+    print_interval(
+        "IC 95 % amélioration Brier TDI sur baseline orbitale",
+        orbit_tdi_brier_ci,
+    );
+
+    print_interval(
+        "IC 95 % gain AUPRC incrémental sur entropie + orbite",
+        full_auprc_ci,
+    );
+
+    print_interval(
+        "IC 95 % amélioration Brier incrémentale sur entropie + orbite",
+        full_brier_ci,
+    );
+
     let observed_tdi_gain = tdi.average_precision - entropy.average_precision;
 
     let tdi_success =
         observed_tdi_gain >= 0.05 && tdi_auprc_ci.lower > 0.0 && tdi_brier_ci.lower > 0.0;
 
+    let observed_orbit_gain = orbit_tdi.average_precision - orbit.average_precision;
+
+    let orbit_incremental_success = observed_orbit_gain > 0.0
+        && orbit_tdi_auprc_ci.lower > 0.0
+        && orbit_tdi_brier_ci.lower > 0.0;
+
     println!();
     println!(
-        "CRITÈRE PRÉENREGISTRÉ TDI-1 : {}",
+        "CRITÈRE ORIGINAL TDI-1 VS ENTROPIE : {}",
         if tdi_success { "RÉUSSI" } else { "ÉCHOUÉ" }
     );
 
+    println!(
+        "CONTRÔLE DE NOUVEAUTÉ VS ORBITE     : {}",
+        if orbit_incremental_success {
+            "RÉUSSI"
+        } else {
+            "ÉCHOUÉ"
+        }
+    );
+
     if !tdi_success {
-        return Err("TDI-1 failed its preregistered holdout criterion".to_owned());
+        return Err("TDI-1 failed its original entropy-baseline criterion".to_owned());
     }
 
     Ok(())

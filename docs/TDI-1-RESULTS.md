@@ -73,3 +73,27 @@ TDI-1 ne démontre pas encore :
 - une supériorité sur toutes les mesures dynamiques existantes ;
 - une généralisation à des systèmes continus, stochastiques ou réels ;
 - une indépendance complète vis-à-vis du protocole de perturbation choisi.
+
+## Contrôle dynamique orbital
+
+Une baseline plus forte utilise les longueurs transitoires et les périodes des orbites de référence et perturbée.
+
+| Modèle | Accuracy | Balanced accuracy | Brier | AUPRC |
+|---|---:|---:|---:|---:|
+| Baseline orbitale | 0.926250 | 0.870044 | 0.053284 | 0.984074 |
+| Orbite + TDI | 0.926250 | 0.870044 | 0.053284 | 0.984074 |
+| Entropie + orbite | 0.917000 | 0.860927 | 0.057089 | 0.983091 |
+| Entropie + orbite + TDI | 0.917000 | 0.860927 | 0.057089 | 0.983091 |
+
+Les gains incrémentaux de TDI contre la baseline orbitale sont exactement nuls :
+
+- gain AUPRC : `0.000000` ;
+- amélioration Brier : `0.000000` ;
+- IC bootstrap à 95 % : `[0.000000, 0.000000]`.
+
+```text
+CRITÈRE ORIGINAL TDI-1 VS ENTROPIE : RÉUSSI
+CONTRÔLE DE NOUVEAUTÉ VS ORBITE     : ÉCHOUÉ
+```
+
+TDI-1 réfute donc la suffisance de l’entropie scalaire seule, mais ne démontre pas encore un invariant dynamique indépendant des propriétés orbitales classiques.

@@ -35,3 +35,9 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo run --release -p tdi-bench --bin tdi-holdout
 ```
+
+## Important negative control
+
+TDI-1 is positive against Shannon entropy alone, but a strong orbital baseline fully subsumes the tested TDI return profile. Incremental AUPRC and Brier gains are exactly zero.
+
+The current evidence therefore challenges entropy-only sufficiency, but does not yet establish a novel independent dynamical invariant.

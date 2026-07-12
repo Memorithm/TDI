@@ -14,6 +14,18 @@ ENTROPY ONLY
   Brier score       : 0.200117
   average precision : 0.760675
 
+ORBIT BASELINE
+  accuracy          : 0.926250
+  balanced accuracy : 0.870044
+  Brier score       : 0.053284
+  average precision : 0.984074
+
+ENTROPY + ORBIT
+  accuracy          : 0.917000
+  balanced accuracy : 0.860927
+  Brier score       : 0.057089
+  average precision : 0.983091
+
 TDI RETURN PROFILE
   accuracy          : 0.812000
   balanced accuracy : 0.706496
@@ -26,15 +38,36 @@ ENTROPY + TDI
   Brier score       : 0.141205
   average precision : 0.854758
 
+ORBIT + TDI
+  accuracy          : 0.926250
+  balanced accuracy : 0.870044
+  Brier score       : 0.053284
+  average precision : 0.984074
+
+ENTROPY + ORBIT + TDI
+  accuracy          : 0.917000
+  balanced accuracy : 0.860927
+  Brier score       : 0.057089
+  average precision : 0.983091
+
 TDI AUPRC gain over entropy      : 0.066325
 combined AUPRC gain over entropy : 0.094083
 TDI Brier improvement            : 0.055728
 combined Brier improvement       : 0.058912
+TDI AUPRC gain over orbit        : 0.000000
+TDI Brier improvement over orbit : 0.000000
+incremental AUPRC over entropy + orbit : 0.000000
+incremental Brier over entropy + orbit : 0.000000
 
 Bootstrap apparié déterministe : 2000 réplications
 IC 95 % gain AUPRC TDI: [0.051310, 0.080562] (médiane 0.066138)
 IC 95 % amélioration Brier TDI: [0.050331, 0.061267] (médiane 0.055780)
 IC 95 % gain AUPRC combiné: [0.081111, 0.106507] (médiane 0.093957)
 IC 95 % amélioration Brier combiné: [0.053399, 0.064276] (médiane 0.058929)
+IC 95 % gain AUPRC TDI sur baseline orbitale: [0.000000, 0.000000] (médiane 0.000000)
+IC 95 % amélioration Brier TDI sur baseline orbitale: [0.000000, 0.000000] (médiane 0.000000)
+IC 95 % gain AUPRC incrémental sur entropie + orbite: [0.000000, 0.000000] (médiane 0.000000)
+IC 95 % amélioration Brier incrémentale sur entropie + orbite: [0.000000, 0.000000] (médiane 0.000000)
 
-CRITÈRE PRÉENREGISTRÉ TDI-1 : RÉUSSI
+CRITÈRE ORIGINAL TDI-1 VS ENTROPIE : RÉUSSI
+CONTRÔLE DE NOUVEAUTÉ VS ORBITE     : ÉCHOUÉ
