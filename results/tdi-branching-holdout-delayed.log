@@ -1,0 +1,56 @@
+Generating TDI-2 branching training systems...
+Generating untouched branching holdout systems...
+
+TDI-2 untouched branching holdout evaluation
+width               : 3
+training systems    : 12000
+holdout systems     : 4000
+observation horizon : 2
+outcome horizon     : 6
+target              : delayed full recovery only
+excluded            : recovered by observation horizon
+training recovered  : 1
+holdout recovered   : 0
+
+ENTROPY PROFILE
+  accuracy          : 1.000000
+  balanced accuracy : 0.500000
+  Brier score       : 0.019672
+  average precision : 0.000000
+
+MATCHED-HORIZON TOPOLOGY
+  accuracy          : 1.000000
+  balanced accuracy : 0.500000
+  Brier score       : 0.037440
+  average precision : 0.000000
+
+ENTROPY + TOPOLOGY
+  accuracy          : 1.000000
+  balanced accuracy : 0.500000
+  Brier score       : 0.007822
+  average precision : 0.000000
+
+EARLY OVERLAP PROFILE
+  accuracy          : 0.999250
+  balanced accuracy : 0.499625
+  Brier score       : 0.023353
+  average precision : 0.000000
+
+ENTROPY + TOPOLOGY + OVERLAP
+  accuracy          : 1.000000
+  balanced accuracy : 0.500000
+  Brier score       : 0.000615
+  average precision : 0.000000
+
+overlap AUPRC gain over matched baseline : 0.000000
+overlap Brier improvement                : -0.015531
+full incremental AUPRC gain              : 0.000000
+full incremental Brier improvement       : 0.007208
+
+Bootstrap apparié déterministe : 2000 réplications
+IC 95 % gain AUPRC overlap sur baseline appariée: [0.000000, 0.000000] (médiane 0.000000)
+IC 95 % amélioration Brier overlap: [-0.016926, -0.014040] (médiane -0.015519)
+IC 95 % gain AUPRC incrémental complet: [0.000000, 0.000000] (médiane 0.000000)
+IC 95 % amélioration Brier incrémentale complète: [0.006392, 0.008054] (médiane 0.007200)
+
+CRITÈRE TDI-2 VS BASELINE APPARIÉE : ÉCHOUÉ
