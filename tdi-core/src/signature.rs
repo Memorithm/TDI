@@ -59,6 +59,47 @@ impl ExactRatio {
     pub fn as_f64(self) -> f64 {
         self.numerator as f64 / self.denominator as f64
     }
+
+    /// Addition rationnelle exacte avec détection des dépassements.
+    #[must_use]
+    pub fn checked_add(self, other: Self) -> Option<Self> {
+        let divisor = greatest_common_divisor(self.denominator, other.denominator);
+
+        let left_factor = other.denominator / divisor;
+        let right_factor = self.denominator / divisor;
+
+        let left_numerator = self.numerator.checked_mul(left_factor)?;
+
+        let right_numerator = other.numerator.checked_mul(right_factor)?;
+
+        let numerator = left_numerator.checked_add(right_numerator)?;
+
+        let denominator = self.denominator.checked_mul(left_factor)?;
+
+        Self::new(numerator, denominator)
+    }
+
+    /// Division exacte par un entier strictement positif.
+    #[must_use]
+    pub fn checked_div_u128(self, divisor: u128) -> Option<Self> {
+        if divisor == 0 {
+            return None;
+        }
+
+        let denominator = self.denominator.checked_mul(divisor)?;
+
+        Self::new(self.numerator, denominator)
+    }
+
+    /// Comparaison rationnelle exacte avec détection des dépassements.
+    #[must_use]
+    pub fn checked_cmp(self, other: Self) -> Option<std::cmp::Ordering> {
+        let left = self.numerator.checked_mul(other.denominator)?;
+
+        let right = other.numerator.checked_mul(self.denominator)?;
+
+        Some(left.cmp(&right))
+    }
 }
 
 impl TdiSignature {
