@@ -11,23 +11,33 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: tdi-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_HOME: /mnt/nvme/github-runners/home/.cargo
+  RUSTUP_HOME: /mnt/nvme/github-runners/home/.rustup
+
 jobs:
   formatting:
     name: Formatting
     runs-on: [self-hosted, Linux, ARM64, jetson, tdi]
     timeout-minutes: 30
+    env:
+      CARGO_TARGET_DIR: /mnt/nvme/github-runners/cache/tdi/formatting
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
+      - name: Configure shared Rust
+        run: |
+          echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
+          mkdir -p "$CARGO_TARGET_DIR"
+          "$CARGO_HOME/bin/rustc" --version
+          "$CARGO_HOME/bin/cargo" --version
+          "$CARGO_HOME/bin/rustfmt" --version
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -36,16 +46,19 @@ jobs:
     name: Tests
     runs-on: [self-hosted, Linux, ARM64, jetson, tdi]
     timeout-minutes: 30
+    env:
+      CARGO_TARGET_DIR: /mnt/nvme/github-runners/cache/tdi/tests
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
+      - name: Configure shared Rust
+        run: |
+          echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
+          mkdir -p "$CARGO_TARGET_DIR"
+          "$CARGO_HOME/bin/rustc" --version
+          "$CARGO_HOME/bin/cargo" --version
 
       - name: Run tests
         run: cargo test --workspace
@@ -54,18 +67,20 @@ jobs:
     name: Clippy
     runs-on: [self-hosted, Linux, ARM64, jetson, tdi]
     timeout-minutes: 30
+    env:
+      CARGO_TARGET_DIR: /mnt/nvme/github-runners/cache/tdi/clippy
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
+      - name: Configure shared Rust
+        run: |
+          echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
+          mkdir -p "$CARGO_TARGET_DIR"
+          "$CARGO_HOME/bin/rustc" --version
+          "$CARGO_HOME/bin/cargo" --version
+          "$CARGO_HOME/bin/cargo" clippy --version
 
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
