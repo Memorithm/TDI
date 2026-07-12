@@ -131,7 +131,6 @@ where
 
     Ok(distribution
         .values()
-        .copied()
         .map(|probability| {
             let value = probability.as_f64();
 

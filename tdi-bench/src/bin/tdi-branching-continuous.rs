@@ -210,7 +210,7 @@ fn topology_profile(
     Ok((reachable, paths))
 }
 
-fn ratio_value(ratio: ExactRatio) -> f64 {
+fn ratio_value(ratio: &ExactRatio) -> f64 {
     ratio.as_f64()
 }
 
@@ -274,8 +274,8 @@ fn analyze_seed(width: u8, seed: u64) -> Result<Option<Record>, String> {
         ));
     }
 
-    let first_overlap = ratio_value(overlap_profile[0]);
-    let second_overlap = ratio_value(overlap_profile[1]);
+    let first_overlap = ratio_value(&overlap_profile[0]);
+    let second_overlap = ratio_value(&overlap_profile[1]);
 
     let final_overlap = outcome
         .final_overlap()

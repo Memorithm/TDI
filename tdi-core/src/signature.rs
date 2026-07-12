@@ -1,10 +1,14 @@
+use num_bigint::BigUint;
+use num_integer::Integer;
+use num_traits::{ToPrimitive, Zero};
+
 use crate::ReachabilityReport;
 
 /// Rapport rationnel exact, sans conversion flottante.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExactRatio {
-    numerator: u128,
-    denominator: u128,
+    numerator: BigUint,
+    denominator: BigUint,
 }
 
 /// Erreurs de construction d'une signature TDI.
@@ -32,111 +36,126 @@ impl ExactRatio {
     /// Construit et réduit une fraction exacte.
     #[must_use]
     pub fn new(numerator: u128, denominator: u128) -> Option<Self> {
-        if denominator == 0 {
+        Self::from_biguint(BigUint::from(numerator), BigUint::from(denominator))
+    }
+
+    fn from_biguint(numerator: BigUint, denominator: BigUint) -> Option<Self> {
+        if denominator.is_zero() {
             return None;
         }
 
-        let divisor = greatest_common_divisor(numerator, denominator);
+        let divisor = numerator.gcd(&denominator);
 
         Some(Self {
-            numerator: numerator / divisor,
+            numerator: numerator / &divisor,
             denominator: denominator / divisor,
         })
     }
 
     #[must_use]
-    pub const fn numerator(self) -> u128 {
-        self.numerator
+    pub const fn numerator(&self) -> &BigUint {
+        &self.numerator
     }
 
     #[must_use]
-    pub const fn denominator(self) -> u128 {
-        self.denominator
+    pub const fn denominator(&self) -> &BigUint {
+        &self.denominator
+    }
+
+    /// Extrait les composantes sous forme `u128` lorsqu'elles tiennent
+    /// toutes les deux dans cette représentation.
+    #[must_use]
+    pub fn components_u128(&self) -> Option<(u128, u128)> {
+        Some((self.numerator.to_u128()?, self.denominator.to_u128()?))
     }
 
     /// Conversion destinée uniquement à l'affichage et aux modèles statistiques.
     #[must_use]
-    pub fn as_f64(self) -> f64 {
-        self.numerator as f64 / self.denominator as f64
+    pub fn as_f64(&self) -> f64 {
+        if self.numerator.is_zero() {
+            return 0.0;
+        }
+
+        if let (Some(numerator), Some(denominator)) =
+            (self.numerator.to_f64(), self.denominator.to_f64())
+        {
+            if numerator.is_finite() && denominator.is_finite() {
+                return numerator / denominator;
+            }
+        }
+
+        let numerator_bits = self.numerator.bits();
+        let denominator_bits = self.denominator.bits();
+
+        let numerator_shift = numerator_bits.saturating_sub(53) as usize;
+
+        let denominator_shift = denominator_bits.saturating_sub(53) as usize;
+
+        let numerator_top = (&self.numerator >> numerator_shift)
+            .to_u64()
+            .expect("top 53 numerator bits fit in u64");
+
+        let denominator_top = (&self.denominator >> denominator_shift)
+            .to_u64()
+            .expect("top 53 denominator bits fit in u64");
+
+        let exponent_difference = numerator_shift as i64 - denominator_shift as i64;
+
+        if exponent_difference < i64::from(i32::MIN) {
+            return 0.0;
+        }
+
+        if exponent_difference > i64::from(i32::MAX) {
+            return f64::INFINITY;
+        }
+
+        (numerator_top as f64 / denominator_top as f64) * 2.0_f64.powi(exponent_difference as i32)
     }
 
-    /// Addition rationnelle exacte avec détection des dépassements.
+    /// Addition rationnelle exacte sans limite de taille fixe.
     #[must_use]
-    pub fn checked_add(self, other: Self) -> Option<Self> {
-        let divisor = greatest_common_divisor(self.denominator, other.denominator);
+    pub fn checked_add(&self, other: &Self) -> Option<Self> {
+        let divisor = self.denominator.gcd(&other.denominator);
 
-        let left_factor = other.denominator / divisor;
-        let right_factor = self.denominator / divisor;
+        let left_factor = &other.denominator / &divisor;
 
-        let left_numerator = self.numerator.checked_mul(left_factor)?;
+        let right_factor = &self.denominator / &divisor;
 
-        let right_numerator = other.numerator.checked_mul(right_factor)?;
+        let numerator = &self.numerator * &left_factor + &other.numerator * &right_factor;
 
-        let numerator = left_numerator.checked_add(right_numerator)?;
+        let denominator = &self.denominator * left_factor;
 
-        let denominator = self.denominator.checked_mul(left_factor)?;
-
-        Self::new(numerator, denominator)
+        Self::from_biguint(numerator, denominator)
     }
 
     /// Division exacte par un entier strictement positif.
     #[must_use]
-    pub fn checked_div_u128(self, divisor: u128) -> Option<Self> {
+    pub fn checked_div_u128(&self, divisor: u128) -> Option<Self> {
         if divisor == 0 {
             return None;
         }
 
-        let denominator = self.denominator.checked_mul(divisor)?;
+        let divisor = BigUint::from(divisor);
 
-        Self::new(self.numerator, denominator)
+        let cancellation = self.numerator.gcd(&divisor);
+
+        let numerator = &self.numerator / &cancellation;
+
+        let remaining_divisor = divisor / cancellation;
+
+        let denominator = &self.denominator * remaining_divisor;
+
+        Self::from_biguint(numerator, denominator)
     }
 
-    /// Comparaison rationnelle exacte sans produit croisé.
-    ///
-    /// L’algorithme utilise les quotients successifs de l’algorithme
-    /// d’Euclide. Il évite ainsi tout dépassement intermédiaire, même lorsque
-    /// les produits croisés dépasseraient `u128`.
+    /// Comparaison rationnelle exacte par produits arbitrairement grands.
     #[must_use]
-    pub fn checked_cmp(self, other: Self) -> Option<std::cmp::Ordering> {
-        let mut left_numerator = self.numerator;
-        let mut left_denominator = self.denominator;
-        let mut right_numerator = other.numerator;
-        let mut right_denominator = other.denominator;
-        let mut reversed = false;
+    pub fn checked_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        let left = &self.numerator * &other.denominator;
 
-        loop {
-            let left_quotient = left_numerator / left_denominator;
-            let right_quotient = right_numerator / right_denominator;
+        let right = &other.numerator * &self.denominator;
 
-            if left_quotient != right_quotient {
-                let ordering = left_quotient.cmp(&right_quotient);
-
-                return Some(if reversed {
-                    ordering.reverse()
-                } else {
-                    ordering
-                });
-            }
-
-            let left_remainder = left_numerator % left_denominator;
-            let right_remainder = right_numerator % right_denominator;
-
-            if left_remainder == 0 || right_remainder == 0 {
-                let ordering = left_remainder.cmp(&right_remainder);
-
-                return Some(if reversed {
-                    ordering.reverse()
-                } else {
-                    ordering
-                });
-            }
-
-            left_numerator = left_denominator;
-            left_denominator = left_remainder;
-            right_numerator = right_denominator;
-            right_denominator = right_remainder;
-            reversed = !reversed;
-        }
+        Some(left.cmp(&right))
     }
 }
 
@@ -204,32 +223,43 @@ impl TdiSignature {
     }
 }
 
-const fn greatest_common_divisor(mut left: u128, mut right: u128) -> u128 {
-    while right != 0 {
-        let remainder = left % right;
-        left = right;
-        right = remainder;
-    }
-
-    if left == 0 { 1 } else { left }
-}
-
 #[cfg(test)]
 mod tests {
+    use num_bigint::BigUint;
+
     use crate::{Action, ExactRatio, SignatureError, State, TableSystem, TdiSignature, explore};
 
     #[test]
     fn reduces_exact_ratios() {
         let ratio = ExactRatio::new(6, 8).expect("non-zero denominator");
 
-        assert_eq!(ratio.numerator(), 3);
-        assert_eq!(ratio.denominator(), 4);
+        assert_eq!(ratio.numerator(), &BigUint::from(3_u8));
+        assert_eq!(ratio.denominator(), &BigUint::from(4_u8));
         assert_eq!(ratio.as_f64(), 0.75);
     }
 
     #[test]
     fn rejects_zero_denominator() {
         assert_eq!(ExactRatio::new(1, 0), None);
+    }
+
+    #[test]
+    fn supports_denominators_larger_than_u128() {
+        let mut ratio = ExactRatio::new(1, 1).expect("valid ratio");
+
+        for _ in 0..100 {
+            ratio = ratio
+                .checked_div_u128(3)
+                .expect("arbitrary-precision division succeeds");
+        }
+
+        let expected = BigUint::from(3_u8).pow(100);
+
+        assert_eq!(ratio.numerator(), &BigUint::from(1_u8));
+        assert_eq!(ratio.denominator(), &expected);
+        assert!(ratio.denominator().bits() > 128);
+        assert!(ratio.as_f64().is_finite());
+        assert!(ratio.as_f64() > 0.0);
     }
 
     #[test]
@@ -240,11 +270,11 @@ mod tests {
 
         let right = ExactRatio::new(maximum - 2, maximum - 1).expect("valid ratio");
 
-        assert_eq!(left.checked_cmp(right), Some(std::cmp::Ordering::Greater));
+        assert_eq!(left.checked_cmp(&right), Some(std::cmp::Ordering::Greater));
 
-        assert_eq!(right.checked_cmp(left), Some(std::cmp::Ordering::Less));
+        assert_eq!(right.checked_cmp(&left), Some(std::cmp::Ordering::Less));
 
-        assert_eq!(left.checked_cmp(left), Some(std::cmp::Ordering::Equal));
+        assert_eq!(left.checked_cmp(&left), Some(std::cmp::Ordering::Equal));
     }
 
     #[test]

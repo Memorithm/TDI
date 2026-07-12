@@ -171,3 +171,5 @@ jobs:
             docs/TDI-3-INTERWIDTH-PREREGISTRATION.sha256
           sha256sum -c \
             docs/TDI-3-INTERWIDTH-EVALUATOR.sha256
+          sha256sum -c \
+            docs/TDI-3-SCIENTIFIC-CODE.sha256

@@ -67,7 +67,7 @@ impl BranchingRecoveryAnalysis {
     /// Recouvrement à la dernière profondeur analysée.
     #[must_use]
     pub fn final_overlap(&self) -> Option<ExactRatio> {
-        self.overlap_profile.last().copied()
+        self.overlap_profile.last().cloned()
     }
 
     /// Indique si les distributions sont identiques à l'horizon final.

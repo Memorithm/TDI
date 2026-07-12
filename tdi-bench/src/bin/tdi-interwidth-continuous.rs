@@ -221,7 +221,7 @@ fn topology_profile(
     Ok((reachable, paths))
 }
 
-fn ratio_value(ratio: ExactRatio) -> f64 {
+fn ratio_value(ratio: &ExactRatio) -> f64 {
     ratio.as_f64()
 }
 
@@ -317,8 +317,8 @@ fn analyze_seed(width: u8, seed: u64) -> Result<Option<Record>, String> {
         ));
     }
 
-    let first_overlap = ratio_value(overlap_profile[0]);
-    let second_overlap = ratio_value(overlap_profile[1]);
+    let first_overlap = ratio_value(&overlap_profile[0]);
+    let second_overlap = ratio_value(&overlap_profile[1]);
 
     let final_overlap = outcome
         .final_overlap()
@@ -1147,9 +1147,9 @@ mod tests {
     use super::{
         BASELINE_FEATURE_COUNT, BOOTSTRAP_SEED, ConfidenceInterval, HOLDOUT_WIDTH_3_SEED_OFFSET,
         HOLDOUT_WIDTH_4_SEED_OFFSET, Metrics, OOD_WIDTH_5_SEED_OFFSET, Record, RidgeModel,
-        TDI_FEATURE_COUNT, TRAIN_WIDTH_3_SEED_OFFSET, TRAIN_WIDTH_4_SEED_OFFSET, average_ranks,
-        calculate_metrics, fit_ridge, generate_records, generate_successor_masks, paired_bootstrap,
-        predictions,
+        TDI_FEATURE_COUNT, TRAIN_WIDTH_3_SEED_OFFSET, TRAIN_WIDTH_4_SEED_OFFSET, analyze_seed,
+        average_ranks, calculate_metrics, fit_ridge, generate_records, generate_successor_masks,
+        paired_bootstrap, predictions,
     };
 
     #[test]
@@ -1263,6 +1263,14 @@ mod tests {
         assert!(
             offsets.windows(2).all(|pair| pair[0] < pair[1]),
             "preregistered seed offsets must be strictly increasing"
+        );
+    }
+
+    #[test]
+    fn width_five_regression_seed_does_not_overflow() {
+        assert!(
+            analyze_seed(5, OOD_WIDTH_5_SEED_OFFSET).is_ok(),
+            "width-5 seed 20_000_000 must not overflow exact arithmetic"
         );
     }
 

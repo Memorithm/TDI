@@ -9,6 +9,7 @@ cd "$ROOT" || exit 1
 
 PREREG_HASH="docs/TDI-3-INTERWIDTH-PREREGISTRATION.sha256"
 EVALUATOR_HASH="docs/TDI-3-INTERWIDTH-EVALUATOR.sha256"
+SCIENTIFIC_CODE_HASH="docs/TDI-3-SCIENTIFIC-CODE.sha256"
 RESULT_DIR="results"
 RESULT_FILE="${RESULT_DIR}/tdi-interwidth-continuous.log"
 
@@ -29,6 +30,11 @@ echo
 echo "=== INTÉGRITÉ DE L’ÉVALUATEUR GELÉ ==="
 
 sha256sum -c "$EVALUATOR_HASH" || exit 1
+
+echo
+echo "=== INTÉGRITÉ DU CODE SCIENTIFIQUE ==="
+
+sha256sum -c "$SCIENTIFIC_CODE_HASH" || exit 1
 
 echo
 echo "=== ÉTAT GIT ==="
