@@ -9,3 +9,6 @@ description = "Exact finite-state primitives for prospective dynamic information
 workspace = true
 
 [dependencies]
+num-bigint = "0.4"
+num-integer = "0.1"
+num-traits = "0.2"

@@ -180,8 +180,14 @@ mod tests {
             second_signature.return_profile()
         );
 
-        assert_eq!(first_signature.return_profile()[1].numerator(), 0);
+        assert_eq!(
+            first_signature.return_profile()[1].numerator(),
+            &num_bigint::BigUint::from(0_u8)
+        );
 
-        assert_eq!(second_signature.return_profile()[1].numerator(), 1);
+        assert_eq!(
+            second_signature.return_profile()[1].numerator(),
+            &num_bigint::BigUint::from(1_u8)
+        );
     }
 }

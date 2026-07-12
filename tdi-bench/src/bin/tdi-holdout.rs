@@ -173,8 +173,12 @@ fn analyze_seed(seed: u64) -> Result<Record, String> {
     let return_profile = signature
         .return_profile()
         .iter()
-        .map(|ratio| (ratio.numerator(), ratio.denominator()))
-        .collect();
+        .map(|ratio| {
+            ratio
+                .components_u128()
+                .ok_or_else(|| "return-profile ratio exceeds u128".to_owned())
+        })
+        .collect::<Result<Vec<_>, String>>()?;
 
     Ok(Record {
         entropy_key: entropy.to_bits(),

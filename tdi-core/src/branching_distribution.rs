@@ -74,14 +74,14 @@ where
                 .ok_or(BranchingDistributionError::ProbabilityOverflow { state, depth })?;
 
             for successor in successors {
-                let updated = match next.get(&successor).copied() {
-                    Some(existing) => existing.checked_add(branch_probability).ok_or(
+                let updated = match next.get(&successor).cloned() {
+                    Some(existing) => existing.checked_add(&branch_probability).ok_or(
                         BranchingDistributionError::ProbabilityOverflow {
                             state: successor,
                             depth,
                         },
                     )?,
-                    None => branch_probability,
+                    None => branch_probability.clone(),
                 };
 
                 next.insert(successor, updated);
@@ -106,15 +106,15 @@ pub fn distribution_overlap(
 
     let zero = ExactRatio::new(0, 1).expect("zero is a valid probability");
 
-    let mut overlap = zero;
+    let mut overlap = zero.clone();
 
     for state in states {
-        let left_probability = left.get(&state).copied().unwrap_or(zero);
+        let left_probability = left.get(&state).cloned().unwrap_or_else(|| zero.clone());
 
-        let right_probability = right.get(&state).copied().unwrap_or(zero);
+        let right_probability = right.get(&state).cloned().unwrap_or_else(|| zero.clone());
 
         let minimum = match left_probability
-            .checked_cmp(right_probability)
+            .checked_cmp(&right_probability)
             .ok_or(DistributionMathError::ArithmeticOverflow)?
         {
             Ordering::Greater => right_probability,
@@ -122,7 +122,7 @@ pub fn distribution_overlap(
         };
 
         overlap = overlap
-            .checked_add(minimum)
+            .checked_add(&minimum)
             .ok_or(DistributionMathError::ArithmeticOverflow)?;
     }
 

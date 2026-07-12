@@ -194,8 +194,10 @@ fn topology_profile(
     Ok((reachable, paths))
 }
 
-fn ratio_pair(ratio: ExactRatio) -> (u128, u128) {
-    (ratio.numerator(), ratio.denominator())
+fn ratio_pair(ratio: &ExactRatio) -> Result<(u128, u128), String> {
+    ratio
+        .components_u128()
+        .ok_or_else(|| "overlap ratio exceeds u128".to_owned())
 }
 
 fn analyze_seed(seed: u64) -> Result<Option<Record>, String> {
@@ -266,9 +268,8 @@ fn analyze_seed(seed: u64) -> Result<Option<Record>, String> {
             profile: observation
                 .overlap_profile()
                 .iter()
-                .copied()
                 .map(ratio_pair)
-                .collect(),
+                .collect::<Result<Vec<_>, String>>()?,
         },
         recovered: outcome.fully_recovered(),
     }))
