@@ -148,6 +148,19 @@ impl ExactRatio {
         Self::from_biguint(numerator, denominator)
     }
 
+    /// Calcule exactement `1 - self` lorsque la fraction appartient à `[0, 1]`.
+    #[must_use]
+    pub fn checked_complement(&self) -> Option<Self> {
+        if self.numerator > self.denominator {
+            return None;
+        }
+
+        Self::from_biguint(
+            &self.denominator - &self.numerator,
+            self.denominator.clone(),
+        )
+    }
+
     /// Comparaison rationnelle exacte par produits arbitrairement grands.
     #[must_use]
     pub fn checked_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
@@ -260,6 +273,25 @@ mod tests {
         assert!(ratio.denominator().bits() > 128);
         assert!(ratio.as_f64().is_finite());
         assert!(ratio.as_f64() > 0.0);
+    }
+
+    #[test]
+    fn computes_exact_complements() {
+        let ratio = ExactRatio::new(7, 8).expect("valid ratio");
+        let complement = ratio
+            .checked_complement()
+            .expect("ratio belongs to the unit interval");
+
+        assert_eq!(complement.numerator(), &BigUint::from(1_u8));
+        assert_eq!(complement.denominator(), &BigUint::from(8_u8));
+
+        let one = ExactRatio::new(1, 1).expect("valid ratio");
+        let zero = one
+            .checked_complement()
+            .expect("one belongs to the unit interval");
+
+        assert_eq!(zero.numerator(), &BigUint::from(0_u8));
+        assert_eq!(zero.denominator(), &BigUint::from(1_u8));
     }
 
     #[test]
