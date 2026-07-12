@@ -6,6 +6,7 @@ mod action;
 mod baseline;
 mod branching_baseline;
 mod branching_distribution;
+mod branching_recovery;
 mod dynamics;
 mod explorer;
 mod recovery;
@@ -24,6 +25,9 @@ pub use branching_baseline::{
 pub use branching_distribution::{
     BranchingDistributionError, DistributionMathError, distribution_overlap,
     uniform_branching_state_distribution,
+};
+pub use branching_recovery::{
+    BranchingRecoveryAnalysis, BranchingRecoveryError, analyze_branching_recovery,
 };
 pub use dynamics::{OrbitAnalysis, OrbitError, analyze_orbit};
 pub use explorer::{ExploreError, ReachabilityReport, explore};
