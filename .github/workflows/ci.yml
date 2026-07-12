@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - tdi-2-branching
+      - tdi-3-interwidth
   pull_request:
   workflow_dispatch:
 
@@ -94,7 +95,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Verify preregistration hash
+      - name: Verify preregistration hashes
         run: |
           sha256sum -c \
             docs/TDI-2-CONTINUOUS-PREREGISTRATION.sha256
+          sha256sum -c \
+            docs/TDI-3-INTERWIDTH-PREREGISTRATION.sha256
