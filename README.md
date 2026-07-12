@@ -82,6 +82,15 @@ The current results do not yet establish:
 - `results/`: captured deterministic reference outputs.
 - `scripts/`: reproducibility commands.
 
+## Jetson self-hosted CI
+
+The validation workflow runs in parallel on four ARM64 GitHub Actions runners
+hosted by the Jetson. Formatting, tests, Clippy and preregistration integrity
+are separate jobs.
+
+Operational details are documented in
+[`docs/JETSON-CI.md`](docs/JETSON-CI.md).
+
 ## Validation
 
 ```bash
