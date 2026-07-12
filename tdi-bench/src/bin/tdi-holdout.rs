@@ -16,6 +16,9 @@ const ENTROPY_HORIZON: usize = 8;
 const TDI_HORIZON: usize = 4;
 const RECOVERY_LIMIT: usize = 32;
 
+const BOOTSTRAP_REPLICATES: usize = 2_000;
+const BOOTSTRAP_SEED: u64 = 0x5444_4931_2026_0712;
+
 #[derive(Clone, Debug)]
 struct Record {
     entropy_key: u64,
@@ -41,6 +44,34 @@ struct Metrics {
     balanced_accuracy: f64,
     brier: f64,
     average_precision: f64,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ConfidenceInterval {
+    lower: f64,
+    median: f64,
+    upper: f64,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct DeterministicRng {
+    state: u64,
+}
+
+impl DeterministicRng {
+    const fn new(seed: u64) -> Self {
+        Self { state: seed }
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        self.state = self.state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+
+        splitmix64(self.state)
+    }
+
+    fn index(&mut self, upper: usize) -> usize {
+        (self.next_u64() % upper as u64) as usize
+    }
 }
 
 fn splitmix64(mut value: u64) -> u64 {
@@ -249,6 +280,138 @@ fn calculate_metrics(records: &[Record], probabilities: &[f64]) -> Metrics {
     }
 }
 
+fn average_precision_for_indices(
+    records: &[Record],
+    probabilities: &[f64],
+    indices: &[usize],
+) -> f64 {
+    let positives = indices
+        .iter()
+        .filter(|&&index| records[index].recovered)
+        .count();
+
+    if positives == 0 {
+        return 0.0;
+    }
+
+    let mut score_groups = BTreeMap::<u64, (usize, usize)>::new();
+
+    for &index in indices {
+        let group = score_groups
+            .entry(probabilities[index].to_bits())
+            .or_default();
+
+        group.0 += 1;
+
+        if records[index].recovered {
+            group.1 += 1;
+        }
+    }
+
+    let mut ordered_groups: Vec<(f64, usize, usize)> = score_groups
+        .into_iter()
+        .map(|(bits, (total, positive))| (f64::from_bits(bits), total, positive))
+        .collect();
+
+    ordered_groups.sort_by(|left, right| right.0.total_cmp(&left.0));
+
+    let mut cumulative_true_positive = 0_usize;
+    let mut cumulative_false_positive = 0_usize;
+    let mut previous_recall = 0.0_f64;
+    let mut average_precision = 0.0_f64;
+
+    for (_, total, positive) in ordered_groups {
+        cumulative_true_positive += positive;
+        cumulative_false_positive += total - positive;
+
+        let recall = cumulative_true_positive as f64 / positives as f64;
+
+        let precision = cumulative_true_positive as f64
+            / (cumulative_true_positive + cumulative_false_positive) as f64;
+
+        average_precision += (recall - previous_recall) * precision;
+
+        previous_recall = recall;
+    }
+
+    average_precision
+}
+
+fn brier_for_indices(records: &[Record], probabilities: &[f64], indices: &[usize]) -> f64 {
+    indices
+        .iter()
+        .map(|&index| {
+            let target = if records[index].recovered { 1.0 } else { 0.0 };
+
+            (target - probabilities[index]).powi(2)
+        })
+        .sum::<f64>()
+        / indices.len() as f64
+}
+
+fn percentile(sorted: &[f64], quantile: f64) -> f64 {
+    let position = quantile * (sorted.len() - 1) as f64;
+    let lower = position.floor() as usize;
+    let upper = position.ceil() as usize;
+
+    if lower == upper {
+        sorted[lower]
+    } else {
+        let weight = position - lower as f64;
+        sorted[lower] * (1.0 - weight) + sorted[upper] * weight
+    }
+}
+
+fn confidence_interval(mut values: Vec<f64>) -> ConfidenceInterval {
+    values.sort_by(f64::total_cmp);
+
+    ConfidenceInterval {
+        lower: percentile(&values, 0.025),
+        median: percentile(&values, 0.500),
+        upper: percentile(&values, 0.975),
+    }
+}
+
+fn paired_bootstrap(
+    records: &[Record],
+    baseline: &[f64],
+    challenger: &[f64],
+) -> (ConfidenceInterval, ConfidenceInterval) {
+    let mut rng = DeterministicRng::new(BOOTSTRAP_SEED);
+    let mut indices = vec![0_usize; records.len()];
+    let mut auprc_gains = Vec::with_capacity(BOOTSTRAP_REPLICATES);
+    let mut brier_improvements = Vec::with_capacity(BOOTSTRAP_REPLICATES);
+
+    for _ in 0..BOOTSTRAP_REPLICATES {
+        for index in &mut indices {
+            *index = rng.index(records.len());
+        }
+
+        let baseline_auprc = average_precision_for_indices(records, baseline, &indices);
+
+        let challenger_auprc = average_precision_for_indices(records, challenger, &indices);
+
+        let baseline_brier = brier_for_indices(records, baseline, &indices);
+
+        let challenger_brier = brier_for_indices(records, challenger, &indices);
+
+        auprc_gains.push(challenger_auprc - baseline_auprc);
+        brier_improvements.push(baseline_brier - challenger_brier);
+    }
+
+    (
+        confidence_interval(auprc_gains),
+        confidence_interval(brier_improvements),
+    )
+}
+
+fn print_interval(label: &str, interval: ConfidenceInterval) {
+    println!(
+        "{label}: [{:.6}, {:.6}] (médiane {:.6})",
+        interval.lower, interval.upper, interval.median
+    );
+}
+
 fn print_metrics(label: &str, metrics: Metrics) {
     println!("{label}");
     println!("  accuracy          : {:.6}", metrics.accuracy);
@@ -343,6 +506,41 @@ fn main() -> Result<(), String> {
         "combined Brier improvement       : {:.6}",
         entropy.brier - combined.brier
     );
+
+    println!();
+    println!(
+        "Bootstrap apparié déterministe : \
+         {BOOTSTRAP_REPLICATES} réplications"
+    );
+
+    let (tdi_auprc_ci, tdi_brier_ci) =
+        paired_bootstrap(&test, &entropy_probabilities, &tdi_probabilities);
+
+    let (combined_auprc_ci, combined_brier_ci) =
+        paired_bootstrap(&test, &entropy_probabilities, &combined_probabilities);
+
+    print_interval("IC 95 % gain AUPRC TDI", tdi_auprc_ci);
+
+    print_interval("IC 95 % amélioration Brier TDI", tdi_brier_ci);
+
+    print_interval("IC 95 % gain AUPRC combiné", combined_auprc_ci);
+
+    print_interval("IC 95 % amélioration Brier combiné", combined_brier_ci);
+
+    let observed_tdi_gain = tdi.average_precision - entropy.average_precision;
+
+    let tdi_success =
+        observed_tdi_gain >= 0.05 && tdi_auprc_ci.lower > 0.0 && tdi_brier_ci.lower > 0.0;
+
+    println!();
+    println!(
+        "CRITÈRE PRÉENREGISTRÉ TDI-1 : {}",
+        if tdi_success { "RÉUSSI" } else { "ÉCHOUÉ" }
+    );
+
+    if !tdi_success {
+        return Err("TDI-1 failed its preregistered holdout criterion".to_owned());
+    }
 
     Ok(())
 }
