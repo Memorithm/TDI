@@ -1,0 +1,193 @@
+name: TDI-5 CI
+
+on:
+  push:
+    branches:
+      - tdi-5-continuous-deficit-geometry
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tdi-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_HOME: /mnt/nvme/github-runners/home/.cargo
+  RUSTUP_HOME: /mnt/nvme/github-runners/home/.rustup
+
+jobs:
+  formatting:
+    name: Formatting
+    runs-on: [self-hosted, Linux, ARM64, jetson, tdi]
+    timeout-minutes: 30
+    env:
+      CARGO_TARGET_DIR: /mnt/nvme/github-runners/cache/tdi/formatting
+
+    steps:
+      - name: Checkout repository
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git init .
+
+          git remote remove origin 2>/dev/null || true
+          git remote add origin             "https://github.com/${GITHUB_REPOSITORY}.git"
+
+          AUTH_HEADER="$(
+            printf 'x-access-token:%s' "$GITHUB_TOKEN" |
+              base64 -w 0
+          )"
+
+          git             -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH_HEADER}"             fetch               --no-tags               --prune               --depth=1               origin               "$GITHUB_REF"
+
+          git checkout             --force             --detach             "$GITHUB_SHA"
+
+          git clean -ffdx
+
+      - name: Configure shared Rust
+        run: |
+          echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
+          mkdir -p "$CARGO_TARGET_DIR"
+          "$CARGO_HOME/bin/rustc" --version
+          "$CARGO_HOME/bin/cargo" --version
+          "$CARGO_HOME/bin/rustfmt" --version
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  tests:
+    name: Tests
+    runs-on: [self-hosted, Linux, ARM64, jetson, tdi]
+    timeout-minutes: 30
+    env:
+      CARGO_TARGET_DIR: /mnt/nvme/github-runners/cache/tdi/tests
+
+    steps:
+      - name: Checkout repository
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git init .
+
+          git remote remove origin 2>/dev/null || true
+          git remote add origin             "https://github.com/${GITHUB_REPOSITORY}.git"
+
+          AUTH_HEADER="$(
+            printf 'x-access-token:%s' "$GITHUB_TOKEN" |
+              base64 -w 0
+          )"
+
+          git             -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH_HEADER}"             fetch               --no-tags               --prune               --depth=1               origin               "$GITHUB_REF"
+
+          git checkout             --force             --detach             "$GITHUB_SHA"
+
+          git clean -ffdx
+
+      - name: Configure shared Rust
+        run: |
+          echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
+          mkdir -p "$CARGO_TARGET_DIR"
+          "$CARGO_HOME/bin/rustc" --version
+          "$CARGO_HOME/bin/cargo" --version
+
+      - name: Run tests
+        run: cargo test --workspace --offline
+
+  clippy:
+    name: Clippy
+    runs-on: [self-hosted, Linux, ARM64, jetson, tdi]
+    timeout-minutes: 30
+    env:
+      CARGO_TARGET_DIR: /mnt/nvme/github-runners/cache/tdi/clippy
+
+    steps:
+      - name: Checkout repository
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git init .
+
+          git remote remove origin 2>/dev/null || true
+          git remote add origin             "https://github.com/${GITHUB_REPOSITORY}.git"
+
+          AUTH_HEADER="$(
+            printf 'x-access-token:%s' "$GITHUB_TOKEN" |
+              base64 -w 0
+          )"
+
+          git             -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH_HEADER}"             fetch               --no-tags               --prune               --depth=1               origin               "$GITHUB_REF"
+
+          git checkout             --force             --detach             "$GITHUB_SHA"
+
+          git clean -ffdx
+
+      - name: Configure shared Rust
+        run: |
+          echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
+          mkdir -p "$CARGO_TARGET_DIR"
+          "$CARGO_HOME/bin/rustc" --version
+          "$CARGO_HOME/bin/cargo" --version
+          "$CARGO_HOME/bin/cargo" clippy --version
+
+      - name: Build frozen TDI-5 evaluator
+        run: >-
+          cargo build
+          --release
+          --offline
+          --bin tdi-continuous-deficit-geometry
+
+      - name: Run Clippy
+        run: cargo clippy --offline --workspace --all-targets -- -D warnings
+
+  integrity:
+    name: Preregistration integrity
+    runs-on: [self-hosted, Linux, ARM64, jetson, tdi]
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git init .
+
+          git remote remove origin 2>/dev/null || true
+          git remote add origin             "https://github.com/${GITHUB_REPOSITORY}.git"
+
+          AUTH_HEADER="$(
+            printf 'x-access-token:%s' "$GITHUB_TOKEN" |
+              base64 -w 0
+          )"
+
+          git             -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH_HEADER}"             fetch               --no-tags               --prune               --depth=1               origin               "$GITHUB_REF"
+
+          git checkout             --force             --detach             "$GITHUB_SHA"
+
+          git clean -ffdx
+
+      - name: Verify preregistration hashes
+        run: |
+          sha256sum -c \
+            docs/TDI-2-CONTINUOUS-PREREGISTRATION.sha256
+          sha256sum -c \
+            docs/TDI-3-INTERWIDTH-PREREGISTRATION.sha256
+          sha256sum -c \
+            docs/TDI-3-INTERWIDTH-EVALUATOR.sha256
+          sha256sum -c \
+            docs/TDI-3-SCIENTIFIC-CODE.sha256
+          sha256sum -c \
+            docs/TDI-4-TARGET-GEOMETRY-PREREGISTRATION.sha256
+          sha256sum -c \
+            docs/TDI-4-TARGET-GEOMETRY-EVALUATOR.sha256
+          sha256sum -c \
+            docs/TDI-4-SCIENTIFIC-CODE.sha256
+          bash -n scripts/reproduce-tdi4.sh
+          sha256sum -c \
+            docs/TDI-5-CONTINUOUS-DEFICIT-GEOMETRY-PREREGISTRATION.sha256
+          sha256sum -c \
+            docs/TDI-5-CONTINUOUS-DEFICIT-GEOMETRY-EVALUATOR.sha256
+          sha256sum -c \
+            docs/TDI-5-SCIENTIFIC-CODE.sha256
+          bash -n scripts/reproduce-tdi5.sh
