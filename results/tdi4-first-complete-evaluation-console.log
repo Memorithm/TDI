@@ -1,0 +1,851 @@
+=== REPRODUCTION TDI-4 ===
+répertoire : /mnt/nvme/TDI
+rustc      : rustc 1.97.0 (2d8144b78 2026-07-07)
+cargo      : cargo 1.97.0 (c980f4866 2026-06-30)
+commit     : 367bff80467d22f0aee0b3122de9dac893a0e0b3
+
+=== INTÉGRITÉ DU PRÉENREGISTREMENT ===
+docs/TDI-4-TARGET-GEOMETRY-PREREGISTRATION.md: OK
+
+=== INTÉGRITÉ DE L’ÉVALUATEUR GELÉ ===
+tdi-bench/src/bin/tdi-target-geometry.rs: OK
+
+=== INTÉGRITÉ DU CODE SCIENTIFIQUE ===
+.cargo/config.toml: OK
+.github/workflows/ci.yml: OK
+Cargo.lock: OK
+Cargo.toml: OK
+docs/TDI-4-CI-INTEGRITY-CORRECTION.md: OK
+docs/TDI-4-TARGET-GEOMETRY-EVALUATOR.sha256: OK
+docs/TDI-4-TARGET-GEOMETRY-PREREGISTRATION.md: OK
+docs/TDI-4-TARGET-GEOMETRY-PREREGISTRATION.sha256: OK
+scripts/reproduce-tdi4.sh: OK
+tdi-bench/Cargo.toml: OK
+tdi-bench/src/bin/tdi-branching-continuous.rs: OK
+tdi-bench/src/bin/tdi-branching-holdout.rs: OK
+tdi-bench/src/bin/tdi-branching-scan.rs: OK
+tdi-bench/src/bin/tdi-eval.rs: OK
+tdi-bench/src/bin/tdi-holdout.rs: OK
+tdi-bench/src/bin/tdi-interwidth-continuous.rs: OK
+tdi-bench/src/bin/tdi-scan.rs: OK
+tdi-bench/src/bin/tdi-target-geometry.rs: OK
+tdi-bench/src/main.rs: OK
+tdi-core/Cargo.toml: OK
+tdi-core/src/action.rs: OK
+tdi-core/src/baseline.rs: OK
+tdi-core/src/branching_baseline.rs: OK
+tdi-core/src/branching_distribution.rs: OK
+tdi-core/src/branching_recovery.rs: OK
+tdi-core/src/dynamics.rs: OK
+tdi-core/src/explorer.rs: OK
+tdi-core/src/lib.rs: OK
+tdi-core/src/recovery.rs: OK
+tdi-core/src/signature.rs: OK
+tdi-core/src/state.rs: OK
+tdi-core/src/system.rs: OK
+vendor/autocfg-1.5.1/.cargo-checksum.json: OK
+vendor/autocfg-1.5.1/.cargo_vcs_info.json: OK
+vendor/autocfg-1.5.1/Cargo.lock: OK
+vendor/autocfg-1.5.1/Cargo.toml: OK
+vendor/autocfg-1.5.1/Cargo.toml.orig: OK
+vendor/autocfg-1.5.1/LICENSE-APACHE: OK
+vendor/autocfg-1.5.1/LICENSE-MIT: OK
+vendor/autocfg-1.5.1/README.md: OK
+vendor/autocfg-1.5.1/examples/integers.rs: OK
+vendor/autocfg-1.5.1/examples/nightly.rs: OK
+vendor/autocfg-1.5.1/examples/paths.rs: OK
+vendor/autocfg-1.5.1/examples/traits.rs: OK
+vendor/autocfg-1.5.1/examples/versions.rs: OK
+vendor/autocfg-1.5.1/src/error.rs: OK
+vendor/autocfg-1.5.1/src/lib.rs: OK
+vendor/autocfg-1.5.1/src/rustc.rs: OK
+vendor/autocfg-1.5.1/src/tests.rs: OK
+vendor/autocfg-1.5.1/src/version.rs: OK
+vendor/autocfg-1.5.1/tests/no_std.rs: OK
+vendor/autocfg-1.5.1/tests/rustflags.rs: OK
+vendor/autocfg-1.5.1/tests/support/mod.rs: OK
+vendor/autocfg-1.5.1/tests/tests.rs: OK
+vendor/autocfg-1.5.1/tests/wrappers.rs: OK
+vendor/num-bigint-0.4.8/.cargo-checksum.json: OK
+vendor/num-bigint-0.4.8/.cargo_vcs_info.json: OK
+vendor/num-bigint-0.4.8/Cargo.lock: OK
+vendor/num-bigint-0.4.8/Cargo.toml: OK
+vendor/num-bigint-0.4.8/Cargo.toml.orig: OK
+vendor/num-bigint-0.4.8/LICENSE-APACHE: OK
+vendor/num-bigint-0.4.8/LICENSE-MIT: OK
+vendor/num-bigint-0.4.8/README.md: OK
+vendor/num-bigint-0.4.8/RELEASES.md: OK
+vendor/num-bigint-0.4.8/benches/bigint.rs: OK
+vendor/num-bigint-0.4.8/benches/factorial.rs: OK
+vendor/num-bigint-0.4.8/benches/gcd.rs: OK
+vendor/num-bigint-0.4.8/benches/rng/mod.rs: OK
+vendor/num-bigint-0.4.8/benches/roots.rs: OK
+vendor/num-bigint-0.4.8/benches/shootout-pidigits.rs: OK
+vendor/num-bigint-0.4.8/src/big_digit.rs: OK
+vendor/num-bigint-0.4.8/src/bigint.rs: OK
+vendor/num-bigint-0.4.8/src/bigint/addition.rs: OK
+vendor/num-bigint-0.4.8/src/bigint/arbitrary.rs: OK
+vendor/num-bigint-0.4.8/src/bigint/bits.rs: OK
+vendor/num-bigint-0.4.8/src/bigint/convert.rs: OK
+vendor/num-bigint-0.4.8/src/bigint/division.rs: OK
+vendor/num-bigint-0.4.8/src/bigint/multiplication.rs: OK
+vendor/num-bigint-0.4.8/src/bigint/power.rs: OK
+vendor/num-bigint-0.4.8/src/bigint/serde.rs: OK
+vendor/num-bigint-0.4.8/src/bigint/shift.rs: OK
+vendor/num-bigint-0.4.8/src/bigint/subtraction.rs: OK
+vendor/num-bigint-0.4.8/src/bigrand.rs: OK
+vendor/num-bigint-0.4.8/src/biguint.rs: OK
+vendor/num-bigint-0.4.8/src/biguint/addition.rs: OK
+vendor/num-bigint-0.4.8/src/biguint/arbitrary.rs: OK
+vendor/num-bigint-0.4.8/src/biguint/bits.rs: OK
+vendor/num-bigint-0.4.8/src/biguint/convert.rs: OK
+vendor/num-bigint-0.4.8/src/biguint/division.rs: OK
+vendor/num-bigint-0.4.8/src/biguint/iter.rs: OK
+vendor/num-bigint-0.4.8/src/biguint/monty.rs: OK
+vendor/num-bigint-0.4.8/src/biguint/multiplication.rs: OK
+vendor/num-bigint-0.4.8/src/biguint/power.rs: OK
+vendor/num-bigint-0.4.8/src/biguint/serde.rs: OK
+vendor/num-bigint-0.4.8/src/biguint/shift.rs: OK
+vendor/num-bigint-0.4.8/src/biguint/subtraction.rs: OK
+vendor/num-bigint-0.4.8/src/lib.rs: OK
+vendor/num-bigint-0.4.8/src/macros.rs: OK
+vendor/num-bigint-0.4.8/tests/bigint.rs: OK
+vendor/num-bigint-0.4.8/tests/bigint_bitwise.rs: OK
+vendor/num-bigint-0.4.8/tests/bigint_scalar.rs: OK
+vendor/num-bigint-0.4.8/tests/biguint.rs: OK
+vendor/num-bigint-0.4.8/tests/biguint_scalar.rs: OK
+vendor/num-bigint-0.4.8/tests/consts/mod.rs: OK
+vendor/num-bigint-0.4.8/tests/fuzzed.rs: OK
+vendor/num-bigint-0.4.8/tests/macros/mod.rs: OK
+vendor/num-bigint-0.4.8/tests/modpow.rs: OK
+vendor/num-bigint-0.4.8/tests/roots.rs: OK
+vendor/num-integer-0.1.46/.cargo-checksum.json: OK
+vendor/num-integer-0.1.46/.cargo_vcs_info.json: OK
+vendor/num-integer-0.1.46/Cargo.toml: OK
+vendor/num-integer-0.1.46/Cargo.toml.orig: OK
+vendor/num-integer-0.1.46/LICENSE-APACHE: OK
+vendor/num-integer-0.1.46/LICENSE-MIT: OK
+vendor/num-integer-0.1.46/README.md: OK
+vendor/num-integer-0.1.46/RELEASES.md: OK
+vendor/num-integer-0.1.46/benches/average.rs: OK
+vendor/num-integer-0.1.46/benches/gcd.rs: OK
+vendor/num-integer-0.1.46/benches/roots.rs: OK
+vendor/num-integer-0.1.46/src/average.rs: OK
+vendor/num-integer-0.1.46/src/lib.rs: OK
+vendor/num-integer-0.1.46/src/roots.rs: OK
+vendor/num-integer-0.1.46/tests/average.rs: OK
+vendor/num-integer-0.1.46/tests/roots.rs: OK
+vendor/num-traits-0.2.19/.cargo-checksum.json: OK
+vendor/num-traits-0.2.19/.cargo_vcs_info.json: OK
+vendor/num-traits-0.2.19/Cargo.toml: OK
+vendor/num-traits-0.2.19/Cargo.toml.orig: OK
+vendor/num-traits-0.2.19/LICENSE-APACHE: OK
+vendor/num-traits-0.2.19/LICENSE-MIT: OK
+vendor/num-traits-0.2.19/README.md: OK
+vendor/num-traits-0.2.19/RELEASES.md: OK
+vendor/num-traits-0.2.19/build.rs: OK
+vendor/num-traits-0.2.19/src/bounds.rs: OK
+vendor/num-traits-0.2.19/src/cast.rs: OK
+vendor/num-traits-0.2.19/src/float.rs: OK
+vendor/num-traits-0.2.19/src/identities.rs: OK
+vendor/num-traits-0.2.19/src/int.rs: OK
+vendor/num-traits-0.2.19/src/lib.rs: OK
+vendor/num-traits-0.2.19/src/macros.rs: OK
+vendor/num-traits-0.2.19/src/ops/bytes.rs: OK
+vendor/num-traits-0.2.19/src/ops/checked.rs: OK
+vendor/num-traits-0.2.19/src/ops/euclid.rs: OK
+vendor/num-traits-0.2.19/src/ops/inv.rs: OK
+vendor/num-traits-0.2.19/src/ops/mod.rs: OK
+vendor/num-traits-0.2.19/src/ops/mul_add.rs: OK
+vendor/num-traits-0.2.19/src/ops/overflowing.rs: OK
+vendor/num-traits-0.2.19/src/ops/saturating.rs: OK
+vendor/num-traits-0.2.19/src/ops/wrapping.rs: OK
+vendor/num-traits-0.2.19/src/pow.rs: OK
+vendor/num-traits-0.2.19/src/real.rs: OK
+vendor/num-traits-0.2.19/src/sign.rs: OK
+vendor/num-traits-0.2.19/tests/cast.rs: OK
+
+=== ÉTAT GIT ===
+## tdi-4-target-geometry...origin/tdi-4-target-geometry
+
+=== COMPILATION RELEASE HORS LIGNE ===
+   Compiling num-traits v0.2.19
+   Compiling num-integer v0.1.46
+   Compiling num-bigint v0.4.8
+   Compiling tdi-core v0.1.0 (/mnt/nvme/TDI/tdi-core)
+   Compiling tdi-bench v0.1.0 (/mnt/nvme/TDI/tdi-bench)
+    Finished `release` profile [optimized] target(s) in 3.02s
+
+=== ÉVALUATION PRÉENREGISTRÉE ===
+Generating preregistered TDI-4 width-3 training systems...
+Generating untouched TDI-4 width-3 holdout systems...
+Generating preregistered TDI-4 width-4 training systems...
+Generating untouched TDI-4 width-4 holdout systems...
+Generating untouched TDI-4 width-5 OOD systems...
+
+TDI-4 preregistered target-geometry evaluation
+training widths             : 3 and 4
+OOD width                   : 5
+training width 3 systems    : 10000
+training width 4 systems    : 10000
+combined training systems   : 20000
+holdout width 3 systems     : 5000
+holdout width 4 systems     : 5000
+combined holdout systems    : 10000
+holdout width 5 systems     : 5000
+observation horizon         : 2
+outcome horizon             : 6
+ridge lambda                : 1
+bootstrap replicates        : 2000
+conditional U mean          : 9.059862669847
+conditional U scale         : 2.155553157728
+training width 3 excluded   : 44
+holdout width 3 excluded    : 19
+training width 4 excluded   : 0
+holdout width 4 excluded    : 0
+holdout width 5 excluded    : 0
+training width 3 next seed  : 30010044
+holdout width 3 next seed   : 31005019
+training width 4 next seed  : 40010000
+holdout width 4 next seed   : 41005000
+holdout width 5 next seed   : 50005000
+
+TARGET GEOMETRY — TRAINING
+  systèmes                 : 20000
+  récupérations exactes    : 0
+  taux récupération exacte : 0.000000000
+  systèmes conditionnels   : 20000
+  U moyen                  : 9.059862670
+  U écart-type             : 2.155553158
+  U minimum                : 0.000000000
+  U maximum                : 16.844129532
+
+TARGET GEOMETRY — WIDTH 3
+  systèmes                 : 5000
+  récupérations exactes    : 0
+  taux récupération exacte : 0.000000000
+  systèmes conditionnels   : 5000
+  U moyen                  : 7.692685236
+  U écart-type             : 2.023118204
+  U minimum                : 0.250340969
+  U maximum                : 15.509775004
+
+TARGET GEOMETRY — WIDTH 4
+  systèmes                 : 5000
+  récupérations exactes    : 0
+  taux récupération exacte : 0.000000000
+  systèmes conditionnels   : 5000
+  U moyen                  : 10.442529677
+  U écart-type             : 1.092706763
+  U minimum                : 4.639218148
+  U maximum                : 13.620023315
+
+TARGET GEOMETRY — WIDTH 5
+  systèmes                 : 5000
+  récupérations exactes    : 0
+  taux récupération exacte : 0.000000000
+  systèmes conditionnels   : 5000
+  U moyen                  : 13.155622729
+  U écart-type             : 0.614937638
+  U minimum                : 10.722224201
+  U maximum                : 15.107637152
+
+BASELINE — TÊTE BINAIRE
+  intercept : 0.000000000000
+  feature 00 | moyenne=0.686874045021 | échelle=0.164187206680 | coefficient=0.000000000000
+  feature 01 | moyenne=1.373004783693 | échelle=0.217597566790 | coefficient=0.000000000000
+  feature 02 | moyenne=0.685238827496 | échelle=0.164112672990 | coefficient=0.000000000000
+  feature 03 | moyenne=1.370725186144 | échelle=0.216536723374 | coefficient=-0.000000000000
+  feature 04 | moyenne=0.502775000000 | échelle=0.151699083303 | coefficient=0.000000000000
+  feature 05 | moyenne=0.944218750000 | échelle=0.117729890633 | coefficient=-0.000000000000
+  feature 06 | moyenne=1.873234679800 | échelle=0.407623532211 | coefficient=-0.000000000000
+  feature 07 | moyenne=3.454414197715 | échelle=0.791431533803 | coefficient=-0.000000000000
+  feature 08 | moyenne=0.500668750000 | échelle=0.152448576243 | coefficient=-0.000000000000
+  feature 09 | moyenne=0.943756250000 | échelle=0.117831646156 | coefficient=-0.000000000000
+  feature 10 | moyenne=1.868967585482 | échelle=0.404387256324 | coefficient=-0.000000000000
+  feature 11 | moyenne=3.448139089617 | échelle=0.786827876108 | coefficient=-0.000000000000
+  feature 12 | moyenne=3.500000000000 | échelle=0.500000000000 | coefficient=0.000000000000
+
+BASELINE — TÊTE CONDITIONNELLE
+  intercept : 0.000000000000
+  feature 00 | moyenne=0.686874045021 | échelle=0.164187206680 | coefficient=-0.353258096410
+  feature 01 | moyenne=1.373004783693 | échelle=0.217597566790 | coefficient=0.742679778003
+  feature 02 | moyenne=0.685238827496 | échelle=0.164112672990 | coefficient=-0.363606022251
+  feature 03 | moyenne=1.370725186144 | échelle=0.216536723374 | coefficient=0.737518721123
+  feature 04 | moyenne=0.502775000000 | échelle=0.151699083303 | coefficient=-0.085628497951
+  feature 05 | moyenne=0.944218750000 | échelle=0.117729890633 | coefficient=-0.021737383049
+  feature 06 | moyenne=1.873234679800 | échelle=0.407623532211 | coefficient=0.370286989275
+  feature 07 | moyenne=3.454414197715 | échelle=0.791431533803 | coefficient=-0.396468203735
+  feature 08 | moyenne=0.500668750000 | échelle=0.152448576243 | coefficient=-0.116189892669
+  feature 09 | moyenne=0.943756250000 | échelle=0.117831646156 | coefficient=0.001110637208
+  feature 10 | moyenne=1.868967585482 | échelle=0.404387256324 | coefficient=0.456579702007
+  feature 11 | moyenne=3.448139089617 | échelle=0.786827876108 | coefficient=-0.483420870766
+  feature 12 | moyenne=3.500000000000 | échelle=0.500000000000 | coefficient=0.333043745912
+
+BASELINE + TDI-4 — TÊTE BINAIRE
+  intercept : 0.000000000000
+  feature 00 | moyenne=0.686874045021 | échelle=0.164187206680 | coefficient=0.000000000000
+  feature 01 | moyenne=1.373004783693 | échelle=0.217597566790 | coefficient=0.000000000000
+  feature 02 | moyenne=0.685238827496 | échelle=0.164112672990 | coefficient=0.000000000000
+  feature 03 | moyenne=1.370725186144 | échelle=0.216536723374 | coefficient=-0.000000000000
+  feature 04 | moyenne=0.502775000000 | échelle=0.151699083303 | coefficient=0.000000000000
+  feature 05 | moyenne=0.944218750000 | échelle=0.117729890633 | coefficient=-0.000000000000
+  feature 06 | moyenne=1.873234679800 | échelle=0.407623532211 | coefficient=-0.000000000000
+  feature 07 | moyenne=3.454414197715 | échelle=0.791431533803 | coefficient=-0.000000000000
+  feature 08 | moyenne=0.500668750000 | échelle=0.152448576243 | coefficient=-0.000000000000
+  feature 09 | moyenne=0.943756250000 | échelle=0.117831646156 | coefficient=-0.000000000000
+  feature 10 | moyenne=1.868967585482 | échelle=0.404387256324 | coefficient=0.000000000000
+  feature 11 | moyenne=3.448139089617 | échelle=0.786827876108 | coefficient=-0.000000000000
+  feature 12 | moyenne=3.500000000000 | échelle=0.500000000000 | coefficient=-0.000000000000
+  feature 13 | moyenne=0.416285573871 | échelle=0.184160041573 | coefficient=0.000000000000
+  feature 14 | moyenne=0.792823945766 | échelle=0.117132918364 | coefficient=0.000000000000
+  feature 15 | moyenne=0.376538371895 | échelle=0.140727864624 | coefficient=0.000000000000
+
+BASELINE + TDI-4 — TÊTE CONDITIONNELLE
+  intercept : 0.000000000000
+  feature 00 | moyenne=0.686874045021 | échelle=0.164187206680 | coefficient=-0.336471813011
+  feature 01 | moyenne=1.373004783693 | échelle=0.217597566790 | coefficient=0.376658011521
+  feature 02 | moyenne=0.685238827496 | échelle=0.164112672990 | coefficient=-0.380124384289
+  feature 03 | moyenne=1.370725186144 | échelle=0.216536723374 | coefficient=0.438857763409
+  feature 04 | moyenne=0.502775000000 | échelle=0.151699083303 | coefficient=0.052011209791
+  feature 05 | moyenne=0.944218750000 | échelle=0.117729890633 | coefficient=-0.075594144935
+  feature 06 | moyenne=1.873234679800 | échelle=0.407623532211 | coefficient=0.052952969982
+  feature 07 | moyenne=3.454414197715 | échelle=0.791431533803 | coefficient=0.013209585661
+  feature 08 | moyenne=0.500668750000 | échelle=0.152448576243 | coefficient=0.011352481088
+  feature 09 | moyenne=0.943756250000 | échelle=0.117831646156 | coefficient=-0.058544440908
+  feature 10 | moyenne=1.868967585482 | échelle=0.404387256324 | coefficient=0.207088096450
+  feature 11 | moyenne=3.448139089617 | échelle=0.786827876108 | coefficient=-0.179312040552
+  feature 12 | moyenne=3.500000000000 | échelle=0.500000000000 | coefficient=0.291058076391
+  feature 13 | moyenne=0.416285573871 | échelle=0.184160041573 | coefficient=0.154661146173
+  feature 14 | moyenne=0.792823945766 | échelle=0.117132918364 | coefficient=0.393785629090
+  feature 15 | moyenne=0.376538371895 | échelle=0.140727864624 | coefficient=0.125368610640
+
+COMPARATEUR DIRECT — BASELINE
+  intercept : 0.991283587654
+  feature 00 | moyenne=0.686874045021 | échelle=0.164187206680 | coefficient=-0.026829502228
+  feature 01 | moyenne=1.373004783693 | échelle=0.217597566790 | coefficient=0.070606297548
+  feature 02 | moyenne=0.685238827496 | échelle=0.164112672990 | coefficient=-0.022701210078
+  feature 03 | moyenne=1.370725186144 | échelle=0.216536723374 | coefficient=0.063163877373
+  feature 04 | moyenne=0.502775000000 | échelle=0.151699083303 | coefficient=-0.015389302128
+  feature 05 | moyenne=0.944218750000 | échelle=0.117729890633 | coefficient=0.004105840228
+  feature 06 | moyenne=1.873234679800 | échelle=0.407623532211 | coefficient=0.055915500294
+  feature 07 | moyenne=3.454414197715 | échelle=0.791431533803 | coefficient=-0.108273554853
+  feature 08 | moyenne=0.500668750000 | échelle=0.152448576243 | coefficient=-0.014988439559
+  feature 09 | moyenne=0.943756250000 | échelle=0.117831646156 | coefficient=0.004490082002
+  feature 10 | moyenne=1.868967585482 | échelle=0.404387256324 | coefficient=0.049523124890
+  feature 11 | moyenne=3.448139089617 | échelle=0.786827876108 | coefficient=-0.097058534826
+  feature 12 | moyenne=3.500000000000 | échelle=0.500000000000 | coefficient=0.056729965959
+
+COMPARATEUR DIRECT — BASELINE + TDI
+  intercept : 0.991283587654
+  feature 00 | moyenne=0.686874045021 | échelle=0.164187206680 | coefficient=-0.024994051523
+  feature 01 | moyenne=1.373004783693 | échelle=0.217597566790 | coefficient=0.056803800910
+  feature 02 | moyenne=0.685238827496 | échelle=0.164112672990 | coefficient=-0.022099744752
+  feature 03 | moyenne=1.370725186144 | échelle=0.216536723374 | coefficient=0.051348860528
+  feature 04 | moyenne=0.502775000000 | échelle=0.151699083303 | coefficient=-0.011985538688
+  feature 05 | moyenne=0.944218750000 | échelle=0.117729890633 | coefficient=0.001475036013
+  feature 06 | moyenne=1.873234679800 | échelle=0.407623532211 | coefficient=0.048125898450
+  feature 07 | moyenne=3.454414197715 | échelle=0.791431533803 | coefficient=-0.092505557915
+  feature 08 | moyenne=0.500668750000 | échelle=0.152448576243 | coefficient=-0.012028432071
+  feature 09 | moyenne=0.943756250000 | échelle=0.117831646156 | coefficient=0.001654512743
+  feature 10 | moyenne=1.868967585482 | échelle=0.404387256324 | coefficient=0.044499668395
+  feature 11 | moyenne=3.448139089617 | échelle=0.786827876108 | coefficient=-0.084605222344
+  feature 12 | moyenne=3.500000000000 | échelle=0.500000000000 | coefficient=0.047593714884
+  feature 13 | moyenne=0.416285573871 | échelle=0.184160041573 | coefficient=0.003457373628
+  feature 14 | moyenne=0.792823945766 | échelle=0.117132918364 | coefficient=0.014027019700
+  feature 15 | moyenne=0.376538371895 | échelle=0.140727864624 | coefficient=0.007150791995
+
+HOLDOUT WIDTH 3
+BASELINE APPARIÉE
+  perte composite       : 0.241887657
+
+  TÊTE BINAIRE
+  Brier                 : 0.000000000
+  récupération observée : 0.000000000
+  probabilité moyenne   : 0.000000000
+  intercept calibration : 0.000000000
+  pente calibration     : 0.000000000
+  prédictions à 0       : 100.000000 %
+  prédictions à 1       : 0.000000 %
+
+  TÊTE CONDITIONNELLE STANDARDISÉE
+  MSE                   : 0.483775315
+  MAE                   : 0.546846778
+  R²                    : 0.450815004
+  Spearman              : 0.637248808
+  biais moyen           : -0.009047214
+  moyenne observée      : -0.634258278
+  moyenne prédite       : -0.643305492
+  intercept calibration : -0.001406354
+  pente calibration     : 0.983750228
+  prédictions à 0       : 0.000000 %
+  prédictions à 1       : 0.000000 %
+
+  RECONSTRUCTION O₆
+  MSE                   : 0.001712584
+  MAE                   : 0.011346318
+  R²                    : 0.418307750
+  Spearman              : 0.637247764
+  biais moyen           : 0.005504275
+  moyenne observée      : 0.983917702
+  moyenne prédite       : 0.989421976
+  intercept calibration : 0.024747547
+  pente calibration     : 0.969424753
+  prédictions à 0       : 0.000000 %
+  prédictions à 1       : 0.000000 %
+
+BASELINE + TDI-4
+  perte composite       : 0.179439894
+
+  TÊTE BINAIRE
+  Brier                 : 0.000000000
+  récupération observée : 0.000000000
+  probabilité moyenne   : 0.000000000
+  intercept calibration : 0.000000000
+  pente calibration     : 0.000000000
+  prédictions à 0       : 100.000000 %
+  prédictions à 1       : 0.000000 %
+
+  TÊTE CONDITIONNELLE STANDARDISÉE
+  MSE                   : 0.358879788
+  MAE                   : 0.467390470
+  R²                    : 0.592597247
+  Spearman              : 0.757689675
+  biais moyen           : -0.007314452
+  moyenne observée      : -0.634258278
+  moyenne prédite       : -0.641572730
+  intercept calibration : 0.000503422
+  pente calibration     : 0.989383853
+  prédictions à 0       : 0.000000 %
+  prédictions à 1       : 0.000000 %
+
+  RECONSTRUCTION O₆
+  MSE                   : 0.001497982
+  MAE                   : 0.010076199
+  R²                    : 0.491199000
+  Spearman              : 0.757689820
+  biais moyen           : 0.000629211
+  moyenne observée      : 0.983917702
+  moyenne prédite       : 0.984546912
+  intercept calibration : 0.351269586
+  pente calibration     : 0.642577929
+  prédictions à 0       : 0.220000 %
+  prédictions à 1       : 0.000000 %
+
+amélioration perte composite : 0.062447763
+réduction relative composite : 25.816846 %
+amélioration Brier            : 0.000000000
+amélioration MSE conditionnelle: 0.124895527
+amélioration MSE reconstruite : 0.000214602
+amélioration MAE reconstruite : 0.001270119
+
+HOLDOUT WIDTH 4
+BASELINE APPARIÉE
+  perte composite       : 0.085792849
+
+  TÊTE BINAIRE
+  Brier                 : 0.000000000
+  récupération observée : 0.000000000
+  probabilité moyenne   : 0.000000000
+  intercept calibration : 0.000000000
+  pente calibration     : 0.000000000
+  prédictions à 0       : 100.000000 %
+  prédictions à 1       : 0.000000 %
+
+  TÊTE CONDITIONNELLE STANDARDISÉE
+  MSE                   : 0.171585697
+  MAE                   : 0.325955143
+  R²                    : 0.332284748
+  Spearman              : 0.565404261
+  biais moyen           : 0.007688317
+  moyenne observée      : 0.641444171
+  moyenne prédite       : 0.649132487
+  intercept calibration : -0.109200011
+  pente calibration     : 1.156380548
+  prédictions à 0       : 0.000000 %
+  prédictions à 1       : 0.000000 %
+
+  RECONSTRUCTION O₆
+  MSE                   : 0.000001282
+  MAE                   : 0.000479102
+  R²                    : 0.164598389
+  Spearman              : 0.565404261
+  biais moyen           : 0.000221583
+  moyenne observée      : 0.999008238
+  moyenne prédite       : 0.999229821
+  intercept calibration : -0.599175730
+  pente calibration     : 1.599415804
+  prédictions à 0       : 0.000000 %
+  prédictions à 1       : 0.000000 %
+
+BASELINE + TDI-4
+  perte composite       : 0.065318515
+
+  TÊTE BINAIRE
+  Brier                 : 0.000000000
+  récupération observée : 0.000000000
+  probabilité moyenne   : 0.000000000
+  intercept calibration : 0.000000000
+  pente calibration     : 0.000000000
+  prédictions à 0       : 100.000000 %
+  prédictions à 1       : 0.000000 %
+
+  TÊTE CONDITIONNELLE STANDARDISÉE
+  MSE                   : 0.130637029
+  MAE                   : 0.284285662
+  R²                    : 0.491633987
+  Spearman              : 0.696432192
+  biais moyen           : 0.003587544
+  moyenne observée      : 0.641444171
+  moyenne prédite       : 0.645031715
+  intercept calibration : -0.101063670
+  pente calibration     : 1.151118346
+  prédictions à 0       : 0.000000 %
+  prédictions à 1       : 0.000000 %
+
+  RECONSTRUCTION O₆
+  MSE                   : 0.000001099
+  MAE                   : 0.000426239
+  R²                    : 0.283938104
+  Spearman              : 0.696432192
+  biais moyen           : 0.000183430
+  moyenne observée      : 0.999008238
+  moyenne prédite       : 0.999191668
+  intercept calibration : -0.383477490
+  pente calibration     : 1.383604140
+  prédictions à 0       : 0.000000 %
+  prédictions à 1       : 0.000000 %
+
+amélioration perte composite : 0.020474334
+réduction relative composite : 23.864849 %
+amélioration Brier            : 0.000000000
+amélioration MSE conditionnelle: 0.040948668
+amélioration MSE reconstruite : 0.000000183
+amélioration MAE reconstruite : 0.000052863
+
+HOLDOUT COMBINÉ WIDTHS 3 ET 4
+BASELINE APPARIÉE
+  perte composite       : 0.163840253
+
+  TÊTE BINAIRE
+  Brier                 : 0.000000000
+  récupération observée : 0.000000000
+  probabilité moyenne   : 0.000000000
+  intercept calibration : 0.000000000
+  pente calibration     : 0.000000000
+  prédictions à 0       : 100.000000 %
+  prédictions à 1       : 0.000000 %
+
+  TÊTE CONDITIONNELLE STANDARDISÉE
+  MSE                   : 0.327680506
+  MAE                   : 0.436400960
+  R²                    : 0.664189444
+  Spearman              : 0.807507926
+  biais moyen           : -0.000679448
+  moyenne observée      : 0.003592946
+  moyenne prédite       : 0.002913498
+  intercept calibration : 0.000695690
+  pente calibration     : 0.994425482
+  prédictions à 0       : 0.000000 %
+  prédictions à 1       : 0.000000 %
+
+  RECONSTRUCTION O₆
+  MSE                   : 0.000856933
+  MAE                   : 0.005912710
+  R²                    : 0.439828431
+  Spearman              : 0.807507809
+  biais moyen           : 0.002862929
+  moyenne observée      : 0.991462970
+  moyenne prédite       : 0.994325899
+  intercept calibration : 0.007925556
+  pente calibration     : 0.989149951
+  prédictions à 0       : 0.000000 %
+  prédictions à 1       : 0.000000 %
+
+BASELINE + TDI-4
+  perte composite       : 0.122379204
+
+  TÊTE BINAIRE
+  Brier                 : 0.000000000
+  récupération observée : 0.000000000
+  probabilité moyenne   : 0.000000000
+  intercept calibration : 0.000000000
+  pente calibration     : 0.000000000
+  prédictions à 0       : 100.000000 %
+  prédictions à 1       : 0.000000 %
+
+  TÊTE CONDITIONNELLE STANDARDISÉE
+  MSE                   : 0.244758409
+  MAE                   : 0.375838066
+  R²                    : 0.749168913
+  Spearman              : 0.859544472
+  biais moyen           : -0.001863454
+  moyenne observée      : 0.003592946
+  moyenne prédite       : 0.001729492
+  intercept calibration : 0.001861098
+  pente calibration     : 1.001362358
+  prédictions à 0       : 0.000000 %
+  prédictions à 1       : 0.000000 %
+
+  RECONSTRUCTION O₆
+  MSE                   : 0.000749540
+  MAE                   : 0.005251219
+  R²                    : 0.510030300
+  Spearman              : 0.859544490
+  biais moyen           : 0.000406320
+  moyenne observée      : 0.991462970
+  moyenne prédite       : 0.991869290
+  intercept calibration : 0.346108429
+  pente calibration     : 0.650644744
+  prédictions à 0       : 0.110000 %
+  prédictions à 1       : 0.000000 %
+
+amélioration perte composite : 0.041461049
+réduction relative composite : 25.305777 %
+amélioration Brier            : 0.000000000
+amélioration MSE conditionnelle: 0.082922097
+amélioration MSE reconstruite : 0.000107393
+amélioration MAE reconstruite : 0.000661491
+
+HOLDOUT HORS DISTRIBUTION — WIDTH 5
+BASELINE APPARIÉE
+  perte composite       : 0.071703443
+
+  TÊTE BINAIRE
+  Brier                 : 0.000000000
+  récupération observée : 0.000000000
+  probabilité moyenne   : 0.000000000
+  intercept calibration : 0.000000000
+  pente calibration     : 0.000000000
+  prédictions à 0       : 100.000000 %
+  prédictions à 1       : 0.000000 %
+
+  TÊTE CONDITIONNELLE STANDARDISÉE
+  MSE                   : 0.143406887
+  MAE                   : 0.318879657
+  R²                    : -0.762078825
+  Spearman              : 0.467776309
+  biais moyen           : -0.284013178
+  moyenne observée      : 1.900096987
+  moyenne prédite       : 1.616083808
+  intercept calibration : 0.149827526
+  pente calibration     : 1.083031370
+  prédictions à 0       : 0.000000 %
+  prédictions à 1       : 0.000000 %
+
+  RECONSTRUCTION O₆
+  MSE                   : 0.000000005
+  MAE                   : 0.000061450
+  R²                    : -0.641389205
+  Spearman              : 0.467776309
+  biais moyen           : -0.000050411
+  moyenne observée      : 0.999879780
+  moyenne prédite       : 0.999829368
+  intercept calibration : 0.257208550
+  pente calibration     : 0.742797975
+  prédictions à 0       : 0.000000 %
+  prédictions à 1       : 0.000000 %
+
+BASELINE + TDI-4
+  perte composite       : 0.035827770
+
+  TÊTE BINAIRE
+  Brier                 : 0.000000000
+  récupération observée : 0.000000000
+  probabilité moyenne   : 0.000000000
+  intercept calibration : 0.000000000
+  pente calibration     : 0.000000000
+  prédictions à 0       : 100.000000 %
+  prédictions à 1       : 0.000000 %
+
+  TÊTE CONDITIONNELLE STANDARDISÉE
+  MSE                   : 0.071655540
+  MAE                   : 0.217243811
+  R²                    : 0.119549183
+  Spearman              : 0.615705212
+  biais moyen           : -0.146952367
+  moyenne observée      : 1.900096987
+  moyenne prédite       : 1.753144619
+  intercept calibration : -0.229122348
+  pente calibration     : 1.214514371
+  prédictions à 0       : 0.000000 %
+  prédictions à 1       : 0.000000 %
+
+  RECONSTRUCTION O₆
+  MSE                   : 0.000000002
+  MAE                   : 0.000038676
+  R²                    : 0.243959397
+  Spearman              : 0.615705212
+  biais moyen           : -0.000019773
+  moyenne observée      : 0.999879780
+  moyenne prédite       : 0.999860006
+  intercept calibration : -0.023408273
+  pente calibration     : 1.023431327
+  prédictions à 0       : 0.000000 %
+  prédictions à 1       : 0.000000 %
+
+amélioration perte composite : 0.035875673
+réduction relative composite : 50.033403 %
+amélioration Brier            : 0.000000000
+amélioration MSE conditionnelle: 0.071751346
+amélioration MSE reconstruite : 0.000000003
+amélioration MAE reconstruite : 0.000022774
+
+COMPARATEUR SECONDAIRE DIRECT — WIDTH 3
+RÉGRESSION DIRECTE BASELINE
+  MSE                   : 0.001932056
+  MAE                   : 0.017472726
+  R²                    : 0.343762274
+  Spearman              : 0.592535975
+  biais moyen           : -0.003173060
+  moyenne observée      : 0.983917702
+  moyenne prédite       : 0.980744641
+  intercept calibration : -0.187744184
+  pente calibration     : 1.194665600
+  prédictions à 0       : 0.000000 %
+  prédictions à 1       : 32.760000 %
+
+RÉGRESSION DIRECTE BASELINE + TDI
+  MSE                   : 0.001659532
+  MAE                   : 0.015900565
+  R²                    : 0.436327197
+  Spearman              : 0.703166531
+  biais moyen           : -0.003730822
+  moyenne observée      : 0.983917702
+  moyenne prédite       : 0.980186879
+  intercept calibration : -0.244550965
+  pente calibration     : 1.253300459
+  prédictions à 0       : 0.000000 %
+  prédictions à 1       : 33.440000 %
+  réduction relative MSE directe : 14.105395 %
+
+COMPARATEUR SECONDAIRE DIRECT — WIDTH 4
+RÉGRESSION DIRECTE BASELINE
+  MSE                   : 0.000020219
+  MAE                   : 0.002670057
+  R²                    : -12.173462347
+  Spearman              : -0.021843197
+  biais moyen           : -0.001639786
+  moyenne observée      : 0.999008238
+  moyenne prédite       : 0.997368452
+  intercept calibration : 0.933964177
+  pente calibration     : 0.065215680
+  prédictions à 0       : 0.000000 %
+  prédictions à 1       : 48.360000 %
+
+RÉGRESSION DIRECTE BASELINE + TDI
+  MSE                   : 0.000031245
+  MAE                   : 0.003289051
+  R²                    : -19.356915968
+  Spearman              : 0.247792368
+  biais moyen           : -0.002500428
+  moyenne observée      : 0.999008238
+  moyenne prédite       : 0.996507810
+  intercept calibration : 0.907223780
+  pente calibration     : 0.092106110
+  prédictions à 0       : 0.000000 %
+  prédictions à 1       : 46.620000 %
+  réduction relative MSE directe : -54.529731 %
+
+COMPARATEUR SECONDAIRE DIRECT — WIDTH 5
+RÉGRESSION DIRECTE BASELINE
+  MSE                   : 0.000772202
+  MAE                   : 0.027381782
+  R²                    : -250810.084244025
+  Spearman              : -0.418865955
+  biais moyen           : -0.027381782
+  moyenne observée      : 0.999879780
+  moyenne prédite       : 0.972497998
+  intercept calibration : 1.004408129
+  pente calibration     : -0.004656410
+  prédictions à 0       : 0.000000 %
+  prédictions à 1       : 0.000000 %
+
+RÉGRESSION DIRECTE BASELINE + TDI
+  MSE                   : 0.000463042
+  MAE                   : 0.020894615
+  R²                    : -150394.961800249
+  Spearman              : -0.247438277
+  biais moyen           : -0.020894615
+  moyenne observée      : 0.999879780
+  moyenne prédite       : 0.978985165
+  intercept calibration : 1.002263375
+  pente calibration     : -0.002434762
+  prédictions à 0       : 0.000000 %
+  prédictions à 1       : 0.000000 %
+  réduction relative MSE directe : 40.036158 %
+
+DÉCILES DU DÉFICIT — WIDTH 3
+  décile 01 | n=500 | déficit=[0.000021433471, 0.000840315293] | MSE baseline=0.000004528631 | MSE TDI-4=0.000002191814
+  décile 02 | n=500 | déficit=[0.000842063980, 0.001519677352] | MSE baseline=0.000010828721 | MSE TDI-4=0.000004183078
+  décile 03 | n=500 | déficit=[0.001522408693, 0.002341214678] | MSE baseline=0.000018957344 | MSE TDI-4=0.000005661420
+  décile 04 | n=500 | déficit=[0.002341606653, 0.003402773920] | MSE baseline=0.000024204248 | MSE TDI-4=0.000010969033
+  décile 05 | n=500 | déficit=[0.003404423697, 0.004639311603] | MSE baseline=0.000018856848 | MSE TDI-4=0.000012456872
+  décile 06 | n=500 | déficit=[0.004640766654, 0.006443043553] | MSE baseline=0.000040523777 | MSE TDI-4=0.000043043851
+  décile 07 | n=500 | déficit=[0.006449995392, 0.009374765972] | MSE baseline=0.000041676094 | MSE TDI-4=0.000079292155
+  décile 08 | n=500 | déficit=[0.009376808449, 0.014076731181] | MSE baseline=0.000097058645 | MSE TDI-4=0.000113946425
+  décile 09 | n=500 | déficit=[0.014080648148, 0.026596061851] | MSE baseline=0.000703457330 | MSE TDI-4=0.002417692752
+  décile 10 | n=500 | déficit=[0.026706512731, 0.840697699653] | MSE baseline=0.016165744024 | MSE TDI-4=0.012290377633
+
+DÉCILES DU DÉFICIT — WIDTH 4
+  décile 01 | n=500 | déficit=[0.000079426320, 0.000281738185] | MSE baseline=0.000000109135 | MSE TDI-4=0.000000063169
+  décile 02 | n=500 | déficit=[0.000282704932, 0.000375669828] | MSE baseline=0.000000091502 | MSE TDI-4=0.000000064813
+  décile 03 | n=500 | déficit=[0.000375763630, 0.000475323089] | MSE baseline=0.000000094232 | MSE TDI-4=0.000000069026
+  décile 04 | n=500 | déficit=[0.000475496596, 0.000577620400] | MSE baseline=0.000000068790 | MSE TDI-4=0.000000068981
+  décile 05 | n=500 | déficit=[0.000577800711, 0.000697915386] | MSE baseline=0.000000055396 | MSE TDI-4=0.000000057939
+  décile 06 | n=500 | déficit=[0.000698011136, 0.000843725549] | MSE baseline=0.000000102193 | MSE TDI-4=0.000000089904
+  décile 07 | n=500 | déficit=[0.000843782255, 0.001028821083] | MSE baseline=0.000000120635 | MSE TDI-4=0.000000114271
+  décile 08 | n=500 | déficit=[0.001029197587, 0.001317497638] | MSE baseline=0.000000175343 | MSE TDI-4=0.000000178955
+  décile 09 | n=500 | déficit=[0.001318238059, 0.001870226344] | MSE baseline=0.000000530139 | MSE TDI-4=0.000000464525
+  décile 10 | n=500 | déficit=[0.001870999349, 0.040128800737] | MSE baseline=0.000011474716 | MSE TDI-4=0.000009818826
+
+DÉCILES DU DÉFICIT — WIDTH 5
+  décile 01 | n=500 | déficit=[0.000028323574, 0.000063794673] | MSE baseline=0.000000009174 | MSE TDI-4=0.000000003553
+  décile 02 | n=500 | déficit=[0.000063848576, 0.000076849319] | MSE baseline=0.000000007227 | MSE TDI-4=0.000000002681
+  décile 03 | n=500 | déficit=[0.000076856659, 0.000087406458] | MSE baseline=0.000000007008 | MSE TDI-4=0.000000002396
+  décile 04 | n=500 | déficit=[0.000087440581, 0.000097984549] | MSE baseline=0.000000005477 | MSE TDI-4=0.000000001767
+  décile 05 | n=500 | déficit=[0.000098004871, 0.000108415716] | MSE baseline=0.000000005010 | MSE TDI-4=0.000000001478
+  décile 06 | n=500 | déficit=[0.000108465584, 0.000121010498] | MSE baseline=0.000000003886 | MSE TDI-4=0.000000001169
+  décile 07 | n=500 | déficit=[0.000121046945, 0.000136074729] | MSE baseline=0.000000003221 | MSE TDI-4=0.000000001054
+  décile 08 | n=500 | déficit=[0.000136078993, 0.000155184929] | MSE baseline=0.000000002511 | MSE TDI-4=0.000000000942
+  décile 09 | n=500 | déficit=[0.000155198213, 0.000189817033] | MSE baseline=0.000000001578 | MSE TDI-4=0.000000001340
+  décile 10 | n=500 | déficit=[0.000189951877, 0.000591955275] | MSE baseline=0.000000005443 | MSE TDI-4=0.000000006897
+
+Bootstrap apparié déterministe : 2000 réplications
+
+BOOTSTRAP WIDTH 3
+IC 95 % amélioration perte composite TDI-4: [0.055802305, 0.069284921] (médiane 0.062370296)
+IC 95 % amélioration Brier TDI-4: [0.000000000, 0.000000000] (médiane 0.000000000)
+IC 95 % amélioration MSE conditionnelle TDI-4: [0.111604609, 0.138569843] (médiane 0.124740592)
+IC 95 % amélioration MSE reconstruite TDI-4: [-0.000431726, 0.000816906] (médiane 0.000222273)
+IC 95 % amélioration MAE reconstruite TDI-4: [0.000350715, 0.002144021] (médiane 0.001251852)
+
+BOOTSTRAP WIDTH 4
+IC 95 % amélioration perte composite TDI-4: [0.018695561, 0.022346104] (médiane 0.020428908)
+IC 95 % amélioration Brier TDI-4: [0.000000000, 0.000000000] (médiane 0.000000000)
+IC 95 % amélioration MSE conditionnelle TDI-4: [0.037391121, 0.044692208] (médiane 0.040857816)
+IC 95 % amélioration MSE reconstruite TDI-4: [0.000000131, 0.000000248] (médiane 0.000000180)
+IC 95 % amélioration MAE reconstruite TDI-4: [0.000045807, 0.000059708] (médiane 0.000052747)
+
+BOOTSTRAP HOLDOUT COMBINÉ WIDTHS 3 ET 4
+IC 95 % amélioration perte composite TDI-4: [0.037685803, 0.044976080] (médiane 0.041429030)
+IC 95 % amélioration Brier TDI-4: [0.000000000, 0.000000000] (médiane 0.000000000)
+IC 95 % amélioration MSE conditionnelle TDI-4: [0.075371605, 0.089952159] (médiane 0.082858061)
+IC 95 % amélioration MSE reconstruite TDI-4: [-0.000230947, 0.000412503] (médiane 0.000110949)
+IC 95 % amélioration MAE reconstruite TDI-4: [0.000202949, 0.001142675] (médiane 0.000654318)
+
+BOOTSTRAP WIDTH 5
+IC 95 % amélioration perte composite TDI-4: [0.034570495, 0.037174978] (médiane 0.035875600)
+IC 95 % amélioration Brier TDI-4: [0.000000000, 0.000000000] (médiane 0.000000000)
+IC 95 % amélioration MSE conditionnelle TDI-4: [0.069140990, 0.074349957] (médiane 0.071751200)
+IC 95 % amélioration MSE reconstruite TDI-4: [0.000000003, 0.000000003] (médiane 0.000000003)
+IC 95 % amélioration MAE reconstruite TDI-4: [0.000022019, 0.000023481] (médiane 0.000022775)
+
+CRITÈRE PRINCIPAL TDI-4A : ÉCHOUÉ
+CRITÈRE TRANSFERT TDI-4B : ÉCHOUÉ
+
+=== HASH DU RÉSULTAT ===
+f1b67144b91f025e586cafc3a4b18b44360564055e46de2be1eecb18d04059a9  results/tdi-target-geometry.log
+
+=== FIN ===
+résultat : results/tdi-target-geometry.log
