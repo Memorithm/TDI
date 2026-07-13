@@ -6,6 +6,7 @@ on:
       - main
       - tdi-2-branching
       - tdi-3-interwidth
+      - tdi-4-target-geometry
   pull_request:
   workflow_dispatch:
 
@@ -173,3 +174,10 @@ jobs:
             docs/TDI-3-INTERWIDTH-EVALUATOR.sha256
           sha256sum -c \
             docs/TDI-3-SCIENTIFIC-CODE.sha256
+          sha256sum -c \
+            docs/TDI-4-TARGET-GEOMETRY-PREREGISTRATION.sha256
+          sha256sum -c \
+            docs/TDI-4-TARGET-GEOMETRY-EVALUATOR.sha256
+          sha256sum -c \
+            docs/TDI-4-SCIENTIFIC-CODE.sha256
+          bash -n scripts/reproduce-tdi4.sh
