@@ -229,6 +229,72 @@ fn ratio_value(ratio: &ExactRatio) -> f64 {
     ratio.as_f64()
 }
 
+fn biguint_log2_from_u64_digits(digits: &[u64]) -> Result<f64, String> {
+    let top = digits
+        .last()
+        .copied()
+        .ok_or_else(|| "cannot calculate log2 of zero".to_owned())?;
+
+    if top == 0 {
+        return Err("invalid leading zero BigUint limb".to_owned());
+    }
+
+    let top_bits = 64_usize - top.leading_zeros() as usize;
+    let bit_length = (digits.len() - 1) * 64 + top_bits;
+
+    let combined = if digits.len() >= 2 {
+        (u128::from(top) << 64) | u128::from(digits[digits.len() - 2])
+    } else {
+        u128::from(top)
+    };
+
+    let combined_bits = if digits.len() >= 2 {
+        top_bits + 64
+    } else {
+        top_bits
+    };
+
+    let shift = combined_bits.saturating_sub(53);
+    let significant = (combined >> shift) as u64;
+    let significant_bits = combined_bits - shift;
+
+    let mantissa = significant as f64 / 2.0_f64.powi((significant_bits - 1) as i32);
+
+    if !mantissa.is_finite() || !(1.0..2.0).contains(&mantissa) {
+        return Err("invalid normalized BigUint mantissa".to_owned());
+    }
+
+    let logarithm = (bit_length - 1) as f64 + mantissa.log2();
+
+    if !logarithm.is_finite() {
+        return Err("non-finite BigUint logarithm".to_owned());
+    }
+
+    Ok(logarithm)
+}
+
+fn exact_overlap_deficit_u(ratio: &ExactRatio) -> Result<f64, String> {
+    if ratio.numerator() >= ratio.denominator() {
+        return Err("conditional overlap must be strictly below one".to_owned());
+    }
+
+    let deficit_numerator = ratio.denominator() - ratio.numerator();
+
+    let numerator_log2 = biguint_log2_from_u64_digits(&deficit_numerator.to_u64_digits())?;
+
+    let denominator_log2 = biguint_log2_from_u64_digits(&ratio.denominator().to_u64_digits())?;
+
+    let transformed = denominator_log2 - numerator_log2;
+
+    if !transformed.is_finite() || transformed < 0.0 {
+        return Err(format!(
+            "invalid conditional target geometry: {transformed}"
+        ));
+    }
+
+    Ok(transformed)
+}
+
 fn normalized_entropy(entropy_bits: f64, width: u8) -> Result<f64, String> {
     let states = state_count(width)? as f64;
     let denominator = states.ln();
@@ -340,30 +406,14 @@ fn analyze_seed(width: u8, seed: u64) -> Result<Option<Record>, String> {
     let conditional_u = if recovered {
         None
     } else {
-        let deficit = final_overlap_ratio
-            .checked_complement()
-            .ok_or_else(|| {
+        Some(
+            exact_overlap_deficit_u(&final_overlap_ratio).map_err(|error| {
                 format!(
-                    "final overlap lies outside the unit interval for                      width {width}, seed {seed}"
+                    "cannot calculate conditional target for width \
+                         {width}, seed {seed}: {error}"
                 )
-            })?
-            .as_f64();
-
-        if !deficit.is_finite() || deficit <= 0.0 || deficit > 1.0 {
-            return Err(format!(
-                "invalid overlap deficit for width {width},                  seed {seed}: {deficit}"
-            ));
-        }
-
-        let transformed = -deficit.log2();
-
-        if !transformed.is_finite() {
-            return Err(format!(
-                "non-finite conditional target for width {width}, seed {seed}"
-            ));
-        }
-
-        Some(transformed)
+            })?,
+        )
     };
 
     let baseline = [
@@ -1780,6 +1830,26 @@ mod tests {
     fn splitmix_is_deterministic() {
         assert_eq!(splitmix64(42), splitmix64(42));
         assert_ne!(splitmix64(42), splitmix64(43));
+    }
+
+    #[test]
+    fn exact_deficit_geometry_is_correct() {
+        let ratio = tdi_core::ExactRatio::new(7, 8).expect("valid ratio");
+
+        let transformed =
+            super::exact_overlap_deficit_u(&ratio).expect("valid conditional geometry");
+
+        assert!((transformed - 3.0).abs() < 1.0e-12);
+    }
+
+    #[test]
+    fn biguint_logarithm_supports_more_than_128_bits() {
+        let digits = [0_u64, 0_u64, 1_u64];
+
+        let logarithm =
+            super::biguint_log2_from_u64_digits(&digits).expect("large integer logarithm");
+
+        assert!((logarithm - 128.0).abs() < 1.0e-12);
     }
 
     #[test]
