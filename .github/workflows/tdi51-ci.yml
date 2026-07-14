@@ -3,6 +3,8 @@ name: TDI-5.1 CI
 on:
   push:
     branches:
+      - main
+      - experiment/tdi-5.1-termination-safety
       - tdi-5.1-continuous-deficit-geometry
       - tdi-51-continuous-deficit-geometry
   workflow_dispatch:
