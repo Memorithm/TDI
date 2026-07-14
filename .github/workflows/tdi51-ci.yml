@@ -19,7 +19,7 @@ concurrency:
 env:
   CARGO_HOME: /mnt/nvme/github-runners/home/.cargo
   RUSTUP_HOME: /mnt/nvme/github-runners/home/.rustup
-  CARGO_TARGET_DIR: /mnt/nvme/github-runners/cache/tdi/tdi51-ci
+  CARGO_TARGET_DIR: ${{ runner.temp }}/tdi51-target
 
 jobs:
   validation:
