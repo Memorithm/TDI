@@ -19,7 +19,6 @@ concurrency:
 env:
   CARGO_HOME: /mnt/nvme/github-runners/home/.cargo
   RUSTUP_HOME: /mnt/nvme/github-runners/home/.rustup
-  CARGO_TARGET_DIR: ${{ runner.temp }}/tdi51-target
 
 jobs:
   validation:
@@ -61,8 +60,13 @@ jobs:
 
       - name: Configure shared Rust
         run: |
+          TARGET_DIR="${{ runner.temp }}/tdi51-target"
+
+          echo "CARGO_TARGET_DIR=$TARGET_DIR" >> "$GITHUB_ENV"
           echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
-          mkdir -p "$CARGO_TARGET_DIR"
+
+          mkdir -p "$TARGET_DIR"
+
           "$CARGO_HOME/bin/rustc" --version
           "$CARGO_HOME/bin/cargo" --version
           "$CARGO_HOME/bin/rustfmt" --version
