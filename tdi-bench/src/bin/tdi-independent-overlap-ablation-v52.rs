@@ -22,10 +22,6 @@ const TRAIN_WIDTH_4: u8 = 4;
 const OOD_WIDTH_5: u8 = 5;
 const OOD_WIDTH_6: u8 = 6;
 
-// Temporary population constants inherited from the guarded TDI-5.1
-// scaffold. They are not the complete TDI-5.2 seed-block contract.
-// Full execution remains disabled until all three preregistered blocks
-// and their pairwise-disjoint consumed ranges are implemented.
 const TRAIN_WIDTH_3_SYSTEMS: usize = 15_000;
 const TRAIN_WIDTH_4_SYSTEMS: usize = 15_000;
 const HOLDOUT_WIDTH_3_SYSTEMS: usize = 5_000;
@@ -33,12 +29,9 @@ const HOLDOUT_WIDTH_4_SYSTEMS: usize = 5_000;
 const OOD_WIDTH_5_SYSTEMS: usize = 10_000;
 const OOD_WIDTH_6_SYSTEMS: usize = 5_000;
 
-const TRAIN_WIDTH_3_SEED_OFFSET: u64 = 60_000_000;
-const HOLDOUT_WIDTH_3_SEED_OFFSET: u64 = 61_000_000;
-const TRAIN_WIDTH_4_SEED_OFFSET: u64 = 70_000_000;
-const HOLDOUT_WIDTH_4_SEED_OFFSET: u64 = 71_000_000;
-const OOD_WIDTH_5_SEED_OFFSET: u64 = 80_000_000;
-const OOD_WIDTH_6_SEED_OFFSET: u64 = 90_000_000;
+const SEED_BLOCK_COUNT: usize = 3;
+const POPULATIONS_PER_SEED_BLOCK: usize = 6;
+const TOTAL_SEED_RESERVATIONS: usize = SEED_BLOCK_COUNT * POPULATIONS_PER_SEED_BLOCK;
 
 const BASELINE_FEATURE_COUNT: usize = 13;
 const EARLY_OVERLAP_FEATURE_COUNT: usize = 2;
@@ -52,12 +45,8 @@ const BD_FEATURE_COUNT: usize = BASELINE_FEATURE_COUNT + 1;
 const MODEL_LAYOUT_COUNT: usize = 5;
 
 const RIDGE_LAMBDA: f64 = 1.0;
-// Temporary bootstrap constants inherited from the guarded TDI-5.1
-// scaffold. They are not the frozen TDI-5.2 bootstrap configuration.
-// TDI-5.2 requires 4,000 replicates per block and a separate stratified
-// aggregate bootstrap; full execution remains disabled until implemented.
-const BOOTSTRAP_REPLICATES: usize = 2_000;
-const BOOTSTRAP_SEED: u64 = 0x5444_4935_4344_4745;
+const BOOTSTRAP_REPLICATES: usize = 4_000;
+const AGGREGATE_BOOTSTRAP_SEED: u64 = 0x5444_4935_3241_4747;
 
 const MAX_SUPPORTED_WIDTH: u8 = 6;
 const WIDTH_3_ATTEMPT_MULTIPLIER: usize = 64;
@@ -68,6 +57,78 @@ const WIDTH_3_NO_PROGRESS_LIMIT: usize = 25_000;
 const WIDTH_4_NO_PROGRESS_LIMIT: usize = 50_000;
 const WIDTH_5_NO_PROGRESS_LIMIT: usize = 75_000;
 const WIDTH_6_NO_PROGRESS_LIMIT: usize = 100_000;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SeedBlockId {
+    A,
+    B,
+    C,
+}
+
+impl SeedBlockId {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::A => "A",
+            Self::B => "B",
+            Self::C => "C",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct SeedBlockSpec {
+    id: SeedBlockId,
+    training_width_3_seed: u64,
+    holdout_width_3_seed: u64,
+    training_width_4_seed: u64,
+    holdout_width_4_seed: u64,
+    ood_width_5_seed: u64,
+    ood_width_6_seed: u64,
+    bootstrap_seed: u64,
+}
+
+const SEED_BLOCKS: [SeedBlockSpec; SEED_BLOCK_COUNT] = [
+    SeedBlockSpec {
+        id: SeedBlockId::A,
+        training_width_3_seed: 160_000_000,
+        holdout_width_3_seed: 170_000_000,
+        training_width_4_seed: 180_000_000,
+        holdout_width_4_seed: 190_000_000,
+        ood_width_5_seed: 200_000_000,
+        ood_width_6_seed: 210_000_000,
+        bootstrap_seed: 0x5444_4935_3241_0001,
+    },
+    SeedBlockSpec {
+        id: SeedBlockId::B,
+        training_width_3_seed: 260_000_000,
+        holdout_width_3_seed: 270_000_000,
+        training_width_4_seed: 280_000_000,
+        holdout_width_4_seed: 290_000_000,
+        ood_width_5_seed: 300_000_000,
+        ood_width_6_seed: 310_000_000,
+        bootstrap_seed: 0x5444_4935_3242_0002,
+    },
+    SeedBlockSpec {
+        id: SeedBlockId::C,
+        training_width_3_seed: 360_000_000,
+        holdout_width_3_seed: 370_000_000,
+        training_width_4_seed: 380_000_000,
+        holdout_width_4_seed: 390_000_000,
+        ood_width_5_seed: 400_000_000,
+        ood_width_6_seed: 410_000_000,
+        bootstrap_seed: 0x5444_4935_3243_0003,
+    },
+];
+
+// Aliases used only by the unreachable legacy scaffold.
+// The final evaluator will orchestrate all three blocks explicitly.
+const TRAIN_WIDTH_3_SEED_OFFSET: u64 = SEED_BLOCKS[0].training_width_3_seed;
+const HOLDOUT_WIDTH_3_SEED_OFFSET: u64 = SEED_BLOCKS[0].holdout_width_3_seed;
+const TRAIN_WIDTH_4_SEED_OFFSET: u64 = SEED_BLOCKS[0].training_width_4_seed;
+const HOLDOUT_WIDTH_4_SEED_OFFSET: u64 = SEED_BLOCKS[0].holdout_width_4_seed;
+const OOD_WIDTH_5_SEED_OFFSET: u64 = SEED_BLOCKS[0].ood_width_5_seed;
+const OOD_WIDTH_6_SEED_OFFSET: u64 = SEED_BLOCKS[0].ood_width_6_seed;
+const BOOTSTRAP_SEED: u64 = SEED_BLOCKS[0].bootstrap_seed;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(usize)]
@@ -1101,6 +1162,101 @@ fn preregistered_generation_limits(
         max_attempts,
         no_progress_limit,
     })
+}
+
+fn validate_preregistered_seed_reservations() -> Result<usize, String> {
+    let mut ranges = Vec::with_capacity(TOTAL_SEED_RESERVATIONS);
+
+    for block in SEED_BLOCKS {
+        let populations = [
+            (
+                "training w3",
+                TRAIN_WIDTH_3,
+                block.training_width_3_seed,
+                TRAIN_WIDTH_3_SYSTEMS,
+            ),
+            (
+                "holdout w3",
+                TRAIN_WIDTH_3,
+                block.holdout_width_3_seed,
+                HOLDOUT_WIDTH_3_SYSTEMS,
+            ),
+            (
+                "training w4",
+                TRAIN_WIDTH_4,
+                block.training_width_4_seed,
+                TRAIN_WIDTH_4_SYSTEMS,
+            ),
+            (
+                "holdout w4",
+                TRAIN_WIDTH_4,
+                block.holdout_width_4_seed,
+                HOLDOUT_WIDTH_4_SYSTEMS,
+            ),
+            (
+                "OOD w5",
+                OOD_WIDTH_5,
+                block.ood_width_5_seed,
+                OOD_WIDTH_5_SYSTEMS,
+            ),
+            (
+                "OOD w6",
+                OOD_WIDTH_6,
+                block.ood_width_6_seed,
+                OOD_WIDTH_6_SYSTEMS,
+            ),
+        ];
+
+        for (population, width, start_seed, accepted_count) in populations {
+            let limits = preregistered_generation_limits(width, start_seed, accepted_count)
+                .map_err(|error| format!("block {} {population}: {error}", block.id.label()))?;
+
+            let reserved_attempts = u64::try_from(limits.max_attempts).map_err(|_| {
+                format!(
+                    "block {} {population}: maximum-attempt budget {} \
+                         cannot be represented as u64",
+                    block.id.label(),
+                    limits.max_attempts
+                )
+            })?;
+
+            let end_seed = start_seed.checked_add(reserved_attempts).ok_or_else(|| {
+                format!(
+                    "block {} {population}: reserved seed range overflows u64",
+                    block.id.label()
+                )
+            })?;
+
+            ranges.push((
+                start_seed,
+                end_seed,
+                format!("block {} {population}", block.id.label()),
+            ));
+        }
+    }
+
+    if ranges.len() != TOTAL_SEED_RESERVATIONS {
+        return Err(format!(
+            "expected {TOTAL_SEED_RESERVATIONS} seed reservations, received {}",
+            ranges.len()
+        ));
+    }
+
+    ranges.sort_by_key(|(start_seed, _, _)| *start_seed);
+
+    for pair in ranges.windows(2) {
+        let (_, previous_end, previous_label) = &pair[0];
+        let (next_start, _, next_label) = &pair[1];
+
+        if *previous_end > *next_start {
+            return Err(format!(
+                "reserved seed ranges overlap: {previous_label} ends at \
+                 {previous_end}, {next_label} starts at {next_start}"
+            ));
+        }
+    }
+
+    Ok(ranges.len())
 }
 
 fn generate_records_with_limits(
@@ -2156,10 +2312,24 @@ fn run_termination_smoke() -> Result<(), String> {
         no_progress_limit: 64,
     };
 
+    let seed_reservation_count = validate_preregistered_seed_reservations()?;
+
     let report = generate_records_with_limits(TRAIN_WIDTH_3, TRAIN_WIDTH_3_SEED_OFFSET, 1, limits)
         .map_err(|error| error.to_string())?;
 
     println!("width 6 successor-set space : 18446744073709551616");
+    println!("reserved seed ranges         : {seed_reservation_count} disjoint");
+    println!("bootstrap replicates         : {BOOTSTRAP_REPLICATES}");
+
+    for block in SEED_BLOCKS {
+        println!(
+            "block {} bootstrap seed      : 0x{:016X}",
+            block.id.label(),
+            block.bootstrap_seed
+        );
+    }
+
+    println!("aggregate bootstrap seed     : 0x{AGGREGATE_BOOTSTRAP_SEED:016X}");
     println!(
         "width 3 smoke accepted       : {} in {} attempts",
         report.records.len(),
@@ -2701,7 +2871,7 @@ mod tests {
             super::Cardinality::Exact(18_446_744_073_709_551_616_u128)
         );
 
-        let context = super::AttemptContext::new(6, 90_000_000, 0);
+        let context = super::AttemptContext::new(6, super::SEED_BLOCKS[0].ood_width_6_seed, 0);
 
         assert_eq!(
             super::nonempty_successor_set_count(context).expect("width 6 non-empty masks fit u64"),
@@ -3123,14 +3293,25 @@ mod tests {
     }
 
     #[test]
-    fn tdi52_scaffold_bootstrap_placeholders_are_unchanged() {
+    fn tdi52_bootstrap_contract_matches_preregistration() {
         assert_eq!(RIDGE_LAMBDA, 1.0);
-        assert_eq!(BOOTSTRAP_REPLICATES, 2_000);
-        assert_eq!(BOOTSTRAP_SEED, 0x5444_4935_4344_4745);
+        assert_eq!(BOOTSTRAP_REPLICATES, 4_000);
+        assert_eq!(BOOTSTRAP_SEED, 0x5444_4935_3241_0001);
+
+        assert_eq!(
+            super::SEED_BLOCKS.map(|block| block.bootstrap_seed),
+            [
+                0x5444_4935_3241_0001,
+                0x5444_4935_3242_0002,
+                0x5444_4935_3243_0003,
+            ]
+        );
+
+        assert_eq!(super::AGGREGATE_BOOTSTRAP_SEED, 0x5444_4935_3241_4747);
     }
 
     #[test]
-    fn tdi52_scaffold_population_placeholders_are_unchanged() {
+    fn tdi52_seed_block_contract_matches_preregistration() {
         assert_eq!(TRAIN_WIDTH_3_SYSTEMS, 15_000);
         assert_eq!(TRAIN_WIDTH_4_SYSTEMS, 15_000);
         assert_eq!(HOLDOUT_WIDTH_3_SYSTEMS, 5_000);
@@ -3138,12 +3319,48 @@ mod tests {
         assert_eq!(OOD_WIDTH_5_SYSTEMS, 10_000);
         assert_eq!(OOD_WIDTH_6_SYSTEMS, 5_000);
 
-        assert_eq!(TRAIN_WIDTH_3_SEED_OFFSET, 60_000_000);
-        assert_eq!(HOLDOUT_WIDTH_3_SEED_OFFSET, 61_000_000);
-        assert_eq!(TRAIN_WIDTH_4_SEED_OFFSET, 70_000_000);
-        assert_eq!(HOLDOUT_WIDTH_4_SEED_OFFSET, 71_000_000);
-        assert_eq!(OOD_WIDTH_5_SEED_OFFSET, 80_000_000);
-        assert_eq!(OOD_WIDTH_6_SEED_OFFSET, 90_000_000);
+        assert_eq!(super::SEED_BLOCKS.len(), 3);
+
+        let block_a = super::SEED_BLOCKS[0];
+        let block_b = super::SEED_BLOCKS[1];
+        let block_c = super::SEED_BLOCKS[2];
+
+        assert_eq!(block_a.id, super::SeedBlockId::A);
+        assert_eq!(block_a.training_width_3_seed, 160_000_000);
+        assert_eq!(block_a.holdout_width_3_seed, 170_000_000);
+        assert_eq!(block_a.training_width_4_seed, 180_000_000);
+        assert_eq!(block_a.holdout_width_4_seed, 190_000_000);
+        assert_eq!(block_a.ood_width_5_seed, 200_000_000);
+        assert_eq!(block_a.ood_width_6_seed, 210_000_000);
+
+        assert_eq!(block_b.id, super::SeedBlockId::B);
+        assert_eq!(block_b.training_width_3_seed, 260_000_000);
+        assert_eq!(block_b.holdout_width_3_seed, 270_000_000);
+        assert_eq!(block_b.training_width_4_seed, 280_000_000);
+        assert_eq!(block_b.holdout_width_4_seed, 290_000_000);
+        assert_eq!(block_b.ood_width_5_seed, 300_000_000);
+        assert_eq!(block_b.ood_width_6_seed, 310_000_000);
+
+        assert_eq!(block_c.id, super::SeedBlockId::C);
+        assert_eq!(block_c.training_width_3_seed, 360_000_000);
+        assert_eq!(block_c.holdout_width_3_seed, 370_000_000);
+        assert_eq!(block_c.training_width_4_seed, 380_000_000);
+        assert_eq!(block_c.holdout_width_4_seed, 390_000_000);
+        assert_eq!(block_c.ood_width_5_seed, 400_000_000);
+        assert_eq!(block_c.ood_width_6_seed, 410_000_000);
+
+        assert_eq!(TRAIN_WIDTH_3_SEED_OFFSET, 160_000_000);
+        assert_eq!(HOLDOUT_WIDTH_3_SEED_OFFSET, 170_000_000);
+        assert_eq!(TRAIN_WIDTH_4_SEED_OFFSET, 180_000_000);
+        assert_eq!(HOLDOUT_WIDTH_4_SEED_OFFSET, 190_000_000);
+        assert_eq!(OOD_WIDTH_5_SEED_OFFSET, 200_000_000);
+        assert_eq!(OOD_WIDTH_6_SEED_OFFSET, 210_000_000);
+
+        assert_eq!(
+            super::validate_preregistered_seed_reservations()
+                .expect("all maximum-attempt seed reservations are disjoint"),
+            18
+        );
     }
 
     #[test]
