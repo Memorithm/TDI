@@ -22,6 +22,10 @@ const TRAIN_WIDTH_4: u8 = 4;
 const OOD_WIDTH_5: u8 = 5;
 const OOD_WIDTH_6: u8 = 6;
 
+// Temporary population constants inherited from the guarded TDI-5.1
+// scaffold. They are not the complete TDI-5.2 seed-block contract.
+// Full execution remains disabled until all three preregistered blocks
+// and their pairwise-disjoint consumed ranges are implemented.
 const TRAIN_WIDTH_3_SYSTEMS: usize = 15_000;
 const TRAIN_WIDTH_4_SYSTEMS: usize = 15_000;
 const HOLDOUT_WIDTH_3_SYSTEMS: usize = 5_000;
@@ -37,16 +41,21 @@ const OOD_WIDTH_5_SEED_OFFSET: u64 = 80_000_000;
 const OOD_WIDTH_6_SEED_OFFSET: u64 = 90_000_000;
 
 const BASELINE_FEATURE_COUNT: usize = 13;
-const TDI_FEATURE_COUNT: usize = 3;
+const EARLY_OVERLAP_FEATURE_COUNT: usize = 2;
 
-const M0_FEATURE_COUNT: usize = BASELINE_FEATURE_COUNT;
-const M1_FEATURE_COUNT: usize = BASELINE_FEATURE_COUNT + 1;
-const M2_FEATURE_COUNT: usize = BASELINE_FEATURE_COUNT + 2;
-const M3_FEATURE_COUNT: usize = BASELINE_FEATURE_COUNT + TDI_FEATURE_COUNT;
+const B0_FEATURE_COUNT: usize = BASELINE_FEATURE_COUNT;
+const B1_FEATURE_COUNT: usize = BASELINE_FEATURE_COUNT + 1;
+const B2_FEATURE_COUNT: usize = BASELINE_FEATURE_COUNT + 1;
+const B12_FEATURE_COUNT: usize = BASELINE_FEATURE_COUNT + EARLY_OVERLAP_FEATURE_COUNT;
+const BD_FEATURE_COUNT: usize = BASELINE_FEATURE_COUNT + 1;
 
-const MODEL_LAYOUT_COUNT: usize = 4;
+const MODEL_LAYOUT_COUNT: usize = 5;
 
 const RIDGE_LAMBDA: f64 = 1.0;
+// Temporary bootstrap constants inherited from the guarded TDI-5.1
+// scaffold. They are not the frozen TDI-5.2 bootstrap configuration.
+// TDI-5.2 requires 4,000 replicates per block and a separate stratified
+// aggregate bootstrap; full execution remains disabled until implemented.
 const BOOTSTRAP_REPLICATES: usize = 2_000;
 const BOOTSTRAP_SEED: u64 = 0x5444_4935_4344_4745;
 
@@ -63,30 +72,33 @@ const WIDTH_6_NO_PROGRESS_LIMIT: usize = 100_000;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(usize)]
 enum FeatureLayout {
-    M0,
-    M1,
-    M2,
-    M3,
+    B0,
+    B1,
+    B2,
+    B12,
+    BD,
 }
 
 impl FeatureLayout {
-    const ALL: [Self; MODEL_LAYOUT_COUNT] = [Self::M0, Self::M1, Self::M2, Self::M3];
+    const ALL: [Self; MODEL_LAYOUT_COUNT] = [Self::B0, Self::B1, Self::B2, Self::B12, Self::BD];
 
     const fn label(self) -> &'static str {
         match self {
-            Self::M0 => "M0 — BASELINE",
-            Self::M1 => "M1 — BASELINE + O1",
-            Self::M2 => "M2 — BASELINE + O1 + O2",
-            Self::M3 => "M3 — BASELINE + O1 + O2 + ΔO",
+            Self::B0 => "B0 — BASELINE",
+            Self::B1 => "B1 — BASELINE + O1",
+            Self::B2 => "B2 — BASELINE + O2",
+            Self::B12 => "B12 — BASELINE + O1 + O2",
+            Self::BD => "BD — BASELINE + (O2 - O1), EXPLORATORY",
         }
     }
 
     const fn feature_count(self) -> usize {
         match self {
-            Self::M0 => M0_FEATURE_COUNT,
-            Self::M1 => M1_FEATURE_COUNT,
-            Self::M2 => M2_FEATURE_COUNT,
-            Self::M3 => M3_FEATURE_COUNT,
+            Self::B0 => B0_FEATURE_COUNT,
+            Self::B1 => B1_FEATURE_COUNT,
+            Self::B2 => B2_FEATURE_COUNT,
+            Self::B12 => B12_FEATURE_COUNT,
+            Self::BD => BD_FEATURE_COUNT,
         }
     }
 }
@@ -94,7 +106,7 @@ impl FeatureLayout {
 #[derive(Clone, Debug)]
 struct Record {
     baseline: [f64; BASELINE_FEATURE_COUNT],
-    tdi: [f64; TDI_FEATURE_COUNT],
+    early_overlap: [f64; EARLY_OVERLAP_FEATURE_COUNT],
     overlaps: [f64; TARGET_HORIZON_COUNT],
     targets_u: [f64; TARGET_HORIZON_COUNT],
 }
@@ -676,17 +688,23 @@ fn feature_layout(record: &Record, layout: FeatureLayout) -> Vec<f64> {
     let mut features = Vec::with_capacity(layout.feature_count());
     features.extend_from_slice(&record.baseline);
 
+    let first_overlap = record.early_overlap[0];
+    let second_overlap = record.early_overlap[1];
+
     match layout {
-        FeatureLayout::M0 => {}
-        FeatureLayout::M1 => {
-            features.push(record.tdi[0]);
+        FeatureLayout::B0 => {}
+        FeatureLayout::B1 => {
+            features.push(first_overlap);
         }
-        FeatureLayout::M2 => {
-            features.push(record.tdi[0]);
-            features.push(record.tdi[1]);
+        FeatureLayout::B2 => {
+            features.push(second_overlap);
         }
-        FeatureLayout::M3 => {
-            features.extend_from_slice(&record.tdi);
+        FeatureLayout::B12 => {
+            features.push(first_overlap);
+            features.push(second_overlap);
+        }
+        FeatureLayout::BD => {
+            features.push(second_overlap - first_overlap);
         }
     }
 
@@ -1009,13 +1027,13 @@ fn analyze_seed(context: AttemptContext) -> Result<CandidateOutcome, EvaluationE
         f64::from(context.width),
     ];
 
-    let tdi = [
-        first_overlap,
-        second_overlap,
-        second_overlap - first_overlap,
-    ];
+    let early_overlap = [first_overlap, second_overlap];
 
-    if baseline.iter().chain(&tdi).any(|value| !value.is_finite()) {
+    if baseline
+        .iter()
+        .chain(&early_overlap)
+        .any(|value| !value.is_finite())
+    {
         return Ok(CandidateOutcome::Rejected(
             RejectionReason::NonFiniteFeature,
         ));
@@ -1023,7 +1041,7 @@ fn analyze_seed(context: AttemptContext) -> Result<CandidateOutcome, EvaluationE
 
     Ok(CandidateOutcome::Accepted(Record {
         baseline,
-        tdi,
+        early_overlap,
         overlaps,
         targets_u,
     }))
@@ -1981,22 +1999,22 @@ fn tdi52_print_evaluations(
         );
     }
 
-    let baseline = tdi52_layout_evaluation(evaluations, FeatureLayout::M0);
+    let baseline = tdi52_layout_evaluation(evaluations, FeatureLayout::B0);
 
-    let challenger = tdi52_layout_evaluation(evaluations, FeatureLayout::M3);
+    let challenger = tdi52_layout_evaluation(evaluations, FeatureLayout::B12);
 
     println!(
-        "  réduction relative MSE U M0→M3 : {:.9} %",
+        "  réduction relative MSE U B0→B12 : {:.9} %",
         tdi52_relative_reduction(baseline.standardized.mse, challenger.standardized.mse,) * 100.0
     );
 
     println!(
-        "  amélioration MSE O M0→M3       : {:.12}",
+        "  amélioration MSE O B0→B12       : {:.12}",
         baseline.reconstructed.mse - challenger.reconstructed.mse
     );
 
     println!(
-        "  amélioration MAE O M0→M3       : {:.12}",
+        "  amélioration MAE O B0→B12       : {:.12}",
         baseline.reconstructed.mae - challenger.reconstructed.mae
     );
 }
@@ -2077,9 +2095,11 @@ fn tdi52_fit_direct_models(training: &[Record]) -> Result<(RidgeModel, RidgeMode
     let horizon_index = primary_horizon_index();
     let targets = overlap_values(training, horizon_index);
 
-    let baseline = feature_matrix(training, |record| feature_layout(record, FeatureLayout::M0));
+    let baseline = feature_matrix(training, |record| feature_layout(record, FeatureLayout::B0));
 
-    let challenger = feature_matrix(training, |record| feature_layout(record, FeatureLayout::M3));
+    let challenger = feature_matrix(training, |record| {
+        feature_layout(record, FeatureLayout::B12)
+    });
 
     Ok((
         fit_ridge(&baseline, &targets)?,
@@ -2097,10 +2117,10 @@ fn tdi52_print_direct_comparator(
     let targets = overlap_values(records, horizon_index);
 
     let baseline_features =
-        feature_matrix(records, |record| feature_layout(record, FeatureLayout::M0));
+        feature_matrix(records, |record| feature_layout(record, FeatureLayout::B0));
 
     let challenger_features =
-        feature_matrix(records, |record| feature_layout(record, FeatureLayout::M3));
+        feature_matrix(records, |record| feature_layout(record, FeatureLayout::B12));
 
     let baseline_predictions = predictions(baseline_model, &baseline_features);
 
@@ -2113,8 +2133,8 @@ fn tdi52_print_direct_comparator(
     println!();
     println!("=== COMPARATEUR DIRECT O6 — {label} ===");
 
-    tdi52_print_metrics("M0 direct", baseline);
-    tdi52_print_metrics("M3 direct", challenger);
+    tdi52_print_metrics("B0 direct", baseline);
+    tdi52_print_metrics("B12 direct", challenger);
 
     println!(
         "  réduction relative MSE directe : {:.9} %",
@@ -2430,64 +2450,64 @@ fn run_legacy_scaffold_full_experiment() -> Result<(), String> {
     let width_6_primary =
         tdi52_evaluate_horizon(&holdout_width_6, primary_index, &models, &target_scalers)?;
 
-    let combined_m0 = tdi52_layout_evaluation(&combined_primary, FeatureLayout::M0);
+    let combined_b0 = tdi52_layout_evaluation(&combined_primary, FeatureLayout::B0);
 
-    let combined_m3 = tdi52_layout_evaluation(&combined_primary, FeatureLayout::M3);
+    let combined_b12 = tdi52_layout_evaluation(&combined_primary, FeatureLayout::B12);
 
-    let width_3_m0 = tdi52_layout_evaluation(&width_3_primary, FeatureLayout::M0);
+    let width_3_b0 = tdi52_layout_evaluation(&width_3_primary, FeatureLayout::B0);
 
-    let width_3_m3 = tdi52_layout_evaluation(&width_3_primary, FeatureLayout::M3);
+    let width_3_b12 = tdi52_layout_evaluation(&width_3_primary, FeatureLayout::B12);
 
-    let width_4_m0 = tdi52_layout_evaluation(&width_4_primary, FeatureLayout::M0);
+    let width_4_b0 = tdi52_layout_evaluation(&width_4_primary, FeatureLayout::B0);
 
-    let width_4_m3 = tdi52_layout_evaluation(&width_4_primary, FeatureLayout::M3);
+    let width_4_b12 = tdi52_layout_evaluation(&width_4_primary, FeatureLayout::B12);
 
-    let width_5_m0 = tdi52_layout_evaluation(&width_5_primary, FeatureLayout::M0);
+    let width_5_b0 = tdi52_layout_evaluation(&width_5_primary, FeatureLayout::B0);
 
-    let width_5_m3 = tdi52_layout_evaluation(&width_5_primary, FeatureLayout::M3);
+    let width_5_b12 = tdi52_layout_evaluation(&width_5_primary, FeatureLayout::B12);
 
-    let width_6_m0 = tdi52_layout_evaluation(&width_6_primary, FeatureLayout::M0);
+    let width_6_b0 = tdi52_layout_evaluation(&width_6_primary, FeatureLayout::B0);
 
-    let width_6_m3 = tdi52_layout_evaluation(&width_6_primary, FeatureLayout::M3);
+    let width_6_b12 = tdi52_layout_evaluation(&width_6_primary, FeatureLayout::B12);
 
     let combined_bootstrap = tdi52_paired_bootstrap(
         &holdout_combined,
         primary_index,
         primary_scaler,
-        &combined_m0.predictions,
-        &combined_m3.predictions,
+        &combined_b0.predictions,
+        &combined_b12.predictions,
     )?;
 
     let width_3_bootstrap = tdi52_paired_bootstrap(
         &holdout_width_3,
         primary_index,
         primary_scaler,
-        &width_3_m0.predictions,
-        &width_3_m3.predictions,
+        &width_3_b0.predictions,
+        &width_3_b12.predictions,
     )?;
 
     let width_4_bootstrap = tdi52_paired_bootstrap(
         &holdout_width_4,
         primary_index,
         primary_scaler,
-        &width_4_m0.predictions,
-        &width_4_m3.predictions,
+        &width_4_b0.predictions,
+        &width_4_b12.predictions,
     )?;
 
     let width_5_bootstrap = tdi52_paired_bootstrap(
         &holdout_width_5,
         primary_index,
         primary_scaler,
-        &width_5_m0.predictions,
-        &width_5_m3.predictions,
+        &width_5_b0.predictions,
+        &width_5_b12.predictions,
     )?;
 
     let width_6_bootstrap = tdi52_paired_bootstrap(
         &holdout_width_6,
         primary_index,
         primary_scaler,
-        &width_6_m0.predictions,
-        &width_6_m3.predictions,
+        &width_6_b0.predictions,
+        &width_6_b12.predictions,
     )?;
 
     println!();
@@ -2504,34 +2524,34 @@ fn run_legacy_scaffold_full_experiment() -> Result<(), String> {
     }
 
     let criterion_a =
-        tdi52_relative_reduction(combined_m0.standardized.mse, combined_m3.standardized.mse)
+        tdi52_relative_reduction(combined_b0.standardized.mse, combined_b12.standardized.mse)
             >= 0.10
             && combined_bootstrap.standardized_mse.lower > 0.0
-            && width_3_m0.standardized.mse - width_3_m3.standardized.mse > 0.0
-            && width_4_m0.standardized.mse - width_4_m3.standardized.mse > 0.0
+            && width_3_b0.standardized.mse - width_3_b12.standardized.mse > 0.0
+            && width_4_b0.standardized.mse - width_4_b12.standardized.mse > 0.0
             && width_3_bootstrap.standardized_mse.lower > 0.0
             && width_4_bootstrap.standardized_mse.lower > 0.0
-            && combined_m3.standardized.spearman > combined_m0.standardized.spearman
-            && width_3_m3.standardized.spearman > 0.0
-            && width_4_m3.standardized.spearman > 0.0
-            && combined_m3.standardized.bias.abs() <= combined_m0.standardized.bias.abs() + 0.02;
+            && combined_b12.standardized.spearman > combined_b0.standardized.spearman
+            && width_3_b12.standardized.spearman > 0.0
+            && width_4_b12.standardized.spearman > 0.0
+            && combined_b12.standardized.bias.abs() <= combined_b0.standardized.bias.abs() + 0.02;
 
     let criterion_b =
-        tdi52_relative_reduction(width_5_m0.standardized.mse, width_5_m3.standardized.mse) >= 0.20
+        tdi52_relative_reduction(width_5_b0.standardized.mse, width_5_b12.standardized.mse) >= 0.20
             && width_5_bootstrap.standardized_mse.lower > 0.0
-            && width_5_m3.standardized.spearman > 0.0
-            && width_5_m3.standardized.spearman >= width_5_m0.standardized.spearman
-            && width_5_m3.standardized.r_squared > width_5_m0.standardized.r_squared
-            && width_5_m3.standardized.bias.abs() < width_5_m0.standardized.bias.abs()
-            && width_5_m0.reconstructed.mse - width_5_m3.reconstructed.mse > 0.0
-            && width_5_m0.reconstructed.mae - width_5_m3.reconstructed.mae > 0.0;
+            && width_5_b12.standardized.spearman > 0.0
+            && width_5_b12.standardized.spearman >= width_5_b0.standardized.spearman
+            && width_5_b12.standardized.r_squared > width_5_b0.standardized.r_squared
+            && width_5_b12.standardized.bias.abs() < width_5_b0.standardized.bias.abs()
+            && width_5_b0.reconstructed.mse - width_5_b12.reconstructed.mse > 0.0
+            && width_5_b0.reconstructed.mae - width_5_b12.reconstructed.mae > 0.0;
 
-    let criterion_c = width_6_m0.standardized.mse - width_6_m3.standardized.mse > 0.0
+    let criterion_c = width_6_b0.standardized.mse - width_6_b12.standardized.mse > 0.0
         && width_6_bootstrap.standardized_mse.lower > 0.0
-        && width_6_m3.standardized.spearman > 0.0
-        && width_6_m3.standardized.spearman >= width_6_m0.standardized.spearman
-        && width_6_m3.standardized.bias.abs() <= width_6_m0.standardized.bias.abs()
-        && width_6_m0.reconstructed.mse - width_6_m3.reconstructed.mse > 0.0;
+        && width_6_b12.standardized.spearman > 0.0
+        && width_6_b12.standardized.spearman >= width_6_b0.standardized.spearman
+        && width_6_b12.standardized.bias.abs() <= width_6_b0.standardized.bias.abs()
+        && width_6_b0.reconstructed.mse - width_6_b12.reconstructed.mse > 0.0;
 
     let secondary_horizons = [0_usize, 1, 2, 4];
     let mut positive_count = 0_usize;
@@ -2545,9 +2565,9 @@ fn run_legacy_scaffold_full_experiment() -> Result<(), String> {
         let evaluations =
             tdi52_evaluate_horizon(&holdout_combined, horizon_index, &models, &target_scalers)?;
 
-        let baseline = tdi52_layout_evaluation(&evaluations, FeatureLayout::M0);
+        let baseline = tdi52_layout_evaluation(&evaluations, FeatureLayout::B0);
 
-        let challenger = tdi52_layout_evaluation(&evaluations, FeatureLayout::M3);
+        let challenger = tdi52_layout_evaluation(&evaluations, FeatureLayout::B12);
 
         let delta = baseline.standardized.mse - challenger.standardized.mse;
 
@@ -2580,9 +2600,9 @@ fn run_legacy_scaffold_full_experiment() -> Result<(), String> {
     println!();
     println!("=== MODÈLES DU COMPARATEUR DIRECT O6 ===");
 
-    print_model("comparateur direct M0", &direct_baseline_model);
+    print_model("comparateur direct B0", &direct_baseline_model);
 
-    print_model("comparateur direct M3", &direct_challenger_model);
+    print_model("comparateur direct B12", &direct_challenger_model);
 
     for &(label, records) in &evaluation_populations {
         tdi52_print_direct_comparator(
@@ -2618,10 +2638,10 @@ fn run_legacy_scaffold_full_experiment() -> Result<(), String> {
 mod tests {
     use super::{
         BASELINE_FEATURE_COUNT, BOOTSTRAP_REPLICATES, BOOTSTRAP_SEED, ConfidenceInterval,
-        DeterministicRng, FeatureLayout, HOLDOUT_WIDTH_3_SEED_OFFSET, HOLDOUT_WIDTH_3_SYSTEMS,
-        HOLDOUT_WIDTH_4_SEED_OFFSET, HOLDOUT_WIDTH_4_SYSTEMS, Metrics, OOD_WIDTH_5_SEED_OFFSET,
-        OOD_WIDTH_5_SYSTEMS, OOD_WIDTH_6_SEED_OFFSET, OOD_WIDTH_6_SYSTEMS, PRIMARY_HORIZON,
-        RIDGE_LAMBDA, Record, TARGET_HORIZON_COUNT, TARGET_HORIZONS, TDI_FEATURE_COUNT,
+        DeterministicRng, EARLY_OVERLAP_FEATURE_COUNT, FeatureLayout, HOLDOUT_WIDTH_3_SEED_OFFSET,
+        HOLDOUT_WIDTH_3_SYSTEMS, HOLDOUT_WIDTH_4_SEED_OFFSET, HOLDOUT_WIDTH_4_SYSTEMS, Metrics,
+        OOD_WIDTH_5_SEED_OFFSET, OOD_WIDTH_5_SYSTEMS, OOD_WIDTH_6_SEED_OFFSET, OOD_WIDTH_6_SYSTEMS,
+        PRIMARY_HORIZON, RIDGE_LAMBDA, Record, TARGET_HORIZON_COUNT, TARGET_HORIZONS,
         TRAIN_WIDTH_3, TRAIN_WIDTH_3_SEED_OFFSET, TRAIN_WIDTH_3_SYSTEMS, TRAIN_WIDTH_4_SEED_OFFSET,
         TRAIN_WIDTH_4_SYSTEMS, TargetScaler, average_ranks, calculate_metrics, confidence_interval,
         primary_horizon_index, splitmix64,
@@ -2938,13 +2958,13 @@ mod tests {
         let records = [
             Record {
                 baseline: [0.0; BASELINE_FEATURE_COUNT],
-                tdi: [0.0; TDI_FEATURE_COUNT],
+                early_overlap: [0.0; EARLY_OVERLAP_FEATURE_COUNT],
                 overlaps: [0.5; TARGET_HORIZON_COUNT],
                 targets_u: [1.0; TARGET_HORIZON_COUNT],
             },
             Record {
                 baseline: [0.0; BASELINE_FEATURE_COUNT],
-                tdi: [0.0; TDI_FEATURE_COUNT],
+                early_overlap: [0.0; EARLY_OVERLAP_FEATURE_COUNT],
                 overlaps: [0.75; TARGET_HORIZON_COUNT],
                 targets_u: [2.0; TARGET_HORIZON_COUNT],
             },
@@ -3013,11 +3033,10 @@ mod tests {
     }
 
     #[test]
-    fn preregistered_layout_is_fixed() {
+    fn tdi52_predictor_storage_matches_preregistration() {
         assert_eq!(BASELINE_FEATURE_COUNT, 13);
-        assert_eq!(TDI_FEATURE_COUNT, 3);
+        assert_eq!(EARLY_OVERLAP_FEATURE_COUNT, 2);
         assert_eq!(RIDGE_LAMBDA, 1.0);
-        assert_eq!(BOOTSTRAP_SEED, 0x5444_4935_4344_4745);
     }
 
     #[test]
@@ -3033,22 +3052,85 @@ mod tests {
     }
 
     #[test]
-    fn tdi52_feature_layouts_are_frozen() {
-        assert_eq!(FeatureLayout::M0.feature_count(), 13);
-        assert_eq!(FeatureLayout::M1.feature_count(), 14);
-        assert_eq!(FeatureLayout::M2.feature_count(), 15);
-        assert_eq!(FeatureLayout::M3.feature_count(), 16);
+    fn tdi52_feature_layouts_match_preregistration() {
+        assert_eq!(super::MODEL_LAYOUT_COUNT, 5);
+        assert_eq!(
+            FeatureLayout::ALL,
+            [
+                FeatureLayout::B0,
+                FeatureLayout::B1,
+                FeatureLayout::B2,
+                FeatureLayout::B12,
+                FeatureLayout::BD,
+            ]
+        );
+
+        assert_eq!(FeatureLayout::B0.feature_count(), 13);
+        assert_eq!(FeatureLayout::B1.feature_count(), 14);
+        assert_eq!(FeatureLayout::B2.feature_count(), 14);
+        assert_eq!(FeatureLayout::B12.feature_count(), 15);
+        assert_eq!(FeatureLayout::BD.feature_count(), 14);
     }
 
     #[test]
-    fn tdi52_constants_are_frozen() {
+    fn tdi52_layout_vectors_have_exact_semantics() {
+        let record = Record {
+            baseline: [0.0; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.25, 0.75],
+            overlaps: [0.5; TARGET_HORIZON_COUNT],
+            targets_u: [1.0; TARGET_HORIZON_COUNT],
+        };
+
+        let b0 = super::feature_layout(&record, FeatureLayout::B0);
+        let b1 = super::feature_layout(&record, FeatureLayout::B1);
+        let b2 = super::feature_layout(&record, FeatureLayout::B2);
+        let b12 = super::feature_layout(&record, FeatureLayout::B12);
+        let bd = super::feature_layout(&record, FeatureLayout::BD);
+
+        assert_eq!(b0.len(), 13);
+        assert_eq!(&b1[BASELINE_FEATURE_COUNT..], &[0.25]);
+        assert_eq!(&b2[BASELINE_FEATURE_COUNT..], &[0.75]);
+        assert_eq!(&b12[BASELINE_FEATURE_COUNT..], &[0.25, 0.75]);
+        assert_eq!(&bd[BASELINE_FEATURE_COUNT..], &[0.50]);
+    }
+
+    #[test]
+    fn tdi52_delta_is_exploratory_only() {
+        let record = Record {
+            baseline: [0.0; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.25, 0.75],
+            overlaps: [0.5; TARGET_HORIZON_COUNT],
+            targets_u: [1.0; TARGET_HORIZON_COUNT],
+        };
+
+        for layout in [
+            FeatureLayout::B0,
+            FeatureLayout::B1,
+            FeatureLayout::B2,
+            FeatureLayout::B12,
+        ] {
+            let features = super::feature_layout(&record, layout);
+
+            assert!(
+                !features[BASELINE_FEATURE_COUNT..].contains(&0.50),
+                "{} contient illicitement O2-O1",
+                layout.label()
+            );
+        }
+
+        let exploratory = super::feature_layout(&record, FeatureLayout::BD);
+        assert_eq!(&exploratory[BASELINE_FEATURE_COUNT..], &[0.50]);
+    }
+
+    #[test]
+    fn tdi52_scaffold_bootstrap_placeholders_are_unchanged() {
         assert_eq!(RIDGE_LAMBDA, 1.0);
         assert_eq!(BOOTSTRAP_REPLICATES, 2_000);
         assert_eq!(BOOTSTRAP_SEED, 0x5444_4935_4344_4745);
     }
 
     #[test]
-    fn tdi52_population_contract_is_frozen() {
+    fn tdi52_scaffold_population_placeholders_are_unchanged() {
         assert_eq!(TRAIN_WIDTH_3_SYSTEMS, 15_000);
         assert_eq!(TRAIN_WIDTH_4_SYSTEMS, 15_000);
         assert_eq!(HOLDOUT_WIDTH_3_SYSTEMS, 5_000);
@@ -3068,7 +3150,7 @@ mod tests {
     fn target_scaler_uses_unit_scale_for_constant_targets() {
         let record = Record {
             baseline: [0.0; BASELINE_FEATURE_COUNT],
-            tdi: [0.0; TDI_FEATURE_COUNT],
+            early_overlap: [0.0; EARLY_OVERLAP_FEATURE_COUNT],
             overlaps: [0.5; TARGET_HORIZON_COUNT],
             targets_u: [2.0; TARGET_HORIZON_COUNT],
         };
