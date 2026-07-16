@@ -2022,6 +2022,38 @@ fn fit_block_models(
     })
 }
 
+#[derive(Clone, Debug)]
+struct AggregateModelFit {
+    blocks: [BlockModelFit; SEED_BLOCK_COUNT],
+}
+
+impl AggregateModelFit {
+    const FROZEN_BLOCK_ORDER: [SeedBlockId; SEED_BLOCK_COUNT] =
+        [SeedBlockId::A, SeedBlockId::B, SeedBlockId::C];
+
+    fn assemble(blocks: [BlockModelFit; SEED_BLOCK_COUNT]) -> Result<Self, String> {
+        for (fit, &expected) in blocks.iter().zip(&Self::FROZEN_BLOCK_ORDER) {
+            if fit.seed_block != expected {
+                return Err(format!(
+                    "aggregate model fit requires deterministic block order A, B, C; \
+                     found {} where {} was expected",
+                    fit.seed_block.label(),
+                    expected.label()
+                ));
+            }
+        }
+
+        Ok(Self { blocks })
+    }
+
+    fn block(&self, seed_block: SeedBlockId) -> &BlockModelFit {
+        self.blocks
+            .iter()
+            .find(|fit| fit.seed_block == seed_block)
+            .expect("AggregateModelFit always contains exactly one fit per seed block")
+    }
+}
+
 fn print_model(label: &str, model: &RidgeModel) {
     println!();
     println!("{label}");
@@ -2622,6 +2654,30 @@ fn run_termination_smoke() -> Result<(), String> {
     println!(
         "identity smoke target mean  : {:.6}",
         block_fit.target_scalers[primary_horizon_index()].mean
+    );
+
+    let block_fit_b = fit_block_models(
+        SeedBlockId::B,
+        &synthetic_training_width_3,
+        &synthetic_training_width_4,
+    )
+    .map_err(|error| error.to_string())?;
+
+    let block_fit_c = fit_block_models(
+        SeedBlockId::C,
+        &synthetic_training_width_3,
+        &synthetic_training_width_4,
+    )
+    .map_err(|error| error.to_string())?;
+
+    let aggregate_fit = AggregateModelFit::assemble([block_fit, block_fit_b, block_fit_c])
+        .map_err(|error| error.to_string())?;
+
+    println!(
+        "identity smoke aggregate     : blocks {}, {}, {}",
+        aggregate_fit.block(SeedBlockId::A).seed_block.label(),
+        aggregate_fit.block(SeedBlockId::B).seed_block.label(),
+        aggregate_fit.block(SeedBlockId::C).seed_block.label()
     );
 
     println!("bounded smoke result         : PASS");
@@ -4340,6 +4396,113 @@ mod tests {
         for (first_model, second_model) in first.models.models.iter().zip(&second.models.models) {
             assert_eq!(first_model.coefficients, second_model.coefficients);
         }
+    }
+
+    #[test]
+    fn aggregate_model_fit_assembles_blocks_in_frozen_order() {
+        let training_width_3 = [Record {
+            baseline: [0.0; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.2, 0.6],
+            overlaps: [0.3; TARGET_HORIZON_COUNT],
+            targets_u: [1.1, 1.2, 1.3, 1.4, 1.5],
+        }];
+
+        let training_width_4 = [Record {
+            baseline: [0.3; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.4, 0.8],
+            overlaps: [0.5; TARGET_HORIZON_COUNT],
+            targets_u: [2.1, 2.2, 2.3, 2.4, 2.5],
+        }];
+
+        let block_a =
+            super::fit_block_models(super::SeedBlockId::A, &training_width_3, &training_width_4)
+                .expect("tiny synthetic training set must fit");
+        let block_b =
+            super::fit_block_models(super::SeedBlockId::B, &training_width_3, &training_width_4)
+                .expect("tiny synthetic training set must fit");
+        let block_c =
+            super::fit_block_models(super::SeedBlockId::C, &training_width_3, &training_width_4)
+                .expect("tiny synthetic training set must fit");
+
+        let aggregate = super::AggregateModelFit::assemble([block_a, block_b, block_c])
+            .expect("blocks in frozen A, B, C order must assemble");
+
+        assert_eq!(
+            aggregate.block(super::SeedBlockId::A).seed_block,
+            super::SeedBlockId::A
+        );
+        assert_eq!(
+            aggregate.block(super::SeedBlockId::B).seed_block,
+            super::SeedBlockId::B
+        );
+        assert_eq!(
+            aggregate.block(super::SeedBlockId::C).seed_block,
+            super::SeedBlockId::C
+        );
+    }
+
+    #[test]
+    fn aggregate_model_fit_rejects_out_of_order_blocks() {
+        let training_width_3 = [Record {
+            baseline: [0.0; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.2, 0.6],
+            overlaps: [0.3; TARGET_HORIZON_COUNT],
+            targets_u: [1.1, 1.2, 1.3, 1.4, 1.5],
+        }];
+
+        let training_width_4 = [Record {
+            baseline: [0.3; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.4, 0.8],
+            overlaps: [0.5; TARGET_HORIZON_COUNT],
+            targets_u: [2.1, 2.2, 2.3, 2.4, 2.5],
+        }];
+
+        let block_a =
+            super::fit_block_models(super::SeedBlockId::A, &training_width_3, &training_width_4)
+                .expect("tiny synthetic training set must fit");
+        let block_b =
+            super::fit_block_models(super::SeedBlockId::B, &training_width_3, &training_width_4)
+                .expect("tiny synthetic training set must fit");
+        let block_c =
+            super::fit_block_models(super::SeedBlockId::C, &training_width_3, &training_width_4)
+                .expect("tiny synthetic training set must fit");
+
+        let error = super::AggregateModelFit::assemble([block_b, block_a, block_c])
+            .expect_err("out-of-order blocks must be rejected");
+
+        assert!(error.contains("deterministic block order"));
+    }
+
+    #[test]
+    fn aggregate_model_fit_rejects_duplicated_block() {
+        let training_width_3 = [Record {
+            baseline: [0.0; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.2, 0.6],
+            overlaps: [0.3; TARGET_HORIZON_COUNT],
+            targets_u: [1.1, 1.2, 1.3, 1.4, 1.5],
+        }];
+
+        let training_width_4 = [Record {
+            baseline: [0.3; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.4, 0.8],
+            overlaps: [0.5; TARGET_HORIZON_COUNT],
+            targets_u: [2.1, 2.2, 2.3, 2.4, 2.5],
+        }];
+
+        let block_a_first =
+            super::fit_block_models(super::SeedBlockId::A, &training_width_3, &training_width_4)
+                .expect("tiny synthetic training set must fit");
+        let block_a_second =
+            super::fit_block_models(super::SeedBlockId::A, &training_width_3, &training_width_4)
+                .expect("tiny synthetic training set must fit");
+        let block_c =
+            super::fit_block_models(super::SeedBlockId::C, &training_width_3, &training_width_4)
+                .expect("tiny synthetic training set must fit");
+
+        let error = super::AggregateModelFit::assemble([block_a_first, block_a_second, block_c])
+            .expect_err("a duplicated block must be rejected");
+
+        assert!(error.contains("deterministic block order"));
     }
 
     #[test]
