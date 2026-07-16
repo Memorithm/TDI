@@ -2627,6 +2627,113 @@ fn evaluate_aggregate_comparison(
     })
 }
 
+fn median_of_three(mut values: [f64; SEED_BLOCK_COUNT]) -> f64 {
+    values.sort_by(f64::total_cmp);
+    values[1]
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CriterionAResult {
+    lower_mse_in_every_block: bool,
+    block_bootstrap_lower_bounds_positive: bool,
+    median_relative_reduction_at_least_15_percent: bool,
+    aggregate_relative_reduction_at_least_15_percent: bool,
+    aggregate_bootstrap_lower_bound_positive: bool,
+    spearman_improves_in_every_block: bool,
+    aggregate_bias_not_worse_than_0_02: bool,
+}
+
+impl CriterionAResult {
+    const BIAS_MARGIN: f64 = 0.02;
+    const RELATIVE_REDUCTION_THRESHOLD: f64 = 0.15;
+
+    fn succeeded(self) -> bool {
+        self.lower_mse_in_every_block
+            && self.block_bootstrap_lower_bounds_positive
+            && self.median_relative_reduction_at_least_15_percent
+            && self.aggregate_relative_reduction_at_least_15_percent
+            && self.aggregate_bootstrap_lower_bound_positive
+            && self.spearman_improves_in_every_block
+            && self.aggregate_bias_not_worse_than_0_02
+    }
+}
+
+fn evaluate_criterion_a(comparison: &AggregateComparison) -> CriterionAResult {
+    let block_relative_reductions = FROZEN_BLOCK_ORDER.map(|seed_block| {
+        let block = comparison.block(seed_block);
+
+        tdi52_relative_reduction(
+            block.baseline.standardized.mse,
+            block.challenger.standardized.mse,
+        )
+    });
+
+    let lower_mse_in_every_block = FROZEN_BLOCK_ORDER.iter().all(|&seed_block| {
+        let block = comparison.block(seed_block);
+
+        block.challenger.standardized.mse < block.baseline.standardized.mse
+    });
+
+    let block_bootstrap_lower_bounds_positive = FROZEN_BLOCK_ORDER.iter().all(|&seed_block| {
+        comparison
+            .block(seed_block)
+            .bootstrap
+            .standardized_mse
+            .lower
+            > 0.0
+    });
+
+    let median_relative_reduction_at_least_15_percent = median_of_three(block_relative_reductions)
+        >= CriterionAResult::RELATIVE_REDUCTION_THRESHOLD;
+
+    let aggregate_relative_reduction = tdi52_relative_reduction(
+        comparison.aggregate_baseline_standardized.mse,
+        comparison.aggregate_challenger_standardized.mse,
+    );
+
+    let aggregate_relative_reduction_at_least_15_percent =
+        aggregate_relative_reduction >= CriterionAResult::RELATIVE_REDUCTION_THRESHOLD;
+
+    let aggregate_bootstrap_lower_bound_positive =
+        comparison.aggregate_bootstrap.standardized_mse.lower > 0.0;
+
+    let spearman_improves_in_every_block = FROZEN_BLOCK_ORDER.iter().all(|&seed_block| {
+        let block = comparison.block(seed_block);
+
+        block.challenger.standardized.spearman > block.baseline.standardized.spearman
+    });
+
+    let aggregate_bias_not_worse_than_0_02 =
+        comparison.aggregate_challenger_standardized.bias.abs()
+            <= comparison.aggregate_baseline_standardized.bias.abs()
+                + CriterionAResult::BIAS_MARGIN;
+
+    CriterionAResult {
+        lower_mse_in_every_block,
+        block_bootstrap_lower_bounds_positive,
+        median_relative_reduction_at_least_15_percent,
+        aggregate_relative_reduction_at_least_15_percent,
+        aggregate_bootstrap_lower_bound_positive,
+        spearman_improves_in_every_block,
+        aggregate_bias_not_worse_than_0_02,
+    }
+}
+
+fn tdi52_criterion_a(
+    aggregate_fit: &AggregateModelFit,
+    combined_holdout_records: [&[Record]; SEED_BLOCK_COUNT],
+) -> Result<CriterionAResult, String> {
+    let comparison = evaluate_aggregate_comparison(
+        primary_horizon_index(),
+        aggregate_fit,
+        combined_holdout_records,
+        FeatureLayout::B0,
+        FeatureLayout::B12,
+    )?;
+
+    Ok(evaluate_criterion_a(&comparison))
+}
+
 fn tdi52_print_bootstrap_intervals(label: &str, intervals: Tdi52BootstrapIntervals) {
     println!();
     println!("{label}");
@@ -3068,6 +3175,28 @@ fn run_termination_smoke() -> Result<(), String> {
             .bootstrap
             .standardized_mse
             .upper
+    );
+
+    let criterion_a = evaluate_criterion_a(&aggregate_comparison);
+
+    println!(
+        "identity smoke criterion A   : succeeded={}",
+        criterion_a.succeeded()
+    );
+
+    let criterion_a_direct = tdi52_criterion_a(
+        &aggregate_fit,
+        [
+            synthetic_training_width_3.as_slice(),
+            synthetic_training_width_3.as_slice(),
+            synthetic_training_width_3.as_slice(),
+        ],
+    )
+    .map_err(|error| error.to_string())?;
+
+    println!(
+        "identity smoke criterion A2  : succeeded={}",
+        criterion_a_direct.succeeded()
     );
 
     println!("bounded smoke result         : PASS");
@@ -5318,6 +5447,218 @@ mod tests {
                 .lower
                 .is_finite()
         );
+    }
+
+    fn sample_metrics(mse: f64, spearman: f64, bias: f64) -> Metrics {
+        Metrics {
+            mse,
+            mae: 0.0,
+            r_squared: 0.0,
+            spearman,
+            bias,
+            observed_mean: 0.0,
+            predicted_mean: 0.0,
+            calibration_intercept: 0.0,
+            calibration_slope: 1.0,
+            zero_fraction: 0.0,
+            one_fraction: 0.0,
+        }
+    }
+
+    fn sample_bootstrap_intervals(standardized_mse_lower: f64) -> super::Tdi52BootstrapIntervals {
+        super::Tdi52BootstrapIntervals {
+            standardized_mse: ConfidenceInterval {
+                lower: standardized_mse_lower,
+                median: standardized_mse_lower,
+                upper: standardized_mse_lower + 0.1,
+            },
+            reconstructed_mse: ConfidenceInterval {
+                lower: 0.0,
+                median: 0.0,
+                upper: 0.0,
+            },
+            reconstructed_mae: ConfidenceInterval {
+                lower: 0.0,
+                median: 0.0,
+                upper: 0.0,
+            },
+        }
+    }
+
+    fn sample_layout_evaluation(
+        layout: FeatureLayout,
+        mse: f64,
+        spearman: f64,
+    ) -> super::Tdi52LayoutEvaluation {
+        super::Tdi52LayoutEvaluation {
+            layout,
+            standardized: sample_metrics(mse, spearman, 0.0),
+            reconstructed: sample_metrics(mse, spearman, 0.0),
+            predictions: super::Tdi52PredictionSet {
+                standardized: vec![],
+                reconstructed_overlap: vec![],
+                clipped_overlap_count: 0,
+            },
+        }
+    }
+
+    fn sample_block_comparison(
+        seed_block: super::SeedBlockId,
+        baseline: (FeatureLayout, f64, f64),
+        challenger: (FeatureLayout, f64, f64),
+        bootstrap_lower: f64,
+    ) -> super::BlockComparison {
+        let (baseline_layout, baseline_mse, baseline_spearman) = baseline;
+        let (challenger_layout, challenger_mse, challenger_spearman) = challenger;
+
+        super::BlockComparison {
+            seed_block,
+            standardized_targets: vec![],
+            overlap_targets: vec![],
+            baseline: sample_layout_evaluation(baseline_layout, baseline_mse, baseline_spearman),
+            challenger: sample_layout_evaluation(
+                challenger_layout,
+                challenger_mse,
+                challenger_spearman,
+            ),
+            bootstrap: sample_bootstrap_intervals(bootstrap_lower),
+        }
+    }
+
+    fn sample_aggregate_comparison(
+        blocks: Vec<super::BlockComparison>,
+        aggregate_baseline_mse: f64,
+        aggregate_challenger_mse: f64,
+        aggregate_baseline_bias: f64,
+        aggregate_challenger_bias: f64,
+        aggregate_bootstrap_lower: f64,
+    ) -> super::AggregateComparison {
+        super::AggregateComparison {
+            blocks,
+            aggregate_baseline_standardized: sample_metrics(
+                aggregate_baseline_mse,
+                0.0,
+                aggregate_baseline_bias,
+            ),
+            aggregate_challenger_standardized: sample_metrics(
+                aggregate_challenger_mse,
+                0.0,
+                aggregate_challenger_bias,
+            ),
+            aggregate_baseline_reconstructed: sample_metrics(0.0, 0.0, 0.0),
+            aggregate_challenger_reconstructed: sample_metrics(0.0, 0.0, 0.0),
+            aggregate_bootstrap: sample_bootstrap_intervals(aggregate_bootstrap_lower),
+        }
+    }
+
+    fn favorable_criterion_a_comparison() -> super::AggregateComparison {
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison(
+                seed_block,
+                (FeatureLayout::B0, 1.0, 0.5),
+                (FeatureLayout::B12, 0.8, 0.6),
+                0.05,
+            )
+        })
+        .to_vec();
+
+        sample_aggregate_comparison(blocks, 1.0, 0.8, 0.01, 0.01, 0.05)
+    }
+
+    #[test]
+    fn median_of_three_computes_the_middle_value() {
+        assert_eq!(super::median_of_three([0.3, 0.1, 0.2]), 0.2);
+        assert_eq!(super::median_of_three([-1.0, 5.0, 2.0]), 2.0);
+    }
+
+    #[test]
+    fn criterion_a_succeeds_when_every_condition_holds() {
+        let comparison = favorable_criterion_a_comparison();
+        let result = super::evaluate_criterion_a(&comparison);
+
+        assert!(result.lower_mse_in_every_block);
+        assert!(result.block_bootstrap_lower_bounds_positive);
+        assert!(result.median_relative_reduction_at_least_15_percent);
+        assert!(result.aggregate_relative_reduction_at_least_15_percent);
+        assert!(result.aggregate_bootstrap_lower_bound_positive);
+        assert!(result.spearman_improves_in_every_block);
+        assert!(result.aggregate_bias_not_worse_than_0_02);
+        assert!(result.succeeded());
+    }
+
+    #[test]
+    fn criterion_a_fails_when_median_relative_reduction_is_below_threshold() {
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison(
+                seed_block,
+                (FeatureLayout::B0, 1.0, 0.5),
+                (FeatureLayout::B12, 0.9, 0.6),
+                0.05,
+            )
+        })
+        .to_vec();
+
+        let comparison = sample_aggregate_comparison(blocks, 1.0, 0.9, 0.01, 0.01, 0.05);
+        let result = super::evaluate_criterion_a(&comparison);
+
+        assert!(!result.median_relative_reduction_at_least_15_percent);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_a_fails_when_a_block_bootstrap_lower_bound_is_not_positive() {
+        let mut comparison = favorable_criterion_a_comparison();
+        comparison.blocks[1].bootstrap.standardized_mse.lower = -0.01;
+
+        let result = super::evaluate_criterion_a(&comparison);
+
+        assert!(!result.block_bootstrap_lower_bounds_positive);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_a_fails_when_aggregate_bootstrap_lower_bound_is_not_positive() {
+        let mut comparison = favorable_criterion_a_comparison();
+        comparison.aggregate_bootstrap.standardized_mse.lower = 0.0;
+
+        let result = super::evaluate_criterion_a(&comparison);
+
+        assert!(!result.aggregate_bootstrap_lower_bound_positive);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_a_fails_when_spearman_does_not_improve_in_every_block() {
+        let mut comparison = favorable_criterion_a_comparison();
+        comparison.blocks[2].challenger.standardized.spearman =
+            comparison.blocks[2].baseline.standardized.spearman;
+
+        let result = super::evaluate_criterion_a(&comparison);
+
+        assert!(!result.spearman_improves_in_every_block);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_a_fails_when_aggregate_bias_worsens_beyond_margin() {
+        let mut comparison = favorable_criterion_a_comparison();
+        comparison.aggregate_challenger_standardized.bias =
+            comparison.aggregate_baseline_standardized.bias + 0.03;
+
+        let result = super::evaluate_criterion_a(&comparison);
+
+        assert!(!result.aggregate_bias_not_worse_than_0_02);
+        assert!(!result.succeeded());
     }
 
     #[test]
