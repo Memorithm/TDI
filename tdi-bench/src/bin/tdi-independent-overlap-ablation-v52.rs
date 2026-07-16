@@ -2035,21 +2035,36 @@ struct AggregateModelFit {
     blocks: [BlockModelFit; SEED_BLOCK_COUNT],
 }
 
-impl AggregateModelFit {
-    const FROZEN_BLOCK_ORDER: [SeedBlockId; SEED_BLOCK_COUNT] =
-        [SeedBlockId::A, SeedBlockId::B, SeedBlockId::C];
+const FROZEN_BLOCK_ORDER: [SeedBlockId; SEED_BLOCK_COUNT] =
+    [SeedBlockId::A, SeedBlockId::B, SeedBlockId::C];
 
-    fn assemble(blocks: [BlockModelFit; SEED_BLOCK_COUNT]) -> Result<Self, String> {
-        for (fit, &expected) in blocks.iter().zip(&Self::FROZEN_BLOCK_ORDER) {
-            if fit.seed_block != expected {
-                return Err(format!(
-                    "aggregate model fit requires deterministic block order A, B, C; \
-                     found {} where {} was expected",
-                    fit.seed_block.label(),
-                    expected.label()
-                ));
-            }
+fn validate_frozen_block_order(seed_blocks: &[SeedBlockId]) -> Result<(), String> {
+    if seed_blocks.len() != SEED_BLOCK_COUNT {
+        return Err(format!(
+            "expected {SEED_BLOCK_COUNT} seed blocks in frozen order, received {}",
+            seed_blocks.len()
+        ));
+    }
+
+    for (&actual, &expected) in seed_blocks.iter().zip(&FROZEN_BLOCK_ORDER) {
+        if actual != expected {
+            return Err(format!(
+                "requires deterministic block order A, B, C; found {} where {} was expected",
+                actual.label(),
+                expected.label()
+            ));
         }
+    }
+
+    Ok(())
+}
+
+impl AggregateModelFit {
+    fn assemble(blocks: [BlockModelFit; SEED_BLOCK_COUNT]) -> Result<Self, String> {
+        let seed_blocks = blocks.each_ref().map(|fit| fit.seed_block);
+
+        validate_frozen_block_order(&seed_blocks)
+            .map_err(|error| format!("aggregate model fit {error}"))?;
 
         Ok(Self { blocks })
     }
@@ -2336,6 +2351,279 @@ fn tdi52_paired_bootstrap(
         standardized_mse: confidence_interval(standardized_mse),
         reconstructed_mse: confidence_interval(reconstructed_mse),
         reconstructed_mae: confidence_interval(reconstructed_mae),
+    })
+}
+
+struct BlockComparisonInputs<'a> {
+    seed_block: SeedBlockId,
+    records: &'a [Record],
+    scaler: TargetScaler,
+    baseline: &'a Tdi52PredictionSet,
+    challenger: &'a Tdi52PredictionSet,
+}
+
+fn aggregate_paired_bootstrap(
+    horizon_index: usize,
+    blocks: &[BlockComparisonInputs<'_>],
+) -> Result<Tdi52BootstrapIntervals, String> {
+    let seed_blocks = blocks
+        .iter()
+        .map(|block| block.seed_block)
+        .collect::<Vec<_>>();
+
+    validate_frozen_block_order(&seed_blocks)
+        .map_err(|error| format!("aggregate bootstrap {error}"))?;
+
+    for block in blocks {
+        let count = block.records.len();
+
+        if count == 0
+            || block.baseline.standardized.len() != count
+            || block.challenger.standardized.len() != count
+            || block.baseline.reconstructed_overlap.len() != count
+            || block.challenger.reconstructed_overlap.len() != count
+        {
+            return Err("invalid aggregate paired-bootstrap dimensions".to_owned());
+        }
+    }
+
+    let mut generator = DeterministicRng::new(AGGREGATE_BOOTSTRAP_SEED);
+
+    let mut standardized_mse = Vec::with_capacity(BOOTSTRAP_REPLICATES);
+    let mut reconstructed_mse = Vec::with_capacity(BOOTSTRAP_REPLICATES);
+    let mut reconstructed_mae = Vec::with_capacity(BOOTSTRAP_REPLICATES);
+
+    for _ in 0..BOOTSTRAP_REPLICATES {
+        let mut baseline_standardized_squared = 0.0;
+        let mut challenger_standardized_squared = 0.0;
+
+        let mut baseline_overlap_squared = 0.0;
+        let mut challenger_overlap_squared = 0.0;
+
+        let mut baseline_overlap_absolute = 0.0;
+        let mut challenger_overlap_absolute = 0.0;
+
+        let mut total_count = 0_usize;
+
+        for block in blocks {
+            let count = block.records.len();
+
+            for _ in 0..count {
+                let index = generator.index(count);
+                let record = &block.records[index];
+
+                let standardized_target = block.scaler.standardize(record.targets_u[horizon_index]);
+
+                let baseline_standardized_residual =
+                    standardized_target - block.baseline.standardized[index];
+
+                let challenger_standardized_residual =
+                    standardized_target - block.challenger.standardized[index];
+
+                baseline_standardized_squared +=
+                    baseline_standardized_residual * baseline_standardized_residual;
+
+                challenger_standardized_squared +=
+                    challenger_standardized_residual * challenger_standardized_residual;
+
+                let overlap_target = record.overlaps[horizon_index];
+
+                let baseline_overlap_residual =
+                    overlap_target - block.baseline.reconstructed_overlap[index];
+
+                let challenger_overlap_residual =
+                    overlap_target - block.challenger.reconstructed_overlap[index];
+
+                baseline_overlap_squared += baseline_overlap_residual * baseline_overlap_residual;
+
+                challenger_overlap_squared +=
+                    challenger_overlap_residual * challenger_overlap_residual;
+
+                baseline_overlap_absolute += baseline_overlap_residual.abs();
+                challenger_overlap_absolute += challenger_overlap_residual.abs();
+            }
+
+            total_count += count;
+        }
+
+        let denominator = total_count as f64;
+
+        standardized_mse.push(
+            baseline_standardized_squared / denominator
+                - challenger_standardized_squared / denominator,
+        );
+
+        reconstructed_mse.push(
+            baseline_overlap_squared / denominator - challenger_overlap_squared / denominator,
+        );
+
+        reconstructed_mae.push(
+            baseline_overlap_absolute / denominator - challenger_overlap_absolute / denominator,
+        );
+    }
+
+    Ok(Tdi52BootstrapIntervals {
+        standardized_mse: confidence_interval(standardized_mse),
+        reconstructed_mse: confidence_interval(reconstructed_mse),
+        reconstructed_mae: confidence_interval(reconstructed_mae),
+    })
+}
+
+#[derive(Clone, Debug)]
+struct BlockComparison {
+    seed_block: SeedBlockId,
+    standardized_targets: Vec<f64>,
+    overlap_targets: Vec<f64>,
+    baseline: Tdi52LayoutEvaluation,
+    challenger: Tdi52LayoutEvaluation,
+    bootstrap: Tdi52BootstrapIntervals,
+}
+
+fn evaluate_block_comparison(
+    seed_block: SeedBlockId,
+    holdout_records: &[Record],
+    horizon_index: usize,
+    models: &HorizonModels,
+    scalers: &[TargetScaler; TARGET_HORIZON_COUNT],
+    baseline_layout: FeatureLayout,
+    challenger_layout: FeatureLayout,
+) -> Result<BlockComparison, String> {
+    let evaluations = tdi52_evaluate_horizon(holdout_records, horizon_index, models, scalers)?;
+    let baseline = tdi52_layout_evaluation(&evaluations, baseline_layout).clone();
+    let challenger = tdi52_layout_evaluation(&evaluations, challenger_layout).clone();
+
+    let scaler = scalers[horizon_index];
+
+    let standardized_targets = holdout_records
+        .iter()
+        .map(|record| scaler.standardize(record.targets_u[horizon_index]))
+        .collect::<Vec<_>>();
+
+    let overlap_targets = overlap_values(holdout_records, horizon_index);
+
+    let bootstrap = tdi52_paired_bootstrap(
+        seed_block,
+        holdout_records,
+        horizon_index,
+        scaler,
+        &baseline.predictions,
+        &challenger.predictions,
+    )?;
+
+    Ok(BlockComparison {
+        seed_block,
+        standardized_targets,
+        overlap_targets,
+        baseline,
+        challenger,
+        bootstrap,
+    })
+}
+
+fn pooled_standardized_metrics(blocks: &[BlockComparison]) -> (Metrics, Metrics) {
+    let mut targets = Vec::new();
+    let mut baseline_predictions = Vec::new();
+    let mut challenger_predictions = Vec::new();
+
+    for block in blocks {
+        targets.extend_from_slice(&block.standardized_targets);
+        baseline_predictions.extend_from_slice(&block.baseline.predictions.standardized);
+        challenger_predictions.extend_from_slice(&block.challenger.predictions.standardized);
+    }
+
+    (
+        calculate_metrics(&targets, &baseline_predictions),
+        calculate_metrics(&targets, &challenger_predictions),
+    )
+}
+
+fn pooled_reconstructed_metrics(blocks: &[BlockComparison]) -> (Metrics, Metrics) {
+    let mut targets = Vec::new();
+    let mut baseline_predictions = Vec::new();
+    let mut challenger_predictions = Vec::new();
+
+    for block in blocks {
+        targets.extend_from_slice(&block.overlap_targets);
+        baseline_predictions.extend_from_slice(&block.baseline.predictions.reconstructed_overlap);
+        challenger_predictions
+            .extend_from_slice(&block.challenger.predictions.reconstructed_overlap);
+    }
+
+    (
+        calculate_metrics(&targets, &baseline_predictions),
+        calculate_metrics(&targets, &challenger_predictions),
+    )
+}
+
+#[derive(Clone, Debug)]
+struct AggregateComparison {
+    blocks: Vec<BlockComparison>,
+    aggregate_baseline_standardized: Metrics,
+    aggregate_challenger_standardized: Metrics,
+    aggregate_baseline_reconstructed: Metrics,
+    aggregate_challenger_reconstructed: Metrics,
+    aggregate_bootstrap: Tdi52BootstrapIntervals,
+}
+
+impl AggregateComparison {
+    fn block(&self, seed_block: SeedBlockId) -> &BlockComparison {
+        self.blocks
+            .iter()
+            .find(|comparison| comparison.seed_block == seed_block)
+            .expect("AggregateComparison always contains exactly one comparison per seed block")
+    }
+}
+
+fn evaluate_aggregate_comparison(
+    horizon_index: usize,
+    aggregate_fit: &AggregateModelFit,
+    holdout_records: [&[Record]; SEED_BLOCK_COUNT],
+    baseline_layout: FeatureLayout,
+    challenger_layout: FeatureLayout,
+) -> Result<AggregateComparison, String> {
+    let mut blocks = Vec::with_capacity(SEED_BLOCK_COUNT);
+
+    for (seed_block, records) in FROZEN_BLOCK_ORDER.into_iter().zip(holdout_records) {
+        let block_fit = aggregate_fit.block(seed_block);
+
+        blocks.push(evaluate_block_comparison(
+            seed_block,
+            records,
+            horizon_index,
+            &block_fit.models,
+            &block_fit.target_scalers,
+            baseline_layout,
+            challenger_layout,
+        )?);
+    }
+
+    let (aggregate_baseline_standardized, aggregate_challenger_standardized) =
+        pooled_standardized_metrics(&blocks);
+
+    let (aggregate_baseline_reconstructed, aggregate_challenger_reconstructed) =
+        pooled_reconstructed_metrics(&blocks);
+
+    let bootstrap_inputs = blocks
+        .iter()
+        .zip(holdout_records)
+        .map(|(comparison, records)| BlockComparisonInputs {
+            seed_block: comparison.seed_block,
+            records,
+            scaler: aggregate_fit.block(comparison.seed_block).target_scalers[horizon_index],
+            baseline: &comparison.baseline.predictions,
+            challenger: &comparison.challenger.predictions,
+        })
+        .collect::<Vec<_>>();
+
+    let aggregate_bootstrap = aggregate_paired_bootstrap(horizon_index, &bootstrap_inputs)?;
+
+    Ok(AggregateComparison {
+        blocks,
+        aggregate_baseline_standardized,
+        aggregate_challenger_standardized,
+        aggregate_baseline_reconstructed,
+        aggregate_challenger_reconstructed,
+        aggregate_bootstrap,
     })
 }
 
@@ -2727,6 +3015,59 @@ fn run_termination_smoke() -> Result<(), String> {
         aggregate_fit.block(SeedBlockId::A).seed_block.label(),
         aggregate_fit.block(SeedBlockId::B).seed_block.label(),
         aggregate_fit.block(SeedBlockId::C).seed_block.label()
+    );
+
+    let aggregate_comparison = evaluate_aggregate_comparison(
+        primary_horizon_index(),
+        &aggregate_fit,
+        [
+            synthetic_training_width_3.as_slice(),
+            synthetic_training_width_3.as_slice(),
+            synthetic_training_width_3.as_slice(),
+        ],
+        FeatureLayout::B0,
+        FeatureLayout::B12,
+    )
+    .map_err(|error| error.to_string())?;
+
+    println!(
+        "identity smoke aggregate CI  : [{:.6}, {:.6}]",
+        aggregate_comparison
+            .aggregate_bootstrap
+            .standardized_mse
+            .lower,
+        aggregate_comparison
+            .aggregate_bootstrap
+            .standardized_mse
+            .upper
+    );
+    println!(
+        "identity smoke pooled blocks : {} standardized, {} reconstructed baseline mean, {} reconstructed challenger mean",
+        aggregate_comparison.blocks.len(),
+        aggregate_comparison
+            .aggregate_baseline_reconstructed
+            .observed_mean,
+        aggregate_comparison
+            .aggregate_challenger_reconstructed
+            .observed_mean
+    );
+    println!(
+        "identity smoke pooled MSE    : baseline={:.6}, challenger={:.6}",
+        aggregate_comparison.aggregate_baseline_standardized.mse,
+        aggregate_comparison.aggregate_challenger_standardized.mse
+    );
+    println!(
+        "identity smoke block A CI    : [{:.6}, {:.6}]",
+        aggregate_comparison
+            .block(SeedBlockId::A)
+            .bootstrap
+            .standardized_mse
+            .lower,
+        aggregate_comparison
+            .block(SeedBlockId::A)
+            .bootstrap
+            .standardized_mse
+            .upper
     );
 
     println!("bounded smoke result         : PASS");
@@ -4710,6 +5051,273 @@ mod tests {
             second.standardized_mse.median
         );
         assert_eq!(first.standardized_mse.upper, second.standardized_mse.upper);
+    }
+
+    #[test]
+    fn aggregate_bootstrap_seed_differs_from_every_block_seed() {
+        let mut aggregate_rng = DeterministicRng::new(super::AGGREGATE_BOOTSTRAP_SEED);
+        let mut block_a_rng = DeterministicRng::new(super::SeedBlockId::A.bootstrap_seed());
+        let mut block_b_rng = DeterministicRng::new(super::SeedBlockId::B.bootstrap_seed());
+        let mut block_c_rng = DeterministicRng::new(super::SeedBlockId::C.bootstrap_seed());
+
+        let aggregate_draws = (0..16)
+            .map(|_| aggregate_rng.index(1_000))
+            .collect::<Vec<_>>();
+        let block_a_draws = (0..16)
+            .map(|_| block_a_rng.index(1_000))
+            .collect::<Vec<_>>();
+        let block_b_draws = (0..16)
+            .map(|_| block_b_rng.index(1_000))
+            .collect::<Vec<_>>();
+        let block_c_draws = (0..16)
+            .map(|_| block_c_rng.index(1_000))
+            .collect::<Vec<_>>();
+
+        assert_ne!(aggregate_draws, block_a_draws);
+        assert_ne!(aggregate_draws, block_b_draws);
+        assert_ne!(aggregate_draws, block_c_draws);
+    }
+
+    #[test]
+    fn aggregate_paired_bootstrap_rejects_out_of_order_blocks() {
+        let records = [Record {
+            baseline: [0.0; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.1, 0.2],
+            overlaps: [0.3; TARGET_HORIZON_COUNT],
+            targets_u: [1.0; TARGET_HORIZON_COUNT],
+        }];
+
+        let scaler = TargetScaler::fit(&records, primary_horizon_index()).expect("valid scaler");
+
+        let predictions = super::Tdi52PredictionSet {
+            standardized: vec![0.0],
+            reconstructed_overlap: vec![0.3],
+            clipped_overlap_count: 0,
+        };
+
+        let inputs = [
+            super::BlockComparisonInputs {
+                seed_block: super::SeedBlockId::B,
+                records: &records,
+                scaler,
+                baseline: &predictions,
+                challenger: &predictions,
+            },
+            super::BlockComparisonInputs {
+                seed_block: super::SeedBlockId::A,
+                records: &records,
+                scaler,
+                baseline: &predictions,
+                challenger: &predictions,
+            },
+            super::BlockComparisonInputs {
+                seed_block: super::SeedBlockId::C,
+                records: &records,
+                scaler,
+                baseline: &predictions,
+                challenger: &predictions,
+            },
+        ];
+
+        let error = super::aggregate_paired_bootstrap(primary_horizon_index(), &inputs)
+            .expect_err("out-of-order blocks must be rejected");
+
+        assert!(error.contains("deterministic block order"));
+    }
+
+    #[test]
+    fn aggregate_paired_bootstrap_is_deterministic() {
+        let records = [
+            Record {
+                baseline: [0.0; BASELINE_FEATURE_COUNT],
+                early_overlap: [0.1, 0.2],
+                overlaps: [0.3; TARGET_HORIZON_COUNT],
+                targets_u: [1.0; TARGET_HORIZON_COUNT],
+            },
+            Record {
+                baseline: [0.0; BASELINE_FEATURE_COUNT],
+                early_overlap: [0.2, 0.3],
+                overlaps: [0.4; TARGET_HORIZON_COUNT],
+                targets_u: [1.4; TARGET_HORIZON_COUNT],
+            },
+        ];
+
+        let scaler = TargetScaler::fit(&records, primary_horizon_index()).expect("valid scaler");
+
+        let baseline = super::Tdi52PredictionSet {
+            standardized: vec![0.0, 0.2],
+            reconstructed_overlap: vec![0.3, 0.35],
+            clipped_overlap_count: 0,
+        };
+
+        let challenger = super::Tdi52PredictionSet {
+            standardized: vec![0.1, 0.1],
+            reconstructed_overlap: vec![0.32, 0.33],
+            clipped_overlap_count: 0,
+        };
+
+        let build_inputs = || {
+            [
+                super::BlockComparisonInputs {
+                    seed_block: super::SeedBlockId::A,
+                    records: &records,
+                    scaler,
+                    baseline: &baseline,
+                    challenger: &challenger,
+                },
+                super::BlockComparisonInputs {
+                    seed_block: super::SeedBlockId::B,
+                    records: &records,
+                    scaler,
+                    baseline: &baseline,
+                    challenger: &challenger,
+                },
+                super::BlockComparisonInputs {
+                    seed_block: super::SeedBlockId::C,
+                    records: &records,
+                    scaler,
+                    baseline: &baseline,
+                    challenger: &challenger,
+                },
+            ]
+        };
+
+        let first = super::aggregate_paired_bootstrap(primary_horizon_index(), &build_inputs())
+            .expect("aggregate bootstrap must succeed");
+
+        let second = super::aggregate_paired_bootstrap(primary_horizon_index(), &build_inputs())
+            .expect("aggregate bootstrap must succeed");
+
+        assert_eq!(first.standardized_mse.lower, second.standardized_mse.lower);
+        assert_eq!(
+            first.standardized_mse.median,
+            second.standardized_mse.median
+        );
+        assert_eq!(first.standardized_mse.upper, second.standardized_mse.upper);
+    }
+
+    #[test]
+    fn evaluate_aggregate_comparison_pools_all_three_blocks() {
+        let training_width_3 = [Record {
+            baseline: [0.0; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.2, 0.6],
+            overlaps: [0.3; TARGET_HORIZON_COUNT],
+            targets_u: [1.1, 1.2, 1.3, 1.4, 1.5],
+        }];
+
+        let training_width_4 = [Record {
+            baseline: [0.3; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.4, 0.8],
+            overlaps: [0.5; TARGET_HORIZON_COUNT],
+            targets_u: [2.1, 2.2, 2.3, 2.4, 2.5],
+        }];
+
+        let block_a =
+            super::fit_block_models(super::SeedBlockId::A, &training_width_3, &training_width_4)
+                .expect("tiny synthetic training set must fit");
+        let block_b =
+            super::fit_block_models(super::SeedBlockId::B, &training_width_3, &training_width_4)
+                .expect("tiny synthetic training set must fit");
+        let block_c =
+            super::fit_block_models(super::SeedBlockId::C, &training_width_3, &training_width_4)
+                .expect("tiny synthetic training set must fit");
+
+        let aggregate_fit = super::AggregateModelFit::assemble([block_a, block_b, block_c])
+            .expect("blocks in frozen order must assemble");
+
+        let holdout_a = vec![Record {
+            baseline: [0.05; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.25, 0.65],
+            overlaps: [0.35; TARGET_HORIZON_COUNT],
+            targets_u: [1.15, 1.25, 1.35, 1.45, 1.55],
+        }];
+
+        let holdout_b = vec![Record {
+            baseline: [0.15; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.30, 0.70],
+            overlaps: [0.40; TARGET_HORIZON_COUNT],
+            targets_u: [1.60, 1.65, 1.70, 1.75, 1.80],
+        }];
+
+        let holdout_c = vec![Record {
+            baseline: [0.25; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.35, 0.75],
+            overlaps: [0.45; TARGET_HORIZON_COUNT],
+            targets_u: [2.00, 1.95, 1.90, 1.85, 1.80],
+        }];
+
+        let comparison = super::evaluate_aggregate_comparison(
+            primary_horizon_index(),
+            &aggregate_fit,
+            [
+                holdout_a.as_slice(),
+                holdout_b.as_slice(),
+                holdout_c.as_slice(),
+            ],
+            FeatureLayout::B0,
+            FeatureLayout::B12,
+        )
+        .expect("tiny synthetic aggregate comparison must succeed");
+
+        assert_eq!(
+            comparison.block(super::SeedBlockId::A).seed_block,
+            super::SeedBlockId::A
+        );
+        assert_eq!(
+            comparison.block(super::SeedBlockId::B).seed_block,
+            super::SeedBlockId::B
+        );
+        assert_eq!(
+            comparison.block(super::SeedBlockId::C).seed_block,
+            super::SeedBlockId::C
+        );
+
+        let pooled_count = comparison
+            .blocks
+            .iter()
+            .map(|block| block.standardized_targets.len())
+            .sum::<usize>();
+
+        assert_eq!(pooled_count, 3);
+        assert!(
+            comparison
+                .aggregate_baseline_standardized
+                .observed_mean
+                .is_finite()
+        );
+        assert!(
+            comparison
+                .aggregate_challenger_standardized
+                .observed_mean
+                .is_finite()
+        );
+        assert!(
+            comparison
+                .aggregate_bootstrap
+                .standardized_mse
+                .lower
+                .is_finite()
+        );
+        assert!(
+            comparison
+                .aggregate_baseline_reconstructed
+                .observed_mean
+                .is_finite()
+        );
+        assert!(
+            comparison
+                .aggregate_challenger_reconstructed
+                .observed_mean
+                .is_finite()
+        );
+        assert!(
+            comparison
+                .block(super::SeedBlockId::A)
+                .bootstrap
+                .standardized_mse
+                .lower
+                .is_finite()
+        );
     }
 
     #[test]
