@@ -2136,6 +2136,7 @@ struct Tdi52BootstrapIntervals {
     standardized_mse: ConfidenceInterval,
     reconstructed_mse: ConfidenceInterval,
     reconstructed_mae: ConfidenceInterval,
+    relative_standardized_mse: ConfidenceInterval,
 }
 
 fn tdi52_relative_reduction(baseline: f64, challenger: f64) -> f64 {
@@ -2288,6 +2289,8 @@ fn tdi52_paired_bootstrap(
 
     let mut reconstructed_mae = Vec::with_capacity(BOOTSTRAP_REPLICATES);
 
+    let mut relative_standardized_mse = Vec::with_capacity(BOOTSTRAP_REPLICATES);
+
     for _ in 0..BOOTSTRAP_REPLICATES {
         let mut baseline_standardized_squared = 0.0;
         let mut challenger_standardized_squared = 0.0;
@@ -2333,10 +2336,15 @@ fn tdi52_paired_bootstrap(
 
         let denominator = count as f64;
 
-        standardized_mse.push(
-            baseline_standardized_squared / denominator
-                - challenger_standardized_squared / denominator,
-        );
+        let baseline_standardized_mse = baseline_standardized_squared / denominator;
+        let challenger_standardized_mse = challenger_standardized_squared / denominator;
+
+        standardized_mse.push(baseline_standardized_mse - challenger_standardized_mse);
+
+        relative_standardized_mse.push(tdi52_relative_reduction(
+            baseline_standardized_mse,
+            challenger_standardized_mse,
+        ));
 
         reconstructed_mse.push(
             baseline_overlap_squared / denominator - challenger_overlap_squared / denominator,
@@ -2351,6 +2359,7 @@ fn tdi52_paired_bootstrap(
         standardized_mse: confidence_interval(standardized_mse),
         reconstructed_mse: confidence_interval(reconstructed_mse),
         reconstructed_mae: confidence_interval(reconstructed_mae),
+        relative_standardized_mse: confidence_interval(relative_standardized_mse),
     })
 }
 
@@ -2392,6 +2401,7 @@ fn aggregate_paired_bootstrap(
     let mut standardized_mse = Vec::with_capacity(BOOTSTRAP_REPLICATES);
     let mut reconstructed_mse = Vec::with_capacity(BOOTSTRAP_REPLICATES);
     let mut reconstructed_mae = Vec::with_capacity(BOOTSTRAP_REPLICATES);
+    let mut relative_standardized_mse = Vec::with_capacity(BOOTSTRAP_REPLICATES);
 
     for _ in 0..BOOTSTRAP_REPLICATES {
         let mut baseline_standardized_squared = 0.0;
@@ -2448,10 +2458,15 @@ fn aggregate_paired_bootstrap(
 
         let denominator = total_count as f64;
 
-        standardized_mse.push(
-            baseline_standardized_squared / denominator
-                - challenger_standardized_squared / denominator,
-        );
+        let baseline_standardized_mse = baseline_standardized_squared / denominator;
+        let challenger_standardized_mse = challenger_standardized_squared / denominator;
+
+        standardized_mse.push(baseline_standardized_mse - challenger_standardized_mse);
+
+        relative_standardized_mse.push(tdi52_relative_reduction(
+            baseline_standardized_mse,
+            challenger_standardized_mse,
+        ));
 
         reconstructed_mse.push(
             baseline_overlap_squared / denominator - challenger_overlap_squared / denominator,
@@ -2466,6 +2481,7 @@ fn aggregate_paired_bootstrap(
         standardized_mse: confidence_interval(standardized_mse),
         reconstructed_mse: confidence_interval(reconstructed_mse),
         reconstructed_mae: confidence_interval(reconstructed_mae),
+        relative_standardized_mse: confidence_interval(relative_standardized_mse),
     })
 }
 
@@ -2828,6 +2844,181 @@ fn tdi52_criterion_b(
     )?;
 
     Ok(evaluate_criterion_b(&comparison))
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CriterionCClassification {
+    Beneficial,
+    Equivalent,
+    Harmful,
+    Inconclusive,
+}
+
+impl CriterionCClassification {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Beneficial => "beneficial",
+            Self::Equivalent => "equivalent",
+            Self::Harmful => "harmful",
+            Self::Inconclusive => "inconclusive",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CriterionCResult {
+    classification: CriterionCClassification,
+    blocks_confirming_benefit: usize,
+    aggregate_relative_improvement_at_least_2_percent: bool,
+    aggregate_bootstrap_lower_bound_positive: bool,
+    all_block_point_estimates_within_equivalence_margin: bool,
+    block_intervals_within_equivalence_margin: usize,
+    aggregate_interval_within_equivalence_margin: bool,
+    blocks_confirming_harm: usize,
+    aggregate_relative_worsening_at_least_2_percent: bool,
+    aggregate_bootstrap_upper_bound_negative: bool,
+}
+
+impl CriterionCResult {
+    const MARGIN: f64 = 0.02;
+
+    fn is_beneficial(&self) -> bool {
+        self.blocks_confirming_benefit >= 2
+            && self.aggregate_relative_improvement_at_least_2_percent
+            && self.aggregate_bootstrap_lower_bound_positive
+    }
+
+    fn is_equivalent(&self) -> bool {
+        self.all_block_point_estimates_within_equivalence_margin
+            && self.block_intervals_within_equivalence_margin >= 2
+            && self.aggregate_interval_within_equivalence_margin
+    }
+
+    fn is_harmful(&self) -> bool {
+        self.blocks_confirming_harm >= 2
+            && self.aggregate_relative_worsening_at_least_2_percent
+            && self.aggregate_bootstrap_upper_bound_negative
+    }
+}
+
+fn evaluate_criterion_c(comparison: &AggregateComparison) -> CriterionCResult {
+    let block_relative_reductions = FROZEN_BLOCK_ORDER.map(|seed_block| {
+        let block = comparison.block(seed_block);
+
+        tdi52_relative_reduction(
+            block.baseline.standardized.mse,
+            block.challenger.standardized.mse,
+        )
+    });
+
+    let blocks_confirming_benefit = FROZEN_BLOCK_ORDER
+        .iter()
+        .zip(block_relative_reductions)
+        .filter(|&(&seed_block, relative_reduction)| {
+            relative_reduction >= CriterionCResult::MARGIN
+                && comparison
+                    .block(seed_block)
+                    .bootstrap
+                    .standardized_mse
+                    .lower
+                    > 0.0
+        })
+        .count();
+
+    let blocks_confirming_harm = FROZEN_BLOCK_ORDER
+        .iter()
+        .zip(block_relative_reductions)
+        .filter(|&(&seed_block, relative_reduction)| {
+            relative_reduction <= -CriterionCResult::MARGIN
+                && comparison
+                    .block(seed_block)
+                    .bootstrap
+                    .standardized_mse
+                    .upper
+                    < 0.0
+        })
+        .count();
+
+    let all_block_point_estimates_within_equivalence_margin =
+        block_relative_reductions.iter().all(|&reduction| {
+            (-CriterionCResult::MARGIN..=CriterionCResult::MARGIN).contains(&reduction)
+        });
+
+    let block_intervals_within_equivalence_margin = FROZEN_BLOCK_ORDER
+        .iter()
+        .filter(|&&seed_block| {
+            let interval = comparison
+                .block(seed_block)
+                .bootstrap
+                .relative_standardized_mse;
+
+            interval.lower >= -CriterionCResult::MARGIN
+                && interval.upper <= CriterionCResult::MARGIN
+        })
+        .count();
+
+    let aggregate_relative_reduction = tdi52_relative_reduction(
+        comparison.aggregate_baseline_standardized.mse,
+        comparison.aggregate_challenger_standardized.mse,
+    );
+
+    let aggregate_relative_improvement_at_least_2_percent =
+        aggregate_relative_reduction >= CriterionCResult::MARGIN;
+
+    let aggregate_relative_worsening_at_least_2_percent =
+        aggregate_relative_reduction <= -CriterionCResult::MARGIN;
+
+    let aggregate_bootstrap_lower_bound_positive =
+        comparison.aggregate_bootstrap.standardized_mse.lower > 0.0;
+
+    let aggregate_bootstrap_upper_bound_negative =
+        comparison.aggregate_bootstrap.standardized_mse.upper < 0.0;
+
+    let aggregate_relative_interval = comparison.aggregate_bootstrap.relative_standardized_mse;
+
+    let aggregate_interval_within_equivalence_margin = aggregate_relative_interval.lower
+        >= -CriterionCResult::MARGIN
+        && aggregate_relative_interval.upper <= CriterionCResult::MARGIN;
+
+    let mut result = CriterionCResult {
+        classification: CriterionCClassification::Inconclusive,
+        blocks_confirming_benefit,
+        aggregate_relative_improvement_at_least_2_percent,
+        aggregate_bootstrap_lower_bound_positive,
+        all_block_point_estimates_within_equivalence_margin,
+        block_intervals_within_equivalence_margin,
+        aggregate_interval_within_equivalence_margin,
+        blocks_confirming_harm,
+        aggregate_relative_worsening_at_least_2_percent,
+        aggregate_bootstrap_upper_bound_negative,
+    };
+
+    result.classification = if result.is_beneficial() {
+        CriterionCClassification::Beneficial
+    } else if result.is_equivalent() {
+        CriterionCClassification::Equivalent
+    } else if result.is_harmful() {
+        CriterionCClassification::Harmful
+    } else {
+        CriterionCClassification::Inconclusive
+    };
+
+    result
+}
+
+fn tdi52_criterion_c(
+    aggregate_fit: &AggregateModelFit,
+    combined_holdout_records: [&[Record]; SEED_BLOCK_COUNT],
+) -> Result<CriterionCResult, String> {
+    let comparison = evaluate_aggregate_comparison(
+        primary_horizon_index(),
+        aggregate_fit,
+        combined_holdout_records,
+        FeatureLayout::B2,
+        FeatureLayout::B12,
+    )?;
+
+    Ok(evaluate_criterion_c(&comparison))
 }
 
 fn tdi52_print_bootstrap_intervals(label: &str, intervals: Tdi52BootstrapIntervals) {
@@ -3308,6 +3499,21 @@ fn run_termination_smoke() -> Result<(), String> {
     println!(
         "identity smoke criterion B   : succeeded={}",
         criterion_b.succeeded()
+    );
+
+    let criterion_c = tdi52_criterion_c(
+        &aggregate_fit,
+        [
+            synthetic_training_width_3.as_slice(),
+            synthetic_training_width_3.as_slice(),
+            synthetic_training_width_3.as_slice(),
+        ],
+    )
+    .map_err(|error| error.to_string())?;
+
+    println!(
+        "identity smoke criterion C   : classification={}",
+        criterion_c.classification.label()
     );
 
     println!("bounded smoke result         : PASS");
@@ -5577,6 +5783,20 @@ mod tests {
     }
 
     fn sample_bootstrap_intervals(standardized_mse_lower: f64) -> super::Tdi52BootstrapIntervals {
+        sample_bootstrap_intervals_with_relative(
+            standardized_mse_lower,
+            ConfidenceInterval {
+                lower: 0.0,
+                median: 0.0,
+                upper: 0.0,
+            },
+        )
+    }
+
+    fn sample_bootstrap_intervals_with_relative(
+        standardized_mse_lower: f64,
+        relative_standardized_mse: ConfidenceInterval,
+    ) -> super::Tdi52BootstrapIntervals {
         super::Tdi52BootstrapIntervals {
             standardized_mse: ConfidenceInterval {
                 lower: standardized_mse_lower,
@@ -5593,6 +5813,7 @@ mod tests {
                 median: 0.0,
                 upper: 0.0,
             },
+            relative_standardized_mse,
         }
     }
 
@@ -5875,6 +6096,333 @@ mod tests {
         let result = super::evaluate_criterion_b(&comparison);
 
         assert!(result.succeeded());
+    }
+
+    fn sample_block_comparison_full(
+        seed_block: super::SeedBlockId,
+        baseline: (FeatureLayout, f64, f64),
+        challenger: (FeatureLayout, f64, f64),
+        absolute_interval: ConfidenceInterval,
+        relative_interval: ConfidenceInterval,
+    ) -> super::BlockComparison {
+        let (baseline_layout, baseline_mse, baseline_spearman) = baseline;
+        let (challenger_layout, challenger_mse, challenger_spearman) = challenger;
+
+        super::BlockComparison {
+            seed_block,
+            standardized_targets: vec![],
+            overlap_targets: vec![],
+            baseline: sample_layout_evaluation(baseline_layout, baseline_mse, baseline_spearman),
+            challenger: sample_layout_evaluation(
+                challenger_layout,
+                challenger_mse,
+                challenger_spearman,
+            ),
+            bootstrap: super::Tdi52BootstrapIntervals {
+                standardized_mse: absolute_interval,
+                reconstructed_mse: ConfidenceInterval {
+                    lower: 0.0,
+                    median: 0.0,
+                    upper: 0.0,
+                },
+                reconstructed_mae: ConfidenceInterval {
+                    lower: 0.0,
+                    median: 0.0,
+                    upper: 0.0,
+                },
+                relative_standardized_mse: relative_interval,
+            },
+        }
+    }
+
+    fn sample_aggregate_comparison_full(
+        blocks: Vec<super::BlockComparison>,
+        aggregate_baseline_mse: f64,
+        aggregate_challenger_mse: f64,
+        aggregate_absolute_interval: ConfidenceInterval,
+        aggregate_relative_interval: ConfidenceInterval,
+    ) -> super::AggregateComparison {
+        super::AggregateComparison {
+            blocks,
+            aggregate_baseline_standardized: sample_metrics(aggregate_baseline_mse, 0.0, 0.0),
+            aggregate_challenger_standardized: sample_metrics(aggregate_challenger_mse, 0.0, 0.0),
+            aggregate_baseline_reconstructed: sample_metrics(0.0, 0.0, 0.0),
+            aggregate_challenger_reconstructed: sample_metrics(0.0, 0.0, 0.0),
+            aggregate_bootstrap: super::Tdi52BootstrapIntervals {
+                standardized_mse: aggregate_absolute_interval,
+                reconstructed_mse: ConfidenceInterval {
+                    lower: 0.0,
+                    median: 0.0,
+                    upper: 0.0,
+                },
+                reconstructed_mae: ConfidenceInterval {
+                    lower: 0.0,
+                    median: 0.0,
+                    upper: 0.0,
+                },
+                relative_standardized_mse: aggregate_relative_interval,
+            },
+        }
+    }
+
+    const ZERO_INTERVAL: ConfidenceInterval = ConfidenceInterval {
+        lower: 0.0,
+        median: 0.0,
+        upper: 0.0,
+    };
+
+    #[test]
+    fn criterion_c_classifies_beneficial_when_conditions_hold() {
+        let positive_interval = ConfidenceInterval {
+            lower: 0.05,
+            median: 0.1,
+            upper: 0.15,
+        };
+
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison_full(
+                seed_block,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 0.9, 0.0),
+                positive_interval,
+                ZERO_INTERVAL,
+            )
+        })
+        .to_vec();
+
+        let comparison =
+            sample_aggregate_comparison_full(blocks, 1.0, 0.9, positive_interval, ZERO_INTERVAL);
+
+        let result = super::evaluate_criterion_c(&comparison);
+
+        assert_eq!(result.blocks_confirming_benefit, 3);
+        assert!(result.aggregate_relative_improvement_at_least_2_percent);
+        assert!(result.aggregate_bootstrap_lower_bound_positive);
+        assert_eq!(
+            result.classification,
+            super::CriterionCClassification::Beneficial
+        );
+    }
+
+    #[test]
+    fn criterion_c_beneficial_requires_at_least_two_blocks() {
+        let positive_interval = ConfidenceInterval {
+            lower: 0.05,
+            median: 0.1,
+            upper: 0.15,
+        };
+
+        let blocks = vec![
+            sample_block_comparison_full(
+                super::SeedBlockId::A,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 0.9, 0.0),
+                positive_interval,
+                ZERO_INTERVAL,
+            ),
+            sample_block_comparison_full(
+                super::SeedBlockId::B,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 0.995, 0.0),
+                ZERO_INTERVAL,
+                ZERO_INTERVAL,
+            ),
+            sample_block_comparison_full(
+                super::SeedBlockId::C,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 0.995, 0.0),
+                ZERO_INTERVAL,
+                ZERO_INTERVAL,
+            ),
+        ];
+
+        let comparison =
+            sample_aggregate_comparison_full(blocks, 1.0, 0.9, positive_interval, ZERO_INTERVAL);
+
+        let result = super::evaluate_criterion_c(&comparison);
+
+        assert_eq!(result.blocks_confirming_benefit, 1);
+        assert_ne!(
+            result.classification,
+            super::CriterionCClassification::Beneficial
+        );
+    }
+
+    #[test]
+    fn criterion_c_classifies_equivalent_when_conditions_hold() {
+        let narrow_relative_interval = ConfidenceInterval {
+            lower: -0.01,
+            median: 0.0,
+            upper: 0.01,
+        };
+
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison_full(
+                seed_block,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 1.005, 0.0),
+                ZERO_INTERVAL,
+                narrow_relative_interval,
+            )
+        })
+        .to_vec();
+
+        let comparison = sample_aggregate_comparison_full(
+            blocks,
+            1.0,
+            1.005,
+            ZERO_INTERVAL,
+            narrow_relative_interval,
+        );
+
+        let result = super::evaluate_criterion_c(&comparison);
+
+        assert!(result.all_block_point_estimates_within_equivalence_margin);
+        assert_eq!(result.block_intervals_within_equivalence_margin, 3);
+        assert!(result.aggregate_interval_within_equivalence_margin);
+        assert_eq!(
+            result.classification,
+            super::CriterionCClassification::Equivalent
+        );
+    }
+
+    #[test]
+    fn criterion_c_equivalent_checks_the_relative_interval_not_the_absolute_one() {
+        // The absolute interval here is wide enough that using it by
+        // mistake for the equivalence check would still look "within
+        // margin" by coincidence; only the relative interval must
+        // decide it, and it is deliberately outside the 2% margin.
+        let wide_relative_interval = ConfidenceInterval {
+            lower: -0.5,
+            median: 0.0,
+            upper: 0.5,
+        };
+
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison_full(
+                seed_block,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 1.005, 0.0),
+                ZERO_INTERVAL,
+                wide_relative_interval,
+            )
+        })
+        .to_vec();
+
+        let comparison = sample_aggregate_comparison_full(
+            blocks,
+            1.0,
+            1.005,
+            ZERO_INTERVAL,
+            wide_relative_interval,
+        );
+
+        let result = super::evaluate_criterion_c(&comparison);
+
+        assert_eq!(result.block_intervals_within_equivalence_margin, 0);
+        assert!(!result.aggregate_interval_within_equivalence_margin);
+        assert_ne!(
+            result.classification,
+            super::CriterionCClassification::Equivalent
+        );
+    }
+
+    #[test]
+    fn criterion_c_classifies_harmful_when_conditions_hold() {
+        let negative_interval = ConfidenceInterval {
+            lower: -0.15,
+            median: -0.1,
+            upper: -0.05,
+        };
+
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison_full(
+                seed_block,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 1.1, 0.0),
+                negative_interval,
+                ZERO_INTERVAL,
+            )
+        })
+        .to_vec();
+
+        let comparison =
+            sample_aggregate_comparison_full(blocks, 1.0, 1.1, negative_interval, ZERO_INTERVAL);
+
+        let result = super::evaluate_criterion_c(&comparison);
+
+        assert_eq!(result.blocks_confirming_harm, 3);
+        assert!(result.aggregate_relative_worsening_at_least_2_percent);
+        assert!(result.aggregate_bootstrap_upper_bound_negative);
+        assert_eq!(
+            result.classification,
+            super::CriterionCClassification::Harmful
+        );
+    }
+
+    #[test]
+    fn criterion_c_classifies_inconclusive_by_default() {
+        // Point estimates sit inside the +/-2% margin (ruling out
+        // beneficial/harmful), but the bootstrap intervals are too
+        // wide to confirm equivalence either: neither extreme applies
+        // and the interval-based equivalence check fails, so the
+        // outcome must fall through to inconclusive.
+        let wide_relative_interval = ConfidenceInterval {
+            lower: -0.5,
+            median: 0.0,
+            upper: 0.5,
+        };
+
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison_full(
+                seed_block,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 1.0, 0.0),
+                ZERO_INTERVAL,
+                wide_relative_interval,
+            )
+        })
+        .to_vec();
+
+        let comparison = sample_aggregate_comparison_full(
+            blocks,
+            1.0,
+            1.0,
+            ZERO_INTERVAL,
+            wide_relative_interval,
+        );
+
+        let result = super::evaluate_criterion_c(&comparison);
+
+        assert_eq!(
+            result.classification,
+            super::CriterionCClassification::Inconclusive
+        );
     }
 
     #[test]
