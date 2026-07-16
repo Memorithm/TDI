@@ -131,6 +131,105 @@ const OOD_WIDTH_6_SEED_OFFSET: u64 = SEED_BLOCKS[0].ood_width_6_seed;
 const BOOTSTRAP_SEED: u64 = SEED_BLOCKS[0].bootstrap_seed;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PopulationKind {
+    TrainingWidth3,
+    HoldoutWidth3,
+    TrainingWidth4,
+    HoldoutWidth4,
+    OodWidth5,
+    OodWidth6,
+}
+
+impl PopulationKind {
+    const ALL: [Self; POPULATIONS_PER_SEED_BLOCK] = [
+        Self::TrainingWidth3,
+        Self::HoldoutWidth3,
+        Self::TrainingWidth4,
+        Self::HoldoutWidth4,
+        Self::OodWidth5,
+        Self::OodWidth6,
+    ];
+
+    const fn label(self) -> &'static str {
+        match self {
+            Self::TrainingWidth3 => "training-w3",
+            Self::HoldoutWidth3 => "holdout-w3",
+            Self::TrainingWidth4 => "training-w4",
+            Self::HoldoutWidth4 => "holdout-w4",
+            Self::OodWidth5 => "ood-w5",
+            Self::OodWidth6 => "ood-w6",
+        }
+    }
+
+    const fn width(self) -> u8 {
+        match self {
+            Self::TrainingWidth3 | Self::HoldoutWidth3 => TRAIN_WIDTH_3,
+            Self::TrainingWidth4 | Self::HoldoutWidth4 => TRAIN_WIDTH_4,
+            Self::OodWidth5 => OOD_WIDTH_5,
+            Self::OodWidth6 => OOD_WIDTH_6,
+        }
+    }
+
+    const fn target_count(self) -> usize {
+        match self {
+            Self::TrainingWidth3 => TRAIN_WIDTH_3_SYSTEMS,
+            Self::HoldoutWidth3 => HOLDOUT_WIDTH_3_SYSTEMS,
+            Self::TrainingWidth4 => TRAIN_WIDTH_4_SYSTEMS,
+            Self::HoldoutWidth4 => HOLDOUT_WIDTH_4_SYSTEMS,
+            Self::OodWidth5 => OOD_WIDTH_5_SYSTEMS,
+            Self::OodWidth6 => OOD_WIDTH_6_SYSTEMS,
+        }
+    }
+
+    const fn initial_seed(self, block: SeedBlockSpec) -> u64 {
+        match self {
+            Self::TrainingWidth3 => block.training_width_3_seed,
+            Self::HoldoutWidth3 => block.holdout_width_3_seed,
+            Self::TrainingWidth4 => block.training_width_4_seed,
+            Self::HoldoutWidth4 => block.holdout_width_4_seed,
+            Self::OodWidth5 => block.ood_width_5_seed,
+            Self::OodWidth6 => block.ood_width_6_seed,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PopulationSpec {
+    seed_block: SeedBlockId,
+    population: PopulationKind,
+    width: u8,
+    seed: u64,
+    target_count: usize,
+}
+
+impl PopulationSpec {
+    const fn from_block(block: SeedBlockSpec, population: PopulationKind) -> Self {
+        Self {
+            seed_block: block.id,
+            population,
+            width: population.width(),
+            seed: population.initial_seed(block),
+            target_count: population.target_count(),
+        }
+    }
+}
+
+fn population_specs() -> [PopulationSpec; TOTAL_SEED_RESERVATIONS] {
+    let mut specs = [PopulationSpec::from_block(SEED_BLOCKS[0], PopulationKind::ALL[0]);
+        TOTAL_SEED_RESERVATIONS];
+    let mut index = 0_usize;
+
+    for block in SEED_BLOCKS {
+        for population in PopulationKind::ALL {
+            specs[index] = PopulationSpec::from_block(block, population);
+            index += 1;
+        }
+    }
+
+    specs
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(usize)]
 enum FeatureLayout {
     B0,
@@ -1219,72 +1318,32 @@ fn preregistered_generation_limits(
 fn validate_preregistered_seed_reservations() -> Result<usize, String> {
     let mut ranges = Vec::with_capacity(TOTAL_SEED_RESERVATIONS);
 
-    for block in SEED_BLOCKS {
-        let populations = [
-            (
-                "training w3",
-                TRAIN_WIDTH_3,
-                block.training_width_3_seed,
-                TRAIN_WIDTH_3_SYSTEMS,
-            ),
-            (
-                "holdout w3",
-                TRAIN_WIDTH_3,
-                block.holdout_width_3_seed,
-                HOLDOUT_WIDTH_3_SYSTEMS,
-            ),
-            (
-                "training w4",
-                TRAIN_WIDTH_4,
-                block.training_width_4_seed,
-                TRAIN_WIDTH_4_SYSTEMS,
-            ),
-            (
-                "holdout w4",
-                TRAIN_WIDTH_4,
-                block.holdout_width_4_seed,
-                HOLDOUT_WIDTH_4_SYSTEMS,
-            ),
-            (
-                "OOD w5",
-                OOD_WIDTH_5,
-                block.ood_width_5_seed,
-                OOD_WIDTH_5_SYSTEMS,
-            ),
-            (
-                "OOD w6",
-                OOD_WIDTH_6,
-                block.ood_width_6_seed,
-                OOD_WIDTH_6_SYSTEMS,
-            ),
-        ];
+    for spec in population_specs() {
+        let label = || {
+            format!(
+                "block {} {}",
+                spec.seed_block.label(),
+                spec.population.label()
+            )
+        };
 
-        for (population, width, start_seed, accepted_count) in populations {
-            let limits = preregistered_generation_limits(width, start_seed, accepted_count)
-                .map_err(|error| format!("block {} {population}: {error}", block.id.label()))?;
+        let limits = preregistered_generation_limits(spec.width, spec.seed, spec.target_count)
+            .map_err(|error| format!("{}: {error}", label()))?;
 
-            let reserved_attempts = u64::try_from(limits.max_attempts).map_err(|_| {
-                format!(
-                    "block {} {population}: maximum-attempt budget {} \
-                         cannot be represented as u64",
-                    block.id.label(),
-                    limits.max_attempts
-                )
-            })?;
+        let reserved_attempts = u64::try_from(limits.max_attempts).map_err(|_| {
+            format!(
+                "{}: maximum-attempt budget {} cannot be represented as u64",
+                label(),
+                limits.max_attempts
+            )
+        })?;
 
-            let end_seed = start_seed.checked_add(reserved_attempts).ok_or_else(|| {
-                format!(
-                    "block {} {population}: reserved seed range overflows u64",
-                    block.id.label()
-                )
-            })?;
+        let end_seed = spec
+            .seed
+            .checked_add(reserved_attempts)
+            .ok_or_else(|| format!("{}: reserved seed range overflows u64", label()))?;
 
-            ranges.push((
-                start_seed,
-                end_seed,
-                format!("block {} {population}", block.id.label()),
-            ));
-        }
+        ranges.push((spec.seed, end_seed, label()));
     }
 
     if ranges.len() != TOTAL_SEED_RESERVATIONS {
@@ -1445,6 +1504,60 @@ where
         attempts,
         limits,
     })
+}
+
+#[derive(Clone, Debug)]
+struct PopulationGenerationReport {
+    spec: PopulationSpec,
+    report: GenerationReport,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PopulationGenerationError {
+    spec: PopulationSpec,
+    error: Box<GenerationError>,
+}
+
+impl std::fmt::Display for PopulationGenerationError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "seed block {}, population {}: {}",
+            self.spec.seed_block.label(),
+            self.spec.population.label(),
+            self.error
+        )
+    }
+}
+
+impl std::error::Error for PopulationGenerationError {}
+
+fn generate_population_with_analyzer<F>(
+    spec: PopulationSpec,
+    limits: GenerationLimits,
+    analyzer: F,
+) -> Result<PopulationGenerationReport, PopulationGenerationError>
+where
+    F: FnMut(AttemptContext) -> Result<CandidateOutcome, EvaluationError>,
+{
+    generate_records_with_analyzer(spec.width, spec.seed, spec.target_count, limits, analyzer)
+        .map(|report| PopulationGenerationReport { spec, report })
+        .map_err(|error| PopulationGenerationError {
+            spec,
+            error: Box::new(error),
+        })
+}
+
+fn generate_population(
+    spec: PopulationSpec,
+) -> Result<PopulationGenerationReport, PopulationGenerationError> {
+    let limits = preregistered_generation_limits(spec.width, spec.seed, spec.target_count)
+        .map_err(|error| PopulationGenerationError {
+            spec,
+            error: Box::new(GenerationError::Evaluation(error)),
+        })?;
+
+    generate_population_with_analyzer(spec, limits, analyze_seed)
 }
 
 fn model_features(record: &Record, layout: FeatureLayout) -> Vec<f64> {
@@ -1871,6 +1984,41 @@ fn fit_target_scalers(records: &[Record]) -> Result<[TargetScaler; TARGET_HORIZO
             "expected {TARGET_HORIZON_COUNT} target scalers, received {}",
             values.len()
         )
+    })
+}
+
+#[derive(Clone, Debug)]
+struct BlockModelFit {
+    seed_block: SeedBlockId,
+    target_scalers: [TargetScaler; TARGET_HORIZON_COUNT],
+    models: HorizonModels,
+}
+
+fn combined_training_records(
+    training_width_3: &[Record],
+    training_width_4: &[Record],
+) -> Vec<Record> {
+    let mut combined = Vec::with_capacity(training_width_3.len() + training_width_4.len());
+
+    combined.extend_from_slice(training_width_3);
+    combined.extend_from_slice(training_width_4);
+
+    combined
+}
+
+fn fit_block_models(
+    seed_block: SeedBlockId,
+    training_width_3: &[Record],
+    training_width_4: &[Record],
+) -> Result<BlockModelFit, String> {
+    let combined = combined_training_records(training_width_3, training_width_4);
+    let target_scalers = fit_target_scalers(&combined)?;
+    let models = fit_horizon_models(&combined, &target_scalers)?;
+
+    Ok(BlockModelFit {
+        seed_block,
+        target_scalers,
+        models,
     })
 }
 
@@ -2405,6 +2553,77 @@ fn run_termination_smoke() -> Result<(), String> {
         "rejection accounting total   : {}",
         report.rejections.total()
     );
+
+    let specs = population_specs();
+
+    println!(
+        "population specifications   : {} deterministic entries",
+        specs.len()
+    );
+
+    let identity_spec = PopulationSpec {
+        target_count: 1,
+        ..specs[0]
+    };
+
+    let identity_report = generate_population(identity_spec).map_err(|error| error.to_string())?;
+
+    println!(
+        "identity smoke seed block   : {}",
+        identity_report.spec.seed_block.label()
+    );
+    println!(
+        "identity smoke population   : {}",
+        identity_report.spec.population.label()
+    );
+    println!(
+        "identity smoke accepted     : {} in {} attempts",
+        identity_report.report.records.len(),
+        identity_report.report.attempts
+    );
+
+    let synthetic_training_width_3 = [
+        Record {
+            baseline: [0.0; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.20, 0.55],
+            overlaps: [0.30; TARGET_HORIZON_COUNT],
+            targets_u: [1.00, 1.10, 1.20, 1.30, 1.40],
+        },
+        Record {
+            baseline: [0.1; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.25, 0.60],
+            overlaps: [0.32; TARGET_HORIZON_COUNT],
+            targets_u: [1.50, 1.35, 1.25, 1.15, 1.05],
+        },
+    ];
+
+    let synthetic_training_width_4 = [Record {
+        baseline: [0.2; BASELINE_FEATURE_COUNT],
+        early_overlap: [0.35, 0.70],
+        overlaps: [0.36; TARGET_HORIZON_COUNT],
+        targets_u: [2.00, 1.90, 1.80, 1.70, 1.60],
+    }];
+
+    let block_fit = fit_block_models(
+        SeedBlockId::A,
+        &synthetic_training_width_3,
+        &synthetic_training_width_4,
+    )
+    .map_err(|error| error.to_string())?;
+
+    println!(
+        "identity smoke model block  : {}",
+        block_fit.seed_block.label()
+    );
+    println!(
+        "identity smoke model count  : {}",
+        block_fit.models.models.len()
+    );
+    println!(
+        "identity smoke target mean  : {:.6}",
+        block_fit.target_scalers[primary_horizon_index()].mean
+    );
+
     println!("bounded smoke result         : PASS");
 
     Ok(())
@@ -3515,6 +3734,470 @@ mod tests {
     }
 
     #[test]
+    fn population_specifications_total_exactly_eighteen() {
+        assert_eq!(super::population_specs().len(), 18);
+        assert_eq!(super::TOTAL_SEED_RESERVATIONS, 18);
+    }
+
+    #[test]
+    fn population_specifications_are_ordered_block_a_then_b_then_c() {
+        let specs = super::population_specs();
+        let per_block = super::POPULATIONS_PER_SEED_BLOCK;
+
+        for spec in &specs[0..per_block] {
+            assert_eq!(spec.seed_block, super::SeedBlockId::A);
+        }
+
+        for spec in &specs[per_block..2 * per_block] {
+            assert_eq!(spec.seed_block, super::SeedBlockId::B);
+        }
+
+        for spec in &specs[2 * per_block..3 * per_block] {
+            assert_eq!(spec.seed_block, super::SeedBlockId::C);
+        }
+    }
+
+    #[test]
+    fn every_seed_block_contains_exactly_six_populations() {
+        let specs = super::population_specs();
+
+        for block_id in [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ] {
+            let count = specs
+                .iter()
+                .filter(|spec| spec.seed_block == block_id)
+                .count();
+
+            assert_eq!(count, super::POPULATIONS_PER_SEED_BLOCK);
+        }
+    }
+
+    #[test]
+    fn every_seed_block_requests_exactly_fifty_five_thousand_accepted_records() {
+        let specs = super::population_specs();
+
+        for block_id in [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ] {
+            let total: usize = specs
+                .iter()
+                .filter(|spec| spec.seed_block == block_id)
+                .map(|spec| spec.target_count)
+                .sum();
+
+            assert_eq!(total, 55_000);
+        }
+    }
+
+    #[test]
+    fn all_seed_blocks_together_request_exactly_165_000_accepted_records() {
+        let total: usize = super::population_specs()
+            .iter()
+            .map(|spec| spec.target_count)
+            .sum();
+
+        assert_eq!(total, 165_000);
+    }
+
+    #[test]
+    fn population_specifications_match_preregistered_width_seed_and_count() {
+        let specs = super::population_specs();
+
+        let expected = [
+            (
+                super::SeedBlockId::A,
+                super::PopulationKind::TrainingWidth3,
+                3u8,
+                160_000_000u64,
+                15_000usize,
+            ),
+            (
+                super::SeedBlockId::A,
+                super::PopulationKind::HoldoutWidth3,
+                3,
+                170_000_000,
+                5_000,
+            ),
+            (
+                super::SeedBlockId::A,
+                super::PopulationKind::TrainingWidth4,
+                4,
+                180_000_000,
+                15_000,
+            ),
+            (
+                super::SeedBlockId::A,
+                super::PopulationKind::HoldoutWidth4,
+                4,
+                190_000_000,
+                5_000,
+            ),
+            (
+                super::SeedBlockId::A,
+                super::PopulationKind::OodWidth5,
+                5,
+                200_000_000,
+                10_000,
+            ),
+            (
+                super::SeedBlockId::A,
+                super::PopulationKind::OodWidth6,
+                6,
+                210_000_000,
+                5_000,
+            ),
+            (
+                super::SeedBlockId::B,
+                super::PopulationKind::TrainingWidth3,
+                3,
+                260_000_000,
+                15_000,
+            ),
+            (
+                super::SeedBlockId::B,
+                super::PopulationKind::HoldoutWidth3,
+                3,
+                270_000_000,
+                5_000,
+            ),
+            (
+                super::SeedBlockId::B,
+                super::PopulationKind::TrainingWidth4,
+                4,
+                280_000_000,
+                15_000,
+            ),
+            (
+                super::SeedBlockId::B,
+                super::PopulationKind::HoldoutWidth4,
+                4,
+                290_000_000,
+                5_000,
+            ),
+            (
+                super::SeedBlockId::B,
+                super::PopulationKind::OodWidth5,
+                5,
+                300_000_000,
+                10_000,
+            ),
+            (
+                super::SeedBlockId::B,
+                super::PopulationKind::OodWidth6,
+                6,
+                310_000_000,
+                5_000,
+            ),
+            (
+                super::SeedBlockId::C,
+                super::PopulationKind::TrainingWidth3,
+                3,
+                360_000_000,
+                15_000,
+            ),
+            (
+                super::SeedBlockId::C,
+                super::PopulationKind::HoldoutWidth3,
+                3,
+                370_000_000,
+                5_000,
+            ),
+            (
+                super::SeedBlockId::C,
+                super::PopulationKind::TrainingWidth4,
+                4,
+                380_000_000,
+                15_000,
+            ),
+            (
+                super::SeedBlockId::C,
+                super::PopulationKind::HoldoutWidth4,
+                4,
+                390_000_000,
+                5_000,
+            ),
+            (
+                super::SeedBlockId::C,
+                super::PopulationKind::OodWidth5,
+                5,
+                400_000_000,
+                10_000,
+            ),
+            (
+                super::SeedBlockId::C,
+                super::PopulationKind::OodWidth6,
+                6,
+                410_000_000,
+                5_000,
+            ),
+        ];
+
+        assert_eq!(specs.len(), expected.len());
+
+        for (spec, (block, population, width, seed, count)) in specs.iter().zip(expected) {
+            assert_eq!(spec.seed_block, block);
+            assert_eq!(spec.population, population);
+            assert_eq!(spec.width, width);
+            assert_eq!(spec.seed, seed);
+            assert_eq!(spec.target_count, count);
+        }
+    }
+
+    #[test]
+    fn population_spec_seed_reservations_remain_pairwise_disjoint() {
+        let mut ranges: Vec<(u64, u64)> = super::population_specs()
+            .iter()
+            .map(|spec| {
+                let limits = super::preregistered_generation_limits(
+                    spec.width,
+                    spec.seed,
+                    spec.target_count,
+                )
+                .expect("preregistered populations carry valid generation limits");
+                let reserved = u64::try_from(limits.max_attempts).expect("attempt budget fits u64");
+                let end = spec
+                    .seed
+                    .checked_add(reserved)
+                    .expect("reserved range fits u64");
+
+                (spec.seed, end)
+            })
+            .collect();
+
+        ranges.sort_by_key(|(start, _)| *start);
+
+        for pair in ranges.windows(2) {
+            assert!(
+                pair[0].1 <= pair[1].0,
+                "seed reservations overlap: {:?} vs {:?}",
+                pair[0],
+                pair[1]
+            );
+        }
+
+        assert_eq!(ranges.len(), super::TOTAL_SEED_RESERVATIONS);
+    }
+
+    #[test]
+    fn synthetic_successful_generation_preserves_block_and_population() {
+        let spec = super::PopulationSpec {
+            seed_block: super::SeedBlockId::B,
+            population: super::PopulationKind::HoldoutWidth4,
+            width: super::TRAIN_WIDTH_4,
+            seed: 4_242,
+            target_count: 1,
+        };
+
+        let limits = super::GenerationLimits {
+            max_attempts: 4,
+            no_progress_limit: 4,
+        };
+
+        let report = super::generate_population_with_analyzer(spec, limits, |_context| {
+            Ok(super::CandidateOutcome::Accepted(Record {
+                baseline: [0.0; BASELINE_FEATURE_COUNT],
+                early_overlap: [0.1, 0.2],
+                overlaps: [0.5; TARGET_HORIZON_COUNT],
+                targets_u: [1.0; TARGET_HORIZON_COUNT],
+            }))
+        })
+        .expect("synthetic analyzer must accept immediately");
+
+        assert_eq!(report.spec.seed_block, super::SeedBlockId::B);
+        assert_eq!(report.spec.population, super::PopulationKind::HoldoutWidth4);
+        assert_eq!(report.spec.width, super::TRAIN_WIDTH_4);
+        assert_eq!(report.spec.seed, 4_242);
+        assert_eq!(report.report.records.len(), 1);
+        assert_eq!(report.report.attempts, 1);
+    }
+
+    #[test]
+    fn synthetic_attempt_budget_failure_preserves_block_and_population() {
+        let spec = super::PopulationSpec {
+            seed_block: super::SeedBlockId::A,
+            population: super::PopulationKind::OodWidth5,
+            width: super::OOD_WIDTH_5,
+            seed: 777,
+            target_count: 1,
+        };
+
+        let limits = super::GenerationLimits {
+            max_attempts: 2,
+            no_progress_limit: 10,
+        };
+
+        let failure = super::generate_population_with_analyzer(spec, limits, |_context| {
+            Ok(super::CandidateOutcome::Rejected(
+                super::RejectionReason::InvalidObservationGeometry,
+            ))
+        })
+        .expect_err("attempt budget must be exhausted deterministically");
+
+        assert_eq!(failure.spec.seed_block, super::SeedBlockId::A);
+        assert_eq!(failure.spec.population, super::PopulationKind::OodWidth5);
+
+        match *failure.error {
+            super::GenerationError::AttemptBudgetExhausted(diagnostic) => {
+                assert_eq!(diagnostic.context.width, super::OOD_WIDTH_5);
+                assert_eq!(diagnostic.context.seed, 779);
+                assert_eq!(diagnostic.context.attempt_index, 2);
+                assert_eq!(diagnostic.progress.accepted, 0);
+                assert_eq!(diagnostic.progress.excluded, 2);
+            }
+            other => panic!("unexpected generation error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn synthetic_no_progress_failure_preserves_block_and_population() {
+        let spec = super::PopulationSpec {
+            seed_block: super::SeedBlockId::C,
+            population: super::PopulationKind::TrainingWidth3,
+            width: super::TRAIN_WIDTH_3,
+            seed: 555,
+            target_count: 1,
+        };
+
+        let limits = super::GenerationLimits {
+            max_attempts: 10,
+            no_progress_limit: 3,
+        };
+
+        let failure = super::generate_population_with_analyzer(spec, limits, |_context| {
+            Ok(super::CandidateOutcome::Rejected(
+                super::RejectionReason::InvalidObservationGeometry,
+            ))
+        })
+        .expect_err("no-progress threshold must terminate deterministically");
+
+        assert_eq!(failure.spec.seed_block, super::SeedBlockId::C);
+        assert_eq!(
+            failure.spec.population,
+            super::PopulationKind::TrainingWidth3
+        );
+
+        match *failure.error {
+            super::GenerationError::NoProgress(diagnostic) => {
+                assert_eq!(diagnostic.context.width, super::TRAIN_WIDTH_3);
+                assert_eq!(diagnostic.context.seed, 557);
+                assert_eq!(diagnostic.context.attempt_index, 2);
+                assert_eq!(diagnostic.progress.accepted, 0);
+                assert_eq!(diagnostic.progress.excluded, 3);
+            }
+            other => panic!("unexpected generation error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn formatted_failure_output_contains_all_preregistered_fields() {
+        let spec = super::PopulationSpec {
+            seed_block: super::SeedBlockId::B,
+            population: super::PopulationKind::OodWidth6,
+            width: super::OOD_WIDTH_6,
+            seed: 999,
+            target_count: 1,
+        };
+
+        let limits = super::GenerationLimits {
+            max_attempts: 2,
+            no_progress_limit: 10,
+        };
+
+        let failure = super::generate_population_with_analyzer(spec, limits, |_context| {
+            Ok(super::CandidateOutcome::Rejected(
+                super::RejectionReason::NonFiniteFeature,
+            ))
+        })
+        .expect_err("attempt budget must be exhausted deterministically");
+
+        let formatted = failure.to_string();
+
+        for expected_fragment in [
+            "block B",
+            "population ood-w6",
+            "width 6",
+            "seed 1001",
+            "attempt 2",
+            "accepted=0",
+            "excluded=2",
+            "target=1",
+            "max_attempts=2",
+            "no_progress_limit=10",
+            "attempt-budget",
+            "non-finite-feature=2",
+        ] {
+            assert!(
+                formatted.contains(expected_fragment),
+                "formatted failure {formatted:?} missing {expected_fragment:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn population_evaluator_failures_are_not_converted_to_rejections() {
+        let spec = super::PopulationSpec {
+            seed_block: super::SeedBlockId::A,
+            population: super::PopulationKind::TrainingWidth3,
+            width: super::TRAIN_WIDTH_3,
+            seed: 1,
+            target_count: 1,
+        };
+
+        let limits = super::GenerationLimits {
+            max_attempts: 4,
+            no_progress_limit: 4,
+        };
+
+        let failure = super::generate_population_with_analyzer(spec, limits, |context| {
+            Err(super::EvaluationError::new(
+                context,
+                super::FailureCategory::Arithmetic,
+                "forced arithmetic failure",
+            ))
+        })
+        .expect_err("evaluator failure must propagate");
+
+        assert_eq!(failure.spec.seed_block, super::SeedBlockId::A);
+        assert_eq!(
+            failure.spec.population,
+            super::PopulationKind::TrainingWidth3
+        );
+
+        match *failure.error {
+            super::GenerationError::Evaluation(evaluation_error) => {
+                assert_eq!(
+                    evaluation_error.category,
+                    super::FailureCategory::Arithmetic
+                );
+            }
+            other => {
+                panic!("evaluator failures must not become rejections or terminations: {other:?}")
+            }
+        }
+    }
+
+    #[test]
+    fn full_execution_guard_is_unaffected_by_population_identity_additions() {
+        assert_eq!(
+            super::population_specs().len(),
+            super::TOTAL_SEED_RESERVATIONS
+        );
+
+        let error =
+            super::run_full_experiment().expect_err("full TDI-5.2 execution must remain disabled");
+
+        assert_eq!(
+            error,
+            "TDI-5.2 full execution is disabled while the evaluator is under implementation"
+        );
+    }
+
+    #[test]
     fn target_scaler_uses_unit_scale_for_constant_targets() {
         let record = Record {
             baseline: [0.0; BASELINE_FEATURE_COUNT],
@@ -3530,6 +4213,133 @@ mod tests {
 
         assert_eq!(scaler.mean, 2.0);
         assert_eq!(scaler.scale, 1.0);
+    }
+
+    #[test]
+    fn combined_training_records_preserve_width_3_then_width_4_order() {
+        let width_3 = [
+            Record {
+                baseline: [0.0; BASELINE_FEATURE_COUNT],
+                early_overlap: [0.10, 0.20],
+                overlaps: [0.3; TARGET_HORIZON_COUNT],
+                targets_u: [1.0; TARGET_HORIZON_COUNT],
+            },
+            Record {
+                baseline: [0.0; BASELINE_FEATURE_COUNT],
+                early_overlap: [0.15, 0.25],
+                overlaps: [0.35; TARGET_HORIZON_COUNT],
+                targets_u: [1.5; TARGET_HORIZON_COUNT],
+            },
+        ];
+
+        let width_4 = [Record {
+            baseline: [0.0; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.40, 0.50],
+            overlaps: [0.6; TARGET_HORIZON_COUNT],
+            targets_u: [2.0; TARGET_HORIZON_COUNT],
+        }];
+
+        let combined = super::combined_training_records(&width_3, &width_4);
+
+        assert_eq!(combined.len(), 3);
+        assert_eq!(combined[0].early_overlap, width_3[0].early_overlap);
+        assert_eq!(combined[1].early_overlap, width_3[1].early_overlap);
+        assert_eq!(combined[2].early_overlap, width_4[0].early_overlap);
+    }
+
+    #[test]
+    fn fit_block_models_preserves_seed_block_identity_and_model_count() {
+        let training_width_3 = [
+            Record {
+                baseline: [0.0; BASELINE_FEATURE_COUNT],
+                early_overlap: [0.20, 0.55],
+                overlaps: [0.30; TARGET_HORIZON_COUNT],
+                targets_u: [1.00, 1.10, 1.20, 1.30, 1.40],
+            },
+            Record {
+                baseline: [0.1; BASELINE_FEATURE_COUNT],
+                early_overlap: [0.25, 0.60],
+                overlaps: [0.32; TARGET_HORIZON_COUNT],
+                targets_u: [1.50, 1.35, 1.25, 1.15, 1.05],
+            },
+        ];
+
+        let training_width_4 = [Record {
+            baseline: [0.2; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.35, 0.70],
+            overlaps: [0.36; TARGET_HORIZON_COUNT],
+            targets_u: [2.00, 1.90, 1.80, 1.70, 1.60],
+        }];
+
+        let fit =
+            super::fit_block_models(super::SeedBlockId::B, &training_width_3, &training_width_4)
+                .expect("tiny synthetic training set must fit");
+
+        assert_eq!(fit.seed_block, super::SeedBlockId::B);
+        assert_eq!(
+            fit.models.models.len(),
+            TARGET_HORIZON_COUNT * super::MODEL_LAYOUT_COUNT
+        );
+
+        for layout in FeatureLayout::ALL {
+            let _ = fit.models.get(primary_horizon_index(), layout);
+        }
+    }
+
+    #[test]
+    fn fit_block_models_target_scaler_reflects_combined_training_population() {
+        let training_width_3 = [Record {
+            baseline: [0.0; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.1, 0.2],
+            overlaps: [0.3; TARGET_HORIZON_COUNT],
+            targets_u: [1.0; TARGET_HORIZON_COUNT],
+        }];
+
+        let training_width_4 = [Record {
+            baseline: [0.0; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.4, 0.5],
+            overlaps: [0.6; TARGET_HORIZON_COUNT],
+            targets_u: [3.0; TARGET_HORIZON_COUNT],
+        }];
+
+        let fit =
+            super::fit_block_models(super::SeedBlockId::C, &training_width_3, &training_width_4)
+                .expect("tiny synthetic training set must fit");
+
+        let expected_mean = (1.0 + 3.0) / 2.0;
+
+        for scaler in fit.target_scalers {
+            assert!((scaler.mean - expected_mean).abs() < 1.0e-12);
+        }
+    }
+
+    #[test]
+    fn fit_block_models_is_deterministic() {
+        let training_width_3 = [Record {
+            baseline: [0.0; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.2, 0.6],
+            overlaps: [0.3; TARGET_HORIZON_COUNT],
+            targets_u: [1.1, 1.2, 1.3, 1.4, 1.5],
+        }];
+
+        let training_width_4 = [Record {
+            baseline: [0.3; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.4, 0.8],
+            overlaps: [0.5; TARGET_HORIZON_COUNT],
+            targets_u: [2.1, 2.2, 2.3, 2.4, 2.5],
+        }];
+
+        let first =
+            super::fit_block_models(super::SeedBlockId::A, &training_width_3, &training_width_4)
+                .expect("tiny synthetic training set must fit");
+
+        let second =
+            super::fit_block_models(super::SeedBlockId::A, &training_width_3, &training_width_4)
+                .expect("tiny synthetic training set must fit");
+
+        for (first_model, second_model) in first.models.models.iter().zip(&second.models.models) {
+            assert_eq!(first_model.coefficients, second_model.coefficients);
+        }
     }
 
     #[test]
