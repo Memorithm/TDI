@@ -3021,6 +3021,220 @@ fn tdi52_criterion_c(
     Ok(evaluate_criterion_c(&comparison))
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CriterionDWidth5Result {
+    positive_mse_improvement_in_every_block: bool,
+    bootstrap_lower_bound_positive_in_every_block: bool,
+    median_relative_reduction_at_least_20_percent: bool,
+    positive_challenger_spearman_in_every_block: bool,
+    spearman_not_worse_in_every_block: bool,
+    aggregate_bias_strictly_lower: bool,
+    positive_aggregate_reconstructed_mse_improvement: bool,
+    positive_aggregate_reconstructed_mae_improvement: bool,
+}
+
+impl CriterionDWidth5Result {
+    const RELATIVE_REDUCTION_THRESHOLD: f64 = 0.20;
+
+    fn succeeded(self) -> bool {
+        self.positive_mse_improvement_in_every_block
+            && self.bootstrap_lower_bound_positive_in_every_block
+            && self.median_relative_reduction_at_least_20_percent
+            && self.positive_challenger_spearman_in_every_block
+            && self.spearman_not_worse_in_every_block
+            && self.aggregate_bias_strictly_lower
+            && self.positive_aggregate_reconstructed_mse_improvement
+            && self.positive_aggregate_reconstructed_mae_improvement
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CriterionDWidth6Result {
+    positive_mse_improvement_in_every_block: bool,
+    bootstrap_lower_bound_positive_in_at_least_two_blocks: bool,
+    aggregate_bootstrap_lower_bound_positive: bool,
+    positive_challenger_spearman_in_every_block: bool,
+    aggregate_spearman_not_worse: bool,
+    aggregate_bias_not_worse: bool,
+    positive_aggregate_reconstructed_mse_improvement: bool,
+}
+
+impl CriterionDWidth6Result {
+    fn succeeded(self) -> bool {
+        self.positive_mse_improvement_in_every_block
+            && self.bootstrap_lower_bound_positive_in_at_least_two_blocks
+            && self.aggregate_bootstrap_lower_bound_positive
+            && self.positive_challenger_spearman_in_every_block
+            && self.aggregate_spearman_not_worse
+            && self.aggregate_bias_not_worse
+            && self.positive_aggregate_reconstructed_mse_improvement
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CriterionDResult {
+    width_5: CriterionDWidth5Result,
+    width_6: CriterionDWidth6Result,
+}
+
+impl CriterionDResult {
+    fn succeeded(self) -> bool {
+        self.width_5.succeeded() && self.width_6.succeeded()
+    }
+}
+
+fn evaluate_criterion_d_width_5(comparison: &AggregateComparison) -> CriterionDWidth5Result {
+    let block_relative_reductions = FROZEN_BLOCK_ORDER.map(|seed_block| {
+        let block = comparison.block(seed_block);
+
+        tdi52_relative_reduction(
+            block.baseline.standardized.mse,
+            block.challenger.standardized.mse,
+        )
+    });
+
+    let positive_mse_improvement_in_every_block = FROZEN_BLOCK_ORDER.iter().all(|&seed_block| {
+        let block = comparison.block(seed_block);
+
+        block.baseline.standardized.mse - block.challenger.standardized.mse > 0.0
+    });
+
+    let bootstrap_lower_bound_positive_in_every_block =
+        FROZEN_BLOCK_ORDER.iter().all(|&seed_block| {
+            comparison
+                .block(seed_block)
+                .bootstrap
+                .standardized_mse
+                .lower
+                > 0.0
+        });
+
+    let median_relative_reduction_at_least_20_percent = median_of_three(block_relative_reductions)
+        >= CriterionDWidth5Result::RELATIVE_REDUCTION_THRESHOLD;
+
+    let positive_challenger_spearman_in_every_block =
+        FROZEN_BLOCK_ORDER.iter().all(|&seed_block| {
+            comparison
+                .block(seed_block)
+                .challenger
+                .standardized
+                .spearman
+                > 0.0
+        });
+
+    let spearman_not_worse_in_every_block = FROZEN_BLOCK_ORDER.iter().all(|&seed_block| {
+        let block = comparison.block(seed_block);
+
+        block.challenger.standardized.spearman >= block.baseline.standardized.spearman
+    });
+
+    let aggregate_bias_strictly_lower = comparison.aggregate_challenger_standardized.bias.abs()
+        < comparison.aggregate_baseline_standardized.bias.abs();
+
+    let positive_aggregate_reconstructed_mse_improvement =
+        comparison.aggregate_baseline_reconstructed.mse
+            - comparison.aggregate_challenger_reconstructed.mse
+            > 0.0;
+
+    let positive_aggregate_reconstructed_mae_improvement =
+        comparison.aggregate_baseline_reconstructed.mae
+            - comparison.aggregate_challenger_reconstructed.mae
+            > 0.0;
+
+    CriterionDWidth5Result {
+        positive_mse_improvement_in_every_block,
+        bootstrap_lower_bound_positive_in_every_block,
+        median_relative_reduction_at_least_20_percent,
+        positive_challenger_spearman_in_every_block,
+        spearman_not_worse_in_every_block,
+        aggregate_bias_strictly_lower,
+        positive_aggregate_reconstructed_mse_improvement,
+        positive_aggregate_reconstructed_mae_improvement,
+    }
+}
+
+fn evaluate_criterion_d_width_6(comparison: &AggregateComparison) -> CriterionDWidth6Result {
+    let positive_mse_improvement_in_every_block = FROZEN_BLOCK_ORDER.iter().all(|&seed_block| {
+        let block = comparison.block(seed_block);
+
+        block.baseline.standardized.mse - block.challenger.standardized.mse > 0.0
+    });
+
+    let bootstrap_lower_bound_positive_in_at_least_two_blocks = FROZEN_BLOCK_ORDER
+        .iter()
+        .filter(|&&seed_block| {
+            comparison
+                .block(seed_block)
+                .bootstrap
+                .standardized_mse
+                .lower
+                > 0.0
+        })
+        .count()
+        >= 2;
+
+    let aggregate_bootstrap_lower_bound_positive =
+        comparison.aggregate_bootstrap.standardized_mse.lower > 0.0;
+
+    let positive_challenger_spearman_in_every_block =
+        FROZEN_BLOCK_ORDER.iter().all(|&seed_block| {
+            comparison
+                .block(seed_block)
+                .challenger
+                .standardized
+                .spearman
+                > 0.0
+        });
+
+    let aggregate_spearman_not_worse = comparison.aggregate_challenger_standardized.spearman
+        >= comparison.aggregate_baseline_standardized.spearman;
+
+    let aggregate_bias_not_worse = comparison.aggregate_challenger_standardized.bias.abs()
+        <= comparison.aggregate_baseline_standardized.bias.abs();
+
+    let positive_aggregate_reconstructed_mse_improvement =
+        comparison.aggregate_baseline_reconstructed.mse
+            - comparison.aggregate_challenger_reconstructed.mse
+            > 0.0;
+
+    CriterionDWidth6Result {
+        positive_mse_improvement_in_every_block,
+        bootstrap_lower_bound_positive_in_at_least_two_blocks,
+        aggregate_bootstrap_lower_bound_positive,
+        positive_challenger_spearman_in_every_block,
+        aggregate_spearman_not_worse,
+        aggregate_bias_not_worse,
+        positive_aggregate_reconstructed_mse_improvement,
+    }
+}
+
+fn tdi52_criterion_d(
+    aggregate_fit: &AggregateModelFit,
+    width_5_ood_records: [&[Record]; SEED_BLOCK_COUNT],
+    width_6_ood_records: [&[Record]; SEED_BLOCK_COUNT],
+) -> Result<CriterionDResult, String> {
+    let width_5_comparison = evaluate_aggregate_comparison(
+        primary_horizon_index(),
+        aggregate_fit,
+        width_5_ood_records,
+        FeatureLayout::B0,
+        FeatureLayout::B12,
+    )?;
+
+    let width_6_comparison = evaluate_aggregate_comparison(
+        primary_horizon_index(),
+        aggregate_fit,
+        width_6_ood_records,
+        FeatureLayout::B0,
+        FeatureLayout::B12,
+    )?;
+
+    Ok(CriterionDResult {
+        width_5: evaluate_criterion_d_width_5(&width_5_comparison),
+        width_6: evaluate_criterion_d_width_6(&width_6_comparison),
+    })
+}
+
 fn tdi52_print_bootstrap_intervals(label: &str, intervals: Tdi52BootstrapIntervals) {
     println!();
     println!("{label}");
@@ -3514,6 +3728,28 @@ fn run_termination_smoke() -> Result<(), String> {
     println!(
         "identity smoke criterion C   : classification={}",
         criterion_c.classification.label()
+    );
+
+    let criterion_d = tdi52_criterion_d(
+        &aggregate_fit,
+        [
+            synthetic_training_width_3.as_slice(),
+            synthetic_training_width_3.as_slice(),
+            synthetic_training_width_3.as_slice(),
+        ],
+        [
+            synthetic_training_width_4.as_slice(),
+            synthetic_training_width_4.as_slice(),
+            synthetic_training_width_4.as_slice(),
+        ],
+    )
+    .map_err(|error| error.to_string())?;
+
+    println!(
+        "identity smoke criterion D   : width5={}, width6={}, succeeded={}",
+        criterion_d.width_5.succeeded(),
+        criterion_d.width_6.succeeded(),
+        criterion_d.succeeded()
     );
 
     println!("bounded smoke result         : PASS");
@@ -5766,10 +6002,10 @@ mod tests {
         );
     }
 
-    fn sample_metrics(mse: f64, spearman: f64, bias: f64) -> Metrics {
+    fn full_metrics(mse: f64, mae: f64, spearman: f64, bias: f64) -> Metrics {
         Metrics {
             mse,
-            mae: 0.0,
+            mae,
             r_squared: 0.0,
             spearman,
             bias,
@@ -5780,6 +6016,10 @@ mod tests {
             zero_fraction: 0.0,
             one_fraction: 0.0,
         }
+    }
+
+    fn sample_metrics(mse: f64, spearman: f64, bias: f64) -> Metrics {
+        full_metrics(mse, 0.0, spearman, bias)
     }
 
     fn sample_bootstrap_intervals(standardized_mse_lower: f64) -> super::Tdi52BootstrapIntervals {
@@ -6422,6 +6662,188 @@ mod tests {
         assert_eq!(
             result.classification,
             super::CriterionCClassification::Inconclusive
+        );
+    }
+
+    fn favorable_criterion_d_width_5_comparison() -> super::AggregateComparison {
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison(
+                seed_block,
+                (FeatureLayout::B0, 1.0, 0.5),
+                (FeatureLayout::B12, 0.7, 0.6),
+                0.05,
+            )
+        })
+        .to_vec();
+
+        super::AggregateComparison {
+            blocks,
+            aggregate_baseline_standardized: full_metrics(1.0, 0.0, 0.5, 0.05),
+            aggregate_challenger_standardized: full_metrics(0.7, 0.0, 0.6, 0.03),
+            aggregate_baseline_reconstructed: full_metrics(0.5, 0.4, 0.0, 0.0),
+            aggregate_challenger_reconstructed: full_metrics(0.3, 0.2, 0.0, 0.0),
+            aggregate_bootstrap: sample_bootstrap_intervals(0.05),
+        }
+    }
+
+    fn favorable_criterion_d_width_6_comparison() -> super::AggregateComparison {
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison(
+                seed_block,
+                (FeatureLayout::B0, 1.0, 0.5),
+                (FeatureLayout::B12, 0.8, 0.6),
+                0.05,
+            )
+        })
+        .to_vec();
+
+        super::AggregateComparison {
+            blocks,
+            aggregate_baseline_standardized: full_metrics(1.0, 0.0, 0.5, 0.05),
+            aggregate_challenger_standardized: full_metrics(0.8, 0.0, 0.6, 0.05),
+            aggregate_baseline_reconstructed: full_metrics(0.5, 0.0, 0.0, 0.0),
+            aggregate_challenger_reconstructed: full_metrics(0.3, 0.0, 0.0, 0.0),
+            aggregate_bootstrap: sample_bootstrap_intervals(0.05),
+        }
+    }
+
+    #[test]
+    fn criterion_d_width_5_succeeds_when_every_condition_holds() {
+        let comparison = favorable_criterion_d_width_5_comparison();
+        let result = super::evaluate_criterion_d_width_5(&comparison);
+
+        assert!(result.positive_mse_improvement_in_every_block);
+        assert!(result.bootstrap_lower_bound_positive_in_every_block);
+        assert!(result.median_relative_reduction_at_least_20_percent);
+        assert!(result.positive_challenger_spearman_in_every_block);
+        assert!(result.spearman_not_worse_in_every_block);
+        assert!(result.aggregate_bias_strictly_lower);
+        assert!(result.positive_aggregate_reconstructed_mse_improvement);
+        assert!(result.positive_aggregate_reconstructed_mae_improvement);
+        assert!(result.succeeded());
+    }
+
+    #[test]
+    fn criterion_d_width_6_succeeds_when_every_condition_holds() {
+        let comparison = favorable_criterion_d_width_6_comparison();
+        let result = super::evaluate_criterion_d_width_6(&comparison);
+
+        assert!(result.positive_mse_improvement_in_every_block);
+        assert!(result.bootstrap_lower_bound_positive_in_at_least_two_blocks);
+        assert!(result.aggregate_bootstrap_lower_bound_positive);
+        assert!(result.positive_challenger_spearman_in_every_block);
+        assert!(result.aggregate_spearman_not_worse);
+        assert!(result.aggregate_bias_not_worse);
+        assert!(result.positive_aggregate_reconstructed_mse_improvement);
+        assert!(result.succeeded());
+    }
+
+    #[test]
+    fn criterion_d_width_5_requires_bootstrap_positive_in_every_block() {
+        let mut comparison = favorable_criterion_d_width_5_comparison();
+        comparison.blocks[2].bootstrap.standardized_mse.lower = -0.01;
+
+        let result = super::evaluate_criterion_d_width_5(&comparison);
+
+        assert!(!result.bootstrap_lower_bound_positive_in_every_block);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_d_width_6_only_requires_bootstrap_positive_in_two_blocks() {
+        let mut comparison = favorable_criterion_d_width_6_comparison();
+        comparison.blocks[2].bootstrap.standardized_mse.lower = -0.01;
+
+        let result = super::evaluate_criterion_d_width_6(&comparison);
+
+        assert!(result.bootstrap_lower_bound_positive_in_at_least_two_blocks);
+        assert!(result.succeeded());
+    }
+
+    #[test]
+    fn criterion_d_width_5_requires_strictly_lower_aggregate_bias() {
+        let mut comparison = favorable_criterion_d_width_5_comparison();
+        comparison.aggregate_challenger_standardized.bias =
+            comparison.aggregate_baseline_standardized.bias;
+
+        let result = super::evaluate_criterion_d_width_5(&comparison);
+
+        assert!(!result.aggregate_bias_strictly_lower);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_d_width_6_allows_equal_aggregate_bias() {
+        // The favorable width-6 fixture already has equal baseline
+        // and challenger bias (0.05 vs 0.05); width 5's stricter,
+        // non-equal requirement is checked separately above.
+        let comparison = favorable_criterion_d_width_6_comparison();
+        let result = super::evaluate_criterion_d_width_6(&comparison);
+
+        assert!(result.aggregate_bias_not_worse);
+        assert!(result.succeeded());
+    }
+
+    #[test]
+    fn criterion_d_width_5_checks_spearman_per_block_while_width_6_checks_aggregate_only() {
+        let mut width_5 = favorable_criterion_d_width_5_comparison();
+        width_5.blocks[2].challenger.standardized.spearman =
+            width_5.blocks[2].baseline.standardized.spearman - 0.1;
+
+        let width_5_result = super::evaluate_criterion_d_width_5(&width_5);
+
+        assert!(!width_5_result.spearman_not_worse_in_every_block);
+        assert!(!width_5_result.succeeded());
+
+        let mut width_6 = favorable_criterion_d_width_6_comparison();
+        width_6.blocks[2].challenger.standardized.spearman =
+            width_6.blocks[2].baseline.standardized.spearman - 0.1;
+
+        let width_6_result = super::evaluate_criterion_d_width_6(&width_6);
+
+        assert!(width_6_result.aggregate_spearman_not_worse);
+        assert!(width_6_result.succeeded());
+    }
+
+    #[test]
+    fn criterion_d_succeeds_only_when_both_widths_succeed() {
+        let width_5 =
+            super::evaluate_criterion_d_width_5(&favorable_criterion_d_width_5_comparison());
+        let width_6 =
+            super::evaluate_criterion_d_width_6(&favorable_criterion_d_width_6_comparison());
+
+        assert!(super::CriterionDResult { width_5, width_6 }.succeeded());
+
+        let mut failing_width_5 = width_5;
+        failing_width_5.positive_mse_improvement_in_every_block = false;
+
+        assert!(
+            !super::CriterionDResult {
+                width_5: failing_width_5,
+                width_6,
+            }
+            .succeeded()
+        );
+
+        let mut failing_width_6 = width_6;
+        failing_width_6.aggregate_bootstrap_lower_bound_positive = false;
+
+        assert!(
+            !super::CriterionDResult {
+                width_5,
+                width_6: failing_width_6,
+            }
+            .succeeded()
         );
     }
 
