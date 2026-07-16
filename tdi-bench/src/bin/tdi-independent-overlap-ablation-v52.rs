@@ -302,7 +302,7 @@ enum Cardinality {
     Invalid { width: u8, reason: &'static str },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum RejectionReason {
     ObservationFullyRecovered,
     InvalidObservationGeometry,
@@ -310,6 +310,56 @@ enum RejectionReason {
     InvalidTargetGeometry { horizon: usize },
     InvalidTransformedTarget { horizon: usize },
     NonFiniteFeature,
+}
+
+impl std::fmt::Display for RejectionReason {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ObservationFullyRecovered => formatter.write_str("observation-fully-recovered"),
+            Self::InvalidObservationGeometry => formatter.write_str("invalid-observation-geometry"),
+            Self::TargetFullyRecovered { horizon } => {
+                write!(formatter, "target-fully-recovered-h{horizon}")
+            }
+            Self::InvalidTargetGeometry { horizon } => {
+                write!(formatter, "invalid-target-geometry-h{horizon}")
+            }
+            Self::InvalidTransformedTarget { horizon } => {
+                write!(formatter, "invalid-transformed-target-h{horizon}")
+            }
+            Self::NonFiniteFeature => formatter.write_str("non-finite-feature"),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct RejectionCounts {
+    counts: std::collections::BTreeMap<RejectionReason, usize>,
+}
+
+impl RejectionCounts {
+    fn record(&mut self, reason: RejectionReason) {
+        let count = self.counts.entry(reason).or_insert(0);
+
+        *count = count
+            .checked_add(1)
+            .expect("rejection count cannot overflow usize");
+    }
+
+    fn total(&self) -> usize {
+        self.counts.values().copied().sum()
+    }
+
+    fn summary(&self) -> String {
+        if self.counts.is_empty() {
+            return "none".to_owned();
+        }
+
+        self.counts
+            .iter()
+            .map(|(reason, count)| format!("{reason}={count}"))
+            .collect::<Vec<_>>()
+            .join(",")
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -329,7 +379,17 @@ struct GenerationReport {
     records: Vec<Record>,
     next_seed: u64,
     excluded: usize,
+    rejections: RejectionCounts,
     attempts: usize,
+    limits: GenerationLimits,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct GenerationProgress {
+    accepted: usize,
+    excluded: usize,
+    rejections: RejectionCounts,
+    target_count: usize,
     limits: GenerationLimits,
 }
 
@@ -337,10 +397,7 @@ struct GenerationReport {
 struct TerminationDiagnostic {
     context: AttemptContext,
     category: FailureCategory,
-    accepted: usize,
-    excluded: usize,
-    target_count: usize,
-    limits: GenerationLimits,
+    progress: GenerationProgress,
     message: String,
 }
 
@@ -348,19 +405,13 @@ impl TerminationDiagnostic {
     fn new(
         context: AttemptContext,
         category: FailureCategory,
-        accepted: usize,
-        excluded: usize,
-        target_count: usize,
-        limits: GenerationLimits,
+        progress: GenerationProgress,
         message: impl Into<String>,
     ) -> Self {
         Self {
             context,
             category,
-            accepted,
-            excluded,
-            target_count,
-            limits,
+            progress,
             message: message.into(),
         }
     }
@@ -370,17 +421,18 @@ impl std::fmt::Display for TerminationDiagnostic {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             formatter,
-            "{} termination at width {}, seed {}, attempt {}: {}; accepted={}, excluded={}, target={}, max_attempts={}, no_progress_limit={}",
+            "{} termination at width {}, seed {}, attempt {}: {}; accepted={}, excluded={}, rejections=[{}], target={}, max_attempts={}, no_progress_limit={}",
             self.category,
             self.context.width,
             self.context.seed,
             self.context.attempt_index,
             self.message,
-            self.accepted,
-            self.excluded,
-            self.target_count,
-            self.limits.max_attempts,
-            self.limits.no_progress_limit
+            self.progress.accepted,
+            self.progress.excluded,
+            self.progress.rejections.summary(),
+            self.progress.target_count,
+            self.progress.limits.max_attempts,
+            self.progress.limits.no_progress_limit
         )
     }
 }
@@ -1318,6 +1370,7 @@ where
 
     let mut records = Vec::with_capacity(count);
     let mut excluded = 0_usize;
+    let mut rejections = RejectionCounts::default();
     let mut attempts = 0_usize;
     let mut attempts_without_progress = 0_usize;
 
@@ -1328,10 +1381,13 @@ where
             let diagnostic = TerminationDiagnostic::new(
                 AttemptContext::new(width, seed, attempts),
                 FailureCategory::AttemptBudget,
-                records.len(),
-                excluded,
-                count,
-                limits,
+                GenerationProgress {
+                    accepted: records.len(),
+                    excluded,
+                    rejections: rejections.clone(),
+                    target_count: count,
+                    limits,
+                },
                 "target record count remained unattainable before the deterministic attempt budget",
             );
 
@@ -1348,9 +1404,11 @@ where
                 attempts_without_progress = 0;
             }
             CandidateOutcome::Rejected(reason) => {
-                let _deterministic_rejection = reason;
+                rejections.record(reason);
                 excluded += 1;
                 attempts_without_progress += 1;
+
+                debug_assert_eq!(excluded, rejections.total());
             }
         }
 
@@ -1360,10 +1418,13 @@ where
             let diagnostic = TerminationDiagnostic::new(
                 context,
                 FailureCategory::NoProgress,
-                records.len(),
-                excluded,
-                count,
-                limits,
+                GenerationProgress {
+                    accepted: records.len(),
+                    excluded,
+                    rejections: rejections.clone(),
+                    target_count: count,
+                    limits,
+                },
                 format!(
                     "no accepted record observed for {attempts_without_progress} consecutive attempts"
                 ),
@@ -1380,6 +1441,7 @@ where
         records,
         next_seed,
         excluded,
+        rejections,
         attempts,
         limits,
     })
@@ -2335,6 +2397,14 @@ fn run_termination_smoke() -> Result<(), String> {
         report.records.len(),
         report.attempts
     );
+    println!(
+        "width 3 smoke rejections     : {}",
+        report.rejections.summary()
+    );
+    println!(
+        "rejection accounting total   : {}",
+        report.rejections.total()
+    );
     println!("bounded smoke result         : PASS");
 
     Ok(())
@@ -2364,6 +2434,7 @@ fn run_legacy_scaffold_full_experiment() -> Result<(), String> {
         excluded: training_width_3_excluded,
         attempts: training_width_3_attempts,
         limits: training_width_3_limits,
+        rejections: _,
     } = generate_records(
         TRAIN_WIDTH_3,
         TRAIN_WIDTH_3_SEED_OFFSET,
@@ -2379,6 +2450,7 @@ fn run_legacy_scaffold_full_experiment() -> Result<(), String> {
         excluded: holdout_width_3_excluded,
         attempts: holdout_width_3_attempts,
         limits: holdout_width_3_limits,
+        rejections: _,
     } = generate_records(
         TRAIN_WIDTH_3,
         HOLDOUT_WIDTH_3_SEED_OFFSET,
@@ -2394,6 +2466,7 @@ fn run_legacy_scaffold_full_experiment() -> Result<(), String> {
         excluded: training_width_4_excluded,
         attempts: training_width_4_attempts,
         limits: training_width_4_limits,
+        rejections: _,
     } = generate_records(
         TRAIN_WIDTH_4,
         TRAIN_WIDTH_4_SEED_OFFSET,
@@ -2409,6 +2482,7 @@ fn run_legacy_scaffold_full_experiment() -> Result<(), String> {
         excluded: holdout_width_4_excluded,
         attempts: holdout_width_4_attempts,
         limits: holdout_width_4_limits,
+        rejections: _,
     } = generate_records(
         TRAIN_WIDTH_4,
         HOLDOUT_WIDTH_4_SEED_OFFSET,
@@ -2424,6 +2498,7 @@ fn run_legacy_scaffold_full_experiment() -> Result<(), String> {
         excluded: holdout_width_5_excluded,
         attempts: holdout_width_5_attempts,
         limits: holdout_width_5_limits,
+        rejections: _,
     } = generate_records(OOD_WIDTH_5, OOD_WIDTH_5_SEED_OFFSET, OOD_WIDTH_5_SYSTEMS)
         .map_err(|error| error.to_string())?;
 
@@ -2435,6 +2510,7 @@ fn run_legacy_scaffold_full_experiment() -> Result<(), String> {
         excluded: holdout_width_6_excluded,
         attempts: holdout_width_6_attempts,
         limits: holdout_width_6_limits,
+        rejections: _,
     } = generate_records(OOD_WIDTH_6, OOD_WIDTH_6_SEED_OFFSET, OOD_WIDTH_6_SYSTEMS)
         .map_err(|error| error.to_string())?;
 
@@ -2979,9 +3055,18 @@ mod tests {
                 assert_eq!(diagnostic.context.width, TRAIN_WIDTH_3);
                 assert_eq!(diagnostic.context.seed, TRAIN_WIDTH_3_SEED_OFFSET + 2);
                 assert_eq!(diagnostic.context.attempt_index, 2);
-                assert_eq!(diagnostic.accepted, 0);
-                assert_eq!(diagnostic.excluded, 2);
-                assert_eq!(diagnostic.limits, limits);
+                assert_eq!(diagnostic.progress.accepted, 0);
+                assert_eq!(diagnostic.progress.excluded, 2);
+                assert_eq!(diagnostic.progress.rejections.total(), 2);
+                assert_eq!(
+                    diagnostic
+                        .progress
+                        .rejections
+                        .counts
+                        .get(&super::RejectionReason::InvalidObservationGeometry),
+                    Some(&2)
+                );
+                assert_eq!(diagnostic.progress.limits, limits);
             }
             other => panic!("unexpected generation error: {other:?}"),
         }
@@ -3012,12 +3097,77 @@ mod tests {
                 assert_eq!(diagnostic.context.width, TRAIN_WIDTH_3);
                 assert_eq!(diagnostic.context.seed, TRAIN_WIDTH_3_SEED_OFFSET + 2);
                 assert_eq!(diagnostic.context.attempt_index, 2);
-                assert_eq!(diagnostic.accepted, 0);
-                assert_eq!(diagnostic.excluded, 3);
-                assert_eq!(diagnostic.limits, limits);
+                assert_eq!(diagnostic.progress.accepted, 0);
+                assert_eq!(diagnostic.progress.excluded, 3);
+                assert_eq!(diagnostic.progress.rejections.total(), 3);
+                assert_eq!(
+                    diagnostic
+                        .progress
+                        .rejections
+                        .counts
+                        .get(&super::RejectionReason::InvalidObservationGeometry),
+                    Some(&3)
+                );
+                assert_eq!(diagnostic.progress.limits, limits);
             }
             other => panic!("unexpected generation error: {other:?}"),
         }
+    }
+
+    #[test]
+    fn rejection_accounting_is_deterministic_by_reason() {
+        let limits = super::GenerationLimits {
+            max_attempts: 8,
+            no_progress_limit: 8,
+        };
+
+        let report = super::generate_records_with_analyzer(
+            TRAIN_WIDTH_3,
+            TRAIN_WIDTH_3_SEED_OFFSET,
+            1,
+            limits,
+            |context| match context.attempt_index {
+                0 => Ok(super::CandidateOutcome::Rejected(
+                    super::RejectionReason::ObservationFullyRecovered,
+                )),
+                1 | 2 => Ok(super::CandidateOutcome::Rejected(
+                    super::RejectionReason::TargetFullyRecovered { horizon: 3 },
+                )),
+                _ => Ok(super::CandidateOutcome::Accepted(Record {
+                    baseline: [0.0; BASELINE_FEATURE_COUNT],
+                    early_overlap: [0.25, 0.75],
+                    overlaps: [0.5; TARGET_HORIZON_COUNT],
+                    targets_u: [1.0; TARGET_HORIZON_COUNT],
+                })),
+            },
+        )
+        .expect("synthetic generation must succeed");
+
+        assert_eq!(report.records.len(), 1);
+        assert_eq!(report.attempts, 4);
+        assert_eq!(report.excluded, 3);
+        assert_eq!(report.rejections.total(), 3);
+
+        assert_eq!(
+            report
+                .rejections
+                .counts
+                .get(&super::RejectionReason::ObservationFullyRecovered),
+            Some(&1)
+        );
+
+        assert_eq!(
+            report
+                .rejections
+                .counts
+                .get(&super::RejectionReason::TargetFullyRecovered { horizon: 3 }),
+            Some(&2)
+        );
+
+        assert_eq!(
+            report.rejections.summary(),
+            "observation-fully-recovered=1,target-fully-recovered-h3=2"
+        );
     }
 
     #[test]
@@ -3037,6 +3187,7 @@ mod tests {
 
         assert_eq!(report.records.len(), 1);
         assert!(report.attempts <= limits.max_attempts);
+        assert_eq!(report.excluded, report.rejections.total());
         assert_eq!(
             report.next_seed,
             TRAIN_WIDTH_3_SEED_OFFSET + u64::try_from(report.attempts).expect("attempts fit u64")
