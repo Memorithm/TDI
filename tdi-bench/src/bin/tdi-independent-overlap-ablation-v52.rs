@@ -3235,6 +3235,144 @@ fn tdi52_criterion_d(
     })
 }
 
+fn secondary_horizon_indices() -> [usize; TARGET_HORIZON_COUNT - 1] {
+    let mut indices = [0_usize; TARGET_HORIZON_COUNT - 1];
+    let mut cursor = 0_usize;
+
+    for horizon_index in 0..TARGET_HORIZON_COUNT {
+        if horizon_index != primary_horizon_index() {
+            indices[cursor] = horizon_index;
+            cursor += 1;
+        }
+    }
+
+    indices
+}
+
+#[derive(Clone, Debug)]
+struct HorizonComparison {
+    horizon_index: usize,
+    comparison: AggregateComparison,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CriterionEResult {
+    horizons_improving_in_every_block: usize,
+    u8_improves_in_every_block: bool,
+    no_block_horizon_reduction_below_minus_5_percent: bool,
+    average_secondary_reduction_positive_in_every_block: bool,
+    aggregate_reduction_positive_at_every_secondary_horizon: bool,
+}
+
+impl CriterionEResult {
+    const RELATIVE_REDUCTION_FLOOR: f64 = -0.05;
+
+    fn succeeded(self) -> bool {
+        self.horizons_improving_in_every_block >= 3
+            && self.u8_improves_in_every_block
+            && self.no_block_horizon_reduction_below_minus_5_percent
+            && self.average_secondary_reduction_positive_in_every_block
+            && self.aggregate_reduction_positive_at_every_secondary_horizon
+    }
+}
+
+fn evaluate_criterion_e(horizon_comparisons: &[HorizonComparison]) -> CriterionEResult {
+    let horizon_improves_in_every_block = |entry: &HorizonComparison| {
+        FROZEN_BLOCK_ORDER.iter().all(|&seed_block| {
+            let block = entry.comparison.block(seed_block);
+
+            block.baseline.standardized.mse > block.challenger.standardized.mse
+        })
+    };
+
+    let horizons_improving_in_every_block = horizon_comparisons
+        .iter()
+        .filter(|entry| horizon_improves_in_every_block(entry))
+        .count();
+
+    let u8_horizon_index = TARGET_HORIZONS
+        .iter()
+        .position(|&horizon| horizon == 8)
+        .expect("U_8 is a frozen target horizon");
+
+    let u8_entry = horizon_comparisons
+        .iter()
+        .find(|entry| entry.horizon_index == u8_horizon_index)
+        .expect("U_8 is evaluated as a secondary horizon");
+
+    let u8_improves_in_every_block = horizon_improves_in_every_block(u8_entry);
+
+    let no_block_horizon_reduction_below_minus_5_percent =
+        horizon_comparisons.iter().all(|entry| {
+            FROZEN_BLOCK_ORDER.iter().all(|&seed_block| {
+                let block = entry.comparison.block(seed_block);
+                let relative_reduction = tdi52_relative_reduction(
+                    block.baseline.standardized.mse,
+                    block.challenger.standardized.mse,
+                );
+
+                relative_reduction >= CriterionEResult::RELATIVE_REDUCTION_FLOOR
+            })
+        });
+
+    let average_secondary_reduction_positive_in_every_block =
+        FROZEN_BLOCK_ORDER.iter().all(|&seed_block| {
+            let total = horizon_comparisons
+                .iter()
+                .map(|entry| {
+                    let block = entry.comparison.block(seed_block);
+
+                    tdi52_relative_reduction(
+                        block.baseline.standardized.mse,
+                        block.challenger.standardized.mse,
+                    )
+                })
+                .sum::<f64>();
+
+            total / horizon_comparisons.len() as f64 > 0.0
+        });
+
+    let aggregate_reduction_positive_at_every_secondary_horizon =
+        horizon_comparisons.iter().all(|entry| {
+            tdi52_relative_reduction(
+                entry.comparison.aggregate_baseline_standardized.mse,
+                entry.comparison.aggregate_challenger_standardized.mse,
+            ) > 0.0
+        });
+
+    CriterionEResult {
+        horizons_improving_in_every_block,
+        u8_improves_in_every_block,
+        no_block_horizon_reduction_below_minus_5_percent,
+        average_secondary_reduction_positive_in_every_block,
+        aggregate_reduction_positive_at_every_secondary_horizon,
+    }
+}
+
+fn tdi52_criterion_e(
+    aggregate_fit: &AggregateModelFit,
+    combined_holdout_records: [&[Record]; SEED_BLOCK_COUNT],
+) -> Result<CriterionEResult, String> {
+    let mut horizon_comparisons = Vec::with_capacity(TARGET_HORIZON_COUNT - 1);
+
+    for horizon_index in secondary_horizon_indices() {
+        let comparison = evaluate_aggregate_comparison(
+            horizon_index,
+            aggregate_fit,
+            combined_holdout_records,
+            FeatureLayout::B0,
+            FeatureLayout::B12,
+        )?;
+
+        horizon_comparisons.push(HorizonComparison {
+            horizon_index,
+            comparison,
+        });
+    }
+
+    Ok(evaluate_criterion_e(&horizon_comparisons))
+}
+
 fn tdi52_print_bootstrap_intervals(label: &str, intervals: Tdi52BootstrapIntervals) {
     println!();
     println!("{label}");
@@ -3750,6 +3888,23 @@ fn run_termination_smoke() -> Result<(), String> {
         criterion_d.width_5.succeeded(),
         criterion_d.width_6.succeeded(),
         criterion_d.succeeded()
+    );
+
+    let criterion_e = tdi52_criterion_e(
+        &aggregate_fit,
+        [
+            synthetic_training_width_3.as_slice(),
+            synthetic_training_width_3.as_slice(),
+            synthetic_training_width_3.as_slice(),
+        ],
+    )
+    .map_err(|error| error.to_string())?;
+
+    println!(
+        "identity smoke criterion E   : horizons_improving={}, u8_improves={}, succeeded={}",
+        criterion_e.horizons_improving_in_every_block,
+        criterion_e.u8_improves_in_every_block,
+        criterion_e.succeeded()
     );
 
     println!("bounded smoke result         : PASS");
@@ -6845,6 +7000,177 @@ mod tests {
             }
             .succeeded()
         );
+    }
+
+    #[test]
+    fn secondary_horizon_indices_exclude_the_primary_horizon() {
+        let indices = super::secondary_horizon_indices();
+
+        assert_eq!(indices.len(), 4);
+        assert!(!indices.contains(&primary_horizon_index()));
+        assert_eq!(indices, [0, 1, 2, 4]);
+
+        for index in indices {
+            assert!(index < TARGET_HORIZON_COUNT);
+        }
+    }
+
+    fn sample_horizon_comparison(
+        horizon_index: usize,
+        baseline_mse: f64,
+        challenger_mse: f64,
+    ) -> super::HorizonComparison {
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison(
+                seed_block,
+                (FeatureLayout::B0, baseline_mse, 0.0),
+                (FeatureLayout::B12, challenger_mse, 0.0),
+                0.05,
+            )
+        })
+        .to_vec();
+
+        let comparison =
+            sample_aggregate_comparison(blocks, baseline_mse, challenger_mse, 0.0, 0.0, 0.05);
+
+        super::HorizonComparison {
+            horizon_index,
+            comparison,
+        }
+    }
+
+    fn favorable_criterion_e_horizon_comparisons() -> Vec<super::HorizonComparison> {
+        super::secondary_horizon_indices()
+            .into_iter()
+            .map(|horizon_index| sample_horizon_comparison(horizon_index, 1.0, 0.9))
+            .collect()
+    }
+
+    #[test]
+    fn criterion_e_succeeds_when_every_condition_holds() {
+        let horizon_comparisons = favorable_criterion_e_horizon_comparisons();
+        let result = super::evaluate_criterion_e(&horizon_comparisons);
+
+        assert_eq!(result.horizons_improving_in_every_block, 4);
+        assert!(result.u8_improves_in_every_block);
+        assert!(result.no_block_horizon_reduction_below_minus_5_percent);
+        assert!(result.average_secondary_reduction_positive_in_every_block);
+        assert!(result.aggregate_reduction_positive_at_every_secondary_horizon);
+        assert!(result.succeeded());
+    }
+
+    #[test]
+    fn criterion_e_fails_when_fewer_than_three_horizons_improve_in_every_block() {
+        let mut horizon_comparisons = favorable_criterion_e_horizon_comparisons();
+
+        // Break improvement for block A at U_3 and U_4 (positions 0
+        // and 1), leaving only U_5 and U_8 improving in every block.
+        for entry in horizon_comparisons.iter_mut().take(2) {
+            entry.comparison.blocks[0].baseline.standardized.mse = 1.0;
+            entry.comparison.blocks[0].challenger.standardized.mse = 1.01;
+        }
+
+        let result = super::evaluate_criterion_e(&horizon_comparisons);
+
+        assert_eq!(result.horizons_improving_in_every_block, 2);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_e_fails_when_u8_does_not_improve_in_every_block() {
+        let mut horizon_comparisons = favorable_criterion_e_horizon_comparisons();
+
+        // U_8 sits at position 3 (secondary_horizon_indices() is
+        // [0, 1, 2, 4]). Breaking only it still leaves U_3, U_4, U_5
+        // satisfying "at least three horizons," proving U_8 is
+        // checked as its own independent, mandatory condition.
+        horizon_comparisons[3].comparison.blocks[0]
+            .baseline
+            .standardized
+            .mse = 1.0;
+        horizon_comparisons[3].comparison.blocks[0]
+            .challenger
+            .standardized
+            .mse = 1.01;
+
+        let result = super::evaluate_criterion_e(&horizon_comparisons);
+
+        assert_eq!(result.horizons_improving_in_every_block, 3);
+        assert!(!result.u8_improves_in_every_block);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_e_fails_when_a_block_horizon_reduction_is_below_minus_5_percent() {
+        let mut horizon_comparisons = favorable_criterion_e_horizon_comparisons();
+        horizon_comparisons[0].comparison.blocks[1]
+            .baseline
+            .standardized
+            .mse = 1.0;
+        horizon_comparisons[0].comparison.blocks[1]
+            .challenger
+            .standardized
+            .mse = 1.10;
+
+        let result = super::evaluate_criterion_e(&horizon_comparisons);
+
+        assert!(!result.no_block_horizon_reduction_below_minus_5_percent);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_e_fails_when_average_secondary_reduction_is_not_positive_for_a_block() {
+        let mut horizon_comparisons = favorable_criterion_e_horizon_comparisons();
+
+        // Block C sits just inside the -5% floor at U_3 (position 0,
+        // satisfying condition 3 with margin to spare against
+        // floating-point rounding at the exact boundary) and only
+        // mildly positive elsewhere, dragging its own average
+        // negative without disturbing any other block or condition.
+        horizon_comparisons[0].comparison.blocks[2]
+            .baseline
+            .standardized
+            .mse = 1.0;
+        horizon_comparisons[0].comparison.blocks[2]
+            .challenger
+            .standardized
+            .mse = 1.049;
+
+        for entry in horizon_comparisons.iter_mut().skip(1) {
+            entry.comparison.blocks[2].baseline.standardized.mse = 1.0;
+            entry.comparison.blocks[2].challenger.standardized.mse = 0.99;
+        }
+
+        let result = super::evaluate_criterion_e(&horizon_comparisons);
+
+        assert_eq!(result.horizons_improving_in_every_block, 3);
+        assert!(result.u8_improves_in_every_block);
+        assert!(result.no_block_horizon_reduction_below_minus_5_percent);
+        assert!(!result.average_secondary_reduction_positive_in_every_block);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_e_fails_when_aggregate_reduction_is_not_positive_at_a_secondary_horizon() {
+        let mut horizon_comparisons = favorable_criterion_e_horizon_comparisons();
+        horizon_comparisons[1]
+            .comparison
+            .aggregate_baseline_standardized
+            .mse = 1.0;
+        horizon_comparisons[1]
+            .comparison
+            .aggregate_challenger_standardized
+            .mse = 1.0;
+
+        let result = super::evaluate_criterion_e(&horizon_comparisons);
+
+        assert!(!result.aggregate_reduction_positive_at_every_secondary_horizon);
+        assert!(!result.succeeded());
     }
 
     #[test]
