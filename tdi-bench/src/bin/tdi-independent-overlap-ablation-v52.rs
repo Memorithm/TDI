@@ -73,6 +73,14 @@ impl SeedBlockId {
             Self::C => "C",
         }
     }
+
+    fn bootstrap_seed(self) -> u64 {
+        SEED_BLOCKS
+            .iter()
+            .find(|block| block.id == self)
+            .expect("SEED_BLOCKS contains an entry for every SeedBlockId")
+            .bootstrap_seed
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2239,6 +2247,7 @@ fn tdi52_layout_evaluation(
 }
 
 fn tdi52_paired_bootstrap(
+    seed_block: SeedBlockId,
     records: &[Record],
     horizon_index: usize,
     scaler: TargetScaler,
@@ -2256,7 +2265,7 @@ fn tdi52_paired_bootstrap(
         return Err("invalid paired-bootstrap dimensions".to_owned());
     }
 
-    let mut generator = DeterministicRng::new(BOOTSTRAP_SEED);
+    let mut generator = DeterministicRng::new(seed_block.bootstrap_seed());
 
     let mut standardized_mse = Vec::with_capacity(BOOTSTRAP_REPLICATES);
 
@@ -2656,6 +2665,46 @@ fn run_termination_smoke() -> Result<(), String> {
         block_fit.target_scalers[primary_horizon_index()].mean
     );
 
+    let bootstrap_horizon = primary_horizon_index();
+    let bootstrap_scaler = block_fit.target_scalers[bootstrap_horizon];
+
+    let bootstrap_baseline = tdi52_predict(
+        &synthetic_training_width_3,
+        bootstrap_horizon,
+        FeatureLayout::B0,
+        block_fit.models.get(bootstrap_horizon, FeatureLayout::B0),
+        bootstrap_scaler,
+    )
+    .map_err(|error| error.to_string())?;
+
+    let bootstrap_challenger = tdi52_predict(
+        &synthetic_training_width_3,
+        bootstrap_horizon,
+        FeatureLayout::B12,
+        block_fit.models.get(bootstrap_horizon, FeatureLayout::B12),
+        bootstrap_scaler,
+    )
+    .map_err(|error| error.to_string())?;
+
+    let bootstrap_intervals = tdi52_paired_bootstrap(
+        SeedBlockId::A,
+        &synthetic_training_width_3,
+        bootstrap_horizon,
+        bootstrap_scaler,
+        &bootstrap_baseline,
+        &bootstrap_challenger,
+    )
+    .map_err(|error| error.to_string())?;
+
+    println!(
+        "identity smoke bootstrap seed: 0x{:016X}",
+        SeedBlockId::A.bootstrap_seed()
+    );
+    println!(
+        "identity smoke bootstrap CI  : [{:.6}, {:.6}]",
+        bootstrap_intervals.standardized_mse.lower, bootstrap_intervals.standardized_mse.upper
+    );
+
     let block_fit_b = fit_block_models(
         SeedBlockId::B,
         &synthetic_training_width_3,
@@ -2992,6 +3041,7 @@ fn run_legacy_scaffold_full_experiment() -> Result<(), String> {
     let width_6_b12 = tdi52_layout_evaluation(&width_6_primary, FeatureLayout::B12);
 
     let combined_bootstrap = tdi52_paired_bootstrap(
+        SeedBlockId::A,
         &holdout_combined,
         primary_index,
         primary_scaler,
@@ -3000,6 +3050,7 @@ fn run_legacy_scaffold_full_experiment() -> Result<(), String> {
     )?;
 
     let width_3_bootstrap = tdi52_paired_bootstrap(
+        SeedBlockId::A,
         &holdout_width_3,
         primary_index,
         primary_scaler,
@@ -3008,6 +3059,7 @@ fn run_legacy_scaffold_full_experiment() -> Result<(), String> {
     )?;
 
     let width_4_bootstrap = tdi52_paired_bootstrap(
+        SeedBlockId::A,
         &holdout_width_4,
         primary_index,
         primary_scaler,
@@ -3016,6 +3068,7 @@ fn run_legacy_scaffold_full_experiment() -> Result<(), String> {
     )?;
 
     let width_5_bootstrap = tdi52_paired_bootstrap(
+        SeedBlockId::A,
         &holdout_width_5,
         primary_index,
         primary_scaler,
@@ -3024,6 +3077,7 @@ fn run_legacy_scaffold_full_experiment() -> Result<(), String> {
     )?;
 
     let width_6_bootstrap = tdi52_paired_bootstrap(
+        SeedBlockId::A,
         &holdout_width_6,
         primary_index,
         primary_scaler,
@@ -4503,6 +4557,159 @@ mod tests {
             .expect_err("a duplicated block must be rejected");
 
         assert!(error.contains("deterministic block order"));
+    }
+
+    #[test]
+    fn seed_block_bootstrap_seed_matches_seed_blocks_table() {
+        assert_eq!(
+            super::SeedBlockId::A.bootstrap_seed(),
+            0x5444_4935_3241_0001
+        );
+        assert_eq!(
+            super::SeedBlockId::B.bootstrap_seed(),
+            0x5444_4935_3242_0002
+        );
+        assert_eq!(
+            super::SeedBlockId::C.bootstrap_seed(),
+            0x5444_4935_3243_0003
+        );
+    }
+
+    #[test]
+    fn seed_block_bootstrap_seeds_produce_different_draw_sequences() {
+        let mut rng_a = DeterministicRng::new(super::SeedBlockId::A.bootstrap_seed());
+        let mut rng_b = DeterministicRng::new(super::SeedBlockId::B.bootstrap_seed());
+        let mut rng_c = DeterministicRng::new(super::SeedBlockId::C.bootstrap_seed());
+
+        let draws_a = (0..16).map(|_| rng_a.index(1_000)).collect::<Vec<_>>();
+        let draws_b = (0..16).map(|_| rng_b.index(1_000)).collect::<Vec<_>>();
+        let draws_c = (0..16).map(|_| rng_c.index(1_000)).collect::<Vec<_>>();
+
+        assert_ne!(draws_a, draws_b);
+        assert_ne!(draws_b, draws_c);
+        assert_ne!(draws_a, draws_c);
+    }
+
+    #[test]
+    fn paired_bootstrap_uses_the_seed_blocks_own_seed() {
+        const SAMPLE_COUNT: usize = 16;
+
+        let records = (0..SAMPLE_COUNT)
+            .map(|index| {
+                let value = 1.0 + 0.13 * index as f64;
+
+                Record {
+                    baseline: [0.0; BASELINE_FEATURE_COUNT],
+                    early_overlap: [0.1, 0.2],
+                    overlaps: [0.3; TARGET_HORIZON_COUNT],
+                    targets_u: [value; TARGET_HORIZON_COUNT],
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let scaler = TargetScaler::fit(&records, primary_horizon_index()).expect("valid scaler");
+
+        let baseline = super::Tdi52PredictionSet {
+            standardized: (0..SAMPLE_COUNT).map(|index| 0.10 * index as f64).collect(),
+            reconstructed_overlap: (0..SAMPLE_COUNT)
+                .map(|index| 0.020 * index as f64)
+                .collect(),
+            clipped_overlap_count: 0,
+        };
+
+        let challenger = super::Tdi52PredictionSet {
+            standardized: (0..SAMPLE_COUNT)
+                .map(|index| 0.11 * index as f64 + 0.05)
+                .collect(),
+            reconstructed_overlap: (0..SAMPLE_COUNT)
+                .map(|index| 0.021 * index as f64 + 0.01)
+                .collect(),
+            clipped_overlap_count: 0,
+        };
+
+        let block_a = super::tdi52_paired_bootstrap(
+            super::SeedBlockId::A,
+            &records,
+            primary_horizon_index(),
+            scaler,
+            &baseline,
+            &challenger,
+        )
+        .expect("bootstrap must succeed");
+
+        let block_b = super::tdi52_paired_bootstrap(
+            super::SeedBlockId::B,
+            &records,
+            primary_horizon_index(),
+            scaler,
+            &baseline,
+            &challenger,
+        )
+        .expect("bootstrap must succeed");
+
+        assert_ne!(
+            block_a.standardized_mse.median, block_b.standardized_mse.median,
+            "different seed blocks resampling identical data must not collapse to the same draw sequence"
+        );
+    }
+
+    #[test]
+    fn paired_bootstrap_is_deterministic_for_a_given_seed_block() {
+        let records = [
+            Record {
+                baseline: [0.0; BASELINE_FEATURE_COUNT],
+                early_overlap: [0.1, 0.2],
+                overlaps: [0.3; TARGET_HORIZON_COUNT],
+                targets_u: [1.0; TARGET_HORIZON_COUNT],
+            },
+            Record {
+                baseline: [0.0; BASELINE_FEATURE_COUNT],
+                early_overlap: [0.2, 0.3],
+                overlaps: [0.4; TARGET_HORIZON_COUNT],
+                targets_u: [1.5; TARGET_HORIZON_COUNT],
+            },
+        ];
+
+        let scaler = TargetScaler::fit(&records, primary_horizon_index()).expect("valid scaler");
+
+        let baseline = super::Tdi52PredictionSet {
+            standardized: vec![0.0, 0.1],
+            reconstructed_overlap: vec![0.3, 0.35],
+            clipped_overlap_count: 0,
+        };
+
+        let challenger = super::Tdi52PredictionSet {
+            standardized: vec![0.05, 0.05],
+            reconstructed_overlap: vec![0.32, 0.33],
+            clipped_overlap_count: 0,
+        };
+
+        let first = super::tdi52_paired_bootstrap(
+            super::SeedBlockId::C,
+            &records,
+            primary_horizon_index(),
+            scaler,
+            &baseline,
+            &challenger,
+        )
+        .expect("bootstrap must succeed");
+
+        let second = super::tdi52_paired_bootstrap(
+            super::SeedBlockId::C,
+            &records,
+            primary_horizon_index(),
+            scaler,
+            &baseline,
+            &challenger,
+        )
+        .expect("bootstrap must succeed");
+
+        assert_eq!(first.standardized_mse.lower, second.standardized_mse.lower);
+        assert_eq!(
+            first.standardized_mse.median,
+            second.standardized_mse.median
+        );
+        assert_eq!(first.standardized_mse.upper, second.standardized_mse.upper);
     }
 
     #[test]
