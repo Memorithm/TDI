@@ -1002,17 +1002,25 @@ fn exact_overlap_deficit_u(ratio: &ExactRatio) -> Result<f64, String> {
 
     let denominator_log2 = biguint_log2_from_u64_digits(&ratio.denominator().to_u64_digits())?;
 
-    let transformed = denominator_log2 - numerator_log2;
-
-    if !transformed.is_finite() || transformed < 0.0 {
-        return Err(format!(
-            "invalid conditional target geometry: {transformed}"
-        ));
-    }
-
-    Ok(transformed)
+    // Finiteness/non-negativity of the transformed value is deliberately
+    // not checked here: the caller (`analyze_seed`) treats an invalid
+    // transform as a graceful per-candidate exclusion
+    // (`RejectionReason::InvalidTransformedTarget`), not a fatal error.
+    // Checking it here too would let this function's own fatal error
+    // path intercept the value first, making that exclusion unreachable.
+    Ok(denominator_log2 - numerator_log2)
 }
 
+// `normalized_entropy`, `normalized_reachable`, and `transformed_path_count`
+// deliberately do not validate the finiteness of their own return values.
+// `analyze_seed`'s baseline-feature assembly checks every value it collects
+// from these functions in one place and turns a non-finite one into a
+// graceful per-candidate exclusion (`RejectionReason::NonFiniteFeature`).
+// A local fatal check here would intercept the value first and make that
+// exclusion unreachable. `normalized_entropy`'s denominator check is kept
+// because it depends only on the width (a structural property, not a
+// per-candidate outcome), so a bad denominator is a genuine invariant
+// violation rather than a data-quality edge case.
 fn normalized_entropy(entropy_bits: f64, context: AttemptContext) -> Result<f64, EvaluationError> {
     let states = state_count(context)? as f64;
     let denominator = states.ln();
@@ -1025,49 +1033,17 @@ fn normalized_entropy(entropy_bits: f64, context: AttemptContext) -> Result<f64,
         ));
     }
 
-    let normalized = entropy_bits * std::f64::consts::LN_2 / denominator;
-
-    if !normalized.is_finite() {
-        return Err(EvaluationError::new(
-            context,
-            FailureCategory::Arithmetic,
-            "non-finite normalized entropy",
-        ));
-    }
-
-    Ok(normalized)
+    Ok(entropy_bits * std::f64::consts::LN_2 / denominator)
 }
 
 fn normalized_reachable(reachable: f64, context: AttemptContext) -> Result<f64, EvaluationError> {
     let states = state_count(context)? as f64;
-    let normalized = reachable / states;
 
-    if !normalized.is_finite() {
-        return Err(EvaluationError::new(
-            context,
-            FailureCategory::Arithmetic,
-            format!("non-finite reachable fraction for width {}", context.width),
-        ));
-    }
-
-    Ok(normalized)
+    Ok(reachable / states)
 }
 
-fn transformed_path_count(
-    path_count: f64,
-    context: AttemptContext,
-) -> Result<f64, EvaluationError> {
-    let transformed = path_count.ln_1p();
-
-    if !transformed.is_finite() {
-        return Err(EvaluationError::new(
-            context,
-            FailureCategory::Arithmetic,
-            "non-finite transformed path count",
-        ));
-    }
-
-    Ok(transformed)
+fn transformed_path_count(path_count: f64) -> f64 {
+    path_count.ln_1p()
 }
 
 fn analyze_seed(context: AttemptContext) -> Result<CandidateOutcome, EvaluationError> {
@@ -1238,12 +1214,12 @@ fn analyze_seed(context: AttemptContext) -> Result<CandidateOutcome, EvaluationE
         normalized_entropy(perturbed_entropy[1], context)?,
         normalized_reachable(reference_reachable[0], context)?,
         normalized_reachable(reference_reachable[1], context)?,
-        transformed_path_count(reference_paths[0], context)?,
-        transformed_path_count(reference_paths[1], context)?,
+        transformed_path_count(reference_paths[0]),
+        transformed_path_count(reference_paths[1]),
         normalized_reachable(perturbed_reachable[0], context)?,
         normalized_reachable(perturbed_reachable[1], context)?,
-        transformed_path_count(perturbed_paths[0], context)?,
-        transformed_path_count(perturbed_paths[1], context)?,
+        transformed_path_count(perturbed_paths[0]),
+        transformed_path_count(perturbed_paths[1]),
         f64::from(context.width),
     ];
 
@@ -1323,10 +1299,16 @@ fn preregistered_generation_limits(
     })
 }
 
-fn validate_preregistered_seed_reservations() -> Result<usize, String> {
-    let mut ranges = Vec::with_capacity(TOTAL_SEED_RESERVATIONS);
+/// Verifies that every population spec's worst-case reserved seed range
+/// (`[seed, seed + max_attempts)`) is pairwise disjoint from every other
+/// spec's. Generic over `specs` so both the real preregistered layout and
+/// tiny test/smoke overrides can be checked with the same logic; callers
+/// that specifically need the real 18-reservation contract should use
+/// `validate_preregistered_seed_reservations` instead.
+fn validate_seed_reservations(specs: &[PopulationSpec]) -> Result<usize, String> {
+    let mut ranges = Vec::with_capacity(specs.len());
 
-    for spec in population_specs() {
+    for spec in specs {
         let label = || {
             format!(
                 "block {} {}",
@@ -1354,13 +1336,6 @@ fn validate_preregistered_seed_reservations() -> Result<usize, String> {
         ranges.push((spec.seed, end_seed, label()));
     }
 
-    if ranges.len() != TOTAL_SEED_RESERVATIONS {
-        return Err(format!(
-            "expected {TOTAL_SEED_RESERVATIONS} seed reservations, received {}",
-            ranges.len()
-        ));
-    }
-
     ranges.sort_by_key(|(start_seed, _, _)| *start_seed);
 
     for pair in ranges.windows(2) {
@@ -1376,6 +1351,18 @@ fn validate_preregistered_seed_reservations() -> Result<usize, String> {
     }
 
     Ok(ranges.len())
+}
+
+fn validate_preregistered_seed_reservations() -> Result<usize, String> {
+    let count = validate_seed_reservations(&population_specs())?;
+
+    if count != TOTAL_SEED_RESERVATIONS {
+        return Err(format!(
+            "expected {TOTAL_SEED_RESERVATIONS} seed reservations, received {count}"
+        ));
+    }
+
+    Ok(count)
 }
 
 fn generate_records_with_limits(
@@ -3474,6 +3461,8 @@ struct Tdi52ExperimentReport {
 fn run_tdi52_pipeline(
     population_specs: &[PopulationSpec],
 ) -> Result<Tdi52ExperimentReport, String> {
+    validate_seed_reservations(population_specs)?;
+
     let mut blocks = Vec::with_capacity(SEED_BLOCK_COUNT);
 
     for seed_block in FROZEN_BLOCK_ORDER {
@@ -3549,23 +3538,32 @@ fn run_tdi52_pipeline(
     })
 }
 
-fn tdi52_print_bootstrap_intervals(label: &str, intervals: Tdi52BootstrapIntervals) {
+fn tdi52_print_bootstrap_intervals(
+    label: &str,
+    horizon: usize,
+    intervals: Tdi52BootstrapIntervals,
+) {
     println!();
     println!("{label}");
 
     print_interval(
-        "  IC 95 % amélioration MSE U6 standardisée",
+        &format!("  IC 95 % amélioration MSE U{horizon} standardisée"),
         intervals.standardized_mse,
     );
 
     print_interval(
-        "  IC 95 % amélioration MSE O6 reconstruite",
+        &format!("  IC 95 % amélioration MSE O{horizon} reconstruite"),
         intervals.reconstructed_mse,
     );
 
     print_interval(
-        "  IC 95 % amélioration MAE O6 reconstruite",
+        &format!("  IC 95 % amélioration MAE O{horizon} reconstruite"),
         intervals.reconstructed_mae,
+    );
+
+    print_interval(
+        &format!("  IC 95 % réduction relative MSE U{horizon} standardisée"),
+        intervals.relative_standardized_mse,
     );
 }
 
@@ -3922,7 +3920,7 @@ fn print_tdi52_population_accounting(blocks: &[BlockPopulations]) {
 
 /// Section 17, items 14-15: every metric and every bootstrap interval
 /// (per block and pooled aggregate) underlying one criterion's verdict.
-fn print_tdi52_aggregate_comparison(label: &str, comparison: &AggregateComparison) {
+fn print_tdi52_aggregate_comparison(label: &str, horizon: usize, comparison: &AggregateComparison) {
     println!();
     println!("=== {label} — métriques et intervalles bootstrap (Section 17, items 14-15) ===");
 
@@ -3962,6 +3960,7 @@ fn print_tdi52_aggregate_comparison(label: &str, comparison: &AggregateCompariso
                 "  bloc {} — intervalles bootstrap appariés",
                 seed_block.label()
             ),
+            horizon,
             block.bootstrap,
         );
     }
@@ -3984,6 +3983,7 @@ fn print_tdi52_aggregate_comparison(label: &str, comparison: &AggregateCompariso
     );
     tdi52_print_bootstrap_intervals(
         "  agrégat — intervalles bootstrap stratifiés",
+        horizon,
         comparison.aggregate_bootstrap,
     );
 }
@@ -4062,30 +4062,38 @@ fn print_tdi52_required_raw_output(report: &Tdi52ExperimentReport) {
         tdi52_print_models(&fit.models, &fit.target_scalers);
     }
 
-    print_tdi52_aggregate_comparison("TDI-5.2A — signal joint", &report.criterion_a_comparison);
+    print_tdi52_aggregate_comparison(
+        "TDI-5.2A — signal joint",
+        PRIMARY_HORIZON,
+        &report.criterion_a_comparison,
+    );
     print_tdi52_aggregate_comparison(
         "TDI-5.2B — signal O2 indépendant",
+        PRIMARY_HORIZON,
         &report.criterion_b_comparison,
     );
     print_tdi52_aggregate_comparison(
         "TDI-5.2C — classification O1 indépendante",
+        PRIMARY_HORIZON,
         &report.criterion_c_comparison,
     );
     print_tdi52_aggregate_comparison(
         "TDI-5.2D — transfert OOD largeur 5",
+        PRIMARY_HORIZON,
         &report.criterion_d_comparisons.0,
     );
     print_tdi52_aggregate_comparison(
         "TDI-5.2D — transfert OOD largeur 6",
+        PRIMARY_HORIZON,
         &report.criterion_d_comparisons.1,
     );
 
     for horizon_comparison in &report.criterion_e_horizon_comparisons {
+        let horizon = TARGET_HORIZONS[horizon_comparison.horizon_index];
+
         print_tdi52_aggregate_comparison(
-            &format!(
-                "TDI-5.2E — trajectoire secondaire U_{}",
-                TARGET_HORIZONS[horizon_comparison.horizon_index]
-            ),
+            &format!("TDI-5.2E — trajectoire secondaire U_{horizon}"),
+            horizon,
             &horizon_comparison.comparison,
         );
     }
@@ -4813,7 +4821,7 @@ fn run_legacy_scaffold_full_experiment() -> Result<(), String> {
         ("OOD principal w5", width_5_bootstrap),
         ("OOD extrême w6", width_6_bootstrap),
     ] {
-        tdi52_print_bootstrap_intervals(label, intervals);
+        tdi52_print_bootstrap_intervals(label, PRIMARY_HORIZON, intervals);
     }
 
     let criterion_a =
@@ -5029,10 +5037,14 @@ mod tests {
 
     #[test]
     fn arithmetic_and_structural_errors_keep_attempt_context() {
-        let context = super::AttemptContext::new(3, 123, 4);
+        // Width 0 degenerates `state_count` to 1, making `ln(states)` the
+        // normalizer's own structural denominator equal to zero — the one
+        // check `normalized_entropy` still performs itself (a width-only
+        // invariant), independent of the `entropy_bits` argument's value.
+        let context = super::AttemptContext::new(0, 123, 4);
 
-        let arithmetic = super::normalized_entropy(f64::INFINITY, context)
-            .expect_err("non-finite normalized entropy is arithmetic failure");
+        let arithmetic = super::normalized_entropy(1.0, context)
+            .expect_err("degenerate width-0 entropy normalizer is arithmetic failure");
 
         assert_eq!(arithmetic.context, context);
         assert_eq!(arithmetic.category, super::FailureCategory::Arithmetic);
@@ -5042,6 +5054,41 @@ mod tests {
 
         assert_eq!(structural.context, context);
         assert_eq!(structural.category, super::FailureCategory::Structural);
+    }
+
+    // These three tests prove the fix for a preregistration audit finding:
+    // `normalized_entropy`/`normalized_reachable`/`transformed_path_count`
+    // used to validate the finiteness of their own return values and
+    // convert a bad one into a fatal `EvaluationError`, which ran before
+    // `analyze_seed`'s own per-candidate `NonFiniteFeature` exclusion check
+    // ever saw the value — making that preregistered graceful-exclusion
+    // category unreachable. Feeding these functions the exact inputs that
+    // used to trigger their internal error now confirms they defer the
+    // decision to the caller instead of intercepting it.
+    #[test]
+    fn normalized_entropy_no_longer_intercepts_non_finite_output_itself() {
+        let context = super::AttemptContext::new(3, 1, 0);
+
+        let normalized = super::normalized_entropy(f64::INFINITY, context)
+            .expect("normalized_entropy must defer non-finite output to the caller");
+
+        assert!(!normalized.is_finite());
+    }
+
+    #[test]
+    fn normalized_reachable_no_longer_intercepts_non_finite_output_itself() {
+        let context = super::AttemptContext::new(3, 1, 0);
+
+        let normalized = super::normalized_reachable(f64::NAN, context)
+            .expect("normalized_reachable must defer non-finite output to the caller");
+
+        assert!(normalized.is_nan());
+    }
+
+    #[test]
+    fn transformed_path_count_is_infallible_and_accepts_non_finite_input() {
+        assert!(super::transformed_path_count(f64::INFINITY).is_infinite());
+        assert!(super::transformed_path_count(f64::NAN).is_nan());
     }
 
     #[test]
@@ -5243,34 +5290,41 @@ mod tests {
 
     #[test]
     fn frozen_tdi52_protocol_hashes_are_unchanged() {
+        // TDI-5.2 "is derived mechanically from the frozen TDI-5.1
+        // evaluator" (see this file's own header comment), so its own
+        // frozen-protocol guard must pin TDI-5.1's files — its immediate
+        // ancestor — not TDI-5's (the grandparent). This mirrors
+        // tdi-continuous-deficit-geometry-v51.rs's own
+        // `frozen_tdi5_protocol_hashes_are_unchanged`, which correctly
+        // pins TDI-5's files for the same reason one generation up.
         let expected_hashes = [
             (
-                ".github/workflows/tdi5-ci.yml",
-                "90b1d45625c8a13bc5dd14d6e98107a6ff9d85cca912b2e883d366a6ad9eed2c",
+                ".github/workflows/tdi51-ci.yml",
+                "e48b6a79a3be41fe16c4659f44237104ee519b503e725b2ae2a0069e1f608221",
             ),
             (
-                "docs/TDI-5-CONTINUOUS-DEFICIT-GEOMETRY-EVALUATOR.sha256",
-                "708dbeab3ad3c509702d1b0f9eb749eb7f11e2be2424d15908560cafda09829a",
+                "docs/TDI-5.1-CONTINUOUS-DEFICIT-GEOMETRY-EVALUATOR.sha256",
+                "7545a5d4f22d76c1f906c3f06f50a3c74e27e0586754f6f776ed01ae597f5c55",
             ),
             (
-                "docs/TDI-5-CONTINUOUS-DEFICIT-GEOMETRY-PREREGISTRATION.md",
-                "8481d730ae5c47506284f67ce7d75586abb1412f617fbd88029106d7c26986ef",
+                "docs/TDI-5.1-CONTINUOUS-DEFICIT-GEOMETRY-PREREGISTRATION.md",
+                "25b65a07b7f248df3e043b9b7f63611c360f60f3d49a600a5612305440131852",
             ),
             (
-                "docs/TDI-5-CONTINUOUS-DEFICIT-GEOMETRY-PREREGISTRATION.sha256",
-                "a674b1cbe9faa19e97bfd790e086b21bd3b4ac904394cce945b2796de6321b9a",
+                "docs/TDI-5.1-CONTINUOUS-DEFICIT-GEOMETRY-PREREGISTRATION.sha256",
+                "1ce298b477216d095454e0081c88ce5ca7b00b673d92b65a3982428e04bb4b3e",
             ),
             (
-                "docs/TDI-5-SCIENTIFIC-CODE.sha256",
-                "a644945cb283af2b168d6f783b5caf9d7694887d386ace2b8f549eb1963c98d0",
+                "docs/TDI-5.1-SCIENTIFIC-CODE.sha256",
+                "906dc938a9cab96299119f4028fbf566b50c7f90eb32d861b7dd79bc265da9ab",
             ),
             (
-                "scripts/reproduce-tdi5.sh",
-                "d06cde6a604f7cba9754c848881a999e680968c56afbf995a52f64ca3eb09a8d",
+                "scripts/reproduce-tdi5.1.sh",
+                "2ae3dea8c36d44e148523d2deb59bbd337714f1b8c576c9ad930c0d0984c2822",
             ),
             (
-                "tdi-bench/src/bin/tdi-continuous-deficit-geometry.rs",
-                "3bfd370944fd48b1c9ef0bd106de51143bbd37c3419fe254d12baee34619532a",
+                "tdi-bench/src/bin/tdi-continuous-deficit-geometry-v51.rs",
+                "d69d42fa31d973603eabd0ded8ffd8ca2f0a4b0b8fcec5f9de42ed8c7ce37444",
             ),
         ];
 
@@ -5376,6 +5430,103 @@ mod tests {
                 one_fraction: 0.0,
             }
         );
+    }
+
+    #[test]
+    fn calculate_metrics_matches_hand_computed_values_for_non_trivial_predictions() {
+        // The only prior coverage was the degenerate identity case
+        // (predictions == targets), where every residual, centered value,
+        // and covariance term is zero -- which cannot distinguish a
+        // correct implementation from a broken one for most of these
+        // fields. This fixture swaps the last two predictions relative to
+        // their targets, giving non-zero residuals, a rank discordance
+        // (for Spearman), and predictions that hit exactly 0.0 and 1.0
+        // (for the zero/one fractions), with every expected value derived
+        // by hand from the formulas in `calculate_metrics`.
+        let targets = [0.0, 1.0, 2.0, 3.0];
+        let predicted = [0.0, 1.0, 3.0, 2.0];
+
+        let metrics = calculate_metrics(&targets, &predicted);
+
+        // mse, mae, bias, the means, and the zero/one fractions land on
+        // exact powers-of-two divisions and match bit-for-bit; r_squared,
+        // spearman, and the calibration terms go through a division that
+        // is not exactly representable in binary, so those are compared
+        // with a tolerance instead of bit-for-bit.
+        assert_eq!(metrics.mse, 0.5);
+        assert_eq!(metrics.mae, 0.5);
+        assert_eq!(metrics.bias, 0.0);
+        assert_eq!(metrics.observed_mean, 1.5);
+        assert_eq!(metrics.predicted_mean, 1.5);
+        assert_eq!(metrics.zero_fraction, 0.25);
+        assert_eq!(metrics.one_fraction, 0.25);
+        assert!((metrics.r_squared - 0.6).abs() < 1.0e-12);
+        assert!((metrics.spearman - 0.8).abs() < 1.0e-12);
+        assert!((metrics.calibration_intercept - 0.3).abs() < 1.0e-12);
+        assert!((metrics.calibration_slope - 0.8).abs() < 1.0e-12);
+    }
+
+    #[test]
+    fn generate_records_produces_identical_records_across_repeated_real_runs() {
+        // Every other determinism test in this module (RNG, bootstrap,
+        // model fitting, attempt-budget/no-progress termination) covers
+        // its own layer, but none of them re-runs the real analyzer
+        // (`analyze_seed`, via `generate_records`) over the same real
+        // seed range twice and compares the accepted records themselves.
+        // Width 3 is used because it is the cheapest real width.
+        let width = super::TRAIN_WIDTH_3;
+        let seed = 500_000;
+        let count = 5;
+
+        let first = super::generate_records(width, seed, count)
+            .expect("real generation must succeed for this seed range");
+        let second = super::generate_records(width, seed, count)
+            .expect("real generation must succeed for this seed range");
+
+        assert_eq!(first.records.len(), count);
+        assert_eq!(first.records.len(), second.records.len());
+        assert_eq!(first.next_seed, second.next_seed);
+        assert_eq!(first.excluded, second.excluded);
+        assert_eq!(first.attempts, second.attempts);
+        assert_eq!(first.rejections, second.rejections);
+
+        for (left, right) in first.records.iter().zip(&second.records) {
+            assert_eq!(left.baseline, right.baseline);
+            assert_eq!(left.early_overlap, right.early_overlap);
+            assert_eq!(left.overlaps, right.overlaps);
+            assert_eq!(left.targets_u, right.targets_u);
+        }
+    }
+
+    #[test]
+    fn entropy_profile_wraps_a_real_tdi_core_failure_as_dynamic_analysis() {
+        // `FailureCategory::DynamicAnalysis` is produced by wrapping
+        // errors from three `tdi_core` calls, but no test previously
+        // exercised any of them: a width mismatch between a constructed
+        // system and its initial state is a real, reachable failure mode
+        // in `tdi_core` (`BranchingBaselineError::InitialWidthMismatch`),
+        // not a contrived one, and it is checked before any transition
+        // table is even required.
+        let context = super::AttemptContext::new(3, 0, 0);
+        let system = super::TableSystem::new(3).expect("width 3 system must construct");
+        let mismatched_initial = super::State::new(0, 4).expect("width 4 state must construct");
+
+        let error = super::entropy_profile(context, &system, mismatched_initial)
+            .expect_err("a width-mismatched initial state must be rejected by tdi_core");
+
+        assert_eq!(error.category, super::FailureCategory::DynamicAnalysis);
+    }
+
+    #[test]
+    fn topology_profile_wraps_a_real_tdi_core_failure_as_dynamic_analysis() {
+        let context = super::AttemptContext::new(3, 0, 0);
+        let system = super::TableSystem::new(3).expect("width 3 system must construct");
+        let mismatched_initial = super::State::new(0, 4).expect("width 4 state must construct");
+
+        let error = super::topology_profile(context, &system, mismatched_initial)
+            .expect_err("a width-mismatched initial state must be rejected by tdi_core");
+
+        assert_eq!(error.category, super::FailureCategory::DynamicAnalysis);
     }
 
     #[test]
@@ -5809,6 +5960,124 @@ mod tests {
         }
 
         assert_eq!(ranges.len(), super::TOTAL_SEED_RESERVATIONS);
+    }
+
+    #[test]
+    fn preregistered_generation_limits_uses_the_correct_multiplier_and_no_progress_limit_per_width()
+    {
+        let width_3 = super::preregistered_generation_limits(3, 0, 1_000)
+            .expect("width 3 is a valid preregistered width");
+        assert_eq!(
+            width_3.max_attempts,
+            1_000 * super::WIDTH_3_ATTEMPT_MULTIPLIER
+        );
+        assert_eq!(width_3.no_progress_limit, super::WIDTH_3_NO_PROGRESS_LIMIT);
+
+        let width_4 = super::preregistered_generation_limits(4, 0, 1_000)
+            .expect("width 4 is a valid preregistered width");
+        assert_eq!(
+            width_4.max_attempts,
+            1_000 * super::WIDTH_4_ATTEMPT_MULTIPLIER
+        );
+        assert_eq!(width_4.no_progress_limit, super::WIDTH_4_NO_PROGRESS_LIMIT);
+
+        let width_5 = super::preregistered_generation_limits(5, 0, 1_000)
+            .expect("width 5 is a valid preregistered width");
+        assert_eq!(
+            width_5.max_attempts,
+            1_000 * super::WIDTH_5_ATTEMPT_MULTIPLIER
+        );
+        assert_eq!(width_5.no_progress_limit, super::WIDTH_5_NO_PROGRESS_LIMIT);
+
+        let width_6 = super::preregistered_generation_limits(6, 0, 1_000)
+            .expect("width 6 is a valid preregistered width");
+        assert_eq!(
+            width_6.max_attempts,
+            1_000 * super::WIDTH_6_ATTEMPT_MULTIPLIER
+        );
+        assert_eq!(width_6.no_progress_limit, super::WIDTH_6_NO_PROGRESS_LIMIT);
+
+        // The four widths must carry genuinely distinct budgets; otherwise
+        // a constant could be silently duplicated across widths (e.g. a
+        // copy-paste error) without any test noticing.
+        let multipliers = [
+            super::WIDTH_3_ATTEMPT_MULTIPLIER,
+            super::WIDTH_4_ATTEMPT_MULTIPLIER,
+            super::WIDTH_5_ATTEMPT_MULTIPLIER,
+            super::WIDTH_6_ATTEMPT_MULTIPLIER,
+        ];
+        for (index, &multiplier) in multipliers.iter().enumerate() {
+            for &other in &multipliers[index + 1..] {
+                assert_ne!(multiplier, other);
+            }
+        }
+    }
+
+    #[test]
+    fn preregistered_generation_limits_rejects_zero_target_count() {
+        let error = super::preregistered_generation_limits(3, 0, 0)
+            .expect_err("a zero record target must be rejected");
+
+        assert_eq!(error.category, super::FailureCategory::InvalidConfiguration);
+    }
+
+    #[test]
+    fn preregistered_generation_limits_rejects_unsupported_widths() {
+        for width in [0u8, 1, 2, 7, 255] {
+            let error = super::preregistered_generation_limits(width, 0, 1)
+                .expect_err("only widths 3-6 are preregistered");
+
+            assert_eq!(error.category, super::FailureCategory::UnsupportedWidth);
+        }
+    }
+
+    #[test]
+    fn preregistered_generation_limits_rejects_attempt_budget_overflow() {
+        let error = super::preregistered_generation_limits(6, 0, usize::MAX)
+            .expect_err("an attempt budget that overflows usize must be rejected");
+
+        assert_eq!(error.category, super::FailureCategory::Arithmetic);
+    }
+
+    #[test]
+    fn validate_seed_reservations_allows_touching_ranges_but_rejects_a_single_seed_overlap() {
+        // Width 3 with a target of 10 reserves exactly 640 seeds
+        // (10 * WIDTH_3_ATTEMPT_MULTIPLIER), so the second spec's seed
+        // sits exactly one past the first spec's reserved range.
+        let touching = vec![
+            super::PopulationSpec {
+                seed_block: super::SeedBlockId::A,
+                population: super::PopulationKind::TrainingWidth3,
+                width: 3,
+                seed: 0,
+                target_count: 10,
+            },
+            super::PopulationSpec {
+                seed_block: super::SeedBlockId::A,
+                population: super::PopulationKind::HoldoutWidth3,
+                width: 3,
+                seed: 640,
+                target_count: 10,
+            },
+        ];
+
+        assert_eq!(
+            super::validate_seed_reservations(&touching)
+                .expect("reservations that merely touch, without overlapping, must be accepted"),
+            2
+        );
+
+        let mut overlapping = touching.clone();
+        overlapping[1].seed -= 1;
+
+        let error = super::validate_seed_reservations(&overlapping).expect_err(
+            "a reservation that starts even one seed before the previous one ends must be rejected",
+        );
+
+        assert!(
+            error.contains("overlap"),
+            "unexpected error message: {error}"
+        );
     }
 
     #[test]
@@ -7055,6 +7324,89 @@ mod tests {
         assert!(!result.succeeded());
     }
 
+    #[test]
+    fn criterion_a_fails_when_lower_mse_in_every_block_is_false_even_though_every_other_condition_holds()
+     {
+        let mut comparison = favorable_criterion_a_comparison();
+        // Regress exactly one block's challenger MSE past its baseline. Its
+        // relative reduction becomes the minimum of the three, so the median
+        // (the middle value) is untouched and every other sub-condition
+        // stays favorable, isolating `lower_mse_in_every_block` as the sole
+        // cause of failure.
+        comparison.blocks[0].challenger.standardized.mse =
+            comparison.blocks[0].baseline.standardized.mse + 0.05;
+
+        let result = super::evaluate_criterion_a(&comparison);
+
+        assert!(!result.lower_mse_in_every_block);
+        assert!(result.block_bootstrap_lower_bounds_positive);
+        assert!(result.median_relative_reduction_at_least_15_percent);
+        assert!(result.aggregate_relative_reduction_at_least_15_percent);
+        assert!(result.aggregate_bootstrap_lower_bound_positive);
+        assert!(result.spearman_improves_in_every_block);
+        assert!(result.aggregate_bias_not_worse_than_0_02);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_a_fails_when_median_relative_reduction_is_below_threshold_even_though_aggregate_alone_would_pass()
+     {
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison(
+                seed_block,
+                (FeatureLayout::B0, 1.0, 0.5),
+                (FeatureLayout::B12, 0.9, 0.6),
+                0.05,
+            )
+        })
+        .to_vec();
+
+        // The aggregate MSE pair is independent of the per-block values in
+        // this fixture; pick one that alone clears the 15% threshold to
+        // prove the median check is independently load-bearing rather than
+        // redundant with the aggregate check.
+        let comparison = sample_aggregate_comparison(blocks, 1.0, 0.8, 0.01, 0.01, 0.05);
+        let result = super::evaluate_criterion_a(&comparison);
+
+        assert!(!result.median_relative_reduction_at_least_15_percent);
+        assert!(result.aggregate_relative_reduction_at_least_15_percent);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_a_fails_when_aggregate_relative_reduction_is_below_threshold_even_though_median_alone_would_pass()
+     {
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison(
+                seed_block,
+                (FeatureLayout::B0, 1.0, 0.5),
+                (FeatureLayout::B12, 0.8, 0.6),
+                0.05,
+            )
+        })
+        .to_vec();
+
+        // Every block individually clears 15%, so the median check alone
+        // would pass; the aggregate pair alone falls below 15%, proving the
+        // aggregate check is a separate, additionally required gate.
+        let comparison = sample_aggregate_comparison(blocks, 1.0, 0.9, 0.01, 0.01, 0.05);
+        let result = super::evaluate_criterion_a(&comparison);
+
+        assert!(result.median_relative_reduction_at_least_15_percent);
+        assert!(!result.aggregate_relative_reduction_at_least_15_percent);
+        assert!(!result.succeeded());
+    }
+
     fn favorable_criterion_b_comparison() -> super::AggregateComparison {
         let blocks = [
             super::SeedBlockId::A,
@@ -7158,6 +7510,86 @@ mod tests {
         let result = super::evaluate_criterion_b(&comparison);
 
         assert!(result.succeeded());
+    }
+
+    #[test]
+    fn criterion_b_fails_when_lower_mse_in_every_block_is_false_even_though_every_other_condition_holds()
+     {
+        let mut comparison = favorable_criterion_b_comparison();
+        // Regress exactly one block's challenger MSE past its baseline,
+        // mirroring the analogous Criterion A isolation test. Its relative
+        // reduction becomes the minimum of the three, so the median stays
+        // above 10% and every other sub-condition remains favorable.
+        comparison.blocks[1].challenger.standardized.mse =
+            comparison.blocks[1].baseline.standardized.mse + 0.05;
+
+        let result = super::evaluate_criterion_b(&comparison);
+
+        assert!(!result.lower_mse_in_every_block);
+        assert!(result.block_bootstrap_lower_bounds_positive);
+        assert!(result.median_relative_reduction_at_least_10_percent);
+        assert!(result.aggregate_relative_reduction_at_least_10_percent);
+        assert!(result.spearman_not_lower_in_any_block);
+        assert!(result.aggregate_bias_not_worse_than_0_02);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_b_fails_when_median_relative_reduction_is_below_threshold_even_though_aggregate_alone_would_pass()
+     {
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison(
+                seed_block,
+                (FeatureLayout::B1, 1.0, 0.5),
+                (FeatureLayout::B12, 0.95, 0.5),
+                0.05,
+            )
+        })
+        .to_vec();
+
+        // The aggregate MSE pair is independent of the per-block values in
+        // this fixture; pick one that alone clears the 10% threshold to
+        // prove the median check is independently load-bearing.
+        let comparison = sample_aggregate_comparison(blocks, 1.0, 0.85, 0.01, 0.01, 0.05);
+        let result = super::evaluate_criterion_b(&comparison);
+
+        assert!(!result.median_relative_reduction_at_least_10_percent);
+        assert!(result.aggregate_relative_reduction_at_least_10_percent);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_b_fails_when_aggregate_relative_reduction_is_below_threshold_even_though_median_alone_would_pass()
+     {
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison(
+                seed_block,
+                (FeatureLayout::B1, 1.0, 0.5),
+                (FeatureLayout::B12, 0.85, 0.5),
+                0.05,
+            )
+        })
+        .to_vec();
+
+        // Every block individually clears 10%, so the median check alone
+        // would pass; the aggregate pair alone falls below 10%, proving the
+        // aggregate check is a separate, additionally required gate.
+        let comparison = sample_aggregate_comparison(blocks, 1.0, 0.95, 0.01, 0.01, 0.05);
+        let result = super::evaluate_criterion_b(&comparison);
+
+        assert!(result.median_relative_reduction_at_least_10_percent);
+        assert!(!result.aggregate_relative_reduction_at_least_10_percent);
+        assert!(!result.succeeded());
     }
 
     fn sample_block_comparison_full(
@@ -7487,6 +7919,574 @@ mod tests {
         );
     }
 
+    #[test]
+    fn criterion_c_beneficial_succeeds_with_exactly_two_of_three_blocks_confirming() {
+        let positive_interval = ConfidenceInterval {
+            lower: 0.05,
+            median: 0.1,
+            upper: 0.15,
+        };
+
+        // Exactly two blocks clear the benefit margin with a positive
+        // bootstrap lower bound; the third is flat. The `>= 2` threshold,
+        // not "all three", must be what drives the classification.
+        let blocks = vec![
+            sample_block_comparison_full(
+                super::SeedBlockId::A,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 0.9, 0.0),
+                positive_interval,
+                ZERO_INTERVAL,
+            ),
+            sample_block_comparison_full(
+                super::SeedBlockId::B,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 0.9, 0.0),
+                positive_interval,
+                ZERO_INTERVAL,
+            ),
+            sample_block_comparison_full(
+                super::SeedBlockId::C,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 1.0, 0.0),
+                ZERO_INTERVAL,
+                ZERO_INTERVAL,
+            ),
+        ];
+
+        let comparison =
+            sample_aggregate_comparison_full(blocks, 1.0, 0.9, positive_interval, ZERO_INTERVAL);
+
+        let result = super::evaluate_criterion_c(&comparison);
+
+        assert_eq!(result.blocks_confirming_benefit, 2);
+        assert_eq!(
+            result.classification,
+            super::CriterionCClassification::Beneficial
+        );
+    }
+
+    #[test]
+    fn criterion_c_beneficial_fails_when_aggregate_relative_improvement_is_below_threshold_even_though_block_count_and_bootstrap_hold()
+     {
+        let positive_interval = ConfidenceInterval {
+            lower: 0.05,
+            median: 0.1,
+            upper: 0.15,
+        };
+
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison_full(
+                seed_block,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 0.9, 0.0),
+                positive_interval,
+                ZERO_INTERVAL,
+            )
+        })
+        .to_vec();
+
+        // Every block confirms benefit and the aggregate bootstrap lower
+        // bound is positive, but the aggregate point estimate itself is
+        // deliberately held under the 2% margin: it alone must be able to
+        // veto the Beneficial classification.
+        let comparison =
+            sample_aggregate_comparison_full(blocks, 1.0, 0.99, positive_interval, ZERO_INTERVAL);
+
+        let result = super::evaluate_criterion_c(&comparison);
+
+        assert_eq!(result.blocks_confirming_benefit, 3);
+        assert!(!result.aggregate_relative_improvement_at_least_2_percent);
+        assert!(result.aggregate_bootstrap_lower_bound_positive);
+        assert_ne!(
+            result.classification,
+            super::CriterionCClassification::Beneficial
+        );
+    }
+
+    #[test]
+    fn criterion_c_beneficial_fails_when_aggregate_bootstrap_lower_bound_is_not_positive_even_though_block_count_and_aggregate_improvement_hold()
+     {
+        let positive_interval = ConfidenceInterval {
+            lower: 0.05,
+            median: 0.1,
+            upper: 0.15,
+        };
+
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison_full(
+                seed_block,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 0.9, 0.0),
+                positive_interval,
+                ZERO_INTERVAL,
+            )
+        })
+        .to_vec();
+
+        let hostile_aggregate_interval = ConfidenceInterval {
+            lower: -0.01,
+            median: 0.05,
+            upper: 0.15,
+        };
+
+        // Every block confirms benefit and the aggregate point estimate
+        // clears the 2% margin, but the aggregate bootstrap lower bound is
+        // not strictly positive: it alone must be able to veto Beneficial.
+        let comparison = sample_aggregate_comparison_full(
+            blocks,
+            1.0,
+            0.9,
+            hostile_aggregate_interval,
+            ZERO_INTERVAL,
+        );
+
+        let result = super::evaluate_criterion_c(&comparison);
+
+        assert_eq!(result.blocks_confirming_benefit, 3);
+        assert!(result.aggregate_relative_improvement_at_least_2_percent);
+        assert!(!result.aggregate_bootstrap_lower_bound_positive);
+        assert_ne!(
+            result.classification,
+            super::CriterionCClassification::Beneficial
+        );
+    }
+
+    #[test]
+    fn criterion_c_harmful_succeeds_with_exactly_two_of_three_blocks_confirming() {
+        let negative_interval = ConfidenceInterval {
+            lower: -0.15,
+            median: -0.1,
+            upper: -0.05,
+        };
+
+        let blocks = vec![
+            sample_block_comparison_full(
+                super::SeedBlockId::A,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 1.1, 0.0),
+                negative_interval,
+                ZERO_INTERVAL,
+            ),
+            sample_block_comparison_full(
+                super::SeedBlockId::B,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 1.1, 0.0),
+                negative_interval,
+                ZERO_INTERVAL,
+            ),
+            sample_block_comparison_full(
+                super::SeedBlockId::C,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 1.0, 0.0),
+                ZERO_INTERVAL,
+                ZERO_INTERVAL,
+            ),
+        ];
+
+        let comparison =
+            sample_aggregate_comparison_full(blocks, 1.0, 1.1, negative_interval, ZERO_INTERVAL);
+
+        let result = super::evaluate_criterion_c(&comparison);
+
+        assert_eq!(result.blocks_confirming_harm, 2);
+        assert_eq!(
+            result.classification,
+            super::CriterionCClassification::Harmful
+        );
+    }
+
+    #[test]
+    fn criterion_c_harmful_fails_when_aggregate_relative_worsening_is_below_threshold_even_though_block_count_and_bootstrap_hold()
+     {
+        let negative_interval = ConfidenceInterval {
+            lower: -0.15,
+            median: -0.1,
+            upper: -0.05,
+        };
+
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison_full(
+                seed_block,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 1.1, 0.0),
+                negative_interval,
+                ZERO_INTERVAL,
+            )
+        })
+        .to_vec();
+
+        // Every block confirms harm and the aggregate bootstrap upper bound
+        // is negative, but the aggregate point estimate itself is held just
+        // inside the 2% margin: it alone must be able to veto Harmful.
+        let comparison =
+            sample_aggregate_comparison_full(blocks, 1.0, 1.01, negative_interval, ZERO_INTERVAL);
+
+        let result = super::evaluate_criterion_c(&comparison);
+
+        assert_eq!(result.blocks_confirming_harm, 3);
+        assert!(!result.aggregate_relative_worsening_at_least_2_percent);
+        assert!(result.aggregate_bootstrap_upper_bound_negative);
+        assert_ne!(
+            result.classification,
+            super::CriterionCClassification::Harmful
+        );
+    }
+
+    #[test]
+    fn criterion_c_harmful_fails_when_aggregate_bootstrap_upper_bound_is_not_negative_even_though_block_count_and_aggregate_worsening_hold()
+     {
+        let negative_interval = ConfidenceInterval {
+            lower: -0.15,
+            median: -0.1,
+            upper: -0.05,
+        };
+
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison_full(
+                seed_block,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 1.1, 0.0),
+                negative_interval,
+                ZERO_INTERVAL,
+            )
+        })
+        .to_vec();
+
+        let hostile_aggregate_interval = ConfidenceInterval {
+            lower: -0.15,
+            median: -0.05,
+            upper: 0.01,
+        };
+
+        // Every block confirms harm and the aggregate point estimate
+        // clears the -2% worsening threshold, but the aggregate bootstrap
+        // upper bound is not strictly negative: it alone must be able to
+        // veto Harmful.
+        let comparison = sample_aggregate_comparison_full(
+            blocks,
+            1.0,
+            1.1,
+            hostile_aggregate_interval,
+            ZERO_INTERVAL,
+        );
+
+        let result = super::evaluate_criterion_c(&comparison);
+
+        assert_eq!(result.blocks_confirming_harm, 3);
+        assert!(result.aggregate_relative_worsening_at_least_2_percent);
+        assert!(!result.aggregate_bootstrap_upper_bound_negative);
+        assert_ne!(
+            result.classification,
+            super::CriterionCClassification::Harmful
+        );
+    }
+
+    #[test]
+    fn criterion_c_equivalent_succeeds_with_exactly_two_of_three_block_intervals_within_margin() {
+        let narrow_relative_interval = ConfidenceInterval {
+            lower: -0.01,
+            median: 0.0,
+            upper: 0.01,
+        };
+        let wide_relative_interval = ConfidenceInterval {
+            lower: -0.5,
+            median: 0.0,
+            upper: 0.5,
+        };
+
+        // All three point estimates sit inside +/-2% (ruling out
+        // Beneficial/Harmful outright), and only two of the three block
+        // bootstrap intervals are narrow enough to confirm equivalence; the
+        // third is deliberately wide. The `>= 2` threshold on intervals,
+        // not "all three", must be what drives the classification.
+        let blocks = vec![
+            sample_block_comparison_full(
+                super::SeedBlockId::A,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 1.005, 0.0),
+                ZERO_INTERVAL,
+                narrow_relative_interval,
+            ),
+            sample_block_comparison_full(
+                super::SeedBlockId::B,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 1.005, 0.0),
+                ZERO_INTERVAL,
+                narrow_relative_interval,
+            ),
+            sample_block_comparison_full(
+                super::SeedBlockId::C,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 1.005, 0.0),
+                ZERO_INTERVAL,
+                wide_relative_interval,
+            ),
+        ];
+
+        let comparison = sample_aggregate_comparison_full(
+            blocks,
+            1.0,
+            1.005,
+            ZERO_INTERVAL,
+            narrow_relative_interval,
+        );
+
+        let result = super::evaluate_criterion_c(&comparison);
+
+        assert!(result.all_block_point_estimates_within_equivalence_margin);
+        assert_eq!(result.block_intervals_within_equivalence_margin, 2);
+        assert!(result.aggregate_interval_within_equivalence_margin);
+        assert_eq!(
+            result.classification,
+            super::CriterionCClassification::Equivalent
+        );
+    }
+
+    #[test]
+    fn criterion_c_equivalent_fails_when_a_block_point_estimate_is_outside_the_margin_even_though_interval_count_and_aggregate_interval_hold()
+     {
+        let narrow_relative_interval = ConfidenceInterval {
+            lower: -0.01,
+            median: 0.0,
+            upper: 0.01,
+        };
+
+        let blocks = vec![
+            sample_block_comparison_full(
+                super::SeedBlockId::A,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 1.005, 0.0),
+                ZERO_INTERVAL,
+                narrow_relative_interval,
+            ),
+            sample_block_comparison_full(
+                super::SeedBlockId::B,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 1.005, 0.0),
+                ZERO_INTERVAL,
+                narrow_relative_interval,
+            ),
+            // This block's point estimate is a clear 10% regression, well
+            // outside the margin, even though its bootstrap interval is
+            // (independently, and perhaps misleadingly) still narrow.
+            sample_block_comparison_full(
+                super::SeedBlockId::C,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 1.1, 0.0),
+                ZERO_INTERVAL,
+                narrow_relative_interval,
+            ),
+        ];
+
+        let comparison = sample_aggregate_comparison_full(
+            blocks,
+            1.0,
+            1.005,
+            ZERO_INTERVAL,
+            narrow_relative_interval,
+        );
+
+        let result = super::evaluate_criterion_c(&comparison);
+
+        assert!(!result.all_block_point_estimates_within_equivalence_margin);
+        assert_eq!(result.block_intervals_within_equivalence_margin, 3);
+        assert!(result.aggregate_interval_within_equivalence_margin);
+        assert_ne!(
+            result.classification,
+            super::CriterionCClassification::Equivalent
+        );
+    }
+
+    #[test]
+    fn criterion_c_equivalent_fails_when_the_aggregate_interval_is_outside_the_margin_even_though_point_estimates_and_interval_count_hold()
+     {
+        let narrow_relative_interval = ConfidenceInterval {
+            lower: -0.01,
+            median: 0.0,
+            upper: 0.01,
+        };
+        let wide_relative_interval = ConfidenceInterval {
+            lower: -0.5,
+            median: 0.0,
+            upper: 0.5,
+        };
+
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison_full(
+                seed_block,
+                (FeatureLayout::B2, 1.0, 0.0),
+                (FeatureLayout::B12, 1.005, 0.0),
+                ZERO_INTERVAL,
+                narrow_relative_interval,
+            )
+        })
+        .to_vec();
+
+        // Every block's point estimate and bootstrap interval confirm
+        // equivalence, but the aggregate bootstrap interval is
+        // deliberately wide: it alone must be able to veto Equivalent.
+        let comparison = sample_aggregate_comparison_full(
+            blocks,
+            1.0,
+            1.005,
+            ZERO_INTERVAL,
+            wide_relative_interval,
+        );
+
+        let result = super::evaluate_criterion_c(&comparison);
+
+        assert!(result.all_block_point_estimates_within_equivalence_margin);
+        assert_eq!(result.block_intervals_within_equivalence_margin, 3);
+        assert!(!result.aggregate_interval_within_equivalence_margin);
+        assert_ne!(
+            result.classification,
+            super::CriterionCClassification::Equivalent
+        );
+    }
+
+    #[test]
+    fn criterion_c_beneficial_takes_precedence_over_equivalent_at_the_exact_margin_boundary() {
+        // 100.0 and 98.0 are both exactly representable in f64, and IEEE
+        // 754 division is correctly rounded, so (100.0 - 98.0) / 100.0
+        // lands on the identical rounded double as the `0.02` literal
+        // backing `CriterionCResult::MARGIN`. This pins the boundary
+        // exactly rather than merely testing "comfortably above it".
+        let reduction = super::tdi52_relative_reduction(100.0, 98.0);
+        assert_eq!(reduction, super::CriterionCResult::MARGIN);
+
+        let favorable_bootstrap = ConfidenceInterval {
+            lower: 0.05,
+            median: 0.05,
+            upper: 0.05,
+        };
+
+        // At this exact point every block simultaneously confirms benefit
+        // (the `>=` threshold) and sits inside the equivalence range (the
+        // inclusive `..=` band), because the two ranges are designed to
+        // meet exactly at the boundary. Evaluation order -- benefit is
+        // checked before equivalence -- is what resolves the ambiguity.
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison_full(
+                seed_block,
+                (FeatureLayout::B2, 100.0, 0.0),
+                (FeatureLayout::B12, 98.0, 0.0),
+                favorable_bootstrap,
+                ZERO_INTERVAL,
+            )
+        })
+        .to_vec();
+
+        let comparison = sample_aggregate_comparison_full(
+            blocks,
+            100.0,
+            98.0,
+            favorable_bootstrap,
+            ZERO_INTERVAL,
+        );
+
+        let result = super::evaluate_criterion_c(&comparison);
+
+        assert_eq!(result.blocks_confirming_benefit, 3);
+        assert!(result.aggregate_relative_improvement_at_least_2_percent);
+        assert!(result.all_block_point_estimates_within_equivalence_margin);
+        assert_eq!(result.block_intervals_within_equivalence_margin, 3);
+        assert!(result.aggregate_interval_within_equivalence_margin);
+        assert_eq!(
+            result.classification,
+            super::CriterionCClassification::Beneficial
+        );
+    }
+
+    #[test]
+    fn criterion_c_equivalent_takes_precedence_over_harmful_at_the_exact_negative_margin_boundary()
+    {
+        // Mirrors the Beneficial-vs-Equivalent boundary test: 100.0 and
+        // 102.0 are both exactly representable in f64, so
+        // (100.0 - 102.0) / 100.0 lands on the identical rounded double as
+        // `-CriterionCResult::MARGIN`. At this exact point every block
+        // simultaneously confirms harm (the `<=` threshold) and sits
+        // inside the equivalence range (the inclusive `..=` band).
+        // Evaluation order -- equivalence is checked before harm -- is
+        // what resolves the ambiguity, so the classification must be
+        // Equivalent even though every harm sub-condition also holds.
+        let reduction = super::tdi52_relative_reduction(100.0, 102.0);
+        assert_eq!(reduction, -super::CriterionCResult::MARGIN);
+
+        let harm_confirming_bootstrap = ConfidenceInterval {
+            lower: -0.05,
+            median: -0.05,
+            upper: -0.05,
+        };
+
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison_full(
+                seed_block,
+                (FeatureLayout::B2, 100.0, 0.0),
+                (FeatureLayout::B12, 102.0, 0.0),
+                harm_confirming_bootstrap,
+                ZERO_INTERVAL,
+            )
+        })
+        .to_vec();
+
+        let comparison = sample_aggregate_comparison_full(
+            blocks,
+            100.0,
+            102.0,
+            harm_confirming_bootstrap,
+            ZERO_INTERVAL,
+        );
+
+        let result = super::evaluate_criterion_c(&comparison);
+
+        assert_eq!(result.blocks_confirming_harm, 3);
+        assert!(result.aggregate_relative_worsening_at_least_2_percent);
+        assert!(result.aggregate_bootstrap_upper_bound_negative);
+        assert!(result.all_block_point_estimates_within_equivalence_margin);
+        assert_eq!(result.block_intervals_within_equivalence_margin, 3);
+        assert!(result.aggregate_interval_within_equivalence_margin);
+        assert_eq!(
+            result.classification,
+            super::CriterionCClassification::Equivalent
+        );
+    }
+
     fn favorable_criterion_d_width_5_comparison() -> super::AggregateComparison {
         let blocks = [
             super::SeedBlockId::A,
@@ -7670,6 +8670,172 @@ mod tests {
     }
 
     #[test]
+    fn criterion_d_width_5_requires_positive_mse_improvement_in_every_block() {
+        let mut comparison = favorable_criterion_d_width_5_comparison();
+        comparison.blocks[0].challenger.standardized.mse =
+            comparison.blocks[0].baseline.standardized.mse;
+
+        let result = super::evaluate_criterion_d_width_5(&comparison);
+
+        assert!(!result.positive_mse_improvement_in_every_block);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_d_width_5_requires_median_relative_reduction_of_at_least_20_percent() {
+        let blocks = [
+            super::SeedBlockId::A,
+            super::SeedBlockId::B,
+            super::SeedBlockId::C,
+        ]
+        .map(|seed_block| {
+            sample_block_comparison(
+                seed_block,
+                (FeatureLayout::B0, 1.0, 0.5),
+                (FeatureLayout::B12, 0.85, 0.6),
+                0.05,
+            )
+        })
+        .to_vec();
+
+        // Every other condition stays favorable (unchanged aggregate
+        // values); only the per-block reduction drops from 30% to 15%,
+        // below the 20% threshold, isolating this condition alone.
+        let comparison = super::AggregateComparison {
+            blocks,
+            aggregate_baseline_standardized: full_metrics(1.0, 0.0, 0.5, 0.05),
+            aggregate_challenger_standardized: full_metrics(0.7, 0.0, 0.6, 0.03),
+            aggregate_baseline_reconstructed: full_metrics(0.5, 0.4, 0.0, 0.0),
+            aggregate_challenger_reconstructed: full_metrics(0.3, 0.2, 0.0, 0.0),
+            aggregate_bootstrap: sample_bootstrap_intervals(0.05),
+        };
+
+        let result = super::evaluate_criterion_d_width_5(&comparison);
+
+        assert!(!result.median_relative_reduction_at_least_20_percent);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_d_width_5_requires_positive_challenger_spearman_in_every_block() {
+        let mut comparison = favorable_criterion_d_width_5_comparison();
+        // Challenger spearman improves relative to baseline (-0.5 >=
+        // -0.6) but is still negative, distinguishing this condition
+        // from `spearman_not_worse_in_every_block`.
+        comparison.blocks[1].baseline.standardized.spearman = -0.6;
+        comparison.blocks[1].challenger.standardized.spearman = -0.5;
+
+        let result = super::evaluate_criterion_d_width_5(&comparison);
+
+        assert!(!result.positive_challenger_spearman_in_every_block);
+        assert!(result.spearman_not_worse_in_every_block);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_d_width_5_requires_positive_aggregate_reconstructed_mse_improvement() {
+        let mut comparison = favorable_criterion_d_width_5_comparison();
+        comparison.aggregate_challenger_reconstructed.mse =
+            comparison.aggregate_baseline_reconstructed.mse;
+
+        let result = super::evaluate_criterion_d_width_5(&comparison);
+
+        assert!(!result.positive_aggregate_reconstructed_mse_improvement);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_d_width_5_requires_positive_aggregate_reconstructed_mae_improvement() {
+        let mut comparison = favorable_criterion_d_width_5_comparison();
+        comparison.aggregate_challenger_reconstructed.mae =
+            comparison.aggregate_baseline_reconstructed.mae;
+
+        let result = super::evaluate_criterion_d_width_5(&comparison);
+
+        assert!(!result.positive_aggregate_reconstructed_mae_improvement);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_d_width_6_requires_positive_mse_improvement_in_every_block() {
+        let mut comparison = favorable_criterion_d_width_6_comparison();
+        comparison.blocks[0].challenger.standardized.mse =
+            comparison.blocks[0].baseline.standardized.mse;
+
+        let result = super::evaluate_criterion_d_width_6(&comparison);
+
+        assert!(!result.positive_mse_improvement_in_every_block);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_d_width_6_fails_when_fewer_than_two_blocks_have_positive_bootstrap_lower_bound() {
+        // Complements `criterion_d_width_6_only_requires_bootstrap_positive_in_two_blocks`,
+        // which shows 2-of-3 is sufficient; this pins the other side of
+        // the `>= 2` boundary by dropping to only 1-of-3 positive.
+        let mut comparison = favorable_criterion_d_width_6_comparison();
+        comparison.blocks[0].bootstrap.standardized_mse.lower = -0.01;
+        comparison.blocks[1].bootstrap.standardized_mse.lower = -0.01;
+
+        let result = super::evaluate_criterion_d_width_6(&comparison);
+
+        assert!(!result.bootstrap_lower_bound_positive_in_at_least_two_blocks);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_d_width_6_requires_aggregate_bootstrap_lower_bound_positive() {
+        let mut comparison = favorable_criterion_d_width_6_comparison();
+        comparison.aggregate_bootstrap.standardized_mse.lower = -0.01;
+
+        let result = super::evaluate_criterion_d_width_6(&comparison);
+
+        assert!(!result.aggregate_bootstrap_lower_bound_positive);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_d_width_6_requires_positive_challenger_spearman_in_every_block() {
+        let mut comparison = favorable_criterion_d_width_6_comparison();
+        // Only the per-block spearman regresses; the aggregate-level
+        // spearman fields are untouched, isolating this condition from
+        // `aggregate_spearman_not_worse`.
+        comparison.blocks[1].challenger.standardized.spearman = -0.1;
+
+        let result = super::evaluate_criterion_d_width_6(&comparison);
+
+        assert!(!result.positive_challenger_spearman_in_every_block);
+        assert!(result.aggregate_spearman_not_worse);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_d_width_6_fails_when_aggregate_bias_becomes_worse() {
+        // Complements `criterion_d_width_6_allows_equal_aggregate_bias`,
+        // which only exercises the equal-bias boundary; this shows a
+        // clear regression is still caught.
+        let mut comparison = favorable_criterion_d_width_6_comparison();
+        comparison.aggregate_challenger_standardized.bias = 0.10;
+
+        let result = super::evaluate_criterion_d_width_6(&comparison);
+
+        assert!(!result.aggregate_bias_not_worse);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
+    fn criterion_d_width_6_requires_positive_aggregate_reconstructed_mse_improvement() {
+        let mut comparison = favorable_criterion_d_width_6_comparison();
+        comparison.aggregate_challenger_reconstructed.mse =
+            comparison.aggregate_baseline_reconstructed.mse;
+
+        let result = super::evaluate_criterion_d_width_6(&comparison);
+
+        assert!(!result.positive_aggregate_reconstructed_mse_improvement);
+        assert!(!result.succeeded());
+    }
+
+    #[test]
     fn secondary_horizon_indices_exclude_the_primary_horizon() {
         let indices = super::secondary_horizon_indices();
 
@@ -7847,6 +9013,26 @@ mod tests {
         })
     }
 
+    // Cheap: `validate_seed_reservations` runs before any generation, so
+    // this returns without ever calling the expensive real analyzer. It
+    // closes a preregistration audit finding — the disjointness check
+    // previously ran only from the `--termination-smoke` path, not from
+    // the pipeline function a future `run_full_experiment` would call
+    // with the real specs.
+    #[test]
+    fn run_tdi52_pipeline_rejects_overlapping_seed_reservations() {
+        let mut specs = tiny_pipeline_specs();
+        specs[1].seed = specs[0].seed;
+
+        let error = super::run_tdi52_pipeline(&specs)
+            .expect_err("overlapping seed reservations must be rejected before generation begins");
+
+        assert!(
+            error.contains("overlap"),
+            "unexpected error message: {error}"
+        );
+    }
+
     // `run_tdi52_pipeline` unconditionally exercises the real analyzer
     // (`analyze_seed`) for every preregistered width, and that analyzer's
     // cost grows steeply with width (empirically ~1.6s at width 5 and
@@ -7911,5 +9097,48 @@ mod tests {
             error,
             "TDI-5.2 full execution is disabled while the evaluator is under implementation"
         );
+    }
+
+    // The following two tests were found by an exhaustive scan of
+    // `analyze_seed` over 130,000 real width-3 seeds and 22,000 real
+    // width-4 seeds (152,000 real evaluations total): these are the only
+    // two of the six `RejectionReason` variants that ever occurred. The
+    // remaining four (`InvalidObservationGeometry`, `InvalidTargetGeometry`,
+    // `InvalidTransformedTarget`, `NonFiniteFeature`) never appeared in
+    // that scan. `InvalidTransformedTarget` is additionally understood
+    // analytically to be unreachable through the monotonic-truncation
+    // behaviour of `biguint_log2_from_u64_digits` (see the comment on
+    // `exact_overlap_deficit_u`); no equally strong argument rules the
+    // other three out, but no real witness has been found despite the
+    // search, and fabricating a synthetic one would misrepresent what the
+    // real evaluator actually does. `generate_population_with_analyzer`'s
+    // handling of an arbitrary `RejectionReason` value (including these
+    // four) is exercised with a synthetic analyzer elsewhere in this
+    // module; what was missing, and what these two tests close, is
+    // confirmation that the real analyzer can and does produce a
+    // `RejectionReason` at all, not just that the surrounding plumbing
+    // reacts correctly to one when handed one synthetically.
+    #[test]
+    fn analyze_seed_rejects_a_real_seed_with_a_fully_recovered_observation() {
+        let context = super::AttemptContext::new(3, 10, 0);
+        let outcome = super::analyze_seed(context).expect("analysis must succeed for this seed");
+
+        assert!(matches!(
+            outcome,
+            super::CandidateOutcome::Rejected(super::RejectionReason::ObservationFullyRecovered)
+        ));
+    }
+
+    #[test]
+    fn analyze_seed_rejects_a_real_seed_with_a_fully_recovered_target_at_horizon_3() {
+        let context = super::AttemptContext::new(3, 8_604, 0);
+        let outcome = super::analyze_seed(context).expect("analysis must succeed for this seed");
+
+        assert!(matches!(
+            outcome,
+            super::CandidateOutcome::Rejected(super::RejectionReason::TargetFullyRecovered {
+                horizon: 3
+            })
+        ));
     }
 }
