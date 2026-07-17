@@ -1568,6 +1568,73 @@ fn generate_population(
     generate_population_with_analyzer(spec, limits, analyze_seed)
 }
 
+#[derive(Clone, Debug)]
+struct BlockPopulations {
+    seed_block: SeedBlockId,
+    training_width_3: PopulationGenerationReport,
+    holdout_width_3: PopulationGenerationReport,
+    training_width_4: PopulationGenerationReport,
+    holdout_width_4: PopulationGenerationReport,
+    ood_width_5: PopulationGenerationReport,
+    ood_width_6: PopulationGenerationReport,
+}
+
+impl BlockPopulations {
+    fn combined_holdout(&self) -> Vec<Record> {
+        combine_width_3_and_4(
+            &self.holdout_width_3.report.records,
+            &self.holdout_width_4.report.records,
+        )
+    }
+
+    /// Every population's full generation report, in `PopulationKind::ALL`
+    /// order. Required-raw-output printing (Section 17 items 8-11 and 20)
+    /// walks this instead of the six named fields directly.
+    fn reports(&self) -> [&PopulationGenerationReport; POPULATIONS_PER_SEED_BLOCK] {
+        [
+            &self.training_width_3,
+            &self.holdout_width_3,
+            &self.training_width_4,
+            &self.holdout_width_4,
+            &self.ood_width_5,
+            &self.ood_width_6,
+        ]
+    }
+}
+
+fn find_population_spec(
+    specs: &[PopulationSpec],
+    seed_block: SeedBlockId,
+    population: PopulationKind,
+) -> PopulationSpec {
+    *specs
+        .iter()
+        .find(|spec| spec.seed_block == seed_block && spec.population == population)
+        .expect("population_specs always covers every (block, population) pair")
+}
+
+fn generate_block_populations(
+    seed_block: SeedBlockId,
+    specs: &[PopulationSpec],
+) -> Result<BlockPopulations, PopulationGenerationError> {
+    let generate =
+        |population: PopulationKind| -> Result<PopulationGenerationReport, PopulationGenerationError> {
+            let spec = find_population_spec(specs, seed_block, population);
+
+            generate_population(spec)
+        };
+
+    Ok(BlockPopulations {
+        seed_block,
+        training_width_3: generate(PopulationKind::TrainingWidth3)?,
+        holdout_width_3: generate(PopulationKind::HoldoutWidth3)?,
+        training_width_4: generate(PopulationKind::TrainingWidth4)?,
+        holdout_width_4: generate(PopulationKind::HoldoutWidth4)?,
+        ood_width_5: generate(PopulationKind::OodWidth5)?,
+        ood_width_6: generate(PopulationKind::OodWidth6)?,
+    })
+}
+
 fn model_features(record: &Record, layout: FeatureLayout) -> Vec<f64> {
     feature_layout(record, layout)
 }
@@ -2002,14 +2069,11 @@ struct BlockModelFit {
     models: HorizonModels,
 }
 
-fn combined_training_records(
-    training_width_3: &[Record],
-    training_width_4: &[Record],
-) -> Vec<Record> {
-    let mut combined = Vec::with_capacity(training_width_3.len() + training_width_4.len());
+fn combine_width_3_and_4(width_3: &[Record], width_4: &[Record]) -> Vec<Record> {
+    let mut combined = Vec::with_capacity(width_3.len() + width_4.len());
 
-    combined.extend_from_slice(training_width_3);
-    combined.extend_from_slice(training_width_4);
+    combined.extend_from_slice(width_3);
+    combined.extend_from_slice(width_4);
 
     combined
 }
@@ -2019,7 +2083,7 @@ fn fit_block_models(
     training_width_3: &[Record],
     training_width_4: &[Record],
 ) -> Result<BlockModelFit, String> {
-    let combined = combined_training_records(training_width_3, training_width_4);
+    let combined = combine_width_3_and_4(training_width_3, training_width_4);
     let target_scalers = fit_target_scalers(&combined)?;
     let models = fit_horizon_models(&combined, &target_scalers)?;
 
@@ -2738,7 +2802,7 @@ fn evaluate_criterion_a(comparison: &AggregateComparison) -> CriterionAResult {
 fn tdi52_criterion_a(
     aggregate_fit: &AggregateModelFit,
     combined_holdout_records: [&[Record]; SEED_BLOCK_COUNT],
-) -> Result<CriterionAResult, String> {
+) -> Result<(AggregateComparison, CriterionAResult), String> {
     let comparison = evaluate_aggregate_comparison(
         primary_horizon_index(),
         aggregate_fit,
@@ -2747,7 +2811,9 @@ fn tdi52_criterion_a(
         FeatureLayout::B12,
     )?;
 
-    Ok(evaluate_criterion_a(&comparison))
+    let result = evaluate_criterion_a(&comparison);
+
+    Ok((comparison, result))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2834,7 +2900,7 @@ fn evaluate_criterion_b(comparison: &AggregateComparison) -> CriterionBResult {
 fn tdi52_criterion_b(
     aggregate_fit: &AggregateModelFit,
     combined_holdout_records: [&[Record]; SEED_BLOCK_COUNT],
-) -> Result<CriterionBResult, String> {
+) -> Result<(AggregateComparison, CriterionBResult), String> {
     let comparison = evaluate_aggregate_comparison(
         primary_horizon_index(),
         aggregate_fit,
@@ -2843,7 +2909,9 @@ fn tdi52_criterion_b(
         FeatureLayout::B12,
     )?;
 
-    Ok(evaluate_criterion_b(&comparison))
+    let result = evaluate_criterion_b(&comparison);
+
+    Ok((comparison, result))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -3009,7 +3077,7 @@ fn evaluate_criterion_c(comparison: &AggregateComparison) -> CriterionCResult {
 fn tdi52_criterion_c(
     aggregate_fit: &AggregateModelFit,
     combined_holdout_records: [&[Record]; SEED_BLOCK_COUNT],
-) -> Result<CriterionCResult, String> {
+) -> Result<(AggregateComparison, CriterionCResult), String> {
     let comparison = evaluate_aggregate_comparison(
         primary_horizon_index(),
         aggregate_fit,
@@ -3018,7 +3086,9 @@ fn tdi52_criterion_c(
         FeatureLayout::B12,
     )?;
 
-    Ok(evaluate_criterion_c(&comparison))
+    let result = evaluate_criterion_c(&comparison);
+
+    Ok((comparison, result))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -3212,7 +3282,7 @@ fn tdi52_criterion_d(
     aggregate_fit: &AggregateModelFit,
     width_5_ood_records: [&[Record]; SEED_BLOCK_COUNT],
     width_6_ood_records: [&[Record]; SEED_BLOCK_COUNT],
-) -> Result<CriterionDResult, String> {
+) -> Result<((AggregateComparison, AggregateComparison), CriterionDResult), String> {
     let width_5_comparison = evaluate_aggregate_comparison(
         primary_horizon_index(),
         aggregate_fit,
@@ -3229,10 +3299,12 @@ fn tdi52_criterion_d(
         FeatureLayout::B12,
     )?;
 
-    Ok(CriterionDResult {
+    let result = CriterionDResult {
         width_5: evaluate_criterion_d_width_5(&width_5_comparison),
         width_6: evaluate_criterion_d_width_6(&width_6_comparison),
-    })
+    };
+
+    Ok(((width_5_comparison, width_6_comparison), result))
 }
 
 fn secondary_horizon_indices() -> [usize; TARGET_HORIZON_COUNT - 1] {
@@ -3352,7 +3424,7 @@ fn evaluate_criterion_e(horizon_comparisons: &[HorizonComparison]) -> CriterionE
 fn tdi52_criterion_e(
     aggregate_fit: &AggregateModelFit,
     combined_holdout_records: [&[Record]; SEED_BLOCK_COUNT],
-) -> Result<CriterionEResult, String> {
+) -> Result<(Vec<HorizonComparison>, CriterionEResult), String> {
     let mut horizon_comparisons = Vec::with_capacity(TARGET_HORIZON_COUNT - 1);
 
     for horizon_index in secondary_horizon_indices() {
@@ -3370,7 +3442,111 @@ fn tdi52_criterion_e(
         });
     }
 
-    Ok(evaluate_criterion_e(&horizon_comparisons))
+    let result = evaluate_criterion_e(&horizon_comparisons);
+
+    Ok((horizon_comparisons, result))
+}
+
+#[derive(Clone, Debug)]
+struct Tdi52ExperimentReport {
+    blocks: Vec<BlockPopulations>,
+    aggregate_fit: AggregateModelFit,
+    criterion_a_comparison: AggregateComparison,
+    criterion_a: CriterionAResult,
+    criterion_b_comparison: AggregateComparison,
+    criterion_b: CriterionBResult,
+    criterion_c_comparison: AggregateComparison,
+    criterion_c: CriterionCResult,
+    criterion_d_comparisons: (AggregateComparison, AggregateComparison),
+    criterion_d: CriterionDResult,
+    criterion_e_horizon_comparisons: Vec<HorizonComparison>,
+    criterion_e: CriterionEResult,
+}
+
+/// Runs the full TDI-5.2 pipeline (generation, per-block fitting,
+/// aggregation, all five criteria) over an arbitrary set of population
+/// specifications. Callers control scale entirely through
+/// `population_specs`: the preregistered `population_specs()` output
+/// requests the real 165,000-record run, while tests and the
+/// termination smoke path pass tiny synthetic-scale specs instead.
+/// This function is never called with the real specs anywhere in this
+/// file; `run_full_experiment` remains the sole, unconditional guard.
+fn run_tdi52_pipeline(
+    population_specs: &[PopulationSpec],
+) -> Result<Tdi52ExperimentReport, String> {
+    let mut blocks = Vec::with_capacity(SEED_BLOCK_COUNT);
+
+    for seed_block in FROZEN_BLOCK_ORDER {
+        blocks.push(
+            generate_block_populations(seed_block, population_specs)
+                .map_err(|error| error.to_string())?,
+        );
+    }
+
+    let mut block_fits = Vec::with_capacity(SEED_BLOCK_COUNT);
+
+    for population in &blocks {
+        block_fits.push(fit_block_models(
+            population.seed_block,
+            &population.training_width_3.report.records,
+            &population.training_width_4.report.records,
+        )?);
+    }
+
+    let block_fits: [BlockModelFit; SEED_BLOCK_COUNT] = block_fits
+        .try_into()
+        .map_err(|_| "expected exactly three block fits".to_owned())?;
+
+    let aggregate_fit = AggregateModelFit::assemble(block_fits)?;
+
+    let combined_holdouts = blocks
+        .iter()
+        .map(BlockPopulations::combined_holdout)
+        .collect::<Vec<_>>();
+
+    let combined_holdout_refs: [&[Record]; SEED_BLOCK_COUNT] = [
+        combined_holdouts[0].as_slice(),
+        combined_holdouts[1].as_slice(),
+        combined_holdouts[2].as_slice(),
+    ];
+
+    let ood_width_5_refs: [&[Record]; SEED_BLOCK_COUNT] = [
+        blocks[0].ood_width_5.report.records.as_slice(),
+        blocks[1].ood_width_5.report.records.as_slice(),
+        blocks[2].ood_width_5.report.records.as_slice(),
+    ];
+
+    let ood_width_6_refs: [&[Record]; SEED_BLOCK_COUNT] = [
+        blocks[0].ood_width_6.report.records.as_slice(),
+        blocks[1].ood_width_6.report.records.as_slice(),
+        blocks[2].ood_width_6.report.records.as_slice(),
+    ];
+
+    let (criterion_a_comparison, criterion_a) =
+        tdi52_criterion_a(&aggregate_fit, combined_holdout_refs)?;
+    let (criterion_b_comparison, criterion_b) =
+        tdi52_criterion_b(&aggregate_fit, combined_holdout_refs)?;
+    let (criterion_c_comparison, criterion_c) =
+        tdi52_criterion_c(&aggregate_fit, combined_holdout_refs)?;
+    let (criterion_d_comparisons, criterion_d) =
+        tdi52_criterion_d(&aggregate_fit, ood_width_5_refs, ood_width_6_refs)?;
+    let (criterion_e_horizon_comparisons, criterion_e) =
+        tdi52_criterion_e(&aggregate_fit, combined_holdout_refs)?;
+
+    Ok(Tdi52ExperimentReport {
+        blocks,
+        aggregate_fit,
+        criterion_a_comparison,
+        criterion_a,
+        criterion_b_comparison,
+        criterion_b,
+        criterion_c_comparison,
+        criterion_c,
+        criterion_d_comparisons,
+        criterion_d,
+        criterion_e_horizon_comparisons,
+        criterion_e,
+    })
 }
 
 fn tdi52_print_bootstrap_intervals(label: &str, intervals: Tdi52BootstrapIntervals) {
@@ -3581,6 +3757,341 @@ fn tdi52_print_direct_comparator(
         "  réduction relative MSE directe : {:.9} %",
         tdi52_relative_reduction(baseline.mse, challenger.mse,) * 100.0
     );
+}
+
+fn tdi52_repository_root() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+}
+
+/// Hashes a repository-relative file with `sha256sum`, matching the
+/// shell-out convention already used by this workspace's frozen-hash
+/// tests. Freeze-time artifacts (e.g. the scientific manifest) do not
+/// exist yet while TDI-5.2 remains under implementation, so a missing
+/// file is reported honestly rather than treated as an error.
+fn tdi52_sha256_of_repo_file(relative_path: &str) -> String {
+    let path = tdi52_repository_root().join(relative_path);
+
+    if !path.is_file() {
+        return format!("non généré ({relative_path} absent)");
+    }
+
+    std::process::Command::new("sha256sum")
+        .arg(&path)
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| {
+            String::from_utf8_lossy(&output.stdout)
+                .split_whitespace()
+                .next()
+                .map(str::to_owned)
+        })
+        .unwrap_or_else(|| "indisponible".to_owned())
+}
+
+/// Section 17, items 1-5: git commit, compiler/Cargo versions, and the
+/// SHA-256 of the evaluator, the preregistration, and the scientific
+/// manifest.
+fn print_tdi52_provenance() {
+    println!();
+    println!("=== PROVENANCE ET INTÉGRITÉ (Section 17, items 1-5) ===");
+    println!(
+        "git commit                     : {}",
+        tdi52_command_output("git", &["rev-parse", "HEAD"])
+    );
+    println!(
+        "rustc                          : {}",
+        tdi52_command_output("rustc", &["--version"])
+    );
+    println!(
+        "cargo                          : {}",
+        tdi52_command_output("cargo", &["--version"])
+    );
+    println!(
+        "évaluateur SHA-256              : {}",
+        tdi52_sha256_of_repo_file("tdi-bench/src/bin/tdi-independent-overlap-ablation-v52.rs")
+    );
+    println!(
+        "préenregistrement SHA-256       : {}",
+        tdi52_sha256_of_repo_file("docs/TDI-5.2-INDEPENDENT-OVERLAP-ABLATION-PREREGISTRATION.md")
+    );
+    println!(
+        "manifeste scientifique SHA-256  : {}",
+        tdi52_sha256_of_repo_file("docs/TDI-5.2-SCIENTIFIC-CODE.sha256")
+    );
+}
+
+/// Section 17, item 6: all frozen scientific constants.
+fn print_tdi52_frozen_constants() {
+    println!();
+    println!("=== CONSTANTES GELÉES (Section 17, item 6) ===");
+    println!("horizon d'observation                    : {OBSERVATION_HORIZON}");
+    println!("horizons cibles                          : {TARGET_HORIZONS:?}");
+    println!("horizon principal                        : {PRIMARY_HORIZON}");
+    println!("largeur maximale supportée                : {MAX_SUPPORTED_WIDTH}");
+    println!(
+        "espace des ensembles successeurs (largeur 6) : {}",
+        match successor_set_space_cardinality(OOD_WIDTH_6) {
+            Cardinality::Exact(value) => value.to_string(),
+            other => format!("{other:?}"),
+        }
+    );
+    println!("nombre de features baseline (B0)          : {BASELINE_FEATURE_COUNT}");
+    println!("nombre de features early-overlap          : {EARLY_OVERLAP_FEATURE_COUNT}");
+    println!("nombre de dispositions de modèle          : {MODEL_LAYOUT_COUNT}");
+    println!("lambda ridge                              : {RIDGE_LAMBDA}");
+    println!("réplicats bootstrap                       : {BOOTSTRAP_REPLICATES}");
+    println!(
+        "tailles de population — train w3={TRAIN_WIDTH_3_SYSTEMS}, holdout w3={HOLDOUT_WIDTH_3_SYSTEMS}, \
+         train w4={TRAIN_WIDTH_4_SYSTEMS}, holdout w4={HOLDOUT_WIDTH_4_SYSTEMS}, \
+         OOD w5={OOD_WIDTH_5_SYSTEMS}, OOD w6={OOD_WIDTH_6_SYSTEMS}"
+    );
+    println!(
+        "multiplicateurs de tentatives — w3={WIDTH_3_ATTEMPT_MULTIPLIER}, w4={WIDTH_4_ATTEMPT_MULTIPLIER}, \
+         w5={WIDTH_5_ATTEMPT_MULTIPLIER}, w6={WIDTH_6_ATTEMPT_MULTIPLIER}"
+    );
+    println!(
+        "seuils sans-progrès — w3={WIDTH_3_NO_PROGRESS_LIMIT}, w4={WIDTH_4_NO_PROGRESS_LIMIT}, \
+         w5={WIDTH_5_NO_PROGRESS_LIMIT}, w6={WIDTH_6_NO_PROGRESS_LIMIT}"
+    );
+}
+
+/// Section 17, item 7: every seed-block definition (all seeds plus each
+/// block's own bootstrap seed), and the separate stratified aggregate
+/// bootstrap seed from Section 10.
+fn print_tdi52_seed_block_definitions() {
+    println!();
+    println!("=== BLOCS DE GRAINES (Section 17, item 7) ===");
+
+    for block in SEED_BLOCKS {
+        println!(
+            "bloc {} | train w3={} | holdout w3={} | train w4={} | holdout w4={} | \
+             OOD w5={} | OOD w6={} | graine bootstrap=0x{:016X}",
+            block.id.label(),
+            block.training_width_3_seed,
+            block.holdout_width_3_seed,
+            block.training_width_4_seed,
+            block.holdout_width_4_seed,
+            block.ood_width_5_seed,
+            block.ood_width_6_seed,
+            block.bootstrap_seed
+        );
+    }
+
+    println!("graine bootstrap agrégat stratifié (Section 10) : 0x{AGGREGATE_BOOTSTRAP_SEED:016X}");
+}
+
+/// Section 17, items 8-11 and 20: requested/accepted/rejected/attempted
+/// counts, rejection counts by reason, final exclusive seeds, generation
+/// budgets, and (for a successful run) the deterministic margin against
+/// each population's termination limits.
+fn print_tdi52_population_accounting(blocks: &[BlockPopulations]) {
+    println!();
+    println!(
+        "=== POPULATIONS — COMPTAGES, RAISONS DE REJET, GRAINES FINALES, BUDGETS \
+         (Section 17, items 8-11, 20) ==="
+    );
+
+    for block in blocks {
+        for report in block.reports() {
+            let spec = report.spec;
+            let generation = &report.report;
+
+            println!(
+                "bloc {} | {:11} | demandé={} | accepté={} | rejeté={} | tenté={} | \
+                 max_tentatives={} | seuil_sans_progrès={} | graine initiale={} | \
+                 graine finale exclusive={} | raisons de rejet={}",
+                block.seed_block.label(),
+                spec.population.label(),
+                spec.target_count,
+                generation.records.len(),
+                generation.excluded,
+                generation.attempts,
+                generation.limits.max_attempts,
+                generation.limits.no_progress_limit,
+                spec.seed,
+                generation.next_seed,
+                generation.rejections.summary()
+            );
+        }
+    }
+}
+
+/// Section 17, items 14-15: every metric and every bootstrap interval
+/// (per block and pooled aggregate) underlying one criterion's verdict.
+fn print_tdi52_aggregate_comparison(label: &str, comparison: &AggregateComparison) {
+    println!();
+    println!("=== {label} — métriques et intervalles bootstrap (Section 17, items 14-15) ===");
+
+    for seed_block in FROZEN_BLOCK_ORDER {
+        let block = comparison.block(seed_block);
+
+        tdi52_print_metrics(
+            &format!(
+                "  bloc {} — référence — espace U standardisé",
+                seed_block.label()
+            ),
+            block.baseline.standardized,
+        );
+        tdi52_print_metrics(
+            &format!(
+                "  bloc {} — challenger — espace U standardisé",
+                seed_block.label()
+            ),
+            block.challenger.standardized,
+        );
+        tdi52_print_metrics(
+            &format!(
+                "  bloc {} — référence — espace O reconstruit",
+                seed_block.label()
+            ),
+            block.baseline.reconstructed,
+        );
+        tdi52_print_metrics(
+            &format!(
+                "  bloc {} — challenger — espace O reconstruit",
+                seed_block.label()
+            ),
+            block.challenger.reconstructed,
+        );
+        tdi52_print_bootstrap_intervals(
+            &format!(
+                "  bloc {} — intervalles bootstrap appariés",
+                seed_block.label()
+            ),
+            block.bootstrap,
+        );
+    }
+
+    tdi52_print_metrics(
+        "  agrégat — référence — espace U standardisé",
+        comparison.aggregate_baseline_standardized,
+    );
+    tdi52_print_metrics(
+        "  agrégat — challenger — espace U standardisé",
+        comparison.aggregate_challenger_standardized,
+    );
+    tdi52_print_metrics(
+        "  agrégat — référence — espace O reconstruit",
+        comparison.aggregate_baseline_reconstructed,
+    );
+    tdi52_print_metrics(
+        "  agrégat — challenger — espace O reconstruit",
+        comparison.aggregate_challenger_reconstructed,
+    );
+    tdi52_print_bootstrap_intervals(
+        "  agrégat — intervalles bootstrap stratifiés",
+        comparison.aggregate_bootstrap,
+    );
+}
+
+/// Section 17, items 16-17: every block-level and aggregate-level
+/// sub-condition considered by each criterion, printed via `Debug` so the
+/// output can never silently drift from the named fields it reflects.
+fn print_tdi52_criteria_conditions(report: &Tdi52ExperimentReport) {
+    println!();
+    println!("=== CONDITIONS PAR CRITÈRE — niveau bloc et agrégat (Section 17, items 16-17) ===");
+    println!();
+    println!("TDI-5.2A : {:#?}", report.criterion_a);
+    println!();
+    println!("TDI-5.2B : {:#?}", report.criterion_b);
+    println!();
+    println!("TDI-5.2C : {:#?}", report.criterion_c);
+    println!();
+    println!("TDI-5.2D : {:#?}", report.criterion_d);
+    println!();
+    println!("TDI-5.2E : {:#?}", report.criterion_e);
+}
+
+fn tdi52_verdict_label(succeeded: bool) -> &'static str {
+    if succeeded { "RÉUSSI" } else { "ÉCHOUÉ" }
+}
+
+/// Section 17, items 18-19: the final TDI-5.2A through TDI-5.2E verdicts,
+/// with TDI-5.2C's four-way classification reported on its own line.
+fn print_tdi52_final_verdicts(report: &Tdi52ExperimentReport) {
+    println!();
+    println!("=== VERDICTS FINAUX (Section 17, items 18-19) ===");
+    println!(
+        "TDI-5.2A — signal joint                    : {}",
+        tdi52_verdict_label(report.criterion_a.succeeded())
+    );
+    println!(
+        "TDI-5.2B — signal O2 indépendant            : {}",
+        tdi52_verdict_label(report.criterion_b.succeeded())
+    );
+    println!(
+        "TDI-5.2C — classification O1 indépendante   : {}",
+        report.criterion_c.classification.label()
+    );
+    println!(
+        "TDI-5.2D — transfert OOD (largeurs 5 et 6)  : {}",
+        tdi52_verdict_label(report.criterion_d.succeeded())
+    );
+    println!(
+        "TDI-5.2E — trajectoire multi-horizon        : {}",
+        tdi52_verdict_label(report.criterion_e.succeeded())
+    );
+}
+
+/// Prints the complete TDI-5.2 Section 17 "required raw output" checklist
+/// (all 20 items) for a completed pipeline run. Purely a presentation
+/// layer over `Tdi52ExperimentReport`: it has no scale-awareness of its
+/// own, so it is exercised at tiny scale by the termination smoke path
+/// and by tests. It would only ever print the real 165,000-record run's
+/// output if `run_full_experiment` were wired to call `run_tdi52_pipeline`
+/// with the real `population_specs()` — which it deliberately is not;
+/// `run_full_experiment` remains the sole, unconditional guard.
+fn print_tdi52_required_raw_output(report: &Tdi52ExperimentReport) {
+    print_tdi52_provenance();
+    print_tdi52_frozen_constants();
+    print_tdi52_seed_block_definitions();
+    print_tdi52_population_accounting(&report.blocks);
+
+    for seed_block in FROZEN_BLOCK_ORDER {
+        let fit = report.aggregate_fit.block(seed_block);
+
+        println!();
+        println!(
+            "### BLOC {} — normalisations et modèles (Section 17, items 12-13) ###",
+            seed_block.label()
+        );
+        tdi52_print_models(&fit.models, &fit.target_scalers);
+    }
+
+    print_tdi52_aggregate_comparison("TDI-5.2A — signal joint", &report.criterion_a_comparison);
+    print_tdi52_aggregate_comparison(
+        "TDI-5.2B — signal O2 indépendant",
+        &report.criterion_b_comparison,
+    );
+    print_tdi52_aggregate_comparison(
+        "TDI-5.2C — classification O1 indépendante",
+        &report.criterion_c_comparison,
+    );
+    print_tdi52_aggregate_comparison(
+        "TDI-5.2D — transfert OOD largeur 5",
+        &report.criterion_d_comparisons.0,
+    );
+    print_tdi52_aggregate_comparison(
+        "TDI-5.2D — transfert OOD largeur 6",
+        &report.criterion_d_comparisons.1,
+    );
+
+    for horizon_comparison in &report.criterion_e_horizon_comparisons {
+        print_tdi52_aggregate_comparison(
+            &format!(
+                "TDI-5.2E — trajectoire secondaire U_{}",
+                TARGET_HORIZONS[horizon_comparison.horizon_index]
+            ),
+            &horizon_comparison.comparison,
+        );
+    }
+
+    print_tdi52_criteria_conditions(report);
+    print_tdi52_final_verdicts(report);
 }
 
 fn run_termination_smoke() -> Result<(), String> {
@@ -3823,7 +4334,7 @@ fn run_termination_smoke() -> Result<(), String> {
         criterion_a.succeeded()
     );
 
-    let criterion_a_direct = tdi52_criterion_a(
+    let (_, criterion_a_direct) = tdi52_criterion_a(
         &aggregate_fit,
         [
             synthetic_training_width_3.as_slice(),
@@ -3838,7 +4349,7 @@ fn run_termination_smoke() -> Result<(), String> {
         criterion_a_direct.succeeded()
     );
 
-    let criterion_b = tdi52_criterion_b(
+    let (_, criterion_b) = tdi52_criterion_b(
         &aggregate_fit,
         [
             synthetic_training_width_3.as_slice(),
@@ -3853,7 +4364,7 @@ fn run_termination_smoke() -> Result<(), String> {
         criterion_b.succeeded()
     );
 
-    let criterion_c = tdi52_criterion_c(
+    let (_, criterion_c) = tdi52_criterion_c(
         &aggregate_fit,
         [
             synthetic_training_width_3.as_slice(),
@@ -3868,7 +4379,7 @@ fn run_termination_smoke() -> Result<(), String> {
         criterion_c.classification.label()
     );
 
-    let criterion_d = tdi52_criterion_d(
+    let (_, criterion_d) = tdi52_criterion_d(
         &aggregate_fit,
         [
             synthetic_training_width_3.as_slice(),
@@ -3890,7 +4401,7 @@ fn run_termination_smoke() -> Result<(), String> {
         criterion_d.succeeded()
     );
 
-    let criterion_e = tdi52_criterion_e(
+    let (_, criterion_e) = tdi52_criterion_e(
         &aggregate_fit,
         [
             synthetic_training_width_3.as_slice(),
@@ -3906,6 +4417,35 @@ fn run_termination_smoke() -> Result<(), String> {
         criterion_e.u8_improves_in_every_block,
         criterion_e.succeeded()
     );
+
+    let tiny_population_specs = population_specs().map(|spec| PopulationSpec {
+        target_count: 1,
+        ..spec
+    });
+
+    let pipeline_report =
+        run_tdi52_pipeline(&tiny_population_specs).map_err(|error| error.to_string())?;
+
+    println!(
+        "identity smoke pipeline      : blocks={}, A={}, B={}, C={}, D={}, E={}",
+        pipeline_report.blocks.len(),
+        pipeline_report.criterion_a.succeeded(),
+        pipeline_report.criterion_b.succeeded(),
+        pipeline_report.criterion_c.classification.label(),
+        pipeline_report.criterion_d.succeeded(),
+        pipeline_report.criterion_e.succeeded()
+    );
+    println!(
+        "identity smoke pipeline fit  : block A model count={}",
+        pipeline_report
+            .aggregate_fit
+            .block(SeedBlockId::A)
+            .models
+            .models
+            .len()
+    );
+
+    print_tdi52_required_raw_output(&pipeline_report);
 
     println!("bounded smoke result         : PASS");
 
@@ -5272,6 +5812,54 @@ mod tests {
     }
 
     #[test]
+    fn find_population_spec_returns_the_matching_spec() {
+        let specs = super::population_specs();
+
+        let spec = super::find_population_spec(
+            &specs,
+            super::SeedBlockId::B,
+            super::PopulationKind::OodWidth5,
+        );
+
+        assert_eq!(spec.seed_block, super::SeedBlockId::B);
+        assert_eq!(spec.population, super::PopulationKind::OodWidth5);
+        assert_eq!(spec.seed, 300_000_000);
+        assert_eq!(spec.target_count, 10_000);
+    }
+
+    #[test]
+    fn generate_block_populations_generates_and_routes_every_population_kind() {
+        // Distinct per-kind counts double as a routing fingerprint: the
+        // real analyzer (widths 3-6) is expensive, so this test calls
+        // `generate_block_populations` exactly once rather than
+        // recomputing each population a second time for comparison. A
+        // copy-paste swap between two kinds (e.g. holdout_width_3 and
+        // training_width_4) would surface as a length mismatch below.
+        let tiny_specs = super::population_specs().map(|spec| super::PopulationSpec {
+            target_count: match spec.population {
+                super::PopulationKind::TrainingWidth3 => 1,
+                super::PopulationKind::HoldoutWidth3 => 2,
+                super::PopulationKind::TrainingWidth4 => 3,
+                super::PopulationKind::HoldoutWidth4 => 4,
+                super::PopulationKind::OodWidth5 => 1,
+                super::PopulationKind::OodWidth6 => 1,
+            },
+            ..spec
+        });
+
+        let populations = super::generate_block_populations(super::SeedBlockId::B, &tiny_specs)
+            .expect("tiny per-population counts must generate successfully");
+
+        assert_eq!(populations.seed_block, super::SeedBlockId::B);
+        assert_eq!(populations.training_width_3.report.records.len(), 1);
+        assert_eq!(populations.holdout_width_3.report.records.len(), 2);
+        assert_eq!(populations.training_width_4.report.records.len(), 3);
+        assert_eq!(populations.holdout_width_4.report.records.len(), 4);
+        assert_eq!(populations.ood_width_5.report.records.len(), 1);
+        assert_eq!(populations.ood_width_6.report.records.len(), 1);
+    }
+
+    #[test]
     fn synthetic_successful_generation_preserves_block_and_population() {
         let spec = super::PopulationSpec {
             seed_block: super::SeedBlockId::B,
@@ -5504,7 +6092,7 @@ mod tests {
     }
 
     #[test]
-    fn combined_training_records_preserve_width_3_then_width_4_order() {
+    fn combine_width_3_and_4_preserves_width_3_then_width_4_order() {
         let width_3 = [
             Record {
                 baseline: [0.0; BASELINE_FEATURE_COUNT],
@@ -5527,12 +6115,91 @@ mod tests {
             targets_u: [2.0; TARGET_HORIZON_COUNT],
         }];
 
-        let combined = super::combined_training_records(&width_3, &width_4);
+        let combined = super::combine_width_3_and_4(&width_3, &width_4);
 
         assert_eq!(combined.len(), 3);
         assert_eq!(combined[0].early_overlap, width_3[0].early_overlap);
         assert_eq!(combined[1].early_overlap, width_3[1].early_overlap);
         assert_eq!(combined[2].early_overlap, width_4[0].early_overlap);
+    }
+
+    fn sample_population_generation_report(
+        population: super::PopulationKind,
+        records: Vec<Record>,
+    ) -> super::PopulationGenerationReport {
+        let count = records.len();
+
+        super::PopulationGenerationReport {
+            spec: super::PopulationSpec {
+                seed_block: super::SeedBlockId::A,
+                population,
+                width: population.width(),
+                seed: 0,
+                target_count: count,
+            },
+            report: super::GenerationReport {
+                records,
+                next_seed: 0,
+                excluded: 0,
+                rejections: super::RejectionCounts::default(),
+                attempts: count,
+                limits: super::GenerationLimits {
+                    max_attempts: count.max(1),
+                    no_progress_limit: count.max(1),
+                },
+            },
+        }
+    }
+
+    #[test]
+    fn block_populations_combined_holdout_preserves_width_3_then_width_4_order() {
+        let holdout_width_3 = vec![Record {
+            baseline: [0.0; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.11, 0.22],
+            overlaps: [0.33; TARGET_HORIZON_COUNT],
+            targets_u: [1.0; TARGET_HORIZON_COUNT],
+        }];
+
+        let holdout_width_4 = vec![Record {
+            baseline: [0.0; BASELINE_FEATURE_COUNT],
+            early_overlap: [0.44, 0.55],
+            overlaps: [0.66; TARGET_HORIZON_COUNT],
+            targets_u: [2.0; TARGET_HORIZON_COUNT],
+        }];
+
+        let populations = super::BlockPopulations {
+            seed_block: super::SeedBlockId::A,
+            training_width_3: sample_population_generation_report(
+                super::PopulationKind::TrainingWidth3,
+                Vec::new(),
+            ),
+            holdout_width_3: sample_population_generation_report(
+                super::PopulationKind::HoldoutWidth3,
+                holdout_width_3.clone(),
+            ),
+            training_width_4: sample_population_generation_report(
+                super::PopulationKind::TrainingWidth4,
+                Vec::new(),
+            ),
+            holdout_width_4: sample_population_generation_report(
+                super::PopulationKind::HoldoutWidth4,
+                holdout_width_4.clone(),
+            ),
+            ood_width_5: sample_population_generation_report(
+                super::PopulationKind::OodWidth5,
+                Vec::new(),
+            ),
+            ood_width_6: sample_population_generation_report(
+                super::PopulationKind::OodWidth6,
+                Vec::new(),
+            ),
+        };
+
+        let combined = populations.combined_holdout();
+
+        assert_eq!(combined.len(), 2);
+        assert_eq!(combined[0].early_overlap, holdout_width_3[0].early_overlap);
+        assert_eq!(combined[1].early_overlap, holdout_width_4[0].early_overlap);
     }
 
     #[test]
@@ -7171,6 +7838,68 @@ mod tests {
 
         assert!(!result.aggregate_reduction_positive_at_every_secondary_horizon);
         assert!(!result.succeeded());
+    }
+
+    fn tiny_pipeline_specs() -> [super::PopulationSpec; 18] {
+        super::population_specs().map(|spec| super::PopulationSpec {
+            target_count: 1,
+            ..spec
+        })
+    }
+
+    // `run_tdi52_pipeline` unconditionally exercises the real analyzer
+    // (`analyze_seed`) for every preregistered width, and that analyzer's
+    // cost grows steeply with width (empirically ~1.6s at width 5 and
+    // ~11s at width 6 per accepted record, even with `target_count: 1`).
+    // A single tiny run is therefore already an expensive integration
+    // test; determinism of every stage it calls (generation's seed
+    // indexing, ridge fitting, paired/aggregate bootstrap) already has
+    // its own dedicated, cheap unit test elsewhere, so this is
+    // deliberately the only test that runs the full pipeline.
+    #[test]
+    fn run_tdi52_pipeline_succeeds_end_to_end_at_tiny_scale() {
+        let report = super::run_tdi52_pipeline(&tiny_pipeline_specs())
+            .expect("tiny end-to-end pipeline run must succeed");
+
+        assert_eq!(report.blocks.len(), super::SEED_BLOCK_COUNT);
+
+        let seed_blocks = report
+            .blocks
+            .iter()
+            .map(|block| block.seed_block)
+            .collect::<Vec<_>>();
+
+        assert_eq!(seed_blocks, super::FROZEN_BLOCK_ORDER.to_vec());
+
+        for seed_block in super::FROZEN_BLOCK_ORDER {
+            let fit = report.aggregate_fit.block(seed_block);
+
+            assert_eq!(fit.seed_block, seed_block);
+            assert_eq!(
+                fit.models.models.len(),
+                TARGET_HORIZON_COUNT * super::MODEL_LAYOUT_COUNT
+            );
+        }
+
+        // All five criteria must be reachable and internally consistent
+        // from a single orchestrated run, even though tiny-scale data
+        // is not expected to satisfy their success conditions.
+        let _ = report.criterion_a.succeeded();
+        let _ = report.criterion_b.succeeded();
+        let _ = report.criterion_c.classification.label();
+        let _ = report.criterion_d.succeeded();
+
+        assert!(
+            report.criterion_e.horizons_improving_in_every_block < TARGET_HORIZON_COUNT,
+            "criterion E cannot report more improving horizons than secondary horizons exist"
+        );
+        let _ = report.criterion_e.succeeded();
+
+        // Reuses this same report rather than running the pipeline a
+        // second time: the Section 17 printer is pure presentation over
+        // `Tdi52ExperimentReport`, so this only needs to prove it does
+        // not panic on a real (if tiny) report shape.
+        super::print_tdi52_required_raw_output(&report);
     }
 
     #[test]
