@@ -1002,17 +1002,25 @@ fn exact_overlap_deficit_u(ratio: &ExactRatio) -> Result<f64, String> {
 
     let denominator_log2 = biguint_log2_from_u64_digits(&ratio.denominator().to_u64_digits())?;
 
-    let transformed = denominator_log2 - numerator_log2;
-
-    if !transformed.is_finite() || transformed < 0.0 {
-        return Err(format!(
-            "invalid conditional target geometry: {transformed}"
-        ));
-    }
-
-    Ok(transformed)
+    // Finiteness/non-negativity of the transformed value is deliberately
+    // not checked here: the caller (`analyze_seed`) treats an invalid
+    // transform as a graceful per-candidate exclusion
+    // (`RejectionReason::InvalidTransformedTarget`), not a fatal error.
+    // Checking it here too would let this function's own fatal error
+    // path intercept the value first, making that exclusion unreachable.
+    Ok(denominator_log2 - numerator_log2)
 }
 
+// `normalized_entropy`, `normalized_reachable`, and `transformed_path_count`
+// deliberately do not validate the finiteness of their own return values.
+// `analyze_seed`'s baseline-feature assembly checks every value it collects
+// from these functions in one place and turns a non-finite one into a
+// graceful per-candidate exclusion (`RejectionReason::NonFiniteFeature`).
+// A local fatal check here would intercept the value first and make that
+// exclusion unreachable. `normalized_entropy`'s denominator check is kept
+// because it depends only on the width (a structural property, not a
+// per-candidate outcome), so a bad denominator is a genuine invariant
+// violation rather than a data-quality edge case.
 fn normalized_entropy(entropy_bits: f64, context: AttemptContext) -> Result<f64, EvaluationError> {
     let states = state_count(context)? as f64;
     let denominator = states.ln();
@@ -1025,49 +1033,17 @@ fn normalized_entropy(entropy_bits: f64, context: AttemptContext) -> Result<f64,
         ));
     }
 
-    let normalized = entropy_bits * std::f64::consts::LN_2 / denominator;
-
-    if !normalized.is_finite() {
-        return Err(EvaluationError::new(
-            context,
-            FailureCategory::Arithmetic,
-            "non-finite normalized entropy",
-        ));
-    }
-
-    Ok(normalized)
+    Ok(entropy_bits * std::f64::consts::LN_2 / denominator)
 }
 
 fn normalized_reachable(reachable: f64, context: AttemptContext) -> Result<f64, EvaluationError> {
     let states = state_count(context)? as f64;
-    let normalized = reachable / states;
 
-    if !normalized.is_finite() {
-        return Err(EvaluationError::new(
-            context,
-            FailureCategory::Arithmetic,
-            format!("non-finite reachable fraction for width {}", context.width),
-        ));
-    }
-
-    Ok(normalized)
+    Ok(reachable / states)
 }
 
-fn transformed_path_count(
-    path_count: f64,
-    context: AttemptContext,
-) -> Result<f64, EvaluationError> {
-    let transformed = path_count.ln_1p();
-
-    if !transformed.is_finite() {
-        return Err(EvaluationError::new(
-            context,
-            FailureCategory::Arithmetic,
-            "non-finite transformed path count",
-        ));
-    }
-
-    Ok(transformed)
+fn transformed_path_count(path_count: f64) -> f64 {
+    path_count.ln_1p()
 }
 
 fn analyze_seed(context: AttemptContext) -> Result<CandidateOutcome, EvaluationError> {
@@ -1238,12 +1214,12 @@ fn analyze_seed(context: AttemptContext) -> Result<CandidateOutcome, EvaluationE
         normalized_entropy(perturbed_entropy[1], context)?,
         normalized_reachable(reference_reachable[0], context)?,
         normalized_reachable(reference_reachable[1], context)?,
-        transformed_path_count(reference_paths[0], context)?,
-        transformed_path_count(reference_paths[1], context)?,
+        transformed_path_count(reference_paths[0]),
+        transformed_path_count(reference_paths[1]),
         normalized_reachable(perturbed_reachable[0], context)?,
         normalized_reachable(perturbed_reachable[1], context)?,
-        transformed_path_count(perturbed_paths[0], context)?,
-        transformed_path_count(perturbed_paths[1], context)?,
+        transformed_path_count(perturbed_paths[0]),
+        transformed_path_count(perturbed_paths[1]),
         f64::from(context.width),
     ];
 
@@ -1323,10 +1299,16 @@ fn preregistered_generation_limits(
     })
 }
 
-fn validate_preregistered_seed_reservations() -> Result<usize, String> {
-    let mut ranges = Vec::with_capacity(TOTAL_SEED_RESERVATIONS);
+/// Verifies that every population spec's worst-case reserved seed range
+/// (`[seed, seed + max_attempts)`) is pairwise disjoint from every other
+/// spec's. Generic over `specs` so both the real preregistered layout and
+/// tiny test/smoke overrides can be checked with the same logic; callers
+/// that specifically need the real 18-reservation contract should use
+/// `validate_preregistered_seed_reservations` instead.
+fn validate_seed_reservations(specs: &[PopulationSpec]) -> Result<usize, String> {
+    let mut ranges = Vec::with_capacity(specs.len());
 
-    for spec in population_specs() {
+    for spec in specs {
         let label = || {
             format!(
                 "block {} {}",
@@ -1354,13 +1336,6 @@ fn validate_preregistered_seed_reservations() -> Result<usize, String> {
         ranges.push((spec.seed, end_seed, label()));
     }
 
-    if ranges.len() != TOTAL_SEED_RESERVATIONS {
-        return Err(format!(
-            "expected {TOTAL_SEED_RESERVATIONS} seed reservations, received {}",
-            ranges.len()
-        ));
-    }
-
     ranges.sort_by_key(|(start_seed, _, _)| *start_seed);
 
     for pair in ranges.windows(2) {
@@ -1376,6 +1351,18 @@ fn validate_preregistered_seed_reservations() -> Result<usize, String> {
     }
 
     Ok(ranges.len())
+}
+
+fn validate_preregistered_seed_reservations() -> Result<usize, String> {
+    let count = validate_seed_reservations(&population_specs())?;
+
+    if count != TOTAL_SEED_RESERVATIONS {
+        return Err(format!(
+            "expected {TOTAL_SEED_RESERVATIONS} seed reservations, received {count}"
+        ));
+    }
+
+    Ok(count)
 }
 
 fn generate_records_with_limits(
@@ -3474,6 +3461,8 @@ struct Tdi52ExperimentReport {
 fn run_tdi52_pipeline(
     population_specs: &[PopulationSpec],
 ) -> Result<Tdi52ExperimentReport, String> {
+    validate_seed_reservations(population_specs)?;
+
     let mut blocks = Vec::with_capacity(SEED_BLOCK_COUNT);
 
     for seed_block in FROZEN_BLOCK_ORDER {
@@ -3549,23 +3538,32 @@ fn run_tdi52_pipeline(
     })
 }
 
-fn tdi52_print_bootstrap_intervals(label: &str, intervals: Tdi52BootstrapIntervals) {
+fn tdi52_print_bootstrap_intervals(
+    label: &str,
+    horizon: usize,
+    intervals: Tdi52BootstrapIntervals,
+) {
     println!();
     println!("{label}");
 
     print_interval(
-        "  IC 95 % amélioration MSE U6 standardisée",
+        &format!("  IC 95 % amélioration MSE U{horizon} standardisée"),
         intervals.standardized_mse,
     );
 
     print_interval(
-        "  IC 95 % amélioration MSE O6 reconstruite",
+        &format!("  IC 95 % amélioration MSE O{horizon} reconstruite"),
         intervals.reconstructed_mse,
     );
 
     print_interval(
-        "  IC 95 % amélioration MAE O6 reconstruite",
+        &format!("  IC 95 % amélioration MAE O{horizon} reconstruite"),
         intervals.reconstructed_mae,
+    );
+
+    print_interval(
+        &format!("  IC 95 % réduction relative MSE U{horizon} standardisée"),
+        intervals.relative_standardized_mse,
     );
 }
 
@@ -3922,7 +3920,7 @@ fn print_tdi52_population_accounting(blocks: &[BlockPopulations]) {
 
 /// Section 17, items 14-15: every metric and every bootstrap interval
 /// (per block and pooled aggregate) underlying one criterion's verdict.
-fn print_tdi52_aggregate_comparison(label: &str, comparison: &AggregateComparison) {
+fn print_tdi52_aggregate_comparison(label: &str, horizon: usize, comparison: &AggregateComparison) {
     println!();
     println!("=== {label} — métriques et intervalles bootstrap (Section 17, items 14-15) ===");
 
@@ -3962,6 +3960,7 @@ fn print_tdi52_aggregate_comparison(label: &str, comparison: &AggregateCompariso
                 "  bloc {} — intervalles bootstrap appariés",
                 seed_block.label()
             ),
+            horizon,
             block.bootstrap,
         );
     }
@@ -3984,6 +3983,7 @@ fn print_tdi52_aggregate_comparison(label: &str, comparison: &AggregateCompariso
     );
     tdi52_print_bootstrap_intervals(
         "  agrégat — intervalles bootstrap stratifiés",
+        horizon,
         comparison.aggregate_bootstrap,
     );
 }
@@ -4062,30 +4062,38 @@ fn print_tdi52_required_raw_output(report: &Tdi52ExperimentReport) {
         tdi52_print_models(&fit.models, &fit.target_scalers);
     }
 
-    print_tdi52_aggregate_comparison("TDI-5.2A — signal joint", &report.criterion_a_comparison);
+    print_tdi52_aggregate_comparison(
+        "TDI-5.2A — signal joint",
+        PRIMARY_HORIZON,
+        &report.criterion_a_comparison,
+    );
     print_tdi52_aggregate_comparison(
         "TDI-5.2B — signal O2 indépendant",
+        PRIMARY_HORIZON,
         &report.criterion_b_comparison,
     );
     print_tdi52_aggregate_comparison(
         "TDI-5.2C — classification O1 indépendante",
+        PRIMARY_HORIZON,
         &report.criterion_c_comparison,
     );
     print_tdi52_aggregate_comparison(
         "TDI-5.2D — transfert OOD largeur 5",
+        PRIMARY_HORIZON,
         &report.criterion_d_comparisons.0,
     );
     print_tdi52_aggregate_comparison(
         "TDI-5.2D — transfert OOD largeur 6",
+        PRIMARY_HORIZON,
         &report.criterion_d_comparisons.1,
     );
 
     for horizon_comparison in &report.criterion_e_horizon_comparisons {
+        let horizon = TARGET_HORIZONS[horizon_comparison.horizon_index];
+
         print_tdi52_aggregate_comparison(
-            &format!(
-                "TDI-5.2E — trajectoire secondaire U_{}",
-                TARGET_HORIZONS[horizon_comparison.horizon_index]
-            ),
+            &format!("TDI-5.2E — trajectoire secondaire U_{horizon}"),
+            horizon,
             &horizon_comparison.comparison,
         );
     }
@@ -4813,7 +4821,7 @@ fn run_legacy_scaffold_full_experiment() -> Result<(), String> {
         ("OOD principal w5", width_5_bootstrap),
         ("OOD extrême w6", width_6_bootstrap),
     ] {
-        tdi52_print_bootstrap_intervals(label, intervals);
+        tdi52_print_bootstrap_intervals(label, PRIMARY_HORIZON, intervals);
     }
 
     let criterion_a =
@@ -5029,10 +5037,14 @@ mod tests {
 
     #[test]
     fn arithmetic_and_structural_errors_keep_attempt_context() {
-        let context = super::AttemptContext::new(3, 123, 4);
+        // Width 0 degenerates `state_count` to 1, making `ln(states)` the
+        // normalizer's own structural denominator equal to zero — the one
+        // check `normalized_entropy` still performs itself (a width-only
+        // invariant), independent of the `entropy_bits` argument's value.
+        let context = super::AttemptContext::new(0, 123, 4);
 
-        let arithmetic = super::normalized_entropy(f64::INFINITY, context)
-            .expect_err("non-finite normalized entropy is arithmetic failure");
+        let arithmetic = super::normalized_entropy(1.0, context)
+            .expect_err("degenerate width-0 entropy normalizer is arithmetic failure");
 
         assert_eq!(arithmetic.context, context);
         assert_eq!(arithmetic.category, super::FailureCategory::Arithmetic);
@@ -5042,6 +5054,41 @@ mod tests {
 
         assert_eq!(structural.context, context);
         assert_eq!(structural.category, super::FailureCategory::Structural);
+    }
+
+    // These three tests prove the fix for a preregistration audit finding:
+    // `normalized_entropy`/`normalized_reachable`/`transformed_path_count`
+    // used to validate the finiteness of their own return values and
+    // convert a bad one into a fatal `EvaluationError`, which ran before
+    // `analyze_seed`'s own per-candidate `NonFiniteFeature` exclusion check
+    // ever saw the value — making that preregistered graceful-exclusion
+    // category unreachable. Feeding these functions the exact inputs that
+    // used to trigger their internal error now confirms they defer the
+    // decision to the caller instead of intercepting it.
+    #[test]
+    fn normalized_entropy_no_longer_intercepts_non_finite_output_itself() {
+        let context = super::AttemptContext::new(3, 1, 0);
+
+        let normalized = super::normalized_entropy(f64::INFINITY, context)
+            .expect("normalized_entropy must defer non-finite output to the caller");
+
+        assert!(!normalized.is_finite());
+    }
+
+    #[test]
+    fn normalized_reachable_no_longer_intercepts_non_finite_output_itself() {
+        let context = super::AttemptContext::new(3, 1, 0);
+
+        let normalized = super::normalized_reachable(f64::NAN, context)
+            .expect("normalized_reachable must defer non-finite output to the caller");
+
+        assert!(normalized.is_nan());
+    }
+
+    #[test]
+    fn transformed_path_count_is_infallible_and_accepts_non_finite_input() {
+        assert!(super::transformed_path_count(f64::INFINITY).is_infinite());
+        assert!(super::transformed_path_count(f64::NAN).is_nan());
     }
 
     #[test]
@@ -5243,34 +5290,41 @@ mod tests {
 
     #[test]
     fn frozen_tdi52_protocol_hashes_are_unchanged() {
+        // TDI-5.2 "is derived mechanically from the frozen TDI-5.1
+        // evaluator" (see this file's own header comment), so its own
+        // frozen-protocol guard must pin TDI-5.1's files — its immediate
+        // ancestor — not TDI-5's (the grandparent). This mirrors
+        // tdi-continuous-deficit-geometry-v51.rs's own
+        // `frozen_tdi5_protocol_hashes_are_unchanged`, which correctly
+        // pins TDI-5's files for the same reason one generation up.
         let expected_hashes = [
             (
-                ".github/workflows/tdi5-ci.yml",
-                "90b1d45625c8a13bc5dd14d6e98107a6ff9d85cca912b2e883d366a6ad9eed2c",
+                ".github/workflows/tdi51-ci.yml",
+                "e48b6a79a3be41fe16c4659f44237104ee519b503e725b2ae2a0069e1f608221",
             ),
             (
-                "docs/TDI-5-CONTINUOUS-DEFICIT-GEOMETRY-EVALUATOR.sha256",
-                "708dbeab3ad3c509702d1b0f9eb749eb7f11e2be2424d15908560cafda09829a",
+                "docs/TDI-5.1-CONTINUOUS-DEFICIT-GEOMETRY-EVALUATOR.sha256",
+                "7545a5d4f22d76c1f906c3f06f50a3c74e27e0586754f6f776ed01ae597f5c55",
             ),
             (
-                "docs/TDI-5-CONTINUOUS-DEFICIT-GEOMETRY-PREREGISTRATION.md",
-                "8481d730ae5c47506284f67ce7d75586abb1412f617fbd88029106d7c26986ef",
+                "docs/TDI-5.1-CONTINUOUS-DEFICIT-GEOMETRY-PREREGISTRATION.md",
+                "25b65a07b7f248df3e043b9b7f63611c360f60f3d49a600a5612305440131852",
             ),
             (
-                "docs/TDI-5-CONTINUOUS-DEFICIT-GEOMETRY-PREREGISTRATION.sha256",
-                "a674b1cbe9faa19e97bfd790e086b21bd3b4ac904394cce945b2796de6321b9a",
+                "docs/TDI-5.1-CONTINUOUS-DEFICIT-GEOMETRY-PREREGISTRATION.sha256",
+                "1ce298b477216d095454e0081c88ce5ca7b00b673d92b65a3982428e04bb4b3e",
             ),
             (
-                "docs/TDI-5-SCIENTIFIC-CODE.sha256",
-                "a644945cb283af2b168d6f783b5caf9d7694887d386ace2b8f549eb1963c98d0",
+                "docs/TDI-5.1-SCIENTIFIC-CODE.sha256",
+                "906dc938a9cab96299119f4028fbf566b50c7f90eb32d861b7dd79bc265da9ab",
             ),
             (
-                "scripts/reproduce-tdi5.sh",
-                "d06cde6a604f7cba9754c848881a999e680968c56afbf995a52f64ca3eb09a8d",
+                "scripts/reproduce-tdi5.1.sh",
+                "2ae3dea8c36d44e148523d2deb59bbd337714f1b8c576c9ad930c0d0984c2822",
             ),
             (
-                "tdi-bench/src/bin/tdi-continuous-deficit-geometry.rs",
-                "3bfd370944fd48b1c9ef0bd106de51143bbd37c3419fe254d12baee34619532a",
+                "tdi-bench/src/bin/tdi-continuous-deficit-geometry-v51.rs",
+                "d69d42fa31d973603eabd0ded8ffd8ca2f0a4b0b8fcec5f9de42ed8c7ce37444",
             ),
         ];
 
@@ -7845,6 +7899,26 @@ mod tests {
             target_count: 1,
             ..spec
         })
+    }
+
+    // Cheap: `validate_seed_reservations` runs before any generation, so
+    // this returns without ever calling the expensive real analyzer. It
+    // closes a preregistration audit finding — the disjointness check
+    // previously ran only from the `--termination-smoke` path, not from
+    // the pipeline function a future `run_full_experiment` would call
+    // with the real specs.
+    #[test]
+    fn run_tdi52_pipeline_rejects_overlapping_seed_reservations() {
+        let mut specs = tiny_pipeline_specs();
+        specs[1].seed = specs[0].seed;
+
+        let error = super::run_tdi52_pipeline(&specs)
+            .expect_err("overlapping seed reservations must be rejected before generation begins");
+
+        assert!(
+            error.contains("overlap"),
+            "unexpected error message: {error}"
+        );
     }
 
     // `run_tdi52_pipeline` unconditionally exercises the real analyzer
