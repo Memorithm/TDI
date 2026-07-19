@@ -213,6 +213,8 @@ The smoke namespace must never contribute a scientific record. The frozen models
 - The full evaluator must not print final-test metrics until every model in every block has been frozen in memory and its selected configuration printed.
 - TDI-5.3 test seeds are public and may not be reused for TDI-5.4 confirmatory inference.
 
+Full-run stage order is frozen: generate/load all training and validation populations; select configurations; refit and freeze every final model; only then generate/load final-test and OOD populations and evaluate them. On resume, deterministic refitting from verified training/validation chunks occurs before any missing test/OOD chunk is generated.
+
 ## 5. Exclusions and failure separation
 
 The only scientific candidate exclusions are:
@@ -445,7 +447,7 @@ This is explicitly conditional test-set uncertainty. It does not include trainin
 - simultaneous aggregate intervals across the three confirmatory families: Bonferroni familywise 95%, individual confidence 98.333333%, quantiles `1/120` and `119/120`;
 - simultaneous aggregate model-class-interaction intervals across Q-vs-L and T-vs-L: Bonferroni familywise 95%, individual confidence 97.5%, quantiles 0.0125 and 0.9875.
 
-Each interval reports lower, median, and upper values. Absolute MSE improvement, relative MSE improvement, reconstructed-O MSE improvement, reconstructed-O MAE improvement, calibration change, and model-class interaction are all bootstrapped from the shared draws.
+Each interval reports lower, median, and upper values. Absolute MSE improvement, relative MSE improvement, reconstructed-O MSE improvement, reconstructed-O MAE improvement, normalized absolute-bias change, calibration-intercept change, calibration-slope change, and model-class interaction are bootstrapped from the shared draws. Equal-count calibration-bin RMSE and its normalized value remain deterministic point guardrails; they are not recomputed inside bootstrap replicates.
 
 ## 11. Confirmatory criteria
 
@@ -648,7 +650,7 @@ The canonical result is UTF-8 TSV with schema `TDI54_RESULT_V1`. Every row has e
 
 `record_type, scope, block, population, family, layout, horizon, metric, estimate, ci_level, ci_lower, ci_median, ci_upper, status, detail`
 
-Missing dimensions use the literal `NA`; numeric fields use a frozen scientific decimal formatter or `NA`; NaN and infinity are forbidden. Text fields may not contain a tab, carriage return, or newline; structured details use semicolon-separated `key=value` pairs in frozen key order.
+Missing dimensions use the literal `NA`; finite numeric fields use lowercase Rust scientific formatting with exactly 17 digits after the decimal point (`{value:.17e}`), or `NA`; NaN and infinity are forbidden. Text fields may not contain a tab, carriage return, or newline; structured details use semicolon-separated `key=value` pairs in frozen key order.
 
 Rows occur in this order:
 
