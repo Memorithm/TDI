@@ -594,7 +594,9 @@ Each canonical chunk records:
 - every record's candidate seed plus its scientific values in canonical field order, using lowercase 16-digit hexadecimal `f64::to_bits` values for floats;
 - completion status.
 
-Chunks are written to a same-filesystem temporary path, flushed, closed, and atomically renamed. A separate immutable `.sha256` sidecar records the SHA-256 of the completed chunk; the population checkpoint ledger references the ordered `(chunk path, chunk SHA-256)` pairs. The chunk and sidecar are then read-only. No file contains its own hash.
+Chunks are written beneath a same-filesystem `.staging/` subtree, flushed, closed, and atomically renamed to their final path. A separate immutable `.sha256` sidecar records the SHA-256 of the completed chunk; the population checkpoint ledger references the ordered `(chunk path, chunk SHA-256)` pairs. The chunk and sidecar are then read-only. No file contains its own hash.
+
+If interruption leaves a nonempty staging file, resume must not use it as scientific input or silently delete it. The evaluator hashes it, moves it without content change into a read-only `abandoned-partials/` path containing its hash, records that preservation event in operational metadata, and regenerates the still-missing chunk from the last verified completed seed/index. A zero-length staging file is preserved in the same way with the standard empty-file SHA-256. Name collisions in `abandoned-partials/` are fatal unless the existing file is byte-identical. This recognized preservation path is the only exception to refusing unexpected checkpoint files.
 
 ### 13.2 Resume validation
 
@@ -605,7 +607,7 @@ On resume, the evaluator must:
 3. verify every chunk hash and canonical record count;
 4. require chunk indices to be contiguous from zero with no duplicate, gap, or overlap;
 5. reconstruct the exact next accepted index, attempt index, seed, and rejection accounting;
-6. refuse any incompatible, malformed, nonfinite, writable-completed, or unexpected file;
+6. preserve a recognized staging partial exactly as specified above, then refuse any other incompatible, malformed, nonfinite, writable-completed, or unexpected file;
 7. continue only from the first missing chunk.
 
 It must never silently repair, skip, replace, or truncate a checkpoint.
