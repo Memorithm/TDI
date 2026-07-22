@@ -2113,7 +2113,7 @@ fn validate_frozen_block_order(seed_blocks: &[SeedBlockId]) -> Result<(), String
     for (&actual, &expected) in seed_blocks.iter().zip(&FROZEN_BLOCK_ORDER) {
         if actual != expected {
             return Err(format!(
-                "requires deterministic block order A, B, C; found {} where {} was expected",
+                "requires deterministic block order D, E, F; found {} where {} was expected",
                 actual.label(),
                 expected.label()
             ));
