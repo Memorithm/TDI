@@ -59,6 +59,35 @@ However, both models were badly calibrated and produced negative rank
 correlations. This supports a relative signal, but not successful universal
 transfer across system widths.
 
+### TDI-5 series — preregistered confirmatory battery (branching systems)
+
+The TDI-5 series is a chain of independently preregistered,
+SHA-256-frozen, confirmation-gated experiments on the branching systems of
+TDI-2. Each experiment freezes its design, evaluator, reproduction script,
+CI workflow and bounded tests before a single, deliberate, human-only
+`--full` run; the full frozen chain (TDI-5.1 → TDI-5.5) is verified before
+any generation. Computation is exact-rational and deterministic, and results
+are reproduced bit-for-bit on an independent ARM64 host. Full per-experiment
+reports are in [`docs/`](docs/).
+
+- **TDI-5.1** — continuous deficit geometry: the exact target geometry
+  `U_h = -log2(1 - O_h)` over the early-overlap predictors `O_1, O_2`.
+- **TDI-5.2 / 5.3** — independent overlap ablation and its independent
+  replication: the joint `{O_1, O_2}` signal, and `O_2`'s independent
+  contribution beyond a structural/entropic baseline, are confirmed;
+  out-of-distribution transfer across widths is not.
+- **TDI-5.4** — nonlinear sufficiency and horizon asymmetry: `O_1`'s
+  *incremental nonlinear* value over `O_2` is real at short horizons
+  (Beneficial at U₃) but decays monotonically into practical equivalence by
+  mid-horizon — a horizon-localized effect.
+- **TDI-5.5** — the baseline challenge: within the exact scope, `{O_1, O_2}`
+  carry predictive signal **beyond an exact contraction descriptor** (the
+  Dobrushin coefficient and mean pairwise total variation) **and beyond a
+  naive temporal-persistence competitor**, Beneficial at **every** horizon
+  U₃…U₈ with no redundancy horizon. The decisive test against *non-exact*
+  contraction descriptors (spectral gap, mixing time) is deferred to a
+  future track.
+
 ## Current conclusion
 
 Within the preregistered width-3 population, early
@@ -111,6 +140,21 @@ cargo clippy --workspace --all-targets -- -D warnings
 ./scripts/reproduce-tdi2.sh
 ```
 
+## Reproduce the TDI-5 series
+
+The TDI-5 confirmatory runs are gated behind an explicit, exact human
+confirmation token and are a deliberate one-time action; no CI workflow ever
+supplies the token. Each experiment has its own script and frozen
+preregistration, e.g.:
+
+```bash
+TDI55_CONFIRM_FULL_RUN=I_ACCEPT_THE_TDI55_FREEZE_RULE \
+  bash scripts/reproduce-tdi5.5.sh
+```
+
+See [`docs/`](docs/) for every preregistration and result report, and
+`scripts/reproduce-tdi5.*.sh` for the other experiments.
+
 ## Validated release
 
 `tdi-2-continuous-v0.1.0`
@@ -138,5 +182,11 @@ Reference TDI-2 output:
 
 ## License
 
-No license has yet been selected. Normal copyright restrictions apply until
-a license is added.
+TDI is **dual-licensed** (see [`LICENSING.md`](LICENSING.md)):
+
+- noncommercial and personal use is free under the
+  [PolyForm Noncommercial License 1.0.0](LICENSE.md);
+- commercial use requires a separate commercial license from the copyright
+  holder (Tarek Zekriti, zekrititarek@gmail.com).
+
+Copyright 2026 Tarek Zekriti.
