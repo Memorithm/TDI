@@ -937,6 +937,23 @@ fn ratio_value(ratio: &ExactRatio) -> f64 {
     ratio.as_f64()
 }
 
+/// Exact total variation `1 - overlap`, formed as the rational
+/// `(denominator - numerator) / denominator` and rounded to `f64` in a
+/// single `as_f64` step, so the descriptor is the exact rational converted
+/// to `f64` — not `1.0 - overlap.as_f64()`, which would round twice and
+/// deviate from the overlap up to one ULP. Every overlap this experiment
+/// produces (width <= 4) has `u128` components; the deterministic
+/// `1.0 - as_f64` form is retained only as an unreachable fallback rather
+/// than risking a panic on a hypothetical wider kernel.
+fn exact_total_variation(overlap: &ExactRatio) -> f64 {
+    match overlap.components_u128() {
+        Some((numerator, denominator)) => ExactRatio::new(denominator - numerator, denominator)
+            .map(|total_variation| total_variation.as_f64())
+            .unwrap_or_else(|| 1.0 - ratio_value(overlap)),
+        None => 1.0 - ratio_value(overlap),
+    }
+}
+
 /// Exact contraction descriptors of the one-step Noop kernel (TDI-5.5
 /// Section 5): the Dobrushin coefficient `delta = max_{i<j} TV(P_i, P_j)`
 /// and the mean pairwise total variation `delta_bar`. Each `P_s` is the
@@ -1018,7 +1035,7 @@ fn contraction_descriptors(
         }
     }
 
-    let dobrushin = 1.0 - ratio_value(&min_overlap);
+    let dobrushin = exact_total_variation(&min_overlap);
 
     let mean_total_variation = if pair_count == 0 {
         // Only possible with a single state; width >= 3 guarantees pairs.
@@ -1032,7 +1049,7 @@ fn contraction_descriptors(
             )
         })?;
 
-        1.0 - ratio_value(&mean_overlap)
+        exact_total_variation(&mean_overlap)
     };
 
     Ok([dobrushin, mean_total_variation])
@@ -1434,7 +1451,7 @@ fn preregistered_generation_limits(
             return Err(EvaluationError::new(
                 context,
                 FailureCategory::UnsupportedWidth,
-                format!("width {width} is not part of the TDI-5.1 preregistered populations"),
+                format!("width {width} is not part of the TDI-5.5 preregistered populations"),
             ));
         }
     };
@@ -1459,7 +1476,7 @@ fn preregistered_generation_limits(
 /// (`[seed, seed + max_attempts)`) is pairwise disjoint from every other
 /// spec's. Generic over `specs` so both the real preregistered layout and
 /// tiny test/smoke overrides can be checked with the same logic; callers
-/// that specifically need the real 18-reservation contract should use
+/// that specifically need the real 12-reservation contract should use
 /// `validate_preregistered_seed_reservations` instead.
 fn validate_seed_reservations(specs: &[PopulationSpec]) -> Result<usize, String> {
     let mut ranges = Vec::with_capacity(specs.len());
@@ -1730,7 +1747,7 @@ impl BlockPopulations {
 
     /// Every population's full generation report, in `PopulationKind::ALL`
     /// order. Required-raw-output printing walks this instead of the four
-    /// named fields directly. TDI-5.4 has no OOD populations (Section 6).
+    /// named fields directly. TDI-5.5 has no OOD populations (Section 8).
     fn reports(&self) -> [&PopulationGenerationReport; POPULATIONS_PER_SEED_BLOCK] {
         [
             &self.training_width_3,
