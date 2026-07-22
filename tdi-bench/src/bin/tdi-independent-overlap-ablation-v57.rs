@@ -1,38 +1,38 @@
-//! TDI-5.7 spectral-challenge evaluator (exact spectral-moment confound).
+//! TDI-5.7 generator-robustness evaluator (does the {O1,O2}-beyond-{contraction
+//! + spectral} signal survive a family of exact generators?).
 //!
-//! This file is derived from the frozen TDI-5.5 evaluator
-//! (`tdi-independent-overlap-ablation-v55.rs`), itself derived from the frozen
-//! TDI-5.4, TDI-5.3 and TDI-5.2 evaluators. TDI-5.1, TDI-5.2, TDI-5.3, TDI-5.4
-//! and TDI-5.5 remain frozen and untouched. TDI-5.7 reuses their frozen
-//! generator, exact candidate analysis, exact overlap/total-variation
-//! primitives, the two exact contraction descriptors (delta, delta_bar), ridge
-//! machinery, deterministic bootstrap engine and the four-way
+//! This file is derived from the frozen TDI-5.6 evaluator
+//! (`tdi-independent-overlap-ablation-v56.rs`), itself derived from the frozen
+//! TDI-5.5 … TDI-5.2 evaluators. TDI-5.1 … TDI-5.6 remain frozen and untouched.
+//! TDI-5.7 reuses their frozen exact candidate analysis, exact
+//! overlap/total-variation primitives, the two exact contraction descriptors
+//! (delta, delta_bar), the two exact spectral moments (s2, s3), the layouts
+//! CK/SK/SKT, ridge machinery, deterministic bootstrap engine and the four-way
 //! Beneficial/Equivalent/Harmful/Inconclusive classification logic without
 //! altering any of them.
 //!
 //! TDI-5.7 makes exactly the scientific additions its preregistration
 //! (`docs/TDI-5.7-GENERATOR-ROBUSTNESS-PREREGISTRATION.md`) declares and
-//! nothing else:
+//! nothing else — it changes only the *generator*, holding the entire TDI-5.6
+//! measurement apparatus fixed:
 //!
-//!   * two *exact* spectral moments of the one-step Noop kernel — the second
-//!     moment `s2 = trace(P^2)` and the third moment `s3 = trace(P^3)`,
-//!     computed per candidate system as closed-walk sums of unit fractions
-//!     (`1/(d_i d_j)` and `1/(d_i d_j d_k)`) accumulated with the inherited
-//!     arbitrary-precision `ExactRatio` addition and rounded once — and two
-//!     new linear layouts, `SK` (baseline + delta + delta_bar + s2 + s3) and
-//!     `SKT` (SK + O1 + O2). `SK` minus `CK` isolates the spectral moments'
-//!     marginal value beyond contraction; `SKT` minus `SK` isolates the
-//!     overlaps' marginal value *after* both the contraction descriptors and
-//!     the spectral moments are present;
-//!   * three fresh, independent seed blocks J/K/L, disjoint from the TDI-5.5
-//!     blocks G/H/I, with fresh bootstrap seeds;
-//!   * the dense target-horizon grid U3..U8 (inherited from TDI-5.5); no OOD
-//!     populations; no persistence competitor (dropped — settled by TDI-5.5B);
-//!   * criterion TDI-5.7A (SKT vs SK at the focal horizons U3 and U6),
-//!     criterion TDI-5.7B (SK vs CK at U3 and U6, the spectral moments'
-//!     marginal value beyond contraction), and criterion TDI-5.7C (the
-//!     SKT-vs-SK relative-MSE reduction across the dense grid plus a
-//!     decay-law / redundancy-horizon summary).
+//!   * a family of four deterministic, exact successor-mask generation rules —
+//!     `F0Base` (the inherited uniform generator), `F1Sparse` (out-degree
+//!     1..2), `F2Dense` (all states minus 0..1 excluded), `F3Local`
+//!     (Hamming-<=1 neighbourhood) — each assembled into a system by the
+//!     unchanged frozen `build_system`, each a deterministic function of the
+//!     candidate seed via the inherited `splitmix64` chain, and each
+//!     guaranteeing a non-empty successor set (a total, exact Noop kernel);
+//!   * 48 fresh, independent seed reservations (4 families x 3 seed blocks x 4
+//!     populations, 480,000 accepted records), disjoint from the TDI-5.6 blocks
+//!     J/K/L and all earlier blocks, with fresh per-block and per-family
+//!     bootstrap seeds;
+//!   * criterion TDI-5.7A (replication: SKT vs SK classifies Beneficial at the
+//!     focal horizons U3 and U6 for every family), TDI-5.7B (across-family
+//!     effect-size heterogeneity), TDI-5.7C (F0->F1 transfer, descriptive) and
+//!     TDI-5.7D (per-family exact-descriptor drift, descriptive); per-family
+//!     per-horizon SKT-vs-SK reductions across the dense grid U3..U8 are
+//!     reported.
 //!
 //! The full run is gated behind an explicit, exact human confirmation
 //! environment variable (see `run_full_experiment` and
@@ -3390,8 +3390,11 @@ struct FamilyReport {
     family: GeneratorFamily,
     blocks: Vec<BlockPopulations>,
     aggregate_fit: AggregateModelFit,
-    /// SKT-vs-SK comparison at each focal horizon (FOCAL_HORIZONS order).
-    focal: Vec<HorizonComparison>,
+    /// SKT-vs-SK comparison at every grid horizon H = {3..8} (TARGET_HORIZONS
+    /// order). The prereg reports per-family per-horizon reductions across the
+    /// grid (Sections 12, 17); the focal horizons U3/U6 that drive criteria
+    /// 5.7A/5.7B are the entries at `focal_horizon_indices()`.
+    grid: Vec<HorizonComparison>,
     /// Holdout means of [delta, delta_bar, s2, s3] on this family's holdout.
     descriptor_means: [f64; DESCRIPTOR_MEAN_COUNT],
 }
@@ -3527,13 +3530,13 @@ fn run_family_pipeline(
     let combined_holdout_refs: [&[Record]; SEED_BLOCK_COUNT] =
         std::array::from_fn(|index| combined_holdouts[index].as_slice());
 
-    // SKT (challenger) vs SK (baseline) at the focal horizons: the overlaps'
-    // marginal value beyond contraction and the exact spectral moments, within
-    // this family (TDI-5.7A / 5.7B).
-    let focal_indices = focal_horizon_indices();
-    let mut focal = Vec::with_capacity(FOCAL_HORIZON_COUNT);
-    for &horizon_index in &focal_indices {
-        focal.push(evaluate_horizon_comparison(
+    // SKT (challenger) vs SK (baseline) at EVERY grid horizon H = {3..8}: the
+    // per-family per-horizon reductions the prereg reports (Sections 12, 17).
+    // The focal horizons U3/U6 that drive criteria 5.7A/5.7B are the grid
+    // entries at focal_horizon_indices().
+    let mut grid = Vec::with_capacity(TARGET_HORIZON_COUNT);
+    for horizon_index in 0..TARGET_HORIZON_COUNT {
+        grid.push(evaluate_horizon_comparison(
             horizon_index,
             &aggregate_fit,
             combined_holdout_refs,
@@ -3548,7 +3551,7 @@ fn run_family_pipeline(
         family,
         blocks,
         aggregate_fit,
-        focal,
+        grid,
         descriptor_means,
     })
 }
@@ -3570,11 +3573,18 @@ fn run_tdi57_pipeline(
     }
 
     // TDI-5.7A — replication: SKT-vs-SK Beneficial at U3 and U6 for every family.
+    // The focal comparisons are the grid entries at focal_horizon_indices()
+    // (U3 -> grid[0], U6 -> grid[3]).
+    let focal_indices = focal_horizon_indices();
     let mut per_family_focal = Vec::with_capacity(GENERATOR_FAMILY_COUNT);
     let mut non_replications = Vec::new();
     for family_report in &families {
         let focal_classifications: [CriterionCClassification; FOCAL_HORIZON_COUNT] =
-            std::array::from_fn(|slot| family_report.focal[slot].result.classification);
+            std::array::from_fn(|slot| {
+                family_report.grid[focal_indices[slot]]
+                    .result
+                    .classification
+            });
 
         for (slot, &classification) in focal_classifications.iter().enumerate() {
             if classification != CriterionCClassification::Beneficial {
@@ -3595,7 +3605,9 @@ fn run_tdi57_pipeline(
     for (slot, &horizon) in FOCAL_HORIZONS.iter().enumerate() {
         let reductions = families
             .iter()
-            .map(|family_report| family_report.focal[slot].aggregate_relative_reduction)
+            .map(|family_report| {
+                family_report.grid[focal_indices[slot]].aggregate_relative_reduction
+            })
             .collect::<Vec<_>>();
 
         let minimum = reductions.iter().copied().fold(f64::INFINITY, f64::min);
@@ -3795,11 +3807,11 @@ fn tdi52_sha256_of_repo_file(relative_path: &str) -> String {
 }
 
 /// Provenance and integrity (TDI-5.7 preregistration Section 17, items
-/// 1-5): git commit, compiler/Cargo versions, and the SHA-256 of the v56
+/// 1-5): git commit, compiler/Cargo versions, and the SHA-256 of the v57
 /// evaluator, the TDI-5.7 preregistration and the TDI-5.7 scientific
-/// manifest — plus the frozen TDI-5.5, TDI-5.4, TDI-5.3 and TDI-5.2
-/// ancestors' own identities, read live and printed for provenance
-/// (Section 1).
+/// manifest — plus the frozen TDI-5.6, TDI-5.5, TDI-5.4, TDI-5.3, TDI-5.2
+/// and TDI-5.1 ancestors' own identities, read live and printed for
+/// provenance (Section 1).
 fn print_tdi52_provenance() {
     println!();
     println!("=== PROVENANCE ET INTÉGRITÉ (Section 17) ===");
@@ -3817,7 +3829,7 @@ fn print_tdi52_provenance() {
     );
     println!(
         "évaluateur TDI-5.7 SHA-256      : {}",
-        tdi52_sha256_of_repo_file("tdi-bench/src/bin/tdi-independent-overlap-ablation-v56.rs")
+        tdi52_sha256_of_repo_file("tdi-bench/src/bin/tdi-independent-overlap-ablation-v57.rs")
     );
     println!(
         "préenregistrement TDI-5.7 SHA-256 : {}",
@@ -3826,6 +3838,20 @@ fn print_tdi52_provenance() {
     println!(
         "manifeste scientifique TDI-5.7 SHA-256 : {}",
         tdi52_sha256_of_repo_file("docs/TDI-5.7-SCIENTIFIC-CODE.sha256")
+    );
+    println!();
+    println!("--- provenance TDI-5.6 (ancêtre gelé, inchangé) ---");
+    println!(
+        "évaluateur TDI-5.6 SHA-256      : {}",
+        tdi52_sha256_of_repo_file("tdi-bench/src/bin/tdi-independent-overlap-ablation-v56.rs")
+    );
+    println!(
+        "préenregistrement TDI-5.6 SHA-256 : {}",
+        tdi52_sha256_of_repo_file("docs/TDI-5.6-EXACT-SPECTRAL-CHALLENGE-PREREGISTRATION.md")
+    );
+    println!(
+        "manifeste scientifique TDI-5.6 SHA-256 : {}",
+        tdi52_sha256_of_repo_file("docs/TDI-5.6-SCIENTIFIC-CODE.sha256")
     );
     println!();
     println!("--- provenance TDI-5.5 (ancêtre gelé, inchangé) ---");
@@ -3882,6 +3908,20 @@ fn print_tdi52_provenance() {
     println!(
         "manifeste scientifique TDI-5.2 SHA-256 : {}",
         tdi52_sha256_of_repo_file("docs/TDI-5.2-SCIENTIFIC-CODE.sha256")
+    );
+    println!();
+    println!("--- provenance TDI-5.1 (ancêtre gelé, inchangé) ---");
+    println!(
+        "évaluateur TDI-5.1 SHA-256      : {}",
+        tdi52_sha256_of_repo_file("tdi-bench/src/bin/tdi-continuous-deficit-geometry-v51.rs")
+    );
+    println!(
+        "préenregistrement TDI-5.1 SHA-256 : {}",
+        tdi52_sha256_of_repo_file("docs/TDI-5.1-CONTINUOUS-DEFICIT-GEOMETRY-PREREGISTRATION.md")
+    );
+    println!(
+        "manifeste scientifique TDI-5.1 SHA-256 : {}",
+        tdi52_sha256_of_repo_file("docs/TDI-5.1-SCIENTIFIC-CODE.sha256")
     );
 }
 
@@ -4080,12 +4120,13 @@ fn print_tdi52_criteria_conditions(report: &Tdi57ExperimentReport) {
     println!();
     println!("=== CONDITIONS PAR CRITÈRE — niveau bloc et agrégat (Section 17) ===");
 
-    // TDI-5.7A/B — per-family SKT-vs-SK at each focal horizon.
+    // TDI-5.7A/B — per-family SKT-vs-SK at every grid horizon H = {3..8}. The
+    // criteria classify at the focal U3/U6; all horizons are reported (§12/§17).
     for family_report in &report.families {
-        for comparison in &family_report.focal {
+        for comparison in &family_report.grid {
             println!();
             println!(
-                "TDI-5.7A — SKT vs SK — famille {} à U_{} : {:#?}",
+                "TDI-5.7 (grille) — SKT vs SK — famille {} à U_{} : {:#?}",
                 family_report.family.label(),
                 comparison.horizon,
                 comparison.result
@@ -4147,6 +4188,22 @@ fn print_tdi52_final_verdicts(report: &Tdi57ExperimentReport) {
             "TDI-5.7A — non-réplication localisée : famille {} à U{horizon}",
             family.label()
         );
+    }
+
+    // TDI-5.7 (grille) — per-family per-horizon SKT-vs-SK reductions across the
+    // dense grid H = {3..8} (reported per Section 12; the confirmatory criteria
+    // classify only at the focal horizons U3/U6).
+    for family_report in &report.families {
+        for comparison in &family_report.grid {
+            println!(
+                "TDI-5.7 (grille) — famille {} à U{} : réduction relative MSE = {:.6}, \
+                 classification = {}",
+                family_report.family.label(),
+                comparison.horizon,
+                comparison.aggregate_relative_reduction,
+                comparison.result.classification.label()
+            );
+        }
     }
 
     // TDI-5.7B — effect-size heterogeneity across families, per focal horizon.
@@ -4226,12 +4283,13 @@ fn print_tdi52_required_raw_output(report: &Tdi57ExperimentReport) {
         }
     }
 
-    // Per-family per-horizon SKT-vs-SK comparisons (metrics + bootstrap intervals).
+    // Per-family per-horizon SKT-vs-SK comparisons across the grid H = {3..8}
+    // (metrics + bootstrap intervals); Sections 12, 17.
     for family_report in &report.families {
-        for comparison in &family_report.focal {
+        for comparison in &family_report.grid {
             print_tdi52_aggregate_comparison(
                 &format!(
-                    "TDI-5.7A — SKT vs SK — famille {} à U_{}",
+                    "TDI-5.7 (grille) — SKT vs SK — famille {} à U_{}",
                     family_report.family.label(),
                     comparison.horizon
                 ),
@@ -4449,12 +4507,13 @@ fn run_termination_smoke() -> Result<(), String> {
             .upper
     );
     println!(
-        "identity smoke 5.7A          : classification={}",
+        "identity smoke SKT vs SK     : classification={}",
         spectral_focal.result.classification.label()
     );
 
-    // Exercise criterion TDI-5.7B (SK vs CK, the spectral moments' marginal
-    // value beyond contraction) at the primary horizon.
+    // Exercise the four-way classifier on a CK-vs-SK comparison (the spectral
+    // moments' marginal value beyond contraction) — a smoke sanity check only;
+    // TDI-5.7 itself has no SK-vs-CK criterion (that was the frozen TDI-5.6B).
     let marginal_spectral_focal = evaluate_horizon_comparison(
         primary_horizon_index(),
         &aggregate_fit,
@@ -4464,7 +4523,7 @@ fn run_termination_smoke() -> Result<(), String> {
     )?;
 
     println!(
-        "identity smoke 5.7B          : classification={}",
+        "identity smoke CK vs SK      : classification={}",
         marginal_spectral_focal.result.classification.label()
     );
 
@@ -4523,7 +4582,7 @@ fn tdi57_full_run_confirmed(value: Option<&str>) -> bool {
 
 fn tdi57_usage_error() -> String {
     format!(
-        "usage: tdi-independent-overlap-ablation-v56 --termination-smoke|--preflight|--full\n\
+        "usage: tdi-independent-overlap-ablation-v57 --termination-smoke|--preflight|--full\n\
          a bare (no-argument) invocation does not start the experiment; the \
          real run additionally requires the exact environment variable \
          {TDI57_FULL_RUN_CONFIRMATION_VAR}={TDI57_FULL_RUN_CONFIRMATION_VALUE}"
