@@ -1,13 +1,14 @@
 # TDI-5.4 — Nonlinear Sufficiency and Horizon-Invariance of the O₁/O₂ Asymmetry
 
-## Status
+## Preregistration
 
-**DRAFT — NOT YET FROZEN. FOR REVIEW.**
-
-This document is a design draft for review. It is not frozen, not hashed,
-and no evaluator, reproduction script, CI workflow, or full run may be
-built or executed against it until it is reviewed, finalized, and frozen
-per Section 18. Nothing in this draft authorizes a real experiment run.
+This document is the frozen preregistration for TDI-5.4. Once its SHA-256
+manifest, the v54 evaluator, the reproduction script, the CI workflow and
+the bounded tests are committed, this design is frozen under the Section 19
+freeze rule: no scientific constant, seed block, nonlinear basis, or
+criterion may change without a new experiment identifier. Freezing the
+design does not authorize a run; the real experiment may begin only as the
+deliberate one-time human action described in Section 14.
 
 ## 1. Experimental status and provenance
 
