@@ -46,8 +46,8 @@ use tdi_core::{
 
 const OBSERVATION_HORIZON: usize = 2;
 
-// Dense target-horizon grid (TDI-5.6 Section 3 adds U7 to the TDI-5.4 grid),
-// so the overlaps' marginal value is sampled at every integer horizon 3..=8.
+// Dense target-horizon grid, inherited unchanged from TDI-5.5 (Section 3), so
+// the overlaps' marginal value is sampled at every integer horizon 3..=8.
 const TARGET_HORIZONS: [usize; 6] = [3, 4, 5, 6, 7, 8];
 const TARGET_HORIZON_COUNT: usize = TARGET_HORIZONS.len();
 const PRIMARY_HORIZON: usize = 6;
@@ -118,7 +118,7 @@ const MODEL_LAYOUT_COUNT: usize = 8;
 const RIDGE_LAMBDA: f64 = 1.0;
 const BOOTSTRAP_REPLICATES: usize = 4_000;
 // Fresh stratified-aggregate bootstrap seed (TDI-5.6 Section 10), disjoint
-// from every TDI-5.2/5.3/5.4 bootstrap seed.
+// from every TDI-5.2/5.3/5.4/5.5 bootstrap seed.
 const AGGREGATE_BOOTSTRAP_SEED: u64 = 0x5444_4935_3600_4747;
 
 const MAX_SUPPORTED_WIDTH: u8 = 6;
