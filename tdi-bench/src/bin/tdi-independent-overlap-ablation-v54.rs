@@ -4358,6 +4358,38 @@ mod tests {
         );
     }
 
+    // --- Reproduction script contract (Section 17) ---
+
+    #[test]
+    fn reproduction_script_invokes_full_and_requires_the_exact_token() {
+        let script = read_repo_file("scripts/reproduce-tdi5.4.sh");
+
+        assert!(
+            script.contains("\"$BINARY_PATH\" --full 2>&1 | tee"),
+            "the script must invoke the binary with --full, capturing combined output"
+        );
+        assert!(
+            !script.contains("\"$BINARY_PATH\" 2>&1 | tee"),
+            "the script must not invoke the binary without --full"
+        );
+        assert!(script.contains(TDI54_FULL_RUN_CONFIRMATION_VAR));
+        assert!(script.contains(TDI54_FULL_RUN_CONFIRMATION_VALUE));
+        assert!(script.contains("require_full_run_confirmation"));
+    }
+
+    #[test]
+    fn reproduction_script_refuses_to_overwrite_an_existing_result_and_verifies_the_ancestors() {
+        let script = read_repo_file("scripts/reproduce-tdi5.4.sh");
+
+        assert!(script.contains("refuse_existing_output"));
+        assert!(script.contains("already exists"));
+        assert!(script.contains("refusing to overwrite"));
+        // The reproduction must verify the full frozen chain before running.
+        assert!(script.contains("FROZEN_TDI51_"));
+        assert!(script.contains("FROZEN_TDI52_"));
+        assert!(script.contains("FROZEN_TDI53_"));
+    }
+
     // --- Frozen ancestors must never change under TDI-5.4 ---
 
     #[test]
