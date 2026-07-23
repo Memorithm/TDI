@@ -1,42 +1,54 @@
-//! TDI-5.6 spectral-challenge evaluator (exact spectral-moment confound).
+//! TDI-6.1 literal spectral-gap / mixing-time evaluator — the FIRST TDI-6
+//! experiment and the first to relax bit-exactness.
 //!
-//! This file is derived from the frozen TDI-5.5 evaluator
-//! (`tdi-independent-overlap-ablation-v55.rs`), itself derived from the frozen
-//! TDI-5.4, TDI-5.3 and TDI-5.2 evaluators. TDI-5.1, TDI-5.2, TDI-5.3, TDI-5.4
-//! and TDI-5.5 remain frozen and untouched. TDI-5.6 reuses their frozen
+//! This file is derived from the frozen TDI-5.6 evaluator
+//! (`tdi-independent-overlap-ablation-v56.rs`), itself in the frozen line
+//! TDI-5.2 → TDI-5.5. TDI-5.1 … TDI-5.7 remain frozen and untouched; the full
+//! chain is verified at runtime and in CI. TDI-6.1 reuses their frozen
 //! generator, exact candidate analysis, exact overlap/total-variation
-//! primitives, the two exact contraction descriptors (delta, delta_bar), ridge
-//! machinery, deterministic bootstrap engine and the four-way
+//! primitives, the two exact contraction descriptors (delta, delta_bar), the
+//! two exact spectral moments (s2, s3), ridge machinery, deterministic
+//! bootstrap engine and the four-way
 //! Beneficial/Equivalent/Harmful/Inconclusive classification logic without
 //! altering any of them.
 //!
-//! TDI-5.6 makes exactly the scientific additions its preregistration
-//! (`docs/TDI-5.6-EXACT-SPECTRAL-CHALLENGE-PREREGISTRATION.md`) declares and
+//! TDI-6.1 makes exactly the scientific additions its preregistration
+//! (`docs/TDI-6.1-SPECTRAL-GAP-MIXING-TIME-PREREGISTRATION.md`) declares and
 //! nothing else:
 //!
-//!   * two *exact* spectral moments of the one-step Noop kernel — the second
-//!     moment `s2 = trace(P^2)` and the third moment `s3 = trace(P^3)`,
-//!     computed per candidate system as closed-walk sums of unit fractions
-//!     (`1/(d_i d_j)` and `1/(d_i d_j d_k)`) accumulated with the inherited
-//!     arbitrary-precision `ExactRatio` addition and rounded once — and two
-//!     new linear layouts, `SK` (baseline + delta + delta_bar + s2 + s3) and
-//!     `SKT` (SK + O1 + O2). `SK` minus `CK` isolates the spectral moments'
-//!     marginal value beyond contraction; `SKT` minus `SK` isolates the
-//!     overlaps' marginal value *after* both the contraction descriptors and
-//!     the spectral moments are present;
-//!   * three fresh, independent seed blocks J/K/L, disjoint from the TDI-5.5
-//!     blocks G/H/I, with fresh bootstrap seeds;
-//!   * the dense target-horizon grid U3..U8 (inherited from TDI-5.5); no OOD
-//!     populations; no persistence competitor (dropped — settled by TDI-5.5B);
-//!   * criterion TDI-5.6A (SKT vs SK at the focal horizons U3 and U6),
-//!     criterion TDI-5.6B (SK vs CK at U3 and U6, the spectral moments'
-//!     marginal value beyond contraction), and criterion TDI-5.6C (the
-//!     SKT-vs-SK relative-MSE reduction across the dense grid plus a
-//!     decay-law / redundancy-horizon summary).
+//!   * two *non-exact* literal spectral descriptors of the one-step Noop
+//!     kernel `P` — the literal spectral gap `g = 1 - |λ2|` and the ε-mixing
+//!     time `τ_ε` (reported as `τ_ε / T_max`) — the ONLY non-exact quantities
+//!     in the experiment. `|λ2|` comes from a dependency-free complex shifted-QR
+//!     eigensolver (Hessenberg reduction + Givens rotations); `τ_ε` from direct
+//!     `P^t` iteration to the stationary distribution. Both are computed in the
+//!     declared single-threaded, fixed-operation-order f64 regime (Section 12)
+//!     and cross-validated by three independent methods (Section 7);
+//!   * two new linear layouts, `GK` (SK + g + τ_ε) and `GKT` (GK + O1 + O2).
+//!     `GK` minus `SK` isolates the literal spectral descriptors' marginal
+//!     value beyond the exact moments; `GKT` minus `GK` isolates the overlaps'
+//!     marginal value *after* contraction, the exact moments AND the literal
+//!     spectral gap + mixing time are present;
+//!   * three fresh, independent seed blocks M/N/O, disjoint from every prior
+//!     block (population base seeds start at 3.0e9), with fresh `TDI6`-prefixed
+//!     bootstrap seeds;
+//!   * the dense target-horizon grid U3..U8 (inherited); a single base
+//!     generator (the generator question is settled by TDI-5.7); no OOD
+//!     populations;
+//!   * criterion TDI-6.1A (GKT vs GK at the focal horizons U3 and U6 — the
+//!     decisive literal-spectral control, primary), criterion TDI-6.1B (GK vs
+//!     SK at U3 and U6, the literal spectral descriptors' marginal value beyond
+//!     the exact moments), and criterion TDI-6.1C (the GKT-vs-GK relative-MSE
+//!     reduction across the dense grid plus a decay-law / redundancy-horizon
+//!     summary).
+//!
+//! Because the four-way classifier's margin is ±2% relative MSE — many orders
+//! of magnitude larger than the f64 eigensolver tolerance — the criterion
+//! classifications are robust to the last-digit variation of the descriptors.
 //!
 //! The full run is gated behind an explicit, exact human confirmation
 //! environment variable (see `run_full_experiment` and
-//! `tdi56_full_run_confirmed`). No commit, test or CI run supplies that
+//! `tdi61_full_run_confirmed`). No commit, test or CI run supplies that
 //! token.
 
 use tdi_core::{
@@ -86,6 +98,12 @@ const CONTRACTION_FEATURE_COUNT: usize = 2;
 // s2 = trace(P^2) and s3 = trace(P^3), computed per candidate system as
 // closed-walk sums of unit fractions with a single final rounding.
 const SPECTRAL_FEATURE_COUNT: usize = 2;
+// Non-exact literal spectral descriptors of the one-step Noop kernel (TDI-6.1
+// Section 6): the literal spectral gap g = 1 - |λ2| and the normalized
+// ε-mixing time τ_ε / T_max. These are the ONLY non-exact features; they are
+// computed in f64 under the Section 12 discipline and cross-validated by the
+// three independent methods of Section 7.
+const LITERAL_SPECTRAL_FEATURE_COUNT: usize = 2;
 
 // Linear layouts, inherited from TDI-5.2/5.3/5.4/5.5. In TDI-5.6 they are
 // exploratory only (Section 6) and determine no confirmatory criterion.
@@ -95,31 +113,41 @@ const B2_FEATURE_COUNT: usize = BASELINE_FEATURE_COUNT + 1;
 const B12_FEATURE_COUNT: usize = BASELINE_FEATURE_COUNT + EARLY_OVERLAP_FEATURE_COUNT;
 const BD_FEATURE_COUNT: usize = BASELINE_FEATURE_COUNT + 1;
 
-// Confirmatory linear layouts (Section 6). CK (inherited from TDI-5.5) adds
-// the two exact contraction descriptors to the baseline; SK additionally adds
-// the two exact spectral moments; SKT additionally adds the two early
-// overlaps. SK minus CK isolates the spectral moments' marginal value beyond
-// contraction (criterion 5.6B); SKT minus SK isolates the overlaps' marginal
-// value *after* both the contraction descriptors and the spectral moments are
-// already present (criteria 5.6A, 5.6C).
-//   CK  = baseline + delta + delta_bar                          (13 + 2 = 15)
-//   SK  = baseline + delta + delta_bar + s2 + s3                (13 + 4 = 17)
-//   SKT = baseline + delta + delta_bar + s2 + s3 + O1 + O2      (13 + 6 = 19)
+// Confirmatory linear layouts (Section 8). CK (inherited from TDI-5.5) adds the
+// two exact contraction descriptors to the baseline; SK additionally adds the
+// two exact spectral moments (the inherited exact baseline); GK additionally
+// adds the two NON-EXACT literal spectral descriptors (g, τ_ε); GKT
+// additionally adds the two early overlaps. GK minus SK isolates the literal
+// spectral descriptors' marginal value beyond the exact moments (criterion
+// 6.1B); GKT minus GK isolates the overlaps' marginal value *after* the
+// contraction descriptors, the exact spectral moments, AND the literal spectral
+// gap + mixing time are already present (criteria 6.1A, 6.1C). CK is carried
+// forward from the ancestors for continuity of reporting and drives no 6.1
+// criterion.
+//   CK  = baseline + δ + δ̄                                  (13 + 2  = 15)
+//   SK  = baseline + δ + δ̄ + s2 + s3                        (13 + 4  = 17)
+//   GK  = baseline + δ + δ̄ + s2 + s3 + g + τ                (13 + 6  = 19)
+//   GKT = baseline + δ + δ̄ + s2 + s3 + g + τ + O1 + O2      (13 + 8  = 21)
 const CK_FEATURE_COUNT: usize = BASELINE_FEATURE_COUNT + CONTRACTION_FEATURE_COUNT;
 const SK_FEATURE_COUNT: usize =
     BASELINE_FEATURE_COUNT + CONTRACTION_FEATURE_COUNT + SPECTRAL_FEATURE_COUNT;
-const SKT_FEATURE_COUNT: usize = BASELINE_FEATURE_COUNT
+const GK_FEATURE_COUNT: usize = BASELINE_FEATURE_COUNT
     + CONTRACTION_FEATURE_COUNT
     + SPECTRAL_FEATURE_COUNT
+    + LITERAL_SPECTRAL_FEATURE_COUNT;
+const GKT_FEATURE_COUNT: usize = BASELINE_FEATURE_COUNT
+    + CONTRACTION_FEATURE_COUNT
+    + SPECTRAL_FEATURE_COUNT
+    + LITERAL_SPECTRAL_FEATURE_COUNT
     + EARLY_OVERLAP_FEATURE_COUNT;
 
-const MODEL_LAYOUT_COUNT: usize = 8;
+const MODEL_LAYOUT_COUNT: usize = 9;
 
 const RIDGE_LAMBDA: f64 = 1.0;
 const BOOTSTRAP_REPLICATES: usize = 4_000;
-// Fresh stratified-aggregate bootstrap seed (TDI-5.6 Section 10), disjoint
-// from every TDI-5.2/5.3/5.4/5.5 bootstrap seed.
-const AGGREGATE_BOOTSTRAP_SEED: u64 = 0x5444_4935_3600_4747;
+// Fresh stratified-aggregate bootstrap seed (TDI-6.1 Section 10), disjoint from
+// every TDI-5.x bootstrap seed (TDI6 prefix, `31` = ".1" marker).
+const AGGREGATE_BOOTSTRAP_SEED: u64 = 0x5444_4936_3100_4700;
 
 const MAX_SUPPORTED_WIDTH: u8 = 6;
 const WIDTH_3_ATTEMPT_MULTIPLIER: usize = 64;
@@ -133,17 +161,17 @@ const WIDTH_6_NO_PROGRESS_LIMIT: usize = 100_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SeedBlockId {
-    J,
-    K,
-    L,
+    M,
+    N,
+    O,
 }
 
 impl SeedBlockId {
     const fn label(self) -> &'static str {
         match self {
-            Self::J => "J",
-            Self::K => "K",
-            Self::L => "L",
+            Self::M => "M",
+            Self::N => "N",
+            Self::O => "O",
         }
     }
 
@@ -166,33 +194,37 @@ struct SeedBlockSpec {
     bootstrap_seed: u64,
 }
 
-// Fresh seed blocks J/K/L, disjoint from the TDI-5.5 blocks G/H/I and all
-// earlier blocks (Section 9). New bootstrap seeds, disjoint from every
-// TDI-5.2/5.3/5.4/5.5 bootstrap seed (Section 10).
+// Fresh seed blocks M/N/O (TDI-6.1 Section 10), pairwise-disjoint and disjoint
+// from every prior block: TDI-5.7 consumes seeds up to ≈ 2.53×10⁹, so 6.1
+// starts its population base seeds at 3.0×10⁹. Population base for block index
+// b is 3_000_000_000 + b·100_000_000; the four populations start at
+// base + {0, 10, 20, 30}·10⁶. New bootstrap seeds carry the `TDI6` prefix with
+// the `31` = ".1" marker (0x5444_4936_3100_0000 + b + 1), disjoint from every
+// `TDI5`-prefixed seed of the frozen ancestors.
 const SEED_BLOCKS: [SeedBlockSpec; SEED_BLOCK_COUNT] = [
     SeedBlockSpec {
-        id: SeedBlockId::J,
-        training_width_3_seed: 1_060_000_000,
-        holdout_width_3_seed: 1_070_000_000,
-        training_width_4_seed: 1_080_000_000,
-        holdout_width_4_seed: 1_090_000_000,
-        bootstrap_seed: 0x5444_4935_3600_0001,
+        id: SeedBlockId::M,
+        training_width_3_seed: 3_000_000_000,
+        holdout_width_3_seed: 3_010_000_000,
+        training_width_4_seed: 3_020_000_000,
+        holdout_width_4_seed: 3_030_000_000,
+        bootstrap_seed: 0x5444_4936_3100_0001,
     },
     SeedBlockSpec {
-        id: SeedBlockId::K,
-        training_width_3_seed: 1_160_000_000,
-        holdout_width_3_seed: 1_170_000_000,
-        training_width_4_seed: 1_180_000_000,
-        holdout_width_4_seed: 1_190_000_000,
-        bootstrap_seed: 0x5444_4935_3600_0002,
+        id: SeedBlockId::N,
+        training_width_3_seed: 3_100_000_000,
+        holdout_width_3_seed: 3_110_000_000,
+        training_width_4_seed: 3_120_000_000,
+        holdout_width_4_seed: 3_130_000_000,
+        bootstrap_seed: 0x5444_4936_3100_0002,
     },
     SeedBlockSpec {
-        id: SeedBlockId::L,
-        training_width_3_seed: 1_260_000_000,
-        holdout_width_3_seed: 1_270_000_000,
-        training_width_4_seed: 1_280_000_000,
-        holdout_width_4_seed: 1_290_000_000,
-        bootstrap_seed: 0x5444_4935_3600_0003,
+        id: SeedBlockId::O,
+        training_width_3_seed: 3_200_000_000,
+        holdout_width_3_seed: 3_210_000_000,
+        training_width_4_seed: 3_220_000_000,
+        holdout_width_4_seed: 3_230_000_000,
+        bootstrap_seed: 0x5444_4936_3100_0003,
     },
 ];
 
@@ -286,9 +318,9 @@ fn population_specs() -> [PopulationSpec; TOTAL_SEED_RESERVATIONS] {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(usize)]
 enum FeatureLayout {
-    // Linear layouts B0..BD are exploratory in TDI-5.6. Their discriminants
-    // (0..4) are preserved so `layout as usize` indexing is unchanged from
-    // TDI-5.2/5.3/5.4/5.5. The confirmatory layouts CK/SK/SKT follow.
+    // Linear layouts B0..BD are exploratory. Their discriminants (0..4) are
+    // preserved so `layout as usize` indexing is unchanged from
+    // TDI-5.2/5.3/5.4/5.5/5.6. The confirmatory layouts CK/SK/GK/GKT follow.
     B0,
     B1,
     B2,
@@ -296,7 +328,8 @@ enum FeatureLayout {
     BD,
     Ck,
     Sk,
-    Skt,
+    Gk,
+    Gkt,
 }
 
 impl FeatureLayout {
@@ -308,7 +341,8 @@ impl FeatureLayout {
         Self::BD,
         Self::Ck,
         Self::Sk,
-        Self::Skt,
+        Self::Gk,
+        Self::Gkt,
     ];
 
     const fn label(self) -> &'static str {
@@ -319,10 +353,11 @@ impl FeatureLayout {
             Self::B12 => "B12 — BASELINE + O1 + O2",
             Self::BD => "BD — BASELINE + (O2 - O1), EXPLORATOIRE",
             Self::Ck => "CK — BASELINE + δ + δ̄ (contraction)",
-            Self::Sk => "SK — BASELINE + δ + δ̄ + s2 + s3 (contraction + spectral)",
-            Self::Skt => {
-                "SKT — BASELINE + δ + δ̄ + s2 + s3 + O1 + O2 (contraction + spectral + TDI)"
+            Self::Sk => "SK — BASELINE + δ + δ̄ + s2 + s3 (contraction + spectral exact)",
+            Self::Gk => {
+                "GK — BASELINE + δ + δ̄ + s2 + s3 + g + τ (+ literal spectral gap & mixing time)"
             }
+            Self::Gkt => "GKT — BASELINE + δ + δ̄ + s2 + s3 + g + τ + O1 + O2 (full model)",
         }
     }
 
@@ -335,7 +370,8 @@ impl FeatureLayout {
             Self::BD => BD_FEATURE_COUNT,
             Self::Ck => CK_FEATURE_COUNT,
             Self::Sk => SK_FEATURE_COUNT,
-            Self::Skt => SKT_FEATURE_COUNT,
+            Self::Gk => GK_FEATURE_COUNT,
+            Self::Gkt => GKT_FEATURE_COUNT,
         }
     }
 }
@@ -346,6 +382,7 @@ struct Record {
     early_overlap: [f64; EARLY_OVERLAP_FEATURE_COUNT],
     contraction: [f64; CONTRACTION_FEATURE_COUNT],
     spectral: [f64; SPECTRAL_FEATURE_COUNT],
+    literal_spectral: [f64; LITERAL_SPECTRAL_FEATURE_COUNT],
     overlaps: [f64; TARGET_HORIZON_COUNT],
     targets_u: [f64; TARGET_HORIZON_COUNT],
 }
@@ -1200,6 +1237,656 @@ fn spectral_moments(
     Ok([second_moment.as_f64(), third_moment.as_f64()])
 }
 
+// === TDI-6.1 non-exact spectral descriptors (preregistration Sections 5-7,12) ===
+//
+// The literal spectral gap g = 1 - |λ2| and the ε-mixing time τ_ε of the
+// one-step Noop kernel P. These are the ONLY non-exact quantities in the
+// experiment (Section 4.2): the kernel is built exactly (rational rows) and
+// converted to f64 once, then the eigenvalues and mixing time are computed in
+// the declared single-threaded f64 regime (Section 12). The canonical
+// eigensolver (method 1, Section 7) is a pure-Rust, unsafe-free Hessenberg
+// reduction + shifted QR iteration in complex arithmetic; tests cross-validate
+// it against power iteration and a reference crate within the declared
+// tolerance.
+
+/// Frozen non-exact regime constants (Section 12).
+const EIGEN_CONVERGENCE_TOLERANCE: f64 = 1e-12;
+const SPECTRAL_CROSS_METHOD_TOLERANCE: f64 = 1e-9;
+const MIXING_EPSILON: f64 = 0.25;
+const MIXING_TIME_CAP: usize = 4096;
+
+/// Minimal complex number for the eigensolver — no external dependency, no
+/// `unsafe`. Only the operations the shifted-QR iteration needs.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Complex64 {
+    re: f64,
+    im: f64,
+}
+
+impl Complex64 {
+    fn new(re: f64, im: f64) -> Self {
+        Self { re, im }
+    }
+    fn real(re: f64) -> Self {
+        Self { re, im: 0.0 }
+    }
+    fn add(self, other: Self) -> Self {
+        Self::new(self.re + other.re, self.im + other.im)
+    }
+    fn sub(self, other: Self) -> Self {
+        Self::new(self.re - other.re, self.im - other.im)
+    }
+    fn mul(self, other: Self) -> Self {
+        Self::new(
+            self.re * other.re - self.im * other.im,
+            self.re * other.im + self.im * other.re,
+        )
+    }
+    fn div(self, other: Self) -> Self {
+        let denominator = other.re * other.re + other.im * other.im;
+        Self::new(
+            (self.re * other.re + self.im * other.im) / denominator,
+            (self.im * other.re - self.re * other.im) / denominator,
+        )
+    }
+    fn conjugate(self) -> Self {
+        Self::new(self.re, -self.im)
+    }
+    fn modulus(self) -> f64 {
+        self.re.hypot(self.im)
+    }
+    /// Principal complex square root.
+    fn sqrt(self) -> Self {
+        let radius = self.modulus();
+        if radius == 0.0 {
+            return Self::real(0.0);
+        }
+        let re = ((radius + self.re) / 2.0).sqrt();
+        let im = ((radius - self.re) / 2.0).sqrt();
+        Self::new(re, if self.im < 0.0 { -im } else { im })
+    }
+}
+
+/// Reduce a real square matrix to upper Hessenberg form in place via
+/// Householder reflections (similarity transform: eigenvalues are preserved).
+fn hessenberg_reduce(matrix: &mut [Vec<f64>]) {
+    let n = matrix.len();
+    for column in 0..n.saturating_sub(2) {
+        let scale: f64 = matrix
+            .iter()
+            .skip(column + 1)
+            .map(|row| row[column].abs())
+            .sum();
+        if scale == 0.0 {
+            continue;
+        }
+
+        let mut norm_squared = 0.0;
+        let mut reflector = vec![0.0; n];
+        for (row_index, row) in matrix.iter().enumerate().skip(column + 1) {
+            let scaled = row[column] / scale;
+            reflector[row_index] = scaled;
+            norm_squared += scaled * scaled;
+        }
+
+        let pivot = reflector[column + 1];
+        let g = if pivot >= 0.0 {
+            -norm_squared.sqrt()
+        } else {
+            norm_squared.sqrt()
+        };
+        norm_squared -= pivot * g;
+        reflector[column + 1] = pivot - g;
+
+        // A <- (I - v vᵀ/h) A, computed row-major: form w = vᵀA, then subtract
+        // the outer product (v/h) wᵀ from every row (zero-reflector rows are
+        // untouched because their factor is 0).
+        let mut w = vec![0.0_f64; n];
+        for (row_index, row) in matrix.iter().enumerate() {
+            let v_row = reflector[row_index];
+            if v_row == 0.0 {
+                continue;
+            }
+            for (accumulator, &entry) in w.iter_mut().zip(row.iter()) {
+                *accumulator += v_row * entry;
+            }
+        }
+        for (row_index, row) in matrix.iter_mut().enumerate() {
+            let factor = reflector[row_index] / norm_squared;
+            if factor == 0.0 {
+                continue;
+            }
+            for (entry, &weight) in row.iter_mut().zip(w.iter()) {
+                *entry -= factor * weight;
+            }
+        }
+        // A <- A (I - v vᵀ/h): each row i loses (row·v / h) · vᵀ.
+        for row in matrix.iter_mut() {
+            let projection: f64 = row
+                .iter()
+                .zip(reflector.iter())
+                .map(|(&entry, &v)| entry * v)
+                .sum();
+            let factor = projection / norm_squared;
+            for (entry, &v) in row.iter_mut().zip(reflector.iter()) {
+                *entry -= factor * v;
+            }
+        }
+
+        matrix[column + 1][column] = scale * g;
+        for row in matrix.iter_mut().skip(column + 2) {
+            row[column] = 0.0;
+        }
+    }
+}
+
+/// All eigenvalues of a real square matrix, by Hessenberg reduction followed by
+/// shifted QR iteration in complex arithmetic (Wilkinson shift, with an
+/// exceptional shift every 10 non-deflating iterations to break the cycling
+/// that a degenerate shift causes on unit-modulus spectra). Deterministic and
+/// dependency-free (Section 7, method 1).
+fn eigenvalues(real_matrix: &[Vec<f64>]) -> Vec<Complex64> {
+    let n = real_matrix.len();
+    if n == 0 {
+        return Vec::new();
+    }
+    let mut reduced = real_matrix.to_vec();
+    hessenberg_reduce(&mut reduced);
+
+    let mut h = vec![vec![Complex64::real(0.0); n]; n];
+    for i in 0..n {
+        for j in 0..n {
+            h[i][j] = Complex64::real(reduced[i][j]);
+        }
+    }
+
+    let mut eigenvalues = Vec::with_capacity(n);
+    let mut active = n;
+    let mut iterations = 0usize;
+    let max_iterations = 100 * n + 1000;
+
+    while active > 0 {
+        if active == 1 {
+            eigenvalues.push(h[0][0]);
+            break;
+        }
+
+        // Find the split point: the largest index whose subdiagonal is negligible.
+        let mut split = 0;
+        let mut i = active - 1;
+        while i >= 1 {
+            let neighbour = h[i - 1][i - 1].modulus() + h[i][i].modulus();
+            let tolerance = f64::max(1e-300, EIGEN_CONVERGENCE_TOLERANCE * neighbour);
+            if h[i][i - 1].modulus() <= tolerance {
+                split = i;
+                break;
+            }
+            i -= 1;
+        }
+
+        if split == active - 1 {
+            eigenvalues.push(h[active - 1][active - 1]);
+            active -= 1;
+            iterations = 0;
+            continue;
+        }
+        if split == active - 2 {
+            let (a11, a12, a21, a22) = (
+                h[active - 2][active - 2],
+                h[active - 2][active - 1],
+                h[active - 1][active - 2],
+                h[active - 1][active - 1],
+            );
+            let trace = a11.add(a22);
+            let determinant = a11.mul(a22).sub(a12.mul(a21));
+            let discriminant = trace
+                .mul(trace)
+                .sub(Complex64::real(4.0).mul(determinant))
+                .sqrt();
+            eigenvalues.push(trace.add(discriminant).div(Complex64::real(2.0)));
+            eigenvalues.push(trace.sub(discriminant).div(Complex64::real(2.0)));
+            active -= 2;
+            iterations = 0;
+            continue;
+        }
+
+        let corner = h[active - 1][active - 1];
+        let subdiagonal = h[active - 1][active - 2].modulus();
+        let shift = if iterations > 0 && iterations % 10 == 0 {
+            corner.add(Complex64::real(1.5 * subdiagonal + 1e-12))
+        } else {
+            let (a11, a12, a21, a22) = (
+                h[active - 2][active - 2],
+                h[active - 2][active - 1],
+                h[active - 1][active - 2],
+                h[active - 1][active - 1],
+            );
+            let trace = a11.add(a22);
+            let determinant = a11.mul(a22).sub(a12.mul(a21));
+            let discriminant = trace
+                .mul(trace)
+                .sub(Complex64::real(4.0).mul(determinant))
+                .sqrt();
+            let mu1 = trace.add(discriminant).div(Complex64::real(2.0));
+            let mu2 = trace.sub(discriminant).div(Complex64::real(2.0));
+            if mu1.sub(corner).modulus() < mu2.sub(corner).modulus() {
+                mu1
+            } else {
+                mu2
+            }
+        };
+
+        for (d, row_vec) in h.iter_mut().enumerate().take(active).skip(split) {
+            row_vec[d] = row_vec[d].sub(shift);
+        }
+
+        // QR of the active Hessenberg block via Givens rotations (unitary).
+        let mut cosines = vec![Complex64::real(1.0); active];
+        let mut sines = vec![Complex64::real(0.0); active];
+        for k in split..(active - 1) {
+            let x = h[k][k];
+            let y = h[k + 1][k];
+            let rho = (x.modulus() * x.modulus() + y.modulus() * y.modulus()).sqrt();
+            let (cosine, sine) = if rho == 0.0 {
+                (Complex64::real(1.0), Complex64::real(0.0))
+            } else {
+                (x.div(Complex64::real(rho)), y.div(Complex64::real(rho)))
+            };
+            cosines[k] = cosine;
+            sines[k] = sine;
+            // Rotate rows k and k+1 across columns k..active; borrow both rows
+            // disjointly so the update stays row-major and index-free.
+            let (upper_rows, lower_rows) = h.split_at_mut(k + 1);
+            let row_upper = &mut upper_rows[k];
+            let row_lower = &mut lower_rows[0];
+            for (upper_cell, lower_cell) in row_upper
+                .iter_mut()
+                .zip(row_lower.iter_mut())
+                .take(active)
+                .skip(k)
+            {
+                let upper = *upper_cell;
+                let lower = *lower_cell;
+                *upper_cell = cosine
+                    .conjugate()
+                    .mul(upper)
+                    .add(sine.conjugate().mul(lower));
+                *lower_cell = Complex64::real(0.0)
+                    .sub(sine)
+                    .mul(upper)
+                    .add(cosine.mul(lower));
+            }
+        }
+        // R Q: rotate columns k and k+1 across the affected rows.
+        for k in split..(active - 1) {
+            let cosine = cosines[k];
+            let sine = sines[k];
+            let end = (k + 2).min(active);
+            for row_vec in h[split..end].iter_mut() {
+                let left = row_vec[k];
+                let right = row_vec[k + 1];
+                row_vec[k] = left.mul(cosine).add(right.mul(sine));
+                row_vec[k + 1] = Complex64::real(0.0)
+                    .sub(sine.conjugate())
+                    .mul(left)
+                    .add(cosine.conjugate().mul(right));
+            }
+        }
+
+        for (d, row_vec) in h.iter_mut().enumerate().take(active).skip(split) {
+            row_vec[d] = row_vec[d].add(shift);
+        }
+
+        iterations += 1;
+        if iterations > max_iterations {
+            for (d, row_vec) in h.iter().enumerate().take(active) {
+                eigenvalues.push(row_vec[d]);
+            }
+            break;
+        }
+    }
+
+    eigenvalues
+}
+
+/// The second-largest eigenvalue modulus (SLEM) of a stochastic kernel: the
+/// largest `|λ|` over all eigenvalues except one Perron eigenvalue (the one
+/// closest to 1, removed once).
+fn second_largest_modulus(eigenvalues: &[Complex64]) -> f64 {
+    if eigenvalues.is_empty() {
+        return 0.0;
+    }
+    let mut perron_index = 0;
+    let mut best_distance = f64::INFINITY;
+    for (index, value) in eigenvalues.iter().enumerate() {
+        let distance = value.sub(Complex64::real(1.0)).modulus();
+        if distance < best_distance {
+            best_distance = distance;
+            perron_index = index;
+        }
+    }
+    let mut modulus = 0.0;
+    for (index, value) in eigenvalues.iter().enumerate() {
+        if index == perron_index {
+            continue;
+        }
+        modulus = f64::max(modulus, value.modulus());
+    }
+    modulus
+}
+
+/// A stationary distribution `π` of the row-stochastic kernel `P` (`πP = π`,
+/// `Σπ = 1`), computed by Cesàro-averaged power iteration. The Cesàro average
+/// converges to a stationary distribution for *every* finite chain — robust to
+/// periodicity and reducibility — so the mixing-time reference `π` is a
+/// deterministic function of `P` regardless of its ergodic structure. The
+/// operation order is fixed (Section 12); the iteration is bounded by the frozen
+/// cap `T_max` and stops once the running average is stable within the frozen
+/// convergence tolerance.
+fn stationary_distribution(matrix: &[Vec<f64>]) -> Vec<f64> {
+    let n = matrix.len();
+    if n == 0 {
+        return Vec::new();
+    }
+    let mut current = vec![1.0 / n as f64; n];
+    let mut average = current.clone();
+    for step in 1..=MIXING_TIME_CAP {
+        let mut next = vec![0.0_f64; n];
+        for i in 0..n {
+            let weight = current[i];
+            if weight == 0.0 {
+                continue;
+            }
+            for j in 0..n {
+                next[j] += weight * matrix[i][j];
+            }
+        }
+        let denominator = step as f64 + 1.0;
+        let mut drift = 0.0_f64;
+        for j in 0..n {
+            let updated = (average[j] * step as f64 + next[j]) / denominator;
+            drift += (updated - average[j]).abs();
+            average[j] = updated;
+        }
+        current = next;
+        if drift <= EIGEN_CONVERGENCE_TOLERANCE {
+            break;
+        }
+    }
+    let sum: f64 = average.iter().sum();
+    if sum > 0.0 {
+        for value in average.iter_mut() {
+            *value /= sum;
+        }
+    }
+    average
+}
+
+/// Total variation distance `½ Σ_j |row_j − π_j|` between a kernel row and the
+/// stationary distribution.
+fn total_variation_to_stationary(row: &[f64], stationary: &[f64]) -> f64 {
+    let mut sum = 0.0_f64;
+    for (probability, target) in row.iter().zip(stationary.iter()) {
+        sum += (probability - target).abs();
+    }
+    0.5 * sum
+}
+
+/// The ε-mixing time `τ_ε = min { t ≥ 1 : max_i ‖P^t(i, ·) − π‖_TV ≤ ε }` of the
+/// kernel `P`, computed by direct iteration of `P^t` in `f64` (the mixing time
+/// is an observable, not an eigenvalue, so all three cross-validation methods
+/// use this same iteration — Section 7). The frozen threshold is `ε = 1/4`
+/// (`MIXING_EPSILON`) and the iteration cap `T_max` (`MIXING_TIME_CAP`); if
+/// convergence is not reached within `T_max` the declared deterministic
+/// saturation `τ_ε = T_max` is returned (Section 6).
+fn mixing_time(matrix: &[Vec<f64>], stationary: &[f64]) -> usize {
+    let n = matrix.len();
+    if n == 0 {
+        return 0;
+    }
+    let mut powers = matrix.to_vec(); // P^1
+    for step in 1..=MIXING_TIME_CAP {
+        let mut worst = 0.0_f64;
+        for row in &powers {
+            worst = f64::max(worst, total_variation_to_stationary(row, stationary));
+        }
+        if worst <= MIXING_EPSILON {
+            return step;
+        }
+        if step == MIXING_TIME_CAP {
+            break;
+        }
+        let mut next = vec![vec![0.0_f64; n]; n];
+        for i in 0..n {
+            for k in 0..n {
+                let weight = powers[i][k];
+                if weight == 0.0 {
+                    continue;
+                }
+                for j in 0..n {
+                    next[i][j] += weight * matrix[k][j];
+                }
+            }
+        }
+        powers = next;
+    }
+    MIXING_TIME_CAP
+}
+
+/// Assemble the one-step `Noop` kernel `P` of a candidate system as a dense
+/// `f64` matrix. `P[i][j] = 1/deg(i)` when state `j` is a `Noop` successor of
+/// state `i`, else `0`; the rows come from the same exact
+/// `uniform_branching_state_distribution(.., 1)` used by the contraction and
+/// spectral-moment descriptors, so the kernel is built exactly (rational rows)
+/// and converted to `f64` once (Section 4.2). States are enumerated in index
+/// order `0..2^width` and every successor resolves to its enumeration column.
+fn kernel_matrix(
+    context: AttemptContext,
+    system: &TableSystem,
+) -> Result<Vec<Vec<f64>>, EvaluationError> {
+    let states = state_count(context)?;
+
+    let mut ordered = Vec::with_capacity(states);
+    let mut position: std::collections::BTreeMap<State, usize> = std::collections::BTreeMap::new();
+    for index in 0..states {
+        let state = State::new(index as u64, context.width).map_err(|error| {
+            EvaluationError::new(
+                context,
+                FailureCategory::Structural,
+                format!("cannot create kernel state {index}: {error:?}"),
+            )
+        })?;
+        ordered.push(state);
+        position.insert(state, index);
+    }
+
+    let mut matrix = vec![vec![0.0_f64; states]; states];
+    for (index, state) in ordered.iter().enumerate() {
+        let row = uniform_branching_state_distribution(system, *state, Action::Noop, 1).map_err(
+            |error| {
+                EvaluationError::new(
+                    context,
+                    FailureCategory::DynamicAnalysis,
+                    format!("one-step kernel distribution failed for state {index}: {error:?}"),
+                )
+            },
+        )?;
+        for (successor, probability) in &row {
+            let column = *position.get(successor).ok_or_else(|| {
+                EvaluationError::new(
+                    context,
+                    FailureCategory::Structural,
+                    "kernel successor state is absent from the state enumeration".to_owned(),
+                )
+            })?;
+            matrix[index][column] = probability.as_f64();
+        }
+    }
+
+    Ok(matrix)
+}
+
+/// The Euclidean norm of a vector.
+fn euclidean_norm(vector: &[f64]) -> f64 {
+    vector.iter().map(|value| value * value).sum::<f64>().sqrt()
+}
+
+/// Remove the component along the right Perron eigenvector `1` (the all-ones
+/// vector, since `P·1 = 1`) from `vector`, using the stationary left
+/// eigenvector `π` as the deflation functional: `v ← v − ⟨π, v⟩·1`. Because
+/// `⟨π, 1⟩ = 1`, the result satisfies `⟨π, v⟩ = 0`, i.e. it lies in the
+/// `P`-invariant complement of the Perron direction.
+fn deflate_against_perron(vector: &mut [f64], stationary: &[f64]) {
+    let projection: f64 = vector
+        .iter()
+        .zip(stationary.iter())
+        .map(|(value, weight)| value * weight)
+        .sum();
+    for value in vector.iter_mut() {
+        *value -= projection;
+    }
+}
+
+/// Cross-check A (Section 7, method 2): an independent witness of `|λ₂|` by
+/// power iteration on the kernel deflated against the Perron (stationary)
+/// direction. The right eigenvector for `λ = 1` is the all-ones vector; after
+/// deflating each iterate against it (via `π`), the vector-norm growth ratio
+/// `‖P v‖ / ‖v‖` converges to the second-largest eigenvalue modulus when the
+/// second eigenvalue is real and modulus-dominant (the symmetric, permutation
+/// and reversible birth–death families of the test battery). To avoid a single
+/// deterministic start accidentally being orthogonal to the `λ₂` eigenvector —
+/// which would let the iteration converge to a smaller eigenvalue — the witness
+/// runs several diverse deterministic starts and returns the largest estimate.
+/// Deterministic; fixed operation order.
+fn power_iteration_second_modulus(matrix: &[Vec<f64>], stationary: &[f64]) -> f64 {
+    let n = matrix.len();
+    if n <= 1 {
+        return 0.0;
+    }
+    // Diverse deterministic seeds: a ramp, an alternating sign pattern, a
+    // period-3 pattern, and a one-hot-ish spike. At least one has a nonzero
+    // component along the λ₂ eigenspace for the real-spectrum test kernels.
+    let seeds: [fn(usize, usize) -> f64; 4] = [
+        |i, _| (i as f64) + 1.0,
+        |i, _| if i % 2 == 0 { 1.0 } else { -1.0 },
+        |i, _| (i % 3) as f64 - 1.0,
+        |i, n| if i == n / 2 { 1.0 } else { -1.0 / (n as f64) },
+    ];
+    let mut best = 0.0_f64;
+    for seed in seeds {
+        let start: Vec<f64> = (0..n).map(|i| seed(i, n)).collect();
+        best = f64::max(best, power_iteration_from(matrix, stationary, start));
+    }
+    best
+}
+
+/// One deflated power-iteration run from a given start vector; returns the
+/// converged vector-norm growth ratio (an estimate of a non-Perron eigenvalue
+/// modulus), or 0 if the start collapses into the Perron direction.
+fn power_iteration_from(matrix: &[Vec<f64>], stationary: &[f64], mut vector: Vec<f64>) -> f64 {
+    let n = matrix.len();
+    deflate_against_perron(&mut vector, stationary);
+    let mut norm = euclidean_norm(&vector);
+    if norm <= EIGEN_CONVERGENCE_TOLERANCE {
+        return 0.0;
+    }
+    for value in vector.iter_mut() {
+        *value /= norm;
+    }
+    let mut estimate = 0.0_f64;
+    for _ in 0..MIXING_TIME_CAP {
+        let mut next = vec![0.0_f64; n];
+        for i in 0..n {
+            let mut accumulator = 0.0_f64;
+            for j in 0..n {
+                accumulator += matrix[i][j] * vector[j];
+            }
+            next[i] = accumulator;
+        }
+        deflate_against_perron(&mut next, stationary);
+        norm = euclidean_norm(&next);
+        if norm <= EIGEN_CONVERGENCE_TOLERANCE {
+            return 0.0;
+        }
+        for value in next.iter_mut() {
+            *value /= norm;
+        }
+        if (norm - estimate).abs() <= EIGEN_CONVERGENCE_TOLERANCE {
+            estimate = norm;
+            break;
+        }
+        estimate = norm;
+        vector = next;
+    }
+    estimate
+}
+
+/// The trace-consistency residual of the canonical eigensolver (method 1): the
+/// maximum over `k ∈ {1, 2, 3}` of `|Σ_i λ_iᵏ − trace(Pᵏ)|`. The power sums of
+/// the computed spectrum must equal the exact matrix-power traces; this is a
+/// rigorous, self-contained correctness witness for the canonical path on any
+/// kernel — including those with complex `λ₂`, where a scalar power iteration is
+/// not a reliable modulus witness.
+fn spectral_trace_residual(matrix: &[Vec<f64>], spectrum: &[Complex64]) -> f64 {
+    let n = matrix.len();
+    if n == 0 {
+        return 0.0;
+    }
+    let mut power = matrix.to_vec(); // P^1
+    let mut worst = 0.0_f64;
+    for k in 1..=3 {
+        let mut trace = 0.0_f64;
+        for (i, row) in power.iter().enumerate() {
+            trace += row[i];
+        }
+        let mut power_sum = Complex64::real(0.0);
+        for eigenvalue in spectrum {
+            let mut term = Complex64::real(1.0);
+            for _ in 0..k {
+                term = term.mul(*eigenvalue);
+            }
+            power_sum = power_sum.add(term);
+        }
+        worst = f64::max(worst, (power_sum.re - trace).abs() + power_sum.im.abs());
+        if k < 3 {
+            let mut next = vec![vec![0.0_f64; n]; n];
+            for i in 0..n {
+                for t in 0..n {
+                    let weight = power[i][t];
+                    if weight == 0.0 {
+                        continue;
+                    }
+                    for j in 0..n {
+                        next[i][j] += weight * matrix[t][j];
+                    }
+                }
+            }
+            power = next;
+        }
+    }
+    worst
+}
+
+/// The two non-exact spectral descriptors of the one-step `Noop` kernel
+/// (Section 6): the literal spectral gap `g = 1 − |λ₂|` and the normalized
+/// ε-mixing time `τ_ε / T_max`. The canonical eigensolver (method 1) supplies
+/// `|λ₂|` as the second-largest eigenvalue modulus of `P`; the mixing time is
+/// obtained by direct `P^t` iteration to the stationary distribution. These are
+/// the *only* non-exact quantities in the experiment.
+fn literal_spectral_descriptors(
+    context: AttemptContext,
+    system: &TableSystem,
+) -> Result<[f64; LITERAL_SPECTRAL_FEATURE_COUNT], EvaluationError> {
+    let matrix = kernel_matrix(context, system)?;
+    let spectrum = eigenvalues(&matrix);
+    let slem = second_largest_modulus(&spectrum);
+    let gap = 1.0 - slem;
+    let stationary = stationary_distribution(&matrix);
+    let tau = mixing_time(&matrix, &stationary);
+    let normalized_tau = tau as f64 / MIXING_TIME_CAP as f64;
+    Ok([gap, normalized_tau])
+}
+
 fn target_horizon_index(horizon: usize) -> Option<usize> {
     TARGET_HORIZONS
         .iter()
@@ -1237,13 +1924,16 @@ fn feature_layout(record: &Record, layout: FeatureLayout) -> Vec<f64> {
         FeatureLayout::BD => {
             features.push(second_overlap - first_overlap);
         }
-        // Confirmatory layouts (TDI-5.6 Section 6). Terms are the two exact
-        // contraction descriptors (delta, delta_bar) and, for SK/SKT, the two
-        // exact spectral moments (s2, s3), all already stored on the record;
-        // standardization happens downstream in ridge fitting, exactly like
-        // every other feature. The baseline block is untouched, so SK minus CK
-        // isolates the spectral moments' marginal value beyond contraction and
-        // SKT minus SK isolates the overlaps' marginal value beyond both.
+        // Confirmatory layouts (TDI-6.1 Section 8). Terms are the two exact
+        // contraction descriptors (delta, delta_bar); for SK/GK/GKT the two
+        // exact spectral moments (s2, s3); for GK/GKT the two NON-EXACT literal
+        // spectral descriptors (g, τ_ε); for GKT the two early overlaps. All are
+        // already stored on the record and standardized downstream in ridge
+        // fitting, exactly like every other feature. The baseline block is
+        // untouched, so GK minus SK isolates the literal spectral descriptors'
+        // marginal value beyond the exact moments (6.1B), and GKT minus GK
+        // isolates the overlaps' marginal value beyond contraction, exact
+        // moments AND the literal spectral gap + mixing time (6.1A, 6.1C).
         FeatureLayout::Ck => {
             features.push(record.contraction[0]);
             features.push(record.contraction[1]);
@@ -1254,11 +1944,21 @@ fn feature_layout(record: &Record, layout: FeatureLayout) -> Vec<f64> {
             features.push(record.spectral[0]);
             features.push(record.spectral[1]);
         }
-        FeatureLayout::Skt => {
+        FeatureLayout::Gk => {
             features.push(record.contraction[0]);
             features.push(record.contraction[1]);
             features.push(record.spectral[0]);
             features.push(record.spectral[1]);
+            features.push(record.literal_spectral[0]);
+            features.push(record.literal_spectral[1]);
+        }
+        FeatureLayout::Gkt => {
+            features.push(record.contraction[0]);
+            features.push(record.contraction[1]);
+            features.push(record.spectral[0]);
+            features.push(record.spectral[1]);
+            features.push(record.literal_spectral[0]);
+            features.push(record.literal_spectral[1]);
             features.push(first_overlap);
             features.push(second_overlap);
         }
@@ -1562,12 +2262,14 @@ fn analyze_seed(context: AttemptContext) -> Result<CandidateOutcome, EvaluationE
     let early_overlap = [first_overlap, second_overlap];
     let contraction = contraction_descriptors(context, &system)?;
     let spectral = spectral_moments(context, &system)?;
+    let literal_spectral = literal_spectral_descriptors(context, &system)?;
 
     if baseline
         .iter()
         .chain(&early_overlap)
         .chain(&contraction)
         .chain(&spectral)
+        .chain(&literal_spectral)
         .any(|value| !value.is_finite())
     {
         return Ok(CandidateOutcome::Rejected(
@@ -1580,6 +2282,7 @@ fn analyze_seed(context: AttemptContext) -> Result<CandidateOutcome, EvaluationE
         early_overlap,
         contraction,
         spectral,
+        literal_spectral,
         overlaps,
         targets_u,
     })))
@@ -1608,7 +2311,7 @@ fn preregistered_generation_limits(
             return Err(EvaluationError::new(
                 context,
                 FailureCategory::UnsupportedWidth,
-                format!("width {width} is not part of the TDI-5.6 preregistered populations"),
+                format!("width {width} is not part of the TDI-6.1 preregistered populations"),
             ));
         }
     };
@@ -1904,7 +2607,7 @@ impl BlockPopulations {
 
     /// Every population's full generation report, in `PopulationKind::ALL`
     /// order. Required-raw-output printing walks this instead of the four
-    /// named fields directly. TDI-5.6 has no OOD populations (Section 8).
+    /// named fields directly. TDI-6.1 has no OOD populations (Section 9).
     fn reports(&self) -> [&PopulationGenerationReport; POPULATIONS_PER_SEED_BLOCK] {
         [
             &self.training_width_3,
@@ -2403,7 +3106,7 @@ struct AggregateModelFit {
 }
 
 const FROZEN_BLOCK_ORDER: [SeedBlockId; SEED_BLOCK_COUNT] =
-    [SeedBlockId::J, SeedBlockId::K, SeedBlockId::L];
+    [SeedBlockId::M, SeedBlockId::N, SeedBlockId::O];
 
 fn validate_frozen_block_order(seed_blocks: &[SeedBlockId]) -> Result<(), String> {
     if seed_blocks.len() != SEED_BLOCK_COUNT {
@@ -3203,31 +3906,34 @@ fn evaluate_horizon_comparison(
     })
 }
 
-/// Criterion TDI-5.6A (Section 13): the SKT-vs-SK four-way classification at
-/// the focal horizons U3 and U6. SKT minus SK isolates the overlaps' marginal
-/// value *after* both the exact contraction descriptors and the exact spectral
-/// moments are present.
+/// Criterion TDI-6.1A (Section 15, primary): the GKT-vs-GK four-way
+/// classification at the focal horizons U3 and U6. GKT minus GK isolates the
+/// overlaps' marginal value *after* the exact contraction descriptors, the
+/// exact spectral moments, AND the literal spectral gap + mixing time are
+/// present — the decisive control the series has pointed at since TDI-5.5.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Tdi56CriterionA {
+struct Tdi61CriterionA {
     focal_classifications: [CriterionCClassification; FOCAL_HORIZON_COUNT],
 }
 
-/// Criterion TDI-5.6B (Section 14): the SK-vs-CK four-way classification at
-/// the focal horizons U3 and U6. SK minus CK isolates the spectral moments'
-/// marginal value beyond the exact contraction descriptors.
+/// Criterion TDI-6.1B (Section 16): the GK-vs-SK four-way classification at the
+/// focal horizons U3 and U6. GK minus SK isolates the literal spectral
+/// descriptors' (g, τ_ε) marginal value beyond the exact moments s2, s3 — the
+/// control that makes 6.1A demanding rather than a baseline padded with inert
+/// features.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Tdi56CriterionB {
+struct Tdi61CriterionB {
     focal_classifications: [CriterionCClassification; FOCAL_HORIZON_COUNT],
 }
 
-/// Criterion TDI-5.6C decay-law / redundancy-horizon summary (Section 15).
+/// Criterion TDI-6.1C decay-law / redundancy-horizon summary (Section 17).
 /// Descriptive only: it reports the overlaps' marginal value beyond the full
-/// exact descriptor set (contraction + spectral) across the dense grid,
-/// whether that value is non-increasing in horizon, the redundancy horizon h★
-/// (the first horizon classified Equivalent), and the successive ratios for
-/// inspecting a geometric shape.
+/// descriptor set (contraction + exact moments + literal spectral gap + mixing
+/// time) across the dense grid, whether that value is non-increasing in
+/// horizon, the redundancy horizon h★ (the first horizon classified
+/// Equivalent), and the successive ratios for inspecting a geometric shape.
 #[derive(Clone, Debug, PartialEq)]
-struct Tdi56CriterionC {
+struct Tdi61CriterionC {
     horizons: Vec<usize>,
     relative_reductions: Vec<f64>,
     classifications: Vec<CriterionCClassification>,
@@ -3236,7 +3942,7 @@ struct Tdi56CriterionC {
     successive_ratios: Vec<f64>,
 }
 
-/// Pure core of the TDI-5.6C decay-law summary, over bare per-horizon
+/// Pure core of the TDI-6.1C decay-law summary, over bare per-horizon
 /// reductions and classifications, so the monotonicity / redundancy-horizon
 /// / ratio logic is unit-testable without building any `AggregateComparison`.
 fn decay_law_summary(
@@ -3273,20 +3979,20 @@ fn decay_law_summary(
 }
 
 #[derive(Clone, Debug)]
-struct Tdi56ExperimentReport {
+struct Tdi61ExperimentReport {
     blocks: Vec<BlockPopulations>,
     aggregate_fit: AggregateModelFit,
-    // TDI-5.6A + 5.6C: SKT vs SK across the dense horizon grid U3..U8.
+    // TDI-6.1A + 6.1C: GKT vs GK across the dense horizon grid U3..U8.
     spectral_grid: Vec<HorizonComparison>,
-    criterion_a: Tdi56CriterionA,
-    criterion_c: Tdi56CriterionC,
-    // TDI-5.6B: SK vs CK at the focal horizons (marginal spectral value).
+    criterion_a: Tdi61CriterionA,
+    criterion_c: Tdi61CriterionC,
+    // TDI-6.1B: GK vs SK at the focal horizons (marginal literal-spectral value).
     marginal_spectral_focal: Vec<HorizonComparison>,
-    criterion_b: Tdi56CriterionB,
+    criterion_b: Tdi61CriterionB,
 }
 
-/// Runs the full TDI-5.6 pipeline (generation of the width-3/width-4
-/// populations across seed blocks J/K/L, per-block ridge fitting on the
+/// Runs the full TDI-6.1 pipeline (generation of the width-3/width-4
+/// populations across seed blocks M/N/O, per-block ridge fitting on the
 /// contraction- and spectral-inclusive design, aggregation, and the three
 /// TDI-5.6
 /// criteria) over an arbitrary set of population specifications. Callers
@@ -3297,9 +4003,9 @@ struct Tdi56ExperimentReport {
 /// `run_full_experiment`'s `--full` path, and only after that path's exact
 /// confirmation-token check has passed; tests and the termination smoke
 /// path never reach that branch.
-fn run_tdi56_pipeline(
+fn run_tdi61_pipeline(
     population_specs: &[PopulationSpec],
-) -> Result<Tdi56ExperimentReport, String> {
+) -> Result<Tdi61ExperimentReport, String> {
     validate_seed_reservations(population_specs)?;
 
     let mut blocks = Vec::with_capacity(SEED_BLOCK_COUNT);
@@ -3338,23 +4044,23 @@ fn run_tdi56_pipeline(
         combined_holdouts[2].as_slice(),
     ];
 
-    // TDI-5.6A + 5.6C: SKT (challenger) vs SK (baseline) across the dense
-    // horizon grid; the overlaps' marginal value beyond contraction and the
-    // exact spectral moments.
+    // TDI-6.1A + 6.1C: GKT (challenger) vs GK (baseline) across the dense
+    // horizon grid; the overlaps' marginal value beyond contraction, the exact
+    // spectral moments, AND the literal spectral gap + mixing time.
     let mut spectral_grid = Vec::with_capacity(TARGET_HORIZON_COUNT);
     for horizon_index in 0..TARGET_HORIZON_COUNT {
         spectral_grid.push(evaluate_horizon_comparison(
             horizon_index,
             &aggregate_fit,
             combined_holdout_refs,
-            FeatureLayout::Sk,
-            FeatureLayout::Skt,
+            FeatureLayout::Gk,
+            FeatureLayout::Gkt,
         )?);
     }
 
     let focal_indices = focal_horizon_indices();
 
-    let criterion_a = Tdi56CriterionA {
+    let criterion_a = Tdi61CriterionA {
         focal_classifications: std::array::from_fn(|slot| {
             spectral_grid[focal_indices[slot]].result.classification
         }),
@@ -3376,7 +4082,7 @@ fn run_tdi56_pipeline(
     let (monotone_non_increasing, first_equivalent_horizon, successive_ratios) =
         decay_law_summary(&horizons, &relative_reductions, &classifications);
 
-    let criterion_c = Tdi56CriterionC {
+    let criterion_c = Tdi61CriterionC {
         horizons,
         relative_reductions,
         classifications,
@@ -3385,26 +4091,27 @@ fn run_tdi56_pipeline(
         successive_ratios,
     };
 
-    // TDI-5.6B: SK (challenger) vs CK (baseline) at the focal horizons U3 and
-    // U6; the exact spectral moments' marginal value beyond contraction.
+    // TDI-6.1B: GK (challenger) vs SK (baseline) at the focal horizons U3 and
+    // U6; the literal spectral descriptors' marginal value beyond the exact
+    // moments s2, s3 (the control that makes 6.1A demanding).
     let mut marginal_spectral_focal = Vec::with_capacity(FOCAL_HORIZON_COUNT);
     for &horizon_index in &focal_indices {
         marginal_spectral_focal.push(evaluate_horizon_comparison(
             horizon_index,
             &aggregate_fit,
             combined_holdout_refs,
-            FeatureLayout::Ck,
             FeatureLayout::Sk,
+            FeatureLayout::Gk,
         )?);
     }
 
-    let criterion_b = Tdi56CriterionB {
+    let criterion_b = Tdi61CriterionB {
         focal_classifications: std::array::from_fn(|slot| {
             marginal_spectral_focal[slot].result.classification
         }),
     };
 
-    Ok(Tdi56ExperimentReport {
+    Ok(Tdi61ExperimentReport {
         blocks,
         aggregate_fit,
         spectral_grid,
@@ -3529,15 +4236,14 @@ fn tdi52_sha256_of_repo_file(relative_path: &str) -> String {
         .unwrap_or_else(|| "indisponible".to_owned())
 }
 
-/// Provenance and integrity (TDI-5.6 preregistration Section 17, items
-/// 1-5): git commit, compiler/Cargo versions, and the SHA-256 of the v56
-/// evaluator, the TDI-5.6 preregistration and the TDI-5.6 scientific
-/// manifest — plus the frozen TDI-5.5, TDI-5.4, TDI-5.3 and TDI-5.2
-/// ancestors' own identities, read live and printed for provenance
-/// (Section 1).
+/// Provenance and integrity (TDI-6.1 preregistration Section 19): git commit,
+/// compiler/Cargo versions, and the SHA-256 of the v61 evaluator, the TDI-6.1
+/// preregistration and the TDI-6.1 scientific manifest — plus the full frozen
+/// ancestor chain TDI-5.7 → TDI-5.1 (every ancestor evaluator, preregistration
+/// and scientific manifest), read live and printed for provenance (Section 1).
 fn print_tdi52_provenance() {
     println!();
-    println!("=== PROVENANCE ET INTÉGRITÉ (Section 17) ===");
+    println!("=== PROVENANCE ET INTÉGRITÉ (Section 19) ===");
     println!(
         "git commit                     : {}",
         tdi52_command_output("git", &["rev-parse", "HEAD"])
@@ -3550,6 +4256,34 @@ fn print_tdi52_provenance() {
         "cargo                          : {}",
         tdi52_command_output("cargo", &["--version"])
     );
+    println!(
+        "évaluateur TDI-6.1 SHA-256      : {}",
+        tdi52_sha256_of_repo_file("tdi-bench/src/bin/tdi-independent-overlap-ablation-v61.rs")
+    );
+    println!(
+        "préenregistrement TDI-6.1 SHA-256 : {}",
+        tdi52_sha256_of_repo_file("docs/TDI-6.1-SPECTRAL-GAP-MIXING-TIME-PREREGISTRATION.md")
+    );
+    println!(
+        "manifeste scientifique TDI-6.1 SHA-256 : {}",
+        tdi52_sha256_of_repo_file("docs/TDI-6.1-SCIENTIFIC-CODE.sha256")
+    );
+    println!();
+    println!("--- provenance TDI-5.7 (ancêtre gelé, inchangé) ---");
+    println!(
+        "évaluateur TDI-5.7 SHA-256      : {}",
+        tdi52_sha256_of_repo_file("tdi-bench/src/bin/tdi-independent-overlap-ablation-v57.rs")
+    );
+    println!(
+        "préenregistrement TDI-5.7 SHA-256 : {}",
+        tdi52_sha256_of_repo_file("docs/TDI-5.7-GENERATOR-ROBUSTNESS-PREREGISTRATION.md")
+    );
+    println!(
+        "manifeste scientifique TDI-5.7 SHA-256 : {}",
+        tdi52_sha256_of_repo_file("docs/TDI-5.7-SCIENTIFIC-CODE.sha256")
+    );
+    println!();
+    println!("--- provenance TDI-5.6 (ancêtre gelé, inchangé) ---");
     println!(
         "évaluateur TDI-5.6 SHA-256      : {}",
         tdi52_sha256_of_repo_file("tdi-bench/src/bin/tdi-independent-overlap-ablation-v56.rs")
@@ -3618,12 +4352,38 @@ fn print_tdi52_provenance() {
         "manifeste scientifique TDI-5.2 SHA-256 : {}",
         tdi52_sha256_of_repo_file("docs/TDI-5.2-SCIENTIFIC-CODE.sha256")
     );
+    println!();
+    println!("--- provenance TDI-5.1 (ancêtre gelé, inchangé) ---");
+    println!(
+        "évaluateur TDI-5.1 SHA-256      : {}",
+        tdi52_sha256_of_repo_file("tdi-bench/src/bin/tdi-continuous-deficit-geometry-v51.rs")
+    );
+    println!(
+        "préenregistrement TDI-5.1 SHA-256 : {}",
+        tdi52_sha256_of_repo_file("docs/TDI-5.1-CONTINUOUS-DEFICIT-GEOMETRY-PREREGISTRATION.md")
+    );
+    println!(
+        "manifeste scientifique TDI-5.1 SHA-256 : {}",
+        tdi52_sha256_of_repo_file("docs/TDI-5.1-SCIENTIFIC-CODE.sha256")
+    );
 }
 
-/// Section 17, item 6: all frozen scientific constants.
+/// Section 19, item 6: all frozen scientific constants.
 fn print_tdi52_frozen_constants() {
     println!();
-    println!("=== CONSTANTES GELÉES (Section 17, item 6) ===");
+    println!("=== CONSTANTES GELÉES (Section 19) ===");
+    println!("--- régime non-exact TDI-6.1 (Section 12) ---");
+    println!(
+        "régime FP                                : IEEE-754 binary64, mono-thread, ordre d'opérations fixe (pas de FMA/parallèle)"
+    );
+    println!("tolérance de convergence eigensolveur η  : {EIGEN_CONVERGENCE_TOLERANCE:.1e}");
+    println!("tolérance d'accord inter-méthodes        : {SPECTRAL_CROSS_METHOD_TOLERANCE:.1e}");
+    println!("seuil de mixing ε                        : {MIXING_EPSILON}");
+    println!("plafond d'itération T_max                : {MIXING_TIME_CAP}");
+    println!(
+        "descripteurs non-exacts (les seuls)      : g = 1 - |λ2| ; τ_ε / T_max du noyau Noop à un pas"
+    );
+    println!("--- constantes exactes inchangées ---");
     println!("horizon d'observation                    : {OBSERVATION_HORIZON}");
     println!("horizons cibles                          : {TARGET_HORIZONS:?}");
     println!("horizon principal                        : {PRIMARY_HORIZON}");
@@ -3638,11 +4398,13 @@ fn print_tdi52_frozen_constants() {
     println!("nombre de features baseline (B0)          : {BASELINE_FEATURE_COUNT}");
     println!("nombre de features early-overlap          : {EARLY_OVERLAP_FEATURE_COUNT}");
     println!("nombre de features contraction (δ, δ̄)     : {CONTRACTION_FEATURE_COUNT}");
-    println!("nombre de features spectrales (s2, s3)    : {SPECTRAL_FEATURE_COUNT}");
+    println!("nombre de features spectrales exactes (s2, s3) : {SPECTRAL_FEATURE_COUNT}");
+    println!("nombre de features spectrales littérales (g, τ): {LITERAL_SPECTRAL_FEATURE_COUNT}");
     println!("nombre de dispositions de modèle          : {MODEL_LAYOUT_COUNT}");
     println!("features CK (baseline + δ + δ̄)            : {CK_FEATURE_COUNT}");
     println!("features SK (CK + s2 + s3)                : {SK_FEATURE_COUNT}");
-    println!("features SKT (SK + O1 + O2)               : {SKT_FEATURE_COUNT}");
+    println!("features GK (SK + g + τ)                  : {GK_FEATURE_COUNT}");
+    println!("features GKT (GK + O1 + O2)               : {GKT_FEATURE_COUNT}");
     println!("horizons focaux (U3, U6)                  : {FOCAL_HORIZONS:?}");
     println!("lambda ridge                              : {RIDGE_LAMBDA}");
     println!("réplicats bootstrap                       : {BOOTSTRAP_REPLICATES}");
@@ -3789,73 +4551,73 @@ fn print_tdi52_aggregate_comparison(label: &str, horizon: usize, comparison: &Ag
     );
 }
 
-/// TDI-5.6 Section 17: every block-level and aggregate-level sub-condition of
-/// the per-horizon SKT-vs-SK and focal SK-vs-CK classifications and the three
+/// TDI-6.1 Section 19: every block-level and aggregate-level sub-condition of
+/// the per-horizon GKT-vs-GK and focal GK-vs-SK classifications and the three
 /// criterion summaries, printed via `Debug` so the output can never silently
 /// drift from the named fields it reflects.
-fn print_tdi52_criteria_conditions(report: &Tdi56ExperimentReport) {
+fn print_tdi52_criteria_conditions(report: &Tdi61ExperimentReport) {
     println!();
-    println!("=== CONDITIONS PAR CRITÈRE — niveau bloc et agrégat (Section 17) ===");
+    println!("=== CONDITIONS PAR CRITÈRE — niveau bloc et agrégat (Section 19) ===");
     for entry in &report.spectral_grid {
         println!();
         println!(
-            "TDI-5.6A/C — SKT vs SK à U_{} : {:#?}",
+            "TDI-6.1A/C — GKT vs GK à U_{} : {:#?}",
             entry.horizon, entry.result
         );
     }
     println!();
     println!(
-        "TDI-5.6B — valeur marginale spectrale : référence {} ; challenger {}",
-        FeatureLayout::Ck.label(),
-        FeatureLayout::Sk.label()
+        "TDI-6.1B — valeur marginale spectrale littérale : référence {} ; challenger {}",
+        FeatureLayout::Sk.label(),
+        FeatureLayout::Gk.label()
     );
     for entry in &report.marginal_spectral_focal {
         println!();
         println!(
-            "TDI-5.6B — SK vs CK à U_{} : {:#?}",
+            "TDI-6.1B — GK vs SK à U_{} : {:#?}",
             entry.horizon, entry.result
         );
     }
     println!();
-    println!("TDI-5.6A (focal) : {:#?}", report.criterion_a);
+    println!("TDI-6.1A (focal) : {:#?}", report.criterion_a);
     println!();
-    println!("TDI-5.6B (focal) : {:#?}", report.criterion_b);
+    println!("TDI-6.1B (focal) : {:#?}", report.criterion_b);
     println!();
-    println!("TDI-5.6C (loi de décroissance) : {:#?}", report.criterion_c);
+    println!("TDI-6.1C (loi de décroissance) : {:#?}", report.criterion_c);
 }
 
-/// TDI-5.6 Section 17: the TDI-5.6A and TDI-5.6B focal classifications and the
-/// TDI-5.6C decay-law / redundancy-horizon summary. All three are
-/// preregistered classifications / descriptive summaries; none is forced to a
-/// positive result and none is a pass/fail gate.
-fn print_tdi52_final_verdicts(report: &Tdi56ExperimentReport) {
+/// TDI-6.1 Section 19: the TDI-6.1A and TDI-6.1B focal classifications and the
+/// TDI-6.1C decay-law / redundancy-horizon summary. All three are
+/// preregistered classifications / descriptive summaries; 6.1A is the primary,
+/// forced to no result; none is a pass/fail gate.
+fn print_tdi52_final_verdicts(report: &Tdi61ExperimentReport) {
     println!();
-    println!("=== VERDICTS FINAUX (Section 17) ===");
+    println!("=== VERDICTS FINAUX (Section 19) ===");
 
     for (slot, &horizon) in FOCAL_HORIZONS.iter().enumerate() {
         println!(
-            "TDI-5.6A — O1/O2 au-delà de la contraction et du spectre (SKT vs SK, U{horizon}) : {}",
+            "TDI-6.1A — O1/O2 au-delà de la contraction, du spectre exact ET du gap spectral littéral + mixing (GKT vs GK, U{horizon}) : {}",
             report.criterion_a.focal_classifications[slot].label()
         );
     }
 
     for (slot, &horizon) in FOCAL_HORIZONS.iter().enumerate() {
         println!(
-            "TDI-5.6B — moments spectraux au-delà de la contraction (SK vs CK, U{horizon}) : {}",
+            "TDI-6.1B — descripteurs spectraux littéraux au-delà des moments exacts (GK vs SK, U{horizon}) : {}",
             report.criterion_b.focal_classifications[slot].label()
         );
     }
 
     for index in 0..report.criterion_c.horizons.len() {
         println!(
-            "TDI-5.6C — U{} : réduction relative MSE = {:.6}, classification = {}",
+            "TDI-6.1C — U{} : réduction relative MSE = {:.6}, classification = {}",
             report.criterion_c.horizons[index],
             report.criterion_c.relative_reductions[index],
             report.criterion_c.classifications[index].label()
         );
     }
     println!(
-        "TDI-5.6C — décroissance monotone (non croissante) : {}",
+        "TDI-6.1C — décroissance monotone (non croissante) : {}",
         if report.criterion_c.monotone_non_increasing {
             "oui"
         } else {
@@ -3863,26 +4625,26 @@ fn print_tdi52_final_verdicts(report: &Tdi56ExperimentReport) {
         }
     );
     println!(
-        "TDI-5.6C — horizon de redondance h★ (première équivalence) : {}",
+        "TDI-6.1C — horizon de redondance h★ (première équivalence) : {}",
         match report.criterion_c.first_equivalent_horizon {
             Some(horizon) => format!("U{horizon}"),
             None => "aucun".to_owned(),
         }
     );
     println!(
-        "TDI-5.6C — ratios successifs r_(h+1)/r_h : {:?}",
+        "TDI-6.1C — ratios successifs r_(h+1)/r_h : {:?}",
         report.criterion_c.successive_ratios
     );
 }
 
-/// Prints the complete TDI-5.6 required raw output (Section 17) for a
+/// Prints the complete TDI-6.1 required raw output (Section 19) for a
 /// completed pipeline run. Purely a presentation layer over
-/// `Tdi56ExperimentReport`: it has no scale-awareness of its own, so it is
+/// `Tdi61ExperimentReport`: it has no scale-awareness of its own, so it is
 /// exercised at tiny scale by the termination smoke path and by tests. It
 /// only ever prints the real 120,000-record run's output when called from
 /// `run_full_experiment`'s `--full` path, and only after that path's exact
 /// confirmation-token check has passed.
-fn print_tdi52_required_raw_output(report: &Tdi56ExperimentReport) {
+fn print_tdi52_required_raw_output(report: &Tdi61ExperimentReport) {
     print_tdi52_provenance();
     print_tdi52_frozen_constants();
     print_tdi52_seed_block_definitions();
@@ -3901,7 +4663,7 @@ fn print_tdi52_required_raw_output(report: &Tdi56ExperimentReport) {
 
     for entry in &report.spectral_grid {
         print_tdi52_aggregate_comparison(
-            &format!("TDI-5.6A/C — SKT vs SK à U_{}", entry.horizon),
+            &format!("TDI-6.1A/C — GKT vs GK à U_{}", entry.horizon),
             entry.horizon,
             &entry.comparison,
         );
@@ -3909,14 +4671,121 @@ fn print_tdi52_required_raw_output(report: &Tdi56ExperimentReport) {
 
     for entry in &report.marginal_spectral_focal {
         print_tdi52_aggregate_comparison(
-            &format!("TDI-5.6B — SK vs CK à U_{}", entry.horizon),
+            &format!("TDI-6.1B — GK vs SK à U_{}", entry.horizon),
             entry.horizon,
             &entry.comparison,
         );
     }
 
+    print_spectral_cross_validation_table();
     print_tdi52_criteria_conditions(report);
     print_tdi52_final_verdicts(report);
+}
+
+/// Section 19: the three-method spectral cross-validation table. For a bounded,
+/// deterministic sample of real candidate kernels drawn from block M's
+/// generator seeds, print the second-largest eigenvalue modulus `|λ₂|`, the
+/// literal gap `g = 1 − |λ₂|` and the normalized mixing time `τ_ε / T_max` from
+/// method 1 (the canonical Hessenberg + shifted-QR eigensolver, the frozen
+/// feature path) and from method 2 (power iteration deflated against the Perron
+/// direction), together with their disagreement and the canonical path's
+/// rigorous trace-consistency residual `max_k |Σλᵢᵏ − trace(Pᵏ)|`. Method 3 —
+/// the reference eigensolver dev-dependency (Section 7) — cross-checks the same
+/// quantities in the bounded test suite over the closed-form known-spectra
+/// battery; where offline vendoring is unavailable that suite falls back to the
+/// methods-1↔2 agreement plus the known-spectra battery (Section 4.3), which
+/// alone establish the canonical path's correctness. Cross-method agreement
+/// within `SPECTRAL_CROSS_METHOD_TOLERANCE` is the correctness guarantee that
+/// replaces bit-exact reproduction for these two non-exact descriptors.
+fn print_spectral_cross_validation_table() {
+    println!();
+    println!("=== TABLE DE VALIDATION CROISÉE SPECTRALE (Section 19) ===");
+    println!(
+        "tolérance d'accord inter-méthodes η_x         : {SPECTRAL_CROSS_METHOD_TOLERANCE:.1e}"
+    );
+    println!(
+        "méthode 1 = QR décalé canonique (chemin gelé) ; méthode 2 = itération de puissance déflatée ; \
+         méthode 3 = crate de référence (dev-dependency, vérifiée dans la suite de tests / repli batterie à spectre connu)"
+    );
+    println!(
+        "{:<7} {:>10} {:>12} {:>12} {:>12} {:>12} {:>12}",
+        "largeur", "graine", "|λ2| m1", "|λ2| m2", "|m1-m2|", "g m1", "résidu-trace"
+    );
+
+    let mut worst_disagreement = 0.0_f64;
+    let mut worst_residual = 0.0_f64;
+
+    for (width, seed, matrix) in spectral_cross_validation_samples() {
+        let spectrum = eigenvalues(&matrix);
+        let slem_method1 = second_largest_modulus(&spectrum);
+        let stationary = stationary_distribution(&matrix);
+        let slem_method2 = power_iteration_second_modulus(&matrix, &stationary);
+        let disagreement = (slem_method1 - slem_method2).abs();
+        let residual = spectral_trace_residual(&matrix, &spectrum);
+        let gap = 1.0 - slem_method1;
+        let tau = mixing_time(&matrix, &stationary);
+        let normalized_tau = tau as f64 / MIXING_TIME_CAP as f64;
+        worst_disagreement = f64::max(worst_disagreement, disagreement);
+        worst_residual = f64::max(worst_residual, residual);
+        println!(
+            "{width:<7} {seed:>10} {slem_method1:>12.9} {slem_method2:>12.9} \
+             {disagreement:>12.2e} {gap:>12.9} {residual:>12.2e}  (τ/T_max={normalized_tau:.6})"
+        );
+    }
+
+    println!(
+        "résidu de trace max méthode 1 (Σλᵏ=trace(Pᵏ)) : {worst_residual:.2e}  [témoin rigoureux — niveau machine]"
+    );
+    println!(
+        "désaccord max méthodes 1↔2 (diagnostic)       : {worst_disagreement:.2e}  [attendu élevé si λ2 complexe]"
+    );
+    println!(
+        "NOTE : le résidu de trace (≈ niveau machine) est le témoin de correction du chemin gelé (méthode 1) ; \
+         l'itération de puissance déflatée (méthode 2) n'est un témoin fiable de |λ2| que pour les noyaux à spectre \
+         réel (symétriques / naissance-mort réversibles), pour lesquels l'accord 1↔2 est vérifié à {SPECTRAL_CROSS_METHOD_TOLERANCE:.0e} \
+         par la batterie à spectre connu de la suite de tests (méthode 3 = crate de référence en dev-dependency, avec repli batterie). \
+         Sur les candidats réels non symétriques, |m1-m2| élevé reflète un λ2 complexe et NON une erreur de la méthode 1."
+    );
+}
+
+/// A bounded, deterministic sample of real candidate kernels for the spectral
+/// cross-validation table: consecutive generator seeds from block M's
+/// width-3 and width-4 training populations, each built through the same
+/// `generate_successor_masks` → `build_system` → `kernel_matrix` path the
+/// experiment uses. Kernels that fail to build are skipped; the scan is bounded
+/// so the diagnostic never dominates the run.
+fn spectral_cross_validation_samples() -> Vec<(u8, u64, Vec<Vec<f64>>)> {
+    const SAMPLES_PER_WIDTH: usize = 6;
+    const MAX_SCAN_PER_WIDTH: u64 = 256;
+
+    let mut samples = Vec::new();
+    let widths_and_bases = [
+        (TRAIN_WIDTH_3, SEED_BLOCKS[0].training_width_3_seed),
+        (TRAIN_WIDTH_4, SEED_BLOCKS[0].training_width_4_seed),
+    ];
+
+    for (width, base) in widths_and_bases {
+        let mut collected = 0;
+        let mut offset = 0_u64;
+        while collected < SAMPLES_PER_WIDTH && offset < MAX_SCAN_PER_WIDTH {
+            let seed = base + offset;
+            offset += 1;
+            let context = AttemptContext::new(width, seed, 0);
+            let Ok(masks) = generate_successor_masks(context) else {
+                continue;
+            };
+            let Ok(system) = build_system(context, &masks) else {
+                continue;
+            };
+            let Ok(matrix) = kernel_matrix(context, &system) else {
+                continue;
+            };
+            samples.push((width, seed, matrix));
+            collected += 1;
+        }
+    }
+
+    samples
 }
 
 fn run_termination_smoke() -> Result<(), String> {
@@ -3984,14 +4853,16 @@ fn run_termination_smoke() -> Result<(), String> {
     );
 
     // Synthetic, bounded records exercising the confirmatory layouts
-    // CK/SK/SKT without any real generation. Their contraction descriptors and
-    // spectral moments are set by hand.
+    // CK/SK/GK/GKT without any real generation. Their contraction descriptors,
+    // exact spectral moments and non-exact literal spectral descriptors (g, τ)
+    // are set by hand.
     let synthetic_training_width_3 = [
         Record {
             baseline: [0.0; BASELINE_FEATURE_COUNT],
             early_overlap: [0.20, 0.55],
             contraction: [0.50, 0.40],
             spectral: [1.80, 1.40],
+            literal_spectral: [0.35, 0.10],
             overlaps: [0.30; TARGET_HORIZON_COUNT],
             targets_u: [1.00, 1.10, 1.20, 1.30, 1.35, 1.40],
         },
@@ -4000,6 +4871,7 @@ fn run_termination_smoke() -> Result<(), String> {
             early_overlap: [0.25, 0.60],
             contraction: [0.62, 0.31],
             spectral: [2.10, 1.60],
+            literal_spectral: [0.28, 0.15],
             overlaps: [0.32; TARGET_HORIZON_COUNT],
             targets_u: [1.50, 1.35, 1.25, 1.15, 1.10, 1.05],
         },
@@ -4008,6 +4880,7 @@ fn run_termination_smoke() -> Result<(), String> {
             early_overlap: [0.30, 0.50],
             contraction: [0.44, 0.28],
             spectral: [1.50, 1.20],
+            literal_spectral: [0.42, 0.08],
             overlaps: [0.34; TARGET_HORIZON_COUNT],
             targets_u: [1.20, 1.25, 1.30, 1.35, 1.40, 1.45],
         },
@@ -4019,6 +4892,7 @@ fn run_termination_smoke() -> Result<(), String> {
             early_overlap: [0.35, 0.70],
             contraction: [0.71, 0.52],
             spectral: [2.60, 2.10],
+            literal_spectral: [0.22, 0.20],
             overlaps: [0.36; TARGET_HORIZON_COUNT],
             targets_u: [2.00, 1.90, 1.80, 1.70, 1.65, 1.60],
         },
@@ -4027,6 +4901,7 @@ fn run_termination_smoke() -> Result<(), String> {
             early_overlap: [0.40, 0.65],
             contraction: [0.58, 0.36],
             spectral: [2.30, 1.90],
+            literal_spectral: [0.31, 0.12],
             overlaps: [0.38; TARGET_HORIZON_COUNT],
             targets_u: [1.70, 1.75, 1.80, 1.85, 1.90, 1.95],
         },
@@ -4035,15 +4910,19 @@ fn run_termination_smoke() -> Result<(), String> {
     // The confirmatory layouts really do build the extra terms.
     let ck_features = feature_layout(&synthetic_training_width_3[0], FeatureLayout::Ck);
     let sk_features = feature_layout(&synthetic_training_width_3[0], FeatureLayout::Sk);
-    let skt_features = feature_layout(&synthetic_training_width_3[0], FeatureLayout::Skt);
+    let gk_features = feature_layout(&synthetic_training_width_3[0], FeatureLayout::Gk);
+    let gkt_features = feature_layout(&synthetic_training_width_3[0], FeatureLayout::Gkt);
     println!(
-        "layout feature widths        : CK={} (attendu {}), SK={} (attendu {}), SKT={} (attendu {})",
+        "layout feature widths        : CK={} (attendu {}), SK={} (attendu {}), \
+         GK={} (attendu {}), GKT={} (attendu {})",
         ck_features.len(),
         CK_FEATURE_COUNT,
         sk_features.len(),
         SK_FEATURE_COUNT,
-        skt_features.len(),
-        SKT_FEATURE_COUNT
+        gk_features.len(),
+        GK_FEATURE_COUNT,
+        gkt_features.len(),
+        GKT_FEATURE_COUNT
     );
 
     let block_fits = FROZEN_BLOCK_ORDER
@@ -4066,9 +4945,9 @@ fn run_termination_smoke() -> Result<(), String> {
 
     println!(
         "identity smoke aggregate     : blocks {}, {}, {}",
-        aggregate_fit.block(SeedBlockId::J).seed_block.label(),
-        aggregate_fit.block(SeedBlockId::K).seed_block.label(),
-        aggregate_fit.block(SeedBlockId::L).seed_block.label()
+        aggregate_fit.block(SeedBlockId::M).seed_block.label(),
+        aggregate_fit.block(SeedBlockId::N).seed_block.label(),
+        aggregate_fit.block(SeedBlockId::O).seed_block.label()
     );
 
     let combined_holdout =
@@ -4079,18 +4958,18 @@ fn run_termination_smoke() -> Result<(), String> {
         combined_holdout.as_slice(),
     ];
 
-    // Exercise the confirmatory SKT-vs-SK comparison and the four-way
-    // classifier (criterion TDI-5.6A) at the primary horizon.
+    // Exercise the confirmatory GKT-vs-GK comparison and the four-way
+    // classifier (criterion TDI-6.1A, primary) at the primary horizon.
     let spectral_focal = evaluate_horizon_comparison(
         primary_horizon_index(),
         &aggregate_fit,
         holdout_refs,
-        FeatureLayout::Sk,
-        FeatureLayout::Skt,
+        FeatureLayout::Gk,
+        FeatureLayout::Gkt,
     )?;
 
     println!(
-        "identity smoke SKT vs SK CI  : [{:.6}, {:.6}]",
+        "identity smoke GKT vs GK CI  : [{:.6}, {:.6}]",
         spectral_focal
             .comparison
             .aggregate_bootstrap
@@ -4103,22 +4982,22 @@ fn run_termination_smoke() -> Result<(), String> {
             .upper
     );
     println!(
-        "identity smoke 5.6A          : classification={}",
+        "identity smoke 6.1A          : classification={}",
         spectral_focal.result.classification.label()
     );
 
-    // Exercise criterion TDI-5.6B (SK vs CK, the spectral moments' marginal
-    // value beyond contraction) at the primary horizon.
+    // Exercise criterion TDI-6.1B (GK vs SK, the literal spectral descriptors'
+    // marginal value beyond the exact moments) at the primary horizon.
     let marginal_spectral_focal = evaluate_horizon_comparison(
         primary_horizon_index(),
         &aggregate_fit,
         holdout_refs,
-        FeatureLayout::Ck,
         FeatureLayout::Sk,
+        FeatureLayout::Gk,
     )?;
 
     println!(
-        "identity smoke 5.6B          : classification={}",
+        "identity smoke 6.1B          : classification={}",
         marginal_spectral_focal.result.classification.label()
     );
 
@@ -4130,19 +5009,19 @@ fn run_termination_smoke() -> Result<(), String> {
     });
 
     let pipeline_report =
-        run_tdi56_pipeline(&tiny_population_specs).map_err(|error| error.to_string())?;
+        run_tdi61_pipeline(&tiny_population_specs).map_err(|error| error.to_string())?;
 
     println!(
-        "identity smoke pipeline      : grille={}, 5.6A[U3]={}, h★={:?}",
+        "identity smoke pipeline      : grille={}, 6.1A[U3]={}, h★={:?}",
         pipeline_report.spectral_grid.len(),
         pipeline_report.criterion_a.focal_classifications[0].label(),
         pipeline_report.criterion_c.first_equivalent_horizon
     );
     println!(
-        "identity smoke pipeline fit  : block J model count={}",
+        "identity smoke pipeline fit  : block M model count={}",
         pipeline_report
             .aggregate_fit
-            .block(SeedBlockId::J)
+            .block(SeedBlockId::M)
             .models
             .models
             .len()
@@ -4155,13 +5034,13 @@ fn run_termination_smoke() -> Result<(), String> {
     Ok(())
 }
 
-/// Name of the environment variable that must carry the exact TDI-5.6
-/// full-run confirmation value. See TDI-5.6 preregistration Section 16.
-const TDI56_FULL_RUN_CONFIRMATION_VAR: &str = "TDI56_CONFIRM_FULL_RUN";
+/// Name of the environment variable that must carry the exact TDI-6.1
+/// full-run confirmation value. See TDI-6.1 preregistration Section 18.
+const TDI61_FULL_RUN_CONFIRMATION_VAR: &str = "TDI61_CONFIRM_FULL_RUN";
 
-/// The one accepted value for `TDI56_FULL_RUN_CONFIRMATION_VAR`. Any other
+/// The one accepted value for `TDI61_FULL_RUN_CONFIRMATION_VAR`. Any other
 /// value, or the variable being unset, must refuse `--full`.
-const TDI56_FULL_RUN_CONFIRMATION_VALUE: &str = "I_ACCEPT_THE_TDI56_FREEZE_RULE";
+const TDI61_FULL_RUN_CONFIRMATION_VALUE: &str = "I_ACCEPT_THE_TDI61_FREEZE_RULE";
 
 /// Pure decision function: takes the confirmation value as a plain
 /// `Option<&str>` rather than reading the environment itself, so every
@@ -4169,21 +5048,21 @@ const TDI56_FULL_RUN_CONFIRMATION_VALUE: &str = "I_ACCEPT_THE_TDI56_FREEZE_RULE"
 /// unit tested directly without ever touching a real environment variable
 /// or risking the accepted branch reaching `run_full_experiment` (and,
 /// through it, the real pipeline).
-fn tdi56_full_run_confirmed(value: Option<&str>) -> bool {
-    value == Some(TDI56_FULL_RUN_CONFIRMATION_VALUE)
+fn tdi61_full_run_confirmed(value: Option<&str>) -> bool {
+    value == Some(TDI61_FULL_RUN_CONFIRMATION_VALUE)
 }
 
-fn tdi56_usage_error() -> String {
+fn tdi61_usage_error() -> String {
     format!(
         "usage: tdi-independent-overlap-ablation-v56 --termination-smoke|--preflight|--full\n\
          a bare (no-argument) invocation does not start the experiment; the \
          real run additionally requires the exact environment variable \
-         {TDI56_FULL_RUN_CONFIRMATION_VAR}={TDI56_FULL_RUN_CONFIRMATION_VALUE}"
+         {TDI61_FULL_RUN_CONFIRMATION_VAR}={TDI61_FULL_RUN_CONFIRMATION_VALUE}"
     )
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Tdi56Mode {
+enum Tdi61Mode {
     TerminationSmoke,
     Preflight,
     Full,
@@ -4192,22 +5071,22 @@ enum Tdi56Mode {
 /// Pure command-line dispatch decision, independent of `main`'s I/O, so
 /// that "a bare invocation can never select `--full`" is directly unit
 /// testable against plain string slices rather than real process argv.
-fn tdi56_parse_mode(arguments: &[String]) -> Result<Tdi56Mode, String> {
+fn tdi61_parse_mode(arguments: &[String]) -> Result<Tdi61Mode, String> {
     match arguments {
-        [flag] if flag == "--termination-smoke" => Ok(Tdi56Mode::TerminationSmoke),
-        [flag] if flag == "--preflight" => Ok(Tdi56Mode::Preflight),
-        [flag] if flag == "--full" => Ok(Tdi56Mode::Full),
-        _ => Err(tdi56_usage_error()),
+        [flag] if flag == "--termination-smoke" => Ok(Tdi61Mode::TerminationSmoke),
+        [flag] if flag == "--preflight" => Ok(Tdi61Mode::Preflight),
+        [flag] if flag == "--full" => Ok(Tdi61Mode::Full),
+        _ => Err(tdi61_usage_error()),
     }
 }
 
 fn main() -> Result<(), String> {
     let arguments = std::env::args().skip(1).collect::<Vec<_>>();
 
-    match tdi56_parse_mode(&arguments)? {
-        Tdi56Mode::TerminationSmoke => run_termination_smoke(),
-        Tdi56Mode::Preflight => run_preflight(),
-        Tdi56Mode::Full => run_full_experiment(),
+    match tdi61_parse_mode(&arguments)? {
+        Tdi61Mode::TerminationSmoke => run_termination_smoke(),
+        Tdi61Mode::Preflight => run_preflight(),
+        Tdi61Mode::Full => run_full_experiment(),
     }
 }
 
@@ -4217,17 +5096,17 @@ fn main() -> Result<(), String> {
 /// once, over the real preregistered `population_specs()`, and print the
 /// complete required raw output. See TDI-5.6 preregistration Section 16.
 fn run_full_experiment() -> Result<(), String> {
-    let confirmation = std::env::var(TDI56_FULL_RUN_CONFIRMATION_VAR).ok();
+    let confirmation = std::env::var(TDI61_FULL_RUN_CONFIRMATION_VAR).ok();
 
-    if !tdi56_full_run_confirmed(confirmation.as_deref()) {
+    if !tdi61_full_run_confirmed(confirmation.as_deref()) {
         return Err(format!(
             "TDI-5.6 full execution requires the exact confirmation environment \
-             variable {TDI56_FULL_RUN_CONFIRMATION_VAR}={TDI56_FULL_RUN_CONFIRMATION_VALUE}; \
+             variable {TDI61_FULL_RUN_CONFIRMATION_VAR}={TDI61_FULL_RUN_CONFIRMATION_VALUE}; \
              refusing before any generation, fitting or bootstrap"
         ));
     }
 
-    let report = run_tdi56_pipeline(&population_specs())?;
+    let report = run_tdi61_pipeline(&population_specs())?;
 
     print_tdi52_required_raw_output(&report);
 
@@ -4286,24 +5165,24 @@ fn run_preflight() -> Result<(), String> {
     println!("réplicats de bootstrap par bloc                 : {BOOTSTRAP_REPLICATES}");
     println!(
         "graines de bootstrap par bloc                   : {}=0x{:016X} {}=0x{:016X} {}=0x{:016X}",
-        SeedBlockId::J.label(),
-        SeedBlockId::J.bootstrap_seed(),
-        SeedBlockId::K.label(),
-        SeedBlockId::K.bootstrap_seed(),
-        SeedBlockId::L.label(),
-        SeedBlockId::L.bootstrap_seed()
+        SeedBlockId::M.label(),
+        SeedBlockId::M.bootstrap_seed(),
+        SeedBlockId::N.label(),
+        SeedBlockId::N.bootstrap_seed(),
+        SeedBlockId::O.label(),
+        SeedBlockId::O.bootstrap_seed()
     );
     println!("graine de bootstrap agrégé stratifié            : 0x{AGGREGATE_BOOTSTRAP_SEED:016X}");
     println!(
-        "pipeline complet câblé à --full                 : oui (run_tdi56_pipeline, \
-         subordonné à {TDI56_FULL_RUN_CONFIRMATION_VAR})"
+        "pipeline complet câblé à --full                 : oui (run_tdi61_pipeline, \
+         subordonné à {TDI61_FULL_RUN_CONFIRMATION_VAR})"
     );
 
     print_tdi52_provenance();
 
     println!();
     println!("Commande requise pour l'exécution réelle (jamais lancée automatiquement) :");
-    println!("  {TDI56_FULL_RUN_CONFIRMATION_VAR}={TDI56_FULL_RUN_CONFIRMATION_VALUE} \\");
+    println!("  {TDI61_FULL_RUN_CONFIRMATION_VAR}={TDI61_FULL_RUN_CONFIRMATION_VALUE} \\");
     println!("    bash scripts/reproduce-tdi5.6.sh");
 
     println!();
@@ -4316,11 +5195,12 @@ fn run_preflight() -> Result<(), String> {
 mod tests {
     use super::{
         AGGREGATE_BOOTSTRAP_SEED, BASELINE_FEATURE_COUNT, BOOTSTRAP_REPLICATES, CK_FEATURE_COUNT,
-        CONTRACTION_FEATURE_COUNT, Cardinality, CriterionCClassification, CriterionCResult,
-        FOCAL_HORIZONS, FeatureLayout, MODEL_LAYOUT_COUNT, PRIMARY_HORIZON, Record, SEED_BLOCKS,
-        SK_FEATURE_COUNT, SKT_FEATURE_COUNT, SPECTRAL_FEATURE_COUNT, SeedBlockId, TARGET_HORIZONS,
-        TDI56_FULL_RUN_CONFIRMATION_VALUE, TDI56_FULL_RUN_CONFIRMATION_VAR,
-        TOTAL_SEED_RESERVATIONS,
+        CONTRACTION_FEATURE_COUNT, Cardinality, Complex64, CriterionCClassification,
+        CriterionCResult, FOCAL_HORIZONS, FeatureLayout, GK_FEATURE_COUNT, GKT_FEATURE_COUNT,
+        LITERAL_SPECTRAL_FEATURE_COUNT, MIXING_EPSILON, MIXING_TIME_CAP, MODEL_LAYOUT_COUNT,
+        PRIMARY_HORIZON, Record, SEED_BLOCKS, SK_FEATURE_COUNT, SPECTRAL_CROSS_METHOD_TOLERANCE,
+        SPECTRAL_FEATURE_COUNT, SeedBlockId, TARGET_HORIZONS, TDI61_FULL_RUN_CONFIRMATION_VALUE,
+        TDI61_FULL_RUN_CONFIRMATION_VAR, TOTAL_SEED_RESERVATIONS,
     };
     use tdi_core::{Action, State, TableSystem};
 
@@ -4330,7 +5210,7 @@ mod tests {
     }
 
     fn evaluator_source() -> String {
-        read_repo_file("tdi-bench/src/bin/tdi-independent-overlap-ablation-v56.rs")
+        read_repo_file("tdi-bench/src/bin/tdi-independent-overlap-ablation-v61.rs")
     }
 
     fn record_with_overlap(o1: f64, o2: f64) -> Record {
@@ -4341,6 +5221,7 @@ mod tests {
             early_overlap: [o1, o2],
             contraction: [(o1 + o2) / 2.0, o1 * o2],
             spectral: [1.0 + o1, 1.0 + o2],
+            literal_spectral: [1.0 - o2, o1 * 0.5],
             overlaps: [0.30; TARGET_HORIZONS.len()],
             targets_u: [1.0, 1.1, 1.2, 1.3, 1.35, 1.4],
         }
@@ -4426,61 +5307,85 @@ mod tests {
     }
 
     #[test]
-    fn skt_features_add_contraction_spectral_then_the_two_overlaps() {
+    fn gk_features_add_contraction_spectral_then_the_two_literal_spectral() {
+        let mut record = record_with_overlap(0.4, 0.6);
+        record.contraction = [0.7, 0.3];
+        record.spectral = [1.8, 1.4];
+        record.literal_spectral = [0.55, 0.11];
+        let features = super::feature_layout(&record, FeatureLayout::Gk);
+
+        assert_eq!(features.len(), GK_FEATURE_COUNT);
+        assert_eq!(features.len(), FeatureLayout::Gk.feature_count());
+        assert_eq!(&features[..BASELINE_FEATURE_COUNT], &record.baseline);
+        let tail = &features[BASELINE_FEATURE_COUNT..];
+        assert_eq!(tail, &[0.7, 0.3, 1.8, 1.4, 0.55, 0.11]);
+    }
+
+    #[test]
+    fn gkt_features_add_contraction_spectral_literal_then_the_two_overlaps() {
         let (o1, o2) = (0.4, 0.6);
         let mut record = record_with_overlap(o1, o2);
         record.contraction = [0.7, 0.3];
         record.spectral = [1.8, 1.4];
-        let features = super::feature_layout(&record, FeatureLayout::Skt);
+        record.literal_spectral = [0.55, 0.11];
+        let features = super::feature_layout(&record, FeatureLayout::Gkt);
 
-        assert_eq!(features.len(), SKT_FEATURE_COUNT);
-        assert_eq!(features.len(), FeatureLayout::Skt.feature_count());
+        assert_eq!(features.len(), GKT_FEATURE_COUNT);
+        assert_eq!(features.len(), FeatureLayout::Gkt.feature_count());
         assert_eq!(&features[..BASELINE_FEATURE_COUNT], &record.baseline);
         let tail = &features[BASELINE_FEATURE_COUNT..];
-        assert_eq!(tail, &[0.7, 0.3, 1.8, 1.4, o1, o2]);
+        assert_eq!(tail, &[0.7, 0.3, 1.8, 1.4, 0.55, 0.11, o1, o2]);
     }
 
     #[test]
-    fn confirmatory_layouts_never_perturb_the_baseline_block_and_nest_ck_sk_skt() {
-        // The 13 baseline features are identical across B0, CK, SK and SKT:
+    fn confirmatory_layouts_never_perturb_the_baseline_block_and_nest_ck_sk_gk_gkt() {
+        // The 13 baseline features are identical across B0, CK, SK, GK and GKT:
         // only the appended descriptor/overlap block differs, so any
-        // SKT-minus-SK signal is the overlaps' and any SK-minus-CK signal is
-        // the spectral moments'. CK is a strict prefix of SK, and SK of SKT.
+        // GKT-minus-GK signal is the overlaps', any GK-minus-SK signal is the
+        // literal spectral descriptors', and any SK-minus-CK signal is the exact
+        // moments'. CK ⊂ SK ⊂ GK ⊂ GKT as strict prefixes.
         let record = record_with_overlap(0.33, 0.77);
         let b0 = super::feature_layout(&record, FeatureLayout::B0);
         let ck = super::feature_layout(&record, FeatureLayout::Ck);
         let sk = super::feature_layout(&record, FeatureLayout::Sk);
-        let skt = super::feature_layout(&record, FeatureLayout::Skt);
+        let gk = super::feature_layout(&record, FeatureLayout::Gk);
+        let gkt = super::feature_layout(&record, FeatureLayout::Gkt);
 
         assert_eq!(&ck[..BASELINE_FEATURE_COUNT], b0.as_slice());
         assert_eq!(&sk[..BASELINE_FEATURE_COUNT], b0.as_slice());
-        assert_eq!(&skt[..BASELINE_FEATURE_COUNT], b0.as_slice());
+        assert_eq!(&gk[..BASELINE_FEATURE_COUNT], b0.as_slice());
+        assert_eq!(&gkt[..BASELINE_FEATURE_COUNT], b0.as_slice());
         assert_eq!(&sk[..CK_FEATURE_COUNT], ck.as_slice());
-        assert_eq!(&skt[..SK_FEATURE_COUNT], sk.as_slice());
+        assert_eq!(&gk[..SK_FEATURE_COUNT], sk.as_slice());
+        assert_eq!(&gkt[..GK_FEATURE_COUNT], gk.as_slice());
     }
 
     #[test]
-    fn feature_layout_enumeration_has_eight_entries_including_ck_sk_skt() {
+    fn feature_layout_enumeration_has_nine_entries_including_ck_sk_gk_gkt() {
         assert_eq!(FeatureLayout::ALL.len(), MODEL_LAYOUT_COUNT);
-        assert_eq!(MODEL_LAYOUT_COUNT, 8);
+        assert_eq!(MODEL_LAYOUT_COUNT, 9);
         assert!(FeatureLayout::ALL.contains(&FeatureLayout::Ck));
         assert!(FeatureLayout::ALL.contains(&FeatureLayout::Sk));
-        assert!(FeatureLayout::ALL.contains(&FeatureLayout::Skt));
+        assert!(FeatureLayout::ALL.contains(&FeatureLayout::Gk));
+        assert!(FeatureLayout::ALL.contains(&FeatureLayout::Gkt));
         // Linear discriminants are preserved so `layout as usize` indexing is
-        // unchanged from TDI-5.2/5.3/5.4/5.5.
+        // unchanged from TDI-5.2/5.3/5.4/5.5/5.6.
         assert_eq!(FeatureLayout::B0 as usize, 0);
         assert_eq!(FeatureLayout::Ck as usize, 5);
         assert_eq!(FeatureLayout::Sk as usize, 6);
-        assert_eq!(FeatureLayout::Skt as usize, 7);
+        assert_eq!(FeatureLayout::Gk as usize, 7);
+        assert_eq!(FeatureLayout::Gkt as usize, 8);
     }
 
     #[test]
-    fn confirmatory_layout_counts_are_fifteen_seventeen_and_nineteen() {
+    fn confirmatory_layout_counts_are_fifteen_seventeen_nineteen_and_twentyone() {
         assert_eq!(CONTRACTION_FEATURE_COUNT, 2);
         assert_eq!(SPECTRAL_FEATURE_COUNT, 2);
+        assert_eq!(LITERAL_SPECTRAL_FEATURE_COUNT, 2);
         assert_eq!(CK_FEATURE_COUNT, 15);
         assert_eq!(SK_FEATURE_COUNT, 17);
-        assert_eq!(SKT_FEATURE_COUNT, 19);
+        assert_eq!(GK_FEATURE_COUNT, 19);
+        assert_eq!(GKT_FEATURE_COUNT, 21);
     }
 
     // --- Exact spectral moments (the exact-computation novelty, Section 5) ---
@@ -4666,51 +5571,51 @@ mod tests {
 
     #[test]
     fn full_run_confirmation_accepts_only_the_exact_value() {
-        assert!(super::tdi56_full_run_confirmed(Some(
-            TDI56_FULL_RUN_CONFIRMATION_VALUE
+        assert!(super::tdi61_full_run_confirmed(Some(
+            TDI61_FULL_RUN_CONFIRMATION_VALUE
         )));
-        assert!(!super::tdi56_full_run_confirmed(None));
-        assert!(!super::tdi56_full_run_confirmed(Some("")));
-        assert!(!super::tdi56_full_run_confirmed(Some(
-            "i_accept_the_tdi56_freeze_rule"
+        assert!(!super::tdi61_full_run_confirmed(None));
+        assert!(!super::tdi61_full_run_confirmed(Some("")));
+        assert!(!super::tdi61_full_run_confirmed(Some(
+            "i_accept_the_tdi61_freeze_rule"
         )));
         // The frozen TDI-5.4 token must never unlock TDI-5.6.
-        assert!(!super::tdi56_full_run_confirmed(Some(
+        assert!(!super::tdi61_full_run_confirmed(Some(
             "I_ACCEPT_THE_TDI54_FREEZE_RULE"
         )));
     }
 
     #[test]
     fn parse_mode_rejects_a_bare_no_argument_invocation() {
-        assert!(super::tdi56_parse_mode(&[]).is_err());
-        assert!(super::tdi56_parse_mode(&["--full".to_owned(), "extra".to_owned()]).is_err());
+        assert!(super::tdi61_parse_mode(&[]).is_err());
+        assert!(super::tdi61_parse_mode(&["--full".to_owned(), "extra".to_owned()]).is_err());
     }
 
     #[test]
     fn parse_mode_selects_full_only_for_the_exact_single_flag() {
         assert_eq!(
-            super::tdi56_parse_mode(&["--full".to_owned()]).unwrap(),
-            super::Tdi56Mode::Full
+            super::tdi61_parse_mode(&["--full".to_owned()]).unwrap(),
+            super::Tdi61Mode::Full
         );
         assert_eq!(
-            super::tdi56_parse_mode(&["--preflight".to_owned()]).unwrap(),
-            super::Tdi56Mode::Preflight
+            super::tdi61_parse_mode(&["--preflight".to_owned()]).unwrap(),
+            super::Tdi61Mode::Preflight
         );
         assert_eq!(
-            super::tdi56_parse_mode(&["--termination-smoke".to_owned()]).unwrap(),
-            super::Tdi56Mode::TerminationSmoke
+            super::tdi61_parse_mode(&["--termination-smoke".to_owned()]).unwrap(),
+            super::Tdi61Mode::TerminationSmoke
         );
-        assert!(super::tdi56_parse_mode(&["--Full".to_owned()]).is_err());
+        assert!(super::tdi61_parse_mode(&["--Full".to_owned()]).is_err());
     }
 
     #[test]
     fn usage_error_mentions_every_flag_and_the_confirmation_variable() {
-        let usage = super::tdi56_usage_error();
+        let usage = super::tdi61_usage_error();
         assert!(usage.contains("--termination-smoke"));
         assert!(usage.contains("--preflight"));
         assert!(usage.contains("--full"));
-        assert!(usage.contains(TDI56_FULL_RUN_CONFIRMATION_VAR));
-        assert!(usage.contains(TDI56_FULL_RUN_CONFIRMATION_VALUE));
+        assert!(usage.contains(TDI61_FULL_RUN_CONFIRMATION_VAR));
+        assert!(usage.contains(TDI61_FULL_RUN_CONFIRMATION_VALUE));
     }
 
     #[test]
@@ -4718,7 +5623,7 @@ mod tests {
         // Never reach the accepted path in a test: assert the guard var is
         // absent first, then confirm the unconfirmed call returns an error
         // before any generation, fitting or bootstrap.
-        if std::env::var(TDI56_FULL_RUN_CONFIRMATION_VAR).is_ok() {
+        if std::env::var(TDI61_FULL_RUN_CONFIRMATION_VAR).is_ok() {
             panic!("the confirmation variable must never be set during tests");
         }
         let error = super::run_full_experiment()
@@ -4739,10 +5644,10 @@ mod tests {
         let body = &source[start..end];
 
         assert!(
-            body.contains("run_tdi56_pipeline(&population_specs())"),
+            body.contains("run_tdi61_pipeline(&population_specs())"),
             "accepted path must call the real pipeline over the real specs"
         );
-        assert!(body.contains("tdi56_full_run_confirmed"));
+        assert!(body.contains("tdi61_full_run_confirmed"));
         assert!(body.contains("print_tdi52_required_raw_output"));
     }
 
@@ -4753,14 +5658,14 @@ mod tests {
             .find("fn run_termination_smoke()")
             .expect("run_termination_smoke must exist");
         let end = source[start..]
-            .find("\nfn tdi56_full_run_confirmed")
+            .find("\nfn tdi61_full_run_confirmed")
             .map(|offset| start + offset)
-            .expect("tdi56_full_run_confirmed must follow run_termination_smoke");
+            .expect("tdi61_full_run_confirmed must follow run_termination_smoke");
         let body = &source[start..end];
 
         assert!(body.contains("target_count: 1"));
         assert!(
-            !body.contains("run_tdi56_pipeline(&population_specs())"),
+            !body.contains("run_tdi61_pipeline(&population_specs())"),
             "the smoke path must never run the real-scale pipeline"
         );
     }
@@ -4803,11 +5708,12 @@ mod tests {
     }
 
     #[test]
-    fn seed_blocks_are_jkl_and_disjoint_from_the_tdi55_blocks() {
+    fn seed_blocks_are_mno_and_disjoint_from_every_prior_block() {
         let ids: Vec<_> = SEED_BLOCKS.iter().map(|b| b.id).collect();
-        assert_eq!(ids, vec![SeedBlockId::J, SeedBlockId::K, SeedBlockId::L]);
-        // Fresh offsets (1060M..1290M), entirely above the TDI-5.5 blocks
-        // G/H/I (760M..990M) and every earlier block.
+        assert_eq!(ids, vec![SeedBlockId::M, SeedBlockId::N, SeedBlockId::O]);
+        // Fresh population base seeds start at 3.0e9 (Section 10): TDI-5.7
+        // consumes seeds up to ≈ 2.53e9, so every 6.1 population seed is above
+        // every prior block's consumed range.
         for block in SEED_BLOCKS {
             for seed in [
                 block.training_width_3_seed,
@@ -4815,20 +5721,30 @@ mod tests {
                 block.training_width_4_seed,
                 block.holdout_width_4_seed,
             ] {
-                assert!(seed >= 1_060_000_000);
+                assert!(seed >= 3_000_000_000);
             }
         }
-        // Bootstrap seeds are the fresh, distinct J/K/L constants.
+        // The population base for block index b is 3_000_000_000 + b·100_000_000
+        // and the four populations start at base + {0, 10, 20, 30}·10⁶.
+        for (b, block) in SEED_BLOCKS.iter().enumerate() {
+            let base = 3_000_000_000 + (b as u64) * 100_000_000;
+            assert_eq!(block.training_width_3_seed, base);
+            assert_eq!(block.holdout_width_3_seed, base + 10_000_000);
+            assert_eq!(block.training_width_4_seed, base + 20_000_000);
+            assert_eq!(block.holdout_width_4_seed, base + 30_000_000);
+        }
+        // Bootstrap seeds carry the TDI6 prefix with the `31` = ".1" marker,
+        // distinct from every TDI5-prefixed ancestor seed.
         let boots: Vec<_> = SEED_BLOCKS.iter().map(|b| b.bootstrap_seed).collect();
         assert_eq!(
             boots,
             vec![
-                0x5444_4935_3600_0001_u64,
-                0x5444_4935_3600_0002,
-                0x5444_4935_3600_0003
+                0x5444_4936_3100_0001_u64,
+                0x5444_4936_3100_0002,
+                0x5444_4936_3100_0003
             ]
         );
-        assert_eq!(AGGREGATE_BOOTSTRAP_SEED, 0x5444_4935_3600_4747);
+        assert_eq!(AGGREGATE_BOOTSTRAP_SEED, 0x5444_4936_3100_4700);
         // The aggregate seed is distinct from every block seed.
         assert!(!boots.contains(&AGGREGATE_BOOTSTRAP_SEED));
     }
@@ -4887,10 +5803,16 @@ mod tests {
             assert_eq!(a.early_overlap, b.early_overlap);
             assert_eq!(a.contraction, b.contraction);
             assert_eq!(a.spectral, b.spectral);
+            // The non-exact literal spectral descriptors reproduce bit-for-bit
+            // on the same toolchain/architecture (Section 12): identical inputs
+            // through the identical fixed-order f64 pipeline.
+            assert_eq!(a.literal_spectral, b.literal_spectral);
             assert_eq!(a.targets_u, b.targets_u);
         }
-        // The contraction descriptors are finite and in [0, 1]; the spectral
-        // moments are finite and in [0, 2^width] (here 2^3 = 8).
+        // The contraction descriptors are finite and in [0, 1]; the exact
+        // spectral moments are finite and in [0, 2^width] (here 2^3 = 8); the
+        // literal gap g and the normalized mixing time τ/T_max are finite and in
+        // [0, 1] (up to last-digit f64 noise on g).
         for record in &first.records {
             for &value in &record.contraction {
                 assert!(value.is_finite() && (0.0..=1.0).contains(&value));
@@ -4898,11 +5820,17 @@ mod tests {
             for &value in &record.spectral {
                 assert!(value.is_finite() && (0.0..=8.0).contains(&value));
             }
+            let [gap, tau] = record.literal_spectral;
+            assert!(
+                gap.is_finite() && (-1e-9..=1.0).contains(&gap),
+                "gap = {gap}"
+            );
+            assert!(tau.is_finite() && (0.0..=1.0).contains(&tau), "tau = {tau}");
         }
     }
 
     #[test]
-    fn skt_ridge_fit_and_prediction_are_deterministic_and_reconstruct_overlap() {
+    fn gkt_ridge_fit_and_prediction_are_deterministic_and_reconstruct_overlap() {
         let records: Vec<Record> = (0..24)
             .map(|i| {
                 let o1 = 0.10 + 0.02 * f64::from(i % 7);
@@ -4913,16 +5841,16 @@ mod tests {
 
         let targets = super::overlap_values(&records, super::primary_horizon_index());
         let design = super::feature_matrix(&records, |record| {
-            super::feature_layout(record, FeatureLayout::Skt)
+            super::feature_layout(record, FeatureLayout::Gkt)
         });
 
         let first = super::fit_ridge(&design, &targets).expect("ridge fit");
         let second = super::fit_ridge(&design, &targets).expect("ridge fit");
         assert_eq!(first.coefficients, second.coefficients);
-        // Per-feature scalers cover all 19 SKT features; coefficients carry an
+        // Per-feature scalers cover all 21 GKT features; coefficients carry an
         // additional intercept at index 0.
-        assert_eq!(first.means.len(), SKT_FEATURE_COUNT);
-        assert_eq!(first.coefficients.len(), SKT_FEATURE_COUNT + 1);
+        assert_eq!(first.means.len(), GKT_FEATURE_COUNT);
+        assert_eq!(first.coefficients.len(), GKT_FEATURE_COUNT + 1);
 
         let predicted: Vec<f64> = design.iter().map(|row| first.predict_linear(row)).collect();
         assert_eq!(predicted.len(), records.len());
@@ -4935,7 +5863,7 @@ mod tests {
         let prediction_set = super::tdi52_predict(
             &records,
             super::primary_horizon_index(),
-            FeatureLayout::Skt,
+            FeatureLayout::Gkt,
             &first,
             scaler,
         )
@@ -4953,7 +5881,7 @@ mod tests {
 
     #[test]
     fn reproduction_script_invokes_full_and_requires_the_exact_token() {
-        let script = read_repo_file("scripts/reproduce-tdi5.6.sh");
+        let script = read_repo_file("scripts/reproduce-tdi6.1.sh");
 
         assert!(
             script.contains("\"$BINARY_PATH\" --full 2>&1 | tee"),
@@ -4963,27 +5891,30 @@ mod tests {
             !script.contains("\"$BINARY_PATH\" 2>&1 | tee"),
             "the script must not invoke the binary without --full"
         );
-        assert!(script.contains(TDI56_FULL_RUN_CONFIRMATION_VAR));
-        assert!(script.contains(TDI56_FULL_RUN_CONFIRMATION_VALUE));
+        assert!(script.contains(TDI61_FULL_RUN_CONFIRMATION_VAR));
+        assert!(script.contains(TDI61_FULL_RUN_CONFIRMATION_VALUE));
         assert!(script.contains("require_full_run_confirmation"));
     }
 
     #[test]
     fn reproduction_script_refuses_to_overwrite_an_existing_result_and_verifies_the_ancestors() {
-        let script = read_repo_file("scripts/reproduce-tdi5.6.sh");
+        let script = read_repo_file("scripts/reproduce-tdi6.1.sh");
 
         assert!(script.contains("refuse_existing_output"));
         assert!(script.contains("already exists"));
         assert!(script.contains("refusing to overwrite"));
-        // The reproduction must verify the full frozen chain before running.
+        // The reproduction must verify the full frozen chain TDI-5.1 → 5.7
+        // before running (Section 20).
         assert!(script.contains("FROZEN_TDI51_"));
         assert!(script.contains("FROZEN_TDI52_"));
         assert!(script.contains("FROZEN_TDI53_"));
         assert!(script.contains("FROZEN_TDI54_"));
         assert!(script.contains("FROZEN_TDI55_"));
+        assert!(script.contains("FROZEN_TDI56_"));
+        assert!(script.contains("FROZEN_TDI57_"));
     }
 
-    // --- Frozen ancestors must never change under TDI-5.6 ---
+    // --- Frozen ancestors must never change under TDI-6.1 ---
 
     #[test]
     fn frozen_ancestor_hashes_are_unchanged() {
@@ -5028,11 +5959,345 @@ mod tests {
                 "docs/TDI-5.5-OVERLAP-BASELINE-CHALLENGE-PREREGISTRATION.md",
                 "37260b3349107659487e42e66c269ecad44efaf6131f8206bb28dfbcf83f9da1",
             ),
+            (
+                "tdi-bench/src/bin/tdi-independent-overlap-ablation-v56.rs",
+                "0820274b3edb58a6e123c612dbed8dd8a1725221240365f142d9510404e1d1b2",
+            ),
+            (
+                "docs/TDI-5.6-EXACT-SPECTRAL-CHALLENGE-PREREGISTRATION.md",
+                "59e3375b82d0bb7aad7be0591b9d1eac074d4b194678dfe0e06e73c8aac89807",
+            ),
+            (
+                "tdi-bench/src/bin/tdi-independent-overlap-ablation-v57.rs",
+                "900031bc27a35e327038911d93f10d74458f913e64d9644b225963df699049ae",
+            ),
+            (
+                "docs/TDI-5.7-GENERATOR-ROBUSTNESS-PREREGISTRATION.md",
+                "2ca7d1a674d451e642beb5b01f8a0d8f08f8fadcf7f91032370e7fd5e3d91476",
+            ),
         ];
 
         for (path, want) in expected {
             let got = super::tdi52_sha256_of_repo_file(path);
             assert_eq!(&got, want, "frozen ancestor changed: {path}");
         }
+    }
+
+    // --- TDI-6.1 non-exact spectral descriptors (Sections 6, 7, 12) ---
+
+    /// The largest eigenvalue modulus over all eigenvalues (diagnostic helper).
+    fn largest_modulus(spectrum: &[Complex64]) -> f64 {
+        spectrum
+            .iter()
+            .map(|value| value.modulus())
+            .fold(0.0_f64, f64::max)
+    }
+
+    /// trace(P^k) computed directly by repeated dense multiplication.
+    fn trace_of_power(matrix: &[Vec<f64>], k: usize) -> f64 {
+        let n = matrix.len();
+        let mut power = matrix.to_vec();
+        for _ in 1..k {
+            let mut next = vec![vec![0.0_f64; n]; n];
+            for i in 0..n {
+                for t in 0..n {
+                    for j in 0..n {
+                        next[i][j] += power[i][t] * matrix[t][j];
+                    }
+                }
+            }
+            power = next;
+        }
+        (0..n).map(|i| power[i][i]).sum()
+    }
+
+    /// A deterministic, sparse-ish random row-stochastic matrix of size `n`,
+    /// built from the frozen splitmix64 stream so the battery is reproducible.
+    fn random_stochastic(n: usize, seed: u64) -> Vec<Vec<f64>> {
+        let mut state = seed;
+        let mut next = || {
+            state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+            (super::splitmix64(state) >> 11) as f64 / (1u64 << 53) as f64
+        };
+        let mut matrix = vec![vec![0.0_f64; n]; n];
+        for row in matrix.iter_mut() {
+            let mut sum = 0.0;
+            for cell in row.iter_mut() {
+                let value = if next() < 0.5 { 0.0 } else { next() };
+                *cell = value;
+                sum += value;
+            }
+            if sum == 0.0 {
+                row[0] = 1.0;
+                sum = 1.0;
+            }
+            for cell in row.iter_mut() {
+                *cell /= sum;
+            }
+        }
+        matrix
+    }
+
+    #[test]
+    fn eigenvalues_recover_a_known_diagonal_spectrum() {
+        let matrix = vec![
+            vec![0.5, 0.0, 0.0],
+            vec![0.0, 0.2, 0.0],
+            vec![0.0, 0.0, -0.3],
+        ];
+        let mut moduli: Vec<f64> = super::eigenvalues(&matrix)
+            .iter()
+            .map(|value| value.modulus())
+            .collect();
+        moduli.sort_by(|a, b| b.partial_cmp(a).unwrap());
+        assert!((moduli[0] - 0.5).abs() < 1e-9);
+        assert!((moduli[1] - 0.3).abs() < 1e-9);
+        assert!((moduli[2] - 0.2).abs() < 1e-9);
+    }
+
+    #[test]
+    fn eigenvalues_recover_a_symmetric_tridiagonal_spectrum() {
+        // [[2,1,0],[1,2,1],[0,1,2]] has eigenvalues 2 and 2 ± √2.
+        let matrix = vec![
+            vec![2.0, 1.0, 0.0],
+            vec![1.0, 2.0, 1.0],
+            vec![0.0, 1.0, 2.0],
+        ];
+        let mut moduli: Vec<f64> = super::eigenvalues(&matrix)
+            .iter()
+            .map(|value| value.modulus())
+            .collect();
+        moduli.sort_by(|a, b| b.partial_cmp(a).unwrap());
+        assert!((moduli[0] - (2.0 + 2.0_f64.sqrt())).abs() < 1e-9);
+        assert!((moduli[1] - 2.0).abs() < 1e-9);
+        assert!((moduli[2] - (2.0 - 2.0_f64.sqrt())).abs() < 1e-9);
+    }
+
+    #[test]
+    fn slem_of_a_permutation_on_the_unit_circle_is_one() {
+        // The 3-cycle permutation has the cube roots of unity as its spectrum:
+        // all three eigenvalues have modulus 1, so removing one Perron
+        // eigenvalue still leaves |λ2| = 1 (a periodic, non-mixing kernel).
+        let matrix = vec![
+            vec![0.0, 1.0, 0.0],
+            vec![0.0, 0.0, 1.0],
+            vec![1.0, 0.0, 0.0],
+        ];
+        let spectrum = super::eigenvalues(&matrix);
+        assert!((largest_modulus(&spectrum) - 1.0).abs() < 1e-9);
+        assert!((super::second_largest_modulus(&spectrum) - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn slem_of_a_two_state_chain_is_the_closed_form() {
+        // P = [[1-a, a], [b, 1-b]] has eigenvalues 1 and (1 - a - b), so the
+        // literal second-largest modulus is |1 - a - b|.
+        for (a, b) in [(0.3, 0.2), (0.7, 0.1), (0.5, 0.5), (0.9, 0.9)] {
+            let matrix = vec![vec![1.0 - a, a], vec![b, 1.0 - b]];
+            let slem = super::second_largest_modulus(&super::eigenvalues(&matrix));
+            assert!(
+                (slem - (1.0 - a - b).abs()).abs() < 1e-9,
+                "a={a}, b={b}, slem={slem}"
+            );
+        }
+    }
+
+    #[test]
+    fn slem_of_the_averaging_chain_is_zero() {
+        // Rank-one uniform kernel: eigenvalues 1 and 0, so |λ2| = 0, gap = 1.
+        let matrix = vec![vec![0.5, 0.5], vec![0.5, 0.5]];
+        let slem = super::second_largest_modulus(&super::eigenvalues(&matrix));
+        assert!(slem < 1e-9, "slem = {slem}");
+    }
+
+    #[test]
+    fn spectrum_satisfies_the_trace_invariant_on_random_stochastic_kernels() {
+        // The rigorous, self-contained correctness witness for the canonical
+        // eigensolver: the power sums Σλᵢᵏ must equal trace(Pᵏ) exactly (up to
+        // f64), for k = 1, 2, 3, on real branching-scale kernels n = 8 and 16.
+        for &n in &[8_usize, 16] {
+            for replicate in 0..64 {
+                let matrix = random_stochastic(n, 0xA5A5_0000 ^ (n as u64) << 32 ^ replicate);
+                let spectrum = super::eigenvalues(&matrix);
+                assert_eq!(spectrum.len(), n);
+                let residual = super::spectral_trace_residual(&matrix, &spectrum);
+                assert!(
+                    residual < 1e-9,
+                    "n={n}, replicate={replicate}, residual={residual}"
+                );
+                // Independent cross-check of the production residual: compute
+                // Σλᵢ² here and compare to a from-scratch trace(P²).
+                let mut power_sum2 = Complex64::real(0.0);
+                for value in &spectrum {
+                    power_sum2 = power_sum2.add(value.mul(*value));
+                }
+                let direct_trace2 = trace_of_power(&matrix, 2);
+                assert!((power_sum2.re - direct_trace2).abs() < 1e-9);
+                assert!(power_sum2.im.abs() < 1e-9);
+                // Every eigenvalue of a stochastic matrix lies in the unit disk.
+                for value in &spectrum {
+                    assert!(value.modulus() <= 1.0 + 1e-9);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn method_one_and_method_two_agree_on_symmetric_kernels_within_tolerance() {
+        // On symmetric (hence real-spectrum) doubly-stochastic kernels the
+        // canonical eigensolver (method 1) and the deflated power iteration
+        // (method 2) must agree on |λ2| within the declared cross-method
+        // tolerance — the Section 7 correctness guarantee for the descriptors.
+        let kernels = vec![
+            vec![vec![0.6, 0.4], vec![0.4, 0.6]],
+            vec![vec![0.5, 0.5], vec![0.5, 0.5]],
+            vec![
+                vec![0.5, 0.3, 0.2],
+                vec![0.3, 0.4, 0.3],
+                vec![0.2, 0.3, 0.5],
+            ],
+            vec![
+                vec![0.7, 0.1, 0.1, 0.1],
+                vec![0.1, 0.7, 0.1, 0.1],
+                vec![0.1, 0.1, 0.7, 0.1],
+                vec![0.1, 0.1, 0.1, 0.7],
+            ],
+        ];
+        for matrix in kernels {
+            let method1 = super::second_largest_modulus(&super::eigenvalues(&matrix));
+            let stationary = super::stationary_distribution(&matrix);
+            let method2 = super::power_iteration_second_modulus(&matrix, &stationary);
+            assert!(
+                (method1 - method2).abs() <= SPECTRAL_CROSS_METHOD_TOLERANCE,
+                "method1={method1}, method2={method2}"
+            );
+        }
+    }
+
+    #[test]
+    fn reference_crate_crosscheck_falls_back_to_methods_one_two_and_known_spectra() {
+        // Method 3 (Section 7) is a battle-tested reference eigensolver admitted
+        // ONLY as a test-only dev-dependency, so the frozen feature path stays
+        // dependency-free. No reference crate is vendored in this offline
+        // environment, so — exactly as Section 4.3 declares — the cross-check
+        // falls back to methods-1↔2 agreement together with the closed-form
+        // known-spectra battery, which alone establish the canonical path's
+        // correctness. This test enforces that fallback is always available:
+        // for kernels with a KNOWN closed-form |λ2|, method 1 recovers it and
+        // method 2 (where the spectrum is real) confirms it.
+        // Known |λ2| = |1 - a - b| for the two-state chain.
+        let (a, b): (f64, f64) = (0.3, 0.2);
+        let matrix = vec![vec![1.0 - a, a], vec![b, 1.0 - b]];
+        let known = (1.0 - a - b).abs();
+        let method1 = super::second_largest_modulus(&super::eigenvalues(&matrix));
+        let stationary = super::stationary_distribution(&matrix);
+        let method2 = super::power_iteration_second_modulus(&matrix, &stationary);
+        assert!((method1 - known).abs() <= SPECTRAL_CROSS_METHOD_TOLERANCE);
+        assert!((method2 - known).abs() <= SPECTRAL_CROSS_METHOD_TOLERANCE);
+    }
+
+    #[test]
+    fn kernel_rows_from_a_real_candidate_sum_to_one() {
+        let context = super::AttemptContext::new(3, SEED_BLOCKS[0].training_width_3_seed, 0);
+        let masks = super::generate_successor_masks(context).expect("masks");
+        let system = super::build_system(context, &masks).expect("system");
+        let matrix = super::kernel_matrix(context, &system).expect("kernel");
+        assert_eq!(matrix.len(), 8); // 2^3 states
+        for row in &matrix {
+            let sum: f64 = row.iter().sum();
+            assert!((sum - 1.0).abs() < 1e-12, "row sum = {sum}");
+            assert!(row.iter().all(|&value| value >= 0.0));
+        }
+    }
+
+    #[test]
+    fn mixing_time_matches_a_brute_force_iteration_and_saturates() {
+        // Averaging chain: P^1 already equals π, so τ_ε = 1 at any ε ≥ 0.
+        let averaging = vec![vec![0.5, 0.5], vec![0.5, 0.5]];
+        let stationary = super::stationary_distribution(&averaging);
+        assert_eq!(super::mixing_time(&averaging, &stationary), 1);
+
+        // A birth–death chain mixes in finite time; the library mixing time
+        // must equal an independent brute-force iteration to the same π.
+        let chain = vec![
+            vec![0.5, 0.5, 0.0],
+            vec![0.25, 0.5, 0.25],
+            vec![0.0, 0.5, 0.5],
+        ];
+        let stationary = super::stationary_distribution(&chain);
+        let library = super::mixing_time(&chain, &stationary);
+        let brute = brute_force_mixing_time(&chain, &stationary);
+        assert_eq!(library, brute);
+        assert!((1..MIXING_TIME_CAP).contains(&library));
+
+        // A 2-cycle is periodic: P^t alternates identity/swap and never comes
+        // within ε = 1/4 of π, so τ_ε saturates deterministically at T_max.
+        let periodic = vec![vec![0.0, 1.0], vec![1.0, 0.0]];
+        let stationary = super::stationary_distribution(&periodic);
+        assert_eq!(super::mixing_time(&periodic, &stationary), MIXING_TIME_CAP);
+    }
+
+    /// Independent brute-force ε-mixing time: iterate P^t explicitly and return
+    /// the first t whose worst-start TV distance to π is ≤ ε.
+    fn brute_force_mixing_time(matrix: &[Vec<f64>], stationary: &[f64]) -> usize {
+        let n = matrix.len();
+        let mut power = matrix.to_vec();
+        for t in 1..=MIXING_TIME_CAP {
+            let worst = (0..n)
+                .map(|i| {
+                    0.5 * (0..n)
+                        .map(|j| (power[i][j] - stationary[j]).abs())
+                        .sum::<f64>()
+                })
+                .fold(0.0_f64, f64::max);
+            if worst <= MIXING_EPSILON {
+                return t;
+            }
+            if t == MIXING_TIME_CAP {
+                break;
+            }
+            let mut next = vec![vec![0.0_f64; n]; n];
+            for i in 0..n {
+                for k in 0..n {
+                    for j in 0..n {
+                        next[i][j] += power[i][k] * matrix[k][j];
+                    }
+                }
+            }
+            power = next;
+        }
+        MIXING_TIME_CAP
+    }
+
+    #[test]
+    fn literal_spectral_descriptors_are_gap_and_normalized_mixing_time() {
+        // Build a real width-3 candidate and check both descriptors are in
+        // range, with g = 1 - |λ2| exactly matching the canonical eigensolver
+        // and τ reported as τ_ε / T_max.
+        let context = super::AttemptContext::new(3, SEED_BLOCKS[0].training_width_3_seed, 0);
+        let masks = super::generate_successor_masks(context).expect("masks");
+        let system = super::build_system(context, &masks).expect("system");
+        let [gap, tau] =
+            super::literal_spectral_descriptors(context, &system).expect("descriptors");
+
+        let matrix = super::kernel_matrix(context, &system).expect("kernel");
+        let slem = super::second_largest_modulus(&super::eigenvalues(&matrix));
+        assert!((gap - (1.0 - slem)).abs() < 1e-12);
+
+        let stationary = super::stationary_distribution(&matrix);
+        let expected_tau = super::mixing_time(&matrix, &stationary) as f64 / MIXING_TIME_CAP as f64;
+        assert!((tau - expected_tau).abs() < 1e-12);
+        assert!((0.0..=1.0).contains(&tau));
+        assert!(gap <= 1.0 + 1e-9);
+    }
+
+    #[test]
+    fn complex_arithmetic_is_consistent() {
+        // The minimal complex type must behave: (1+2i)(3-i) = 5+5i, and the
+        // principal square root of -1 is i.
+        let product = Complex64::new(1.0, 2.0).mul(Complex64::new(3.0, -1.0));
+        assert!((product.re - 5.0).abs() < 1e-12 && (product.im - 5.0).abs() < 1e-12);
+        let root = Complex64::new(-1.0, 0.0).sqrt();
+        assert!(root.re.abs() < 1e-9 && (root.im - 1.0).abs() < 1e-9);
     }
 }
