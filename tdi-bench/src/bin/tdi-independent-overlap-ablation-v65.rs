@@ -144,7 +144,7 @@ const MODEL_LAYOUT_COUNT: usize = 9;
 const RIDGE_LAMBDA: f64 = 1.0;
 const BOOTSTRAP_REPLICATES: usize = 4_000;
 // Fresh per-family stratified-aggregate bootstrap seeds (TDI-6.5 Section 12),
-// disjoint from every TDI-5.2 … 5.6 bootstrap seed. Each family aggregates its
+// disjoint from every TDI-5.2 … 6.2 bootstrap seed. Each family aggregates its
 // own three blocks with seed base + family index.
 const AGGREGATE_BOOTSTRAP_SEED_BASE: u64 = 0x5444_4936_3500_4700;
 
@@ -163,7 +163,7 @@ const WIDTH_5_NO_PROGRESS_LIMIT: usize = 75_000;
 const WIDTH_6_NO_PROGRESS_LIMIT: usize = 100_000;
 
 /// A seed block is one of the `SEED_BLOCK_COUNT` blocks within a generator
-/// family (Section 8). Its population seeds and bootstrap seed are computed
+/// family (Section 9). Its population seeds and bootstrap seed are computed
 /// deterministically from `(family, block)`; no block table is stored.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct SeedBlockId {
@@ -176,13 +176,13 @@ impl SeedBlockId {
         format!("{}/b{}", self.family.label(), self.block)
     }
 
-    /// `base(f, b) = 1.4e9 + f·300e6 + b·100e6` (Section 8). The four
+    /// `base(f, b) = 5.0e9 + f·300e6 + b·100e6` (Section 12). The four
     /// populations start at this base + `{0, 10, 20, 30}·1e6`.
     fn population_base_seed(self) -> u64 {
         5_000_000_000 + self.family.index() * 300_000_000 + u64::from(self.block) * 100_000_000
     }
 
-    /// `0x5444_4936_3500_0000 + (SEED_BLOCK_COUNT·f + b) + 1` (Section 9).
+    /// `0x5444_4936_3500_0000 + (SEED_BLOCK_COUNT·f + b) + 1` (Section 12).
     fn bootstrap_seed(self) -> u64 {
         0x5444_4936_3500_0000
             + (SEED_BLOCK_COUNT as u64 * self.family.index() + u64::from(self.block))
@@ -240,7 +240,7 @@ impl PopulationKind {
         }
     }
 
-    /// Offset from the block base seed: 0 / 10M / 20M / 30M (Section 8).
+    /// Offset from the block base seed: 0 / 10M / 20M / 30M (Section 12).
     const fn seed_offset(self) -> u64 {
         match self {
             Self::TrainingWidth3 => 0,

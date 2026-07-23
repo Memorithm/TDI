@@ -204,10 +204,16 @@ an iteration cap; `|λ₂|` is the max modulus over the non-Perron eigenvalues. 
 mixing time iterates `Pᵗ` in `f64`. The bounded tests assert that methods 1, 2
 and 3 agree on `|λ₂|` to within `1e-9` on a battery of kernels with **known**
 spectra (symmetric, permutation, reversible birth–death, randomly generated
-stochastic matrices) **and on sampled kernels drawn from each of F0–F3**, and
-that `τ_ε` matches a direct brute-force iteration exactly. Cross-method
-agreement within tolerance **is** the correctness guarantee that replaces
-bit-exact reproduction for these descriptors.
+stochastic matrices), and that `τ_ε` matches a direct brute-force iteration
+exactly. On the more varied F1/F2/F3 kernels a scalar deflated power iteration
+(method 2) is **not** a valid `|λ₂|` witness — `λ₂` there may be complex — so
+the canonical method-1 path's correctness on the family kernels is instead
+established by the rigorous **trace-consistency** residual
+`max_k |Σλᵢᵏ − trace(Pᵏ)|`, reported per family in the Section 21
+cross-validation table and enforced by the trace-invariant bounded test.
+Cross-method agreement within tolerance on the known-spectra battery, together
+with the per-family trace witness, **is** the correctness guarantee that
+replaces bit-exact reproduction for these descriptors.
 
 ## 9. The generator family
 
