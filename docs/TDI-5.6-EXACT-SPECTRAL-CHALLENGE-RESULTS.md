@@ -25,42 +25,37 @@ low-order spectral structure.
 
 | Item | Value |
 |---|---|
+| Run git commit | `f5dcb878f666d3e65139c0b9ddc8ae953a9a7a0f` |
 | Evaluator (v56) SHA-256 | `0820274b3edb58a6e123c612dbed8dd8a1725221240365f142d9510404e1d1b2` |
 | Preregistration SHA-256 | `59e3375b82d0bb7aad7be0591b9d1eac074d4b194678dfe0e06e73c8aac89807` |
 | Scientific-manifest SHA-256 | `b34a90a6dff311422cef46f2b213880d85d2edc7c3a78f9563c059a91479fa4c` |
 | Result log SHA-256 | `010b3045222221e563dc8befa10966a98b161018ee884d0f8e8c44e08ef5986e` |
+| Toolchain | rustc 1.97.0 (2d8144b78 2026-07-07), cargo 1.97.0 (c980f4866 2026-06-30) |
 | Host | Linux `tarek`, aarch64 (Jetson, ARM64) |
-| Completion (UTC) | 2026-07-22T22:24:38Z |
-| Run git commit / start (UTC) / toolchain | recorded in the run's committed metadata artifact (see below) |
+| Start / end (UTC) | 2026-07-22T22:05:34Z / 2026-07-22T22:24:38Z (~19 min) |
 
-The three frozen-code hashes above were **recomputed from the committed
-frozen files on the base of this document and match the frozen manifests**:
-the v56 evaluator hash equals the frozen `TDI-5.6-…-EVALUATOR.sha256`, and
-the full frozen scientific chain TDI-5.1 → TDI-5.6 (31 files, including all
-of `tdi-core`) verifies clean via `sha256sum -c
-docs/TDI-5.6-SCIENTIFIC-CODE.sha256`. The result log SHA-256, host, and
-completion timestamp are taken from the run's own final completion lines.
+The run's recorded evaluator hash equals the committed frozen v56 evaluator
+and the frozen `EVALUATOR.sha256` manifest (`0820274b…`); the preregistration
+(`59e3375b…`) and scientific-manifest (`b34a90a6…`) hashes likewise match the
+committed frozen files, and the full frozen scientific chain TDI-5.1 → TDI-5.6
+(31 files, including all of `tdi-core`) verifies clean via `sha256sum -c
+docs/TDI-5.6-SCIENTIFIC-CODE.sha256`. The run therefore used the exact
+reviewed, frozen scientific code.
+
+The run's read-only artifacts are committed under
+`results/tdi5.6-exact-spectral-challenge/` (`…v56.log`, `…v56.log.sha256`,
+`…v56.complete`, `…v56.metadata.txt`); the committed `…metadata.txt` records
+the run git commit, start/end timestamps, `rustc`/`cargo` versions, `uname`,
+and the cross-checked frozen hashes above. The committed log has been
+reverified independently to hash to
+`010b3045222221e563dc8befa10966a98b161018ee884d0f8e8c44e08ef5986e`.
 
 `scripts/reproduce-tdi5.6.sh` verifies the entire frozen hash chain **before
-any generation** and refuses a dirty repository; the run completed and
-emitted every criterion line, so the frozen scientific code was intact at
-run time. Because that scientific code is byte-identical across the merged
-history that carries the frozen v56 chain, the log SHA-256
-`010b3045222221e563dc8befa10966a98b161018ee884d0f8e8c44e08ef5986e` is
-reproducible by any faithful re-run carrying evaluator hash
-`0820274b…` on the same toolchain and architecture.
-
-> **Provenance to be pinned.** Following the TDI-5.3/5.4/5.5 pattern, the
-> run's read-only artifacts (`…v56.log`, `…v56.log.sha256`,
-> `…v56.complete`, `…v56.metadata.txt`) live under
-> `results/tdi5.6-exact-spectral-challenge/` on the Jetson. Their
-> `…metadata.txt` records the exact run git commit, start timestamp,
-> `rustc`/`cargo` versions, `uname`, and the run-recorded `evaluator_sha256`
-> (which the metadata cross-checks against the frozen value). Those four
-> fields — run commit, start time, toolchain, and the run-side evaluator
-> hash — will be pinned into this table verbatim once the result branch is
-> committed and merged; every scientific claim below is already fully
-> determined by the frozen code and the run's emitted criterion lines.
+any generation** and refuses a dirty repository, so the frozen scientific code
+was intact at run time. Determinism is exact: the log SHA-256 above is
+reproduced by any faithful re-run of commit
+`f5dcb878f666d3e65139c0b9ddc8ae953a9a7a0f` on the same toolchain and
+architecture.
 
 ## 2. Populations
 
@@ -237,6 +232,7 @@ criterion lines, and writes read-only result, metadata, hash and completion
 artifacts under `results/tdi5.6-exact-spectral-challenge/`. Determinism is
 exact: the log SHA-256
 `010b3045222221e563dc8befa10966a98b161018ee884d0f8e8c44e08ef5986e` is
-reproduced by any faithful re-run carrying the frozen v56 evaluator (hash
+reproduced by any faithful re-run of commit
+`f5dcb878f666d3e65139c0b9ddc8ae953a9a7a0f` (frozen v56 evaluator hash
 `0820274b3edb58a6e123c612dbed8dd8a1725221240365f142d9510404e1d1b2`) on the
 same toolchain and architecture.
