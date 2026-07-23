@@ -33,7 +33,7 @@
 //!     pairwise interactions'* nonlinear marginal value beyond a nonlinear
 //!     contraction + exact-moments + literal-spectral baseline; `GK − SK`
 //!     isolates the literal spectral descriptors' nonlinear marginal value;
-//!   * three fresh, independent seed blocks M/N/O — renamed P/Q/R — disjoint
+//!   * three fresh, independent seed blocks P/Q/R — disjoint
 //!     from every prior block (population base seeds start at 4.0e9), with fresh
 //!     `TDI6`/`32`-marked bootstrap seeds;
 //!   * criterion TDI-6.2A (GKT vs GK, degree-2, at U3 and U6 — the primary
@@ -146,7 +146,7 @@ const MODEL_LAYOUT_COUNT: usize = 9;
 const RIDGE_LAMBDA: f64 = 1.0;
 const BOOTSTRAP_REPLICATES: usize = 4_000;
 // Fresh stratified-aggregate bootstrap seed (TDI-6.2 Section 10), disjoint from
-// every TDI-5.x bootstrap seed (TDI6 prefix, `31` = ".1" marker).
+// every TDI-5.x bootstrap seed (TDI6 prefix, `32` = ".2" marker).
 const AGGREGATE_BOOTSTRAP_SEED: u64 = 0x5444_4936_3200_4700;
 
 const MAX_SUPPORTED_WIDTH: u8 = 6;
@@ -195,7 +195,7 @@ struct SeedBlockSpec {
 }
 
 // Fresh seed blocks P/Q/R (TDI-6.2 Section 9), pairwise-disjoint and disjoint
-// from every prior block: TDI-6.2 consumes seeds up to ≈ 3.23×10⁹, so 6.2
+// from every prior block: TDI-6.1 consumes seeds up to ≈ 3.23×10⁹, so 6.2
 // starts its population base seeds at 4.0×10⁹. Population base for block index
 // b is 4_000_000_000 + b·100_000_000; the four populations start at
 // base + {0, 10, 20, 30}·10⁶. New bootstrap seeds carry the `TDI6` prefix with
@@ -3165,7 +3165,7 @@ fn validate_frozen_block_order(seed_blocks: &[SeedBlockId]) -> Result<(), String
     for (&actual, &expected) in seed_blocks.iter().zip(&FROZEN_BLOCK_ORDER) {
         if actual != expected {
             return Err(format!(
-                "requires deterministic block order J, K, L; found {} where {} was expected",
+                "requires deterministic block order P, Q, R; found {} where {} was expected",
                 actual.label(),
                 expected.label()
             ));
@@ -4038,9 +4038,9 @@ struct Tdi62ExperimentReport {
 }
 
 /// Runs the full TDI-6.2 pipeline (generation of the width-3/width-4
-/// populations across seed blocks M/N/O, per-block ridge fitting on the
+/// populations across seed blocks P/Q/R, per-block ridge fitting on the
 /// contraction- and spectral-inclusive design, aggregation, and the three
-/// TDI-5.6
+/// TDI-6.2
 /// criteria) over an arbitrary set of population specifications. Callers
 /// control scale entirely through `population_specs`: the preregistered
 /// `population_specs()` output requests the real 120,000-record run, while
@@ -5165,17 +5165,17 @@ fn main() -> Result<(), String> {
     }
 }
 
-/// The TDI-5.6 full-run entrypoint. Checks the exact confirmation
+/// The TDI-6.2 full-run entrypoint. Checks the exact confirmation
 /// environment variable *before* any generation, fitting or bootstrap;
 /// only when it matches does this call the real full pipeline exactly
 /// once, over the real preregistered `population_specs()`, and print the
-/// complete required raw output. See TDI-5.6 preregistration Section 16.
+/// complete required raw output. See TDI-6.2 preregistration Section 16.
 fn run_full_experiment() -> Result<(), String> {
     let confirmation = std::env::var(TDI62_FULL_RUN_CONFIRMATION_VAR).ok();
 
     if !tdi62_full_run_confirmed(confirmation.as_deref()) {
         return Err(format!(
-            "TDI-5.6 full execution requires the exact confirmation environment \
+            "TDI-6.2 full execution requires the exact confirmation environment \
              variable {TDI62_FULL_RUN_CONFIRMATION_VAR}={TDI62_FULL_RUN_CONFIRMATION_VALUE}; \
              refusing before any generation, fitting or bootstrap"
         ));
@@ -5188,14 +5188,14 @@ fn run_full_experiment() -> Result<(), String> {
     Ok(())
 }
 
-/// TDI-5.6 preflight: verifies the complete frozen configuration (seed
+/// TDI-6.2 preflight: verifies the complete frozen configuration (seed
 /// reservations, population counts, bootstrap constants, pipeline wiring)
 /// and prints identities and the exact real-run command, without ever
-/// generating a scientific population. See TDI-5.6 preregistration
+/// generating a scientific population. See TDI-6.2 preregistration
 /// Section 16.
 fn run_preflight() -> Result<(), String> {
     println!();
-    println!("=== TDI-5.6 PREFLIGHT (aucune génération scientifique) ===");
+    println!("=== TDI-6.2 PREFLIGHT (aucune génération scientifique) ===");
 
     let reservation_count = validate_preregistered_seed_reservations()?;
     println!("réservations de graines vérifiées (disjointes)  : {reservation_count}");
@@ -5258,7 +5258,7 @@ fn run_preflight() -> Result<(), String> {
     println!();
     println!("Commande requise pour l'exécution réelle (jamais lancée automatiquement) :");
     println!("  {TDI62_FULL_RUN_CONFIRMATION_VAR}={TDI62_FULL_RUN_CONFIRMATION_VALUE} \\");
-    println!("    bash scripts/reproduce-tdi5.6.sh");
+    println!("    bash scripts/reproduce-tdi6.2.sh");
 
     println!();
     println!("=== PREFLIGHT TERMINÉ : aucun résultat produit ===");
