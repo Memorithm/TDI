@@ -1539,8 +1539,15 @@ fn eigenvalues(real_matrix: &[Vec<f64>]) -> Vec<Complex64> {
 
         iterations += 1;
         if iterations > max_iterations {
-            for (d, row_vec) in h.iter().enumerate().take(active) {
-                eigenvalues.push(row_vec[d]);
+            // Non-convergence must never emit finite-but-wrong eigenvalues into
+            // the frozen feature path. Signal failure with NaN so the descriptor
+            // becomes non-finite and the candidate is rejected
+            // (`NonFiniteFeature`) rather than silently mis-scored. This is
+            // empirically unreachable (the exceptional shift handles unit-modulus
+            // spectra), but it makes a silent eigensolver failure impossible
+            // rather than merely improbable.
+            for _ in 0..active {
+                eigenvalues.push(Complex64::new(f64::NAN, f64::NAN));
             }
             break;
         }
@@ -1570,7 +1577,14 @@ fn second_largest_modulus(eigenvalues: &[Complex64]) -> f64 {
         if index == perron_index {
             continue;
         }
-        modulus = f64::max(modulus, value.modulus());
+        let candidate = value.modulus();
+        // Propagate a non-finite eigenvalue instead of letting `f64::max` absorb
+        // it: a NaN here signals eigensolver non-convergence and must reach the
+        // `NonFiniteFeature` rejection, never be silently dropped.
+        if candidate.is_nan() {
+            return f64::NAN;
+        }
+        modulus = f64::max(modulus, candidate);
     }
     modulus
 }
@@ -6289,6 +6303,52 @@ mod tests {
         assert!((tau - expected_tau).abs() < 1e-12);
         assert!((0.0..=1.0).contains(&tau));
         assert!(gap <= 1.0 + 1e-9);
+    }
+
+    #[test]
+    fn non_convergence_signals_via_nan_and_is_rejected_not_silently_scored() {
+        // Hardening (adversarial-review Findings 1 & 3): a non-finite eigenvalue
+        // (the sentinel the eigensolver's non-convergence fallback emits) must
+        // propagate to a NaN SLEM so `1 - |λ2|` is non-finite and the candidate
+        // is rejected via the NonFiniteFeature path — never absorbed by
+        // `f64::max` into a finite-but-wrong gap.
+        let spectrum = vec![
+            Complex64::real(1.0),
+            Complex64::new(f64::NAN, f64::NAN),
+            Complex64::real(0.3),
+        ];
+        assert!(super::second_largest_modulus(&spectrum).is_nan());
+        // All-NaN (full non-convergence) also yields NaN, not 0.
+        let all_nan = vec![
+            Complex64::new(f64::NAN, f64::NAN),
+            Complex64::new(f64::NAN, f64::NAN),
+        ];
+        assert!(super::second_largest_modulus(&all_nan).is_nan());
+    }
+
+    #[test]
+    fn real_candidate_descriptors_are_always_finite_so_the_guard_never_false_rejects() {
+        // The convergence guard must never wrongly reject a VALID candidate: for
+        // a battery of real width-3 and width-4 candidate kernels the eigensolver
+        // converges and `literal_spectral_descriptors` returns finite [g, τ].
+        for (width, base) in [
+            (3_u8, SEED_BLOCKS[0].training_width_3_seed),
+            (4_u8, SEED_BLOCKS[0].training_width_4_seed),
+        ] {
+            for offset in 0..24_u64 {
+                let context = super::AttemptContext::new(width, base + offset, 0);
+                let Ok(masks) = super::generate_successor_masks(context) else {
+                    continue;
+                };
+                let Ok(system) = super::build_system(context, &masks) else {
+                    continue;
+                };
+                let [gap, tau] =
+                    super::literal_spectral_descriptors(context, &system).expect("descriptors");
+                assert!(gap.is_finite(), "width={width}, seed={}", base + offset);
+                assert!(tau.is_finite(), "width={width}, seed={}", base + offset);
+            }
+        }
     }
 
     #[test]
