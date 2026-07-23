@@ -1,15 +1,14 @@
 # TDI-6.2 — Nonlinear Sufficiency: Does the Overlap Signal Survive the Literal Spectral Gap Under a *Nonlinear* Model?
 
-## Preregistration — DRAFT (not yet frozen)
+## Preregistration
 
-This document is the **draft** preregistration for TDI-6.2. It is not frozen and
-carries no SHA-256 manifest yet; the design may still change during review. Once
-its manifest, the evaluator, the reproduction script, the CI workflow and the
-bounded tests are committed, this design freezes under the Section 22 rule: no
+This document is the frozen preregistration for TDI-6.2. Once its SHA-256
+manifest, the evaluator, the reproduction script, the CI workflow and the
+bounded tests are committed, this design is frozen under the Section 20 rule: no
 scientific constant, tolerance, FP-regime declaration, seed block, model-family
 definition, feature definition, baseline or criterion may change without a new
 experiment identifier. Freezing does not authorize a run; the real experiment
-begins only as the deliberate one-time human action of Section 18. The authoring
+begins only as the deliberate one-time human action of Section 16. The authoring
 agent never invokes `--full`.
 
 ## 1. Experimental status, provenance, and the single changed factor
