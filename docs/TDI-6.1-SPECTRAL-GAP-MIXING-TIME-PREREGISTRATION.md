@@ -1,14 +1,17 @@
 # TDI-6.1 — The Literal Spectral Gap and Mixing Time: Does the Overlap Signal Survive the *Actual* Second Eigenvalue?
 
-## Preregistration — DRAFT (for review; not yet frozen)
+## Preregistration
 
-> **Status: DRAFT.** This is the design of the **first TDI-6 experiment** and
-> the first to relax bit-exactness. It is presented for review. Nothing here
-> is frozen until its SHA-256 manifest, the evaluator, the reproduction
-> script, the CI workflow and the bounded tests are committed under the
-> Section 22 freeze rule. Freezing the design does not authorize a run; the
-> real experiment begins only as the deliberate one-time human action of
-> Section 18. The authoring agent never invokes `--full`.
+This document is the frozen preregistration for TDI-6.1 — the design of the
+**first TDI-6 experiment** and the first to relax bit-exactness. Once its
+SHA-256 manifest, the evaluator, the reproduction script, the CI workflow and
+the bounded tests are committed, this design is frozen under the Section 22
+freeze rule: no scientific constant, tolerance, FP-regime declaration, seed
+block, spectral descriptor definition, feature definition, baseline or
+criterion may change without a new experiment identifier. Freezing the design
+does not authorize a run; the real experiment begins only as the deliberate
+one-time human action of Section 18. The authoring agent never invokes
+`--full`.
 
 ## 1. Experimental status, provenance, and the TDI-6 discipline shift
 
@@ -112,9 +115,10 @@ Bit-exactness is replaced by **cross-method agreement within a declared
 tolerance**. The literal `|λ₂|` and `τ_ε` are computed by three independent
 implementations that must agree (Section 7):
 
-1. **canonical (frozen feature path):** a pure-Rust Hessenberg reduction +
-   Francis double-shift QR eigensolver on the ≤ 16×16 kernel, giving all
-   eigenvalues (including complex-conjugate pairs) → the literal `|λ₂|`. No new
+1. **canonical (frozen feature path):** a pure-Rust standard dense eigenvalue
+   algorithm — Hessenberg reduction followed by shifted QR iteration (in complex
+   arithmetic, so real and complex-conjugate eigenvalues are handled uniformly)
+   — on the ≤ 16×16 kernel, giving all eigenvalues → the literal `|λ₂|`. No new
    dependency; `unsafe`-free.
 2. **cross-check A (tests):** power iteration on the kernel deflated against the
    Perron (stationary) direction, plus the geometric TV-distance decay rate, as
@@ -128,13 +132,15 @@ The ε-mixing time is computed by direct iteration of `Pᵗ` (method for all
 three: the mixing time is an observable, not an eigenvalue) and cross-checked
 against the spectral-gap bound `τ_ε ≲ log(1/ε)/(1 − |λ₂|)`.
 
-> **DESIGN DECISION FOR REVIEW.** Cross-check B (Section 7, method 3) is the
-> single choice that adds a vendored crate — even as a `dev-dependency` it
-> enlarges `Cargo.lock` and `vendor/`. Methods 1 and 2 alone are fully
-> dependency-free and already cross-validate the canonical path. Confirm
-> whether to (i) include the reference crate as a test-only witness [drafted],
-> (ii) drop it and rely on methods 1↔2 agreement, or (iii) promote it to the
-> production path. This is the one item that changes the dependency footprint.
+Cross-check B (Section 7, method 3) is included as a **test-only
+`dev-dependency`** reference eigensolver: it enlarges `Cargo.lock` and
+`vendor/` but never enters the frozen scientific feature path (method 1), which
+stays dependency-free and `unsafe`-free. Where offline vendoring of the
+reference crate is unavailable, the cross-validation test falls back to the
+methods-1↔2 agreement together with the closed-form **known-spectra battery**
+of Section 7 — which alone establish the canonical path's correctness — so the
+frozen feature path and its guarantees never depend on the reference crate
+being present.
 
 ## 5. The one-step Noop kernel
 
@@ -163,9 +169,10 @@ predict `g`?) is printed but drives no criterion.
 
 ## 7. Spectral-descriptor computation and the declared tolerance
 
-The canonical path (method 1) computes the spectrum by Hessenberg + Francis
-double-shift QR with a declared convergence tolerance `η = 1e-12` and iteration
-cap; `|λ₂|` is the max modulus over the non-Perron eigenvalues. The mixing time
+The canonical path (method 1) computes the spectrum by Hessenberg reduction
+followed by shifted QR iteration (in complex arithmetic, Wilkinson shift) with a
+declared convergence tolerance `η = 1e-12` and iteration cap; `|λ₂|` is the max
+modulus over the non-Perron eigenvalues. The mixing time
 iterates `Pᵗ` in `f64`. The bounded tests assert that methods 1, 2 and 3 agree
 on `|λ₂|` to within `1e-9` on a battery of kernels with **known** spectra
 (symmetric, permutation, reversible birth–death, and randomly generated
