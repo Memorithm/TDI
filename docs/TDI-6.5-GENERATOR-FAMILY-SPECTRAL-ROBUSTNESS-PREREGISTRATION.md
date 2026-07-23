@@ -2,18 +2,15 @@
 
 ## Preregistration
 
-> **DRAFT.** This document is the working draft of the TDI-6.5 preregistration.
-> It is frozen only when its SHA-256 manifest, the v65 evaluator, the
-> reproduction script, the CI workflow and the bounded tests are committed;
-> until then the section numbering and wording may still be adjusted. Freezing
-> the design does not authorize a run.
-
-Once frozen (Section 24 freeze rule), no scientific constant, tolerance,
-FP-regime declaration, seed block, generator-family rule, spectral-descriptor
-definition, feature definition, baseline or criterion may change without a new
-experiment identifier. Freezing the design does not authorize a run; the real
-experiment begins only as the deliberate one-time human action of Section 20.
-The authoring agent never invokes `--full`.
+This document is the frozen preregistration for TDI-6.5. Once its SHA-256
+manifest, the v65 evaluator, the reproduction script, the CI workflow and the
+bounded tests are committed, this design is frozen under the Section 24 freeze
+rule: no scientific constant, tolerance, FP-regime declaration, seed block,
+generator-family rule, spectral-descriptor definition, feature definition,
+baseline or criterion may change without a new experiment identifier. Freezing
+the design does not authorize a run; the real experiment begins only as the
+deliberate one-time human action of Section 20. The authoring agent never
+invokes `--full`.
 
 ## 1. Experimental status, provenance, and the single changed factor
 
