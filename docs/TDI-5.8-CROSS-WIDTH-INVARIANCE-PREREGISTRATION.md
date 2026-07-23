@@ -2,19 +2,14 @@
 
 ## Preregistration
 
-> **DRAFT.** This document is the working draft of the TDI-5.8 preregistration.
-> It is frozen only when its SHA-256 manifest, the v58 evaluator, the
-> reproduction script, the CI workflow and the bounded tests are committed. The
-> width set and per-width population counts of Sections 7–9 are provisional
-> until a bounded generation probe (Section 4.3) confirms the largest width is
-> reachable within the inherited generation budget; the frozen design records
-> the confirmed values.
-
-Once frozen (Section 22 freeze rule), no scientific constant, seed block,
-feature definition, width, baseline or criterion may change without a new
-experiment identifier. Freezing the design does not authorize a run; the real
-experiment begins only as the deliberate one-time human action of Section 16.
-The authoring agent never invokes `--full`.
+This document is the frozen preregistration for TDI-5.8. Once its SHA-256
+manifest, the v58 evaluator, the reproduction script, the CI workflow and the
+bounded tests are committed, this design is frozen under the Section 21 freeze
+rule: no scientific constant, seed block, feature definition, width, baseline
+or criterion may change without a new experiment identifier. Freezing the
+design does not authorize a run; the real experiment begins only as the
+deliberate one-time human action of Section 16. The authoring agent never
+invokes `--full`.
 
 ## 1. Experimental status, provenance, and the single changed factor
 
@@ -124,18 +119,27 @@ in `[0, N]`. No eigenvalue or floating-point iteration is introduced; TDI-5.8
 stays bit-exact at every width, so its reproduction is **byte-exact** (unlike
 the tolerance-based TDI-6 track).
 
-### 4.3 Width set and generation feasibility (provisional until probed)
+### 4.3 Width set and generation feasibility (confirmed by a bounded probe)
 
 The base widths {3, 4} are proven reachable at scale by every prior `--full`
 run. TDI-5.8 adds width **5** (`N = 32`), the natural next kernel size, giving a
 three-point invariance test across `N ∈ {8, 16, 32}` (a 4× size range). The
 inherited generation budget for width 5 (attempt multiplier 128, no-progress
-limit 75,000) governs acceptance. **Before freezing**, a bounded generation
-probe confirms that the preregistered width-5 target is reachable within that
-budget on the frozen seed blocks; the frozen design records the confirmed width
-set and counts. Widths `≥ 6` (`N ≥ 64`) are a **documented out-of-scope
-boundary** (generation cost and acceptance at `N ≥ 64` are deferred to a future
-identifier), recorded honestly in Section 20.
+limit 75,000) governs acceptance. A bounded generation probe (a few hundred
+accepted records, starting from the frozen width-5 seed blocks) observed
+**zero rejections** — acceptance is effectively total under the base
+generator's uniform non-empty successor-mask rule at width 5 — so the
+preregistered 15,000-record per-block target is comfortably reachable, far
+inside the 75,000 no-progress cap and the 128×-multiplier attempt ceiling. The
+width set `W = {3, 4, 5}` and the per-width counts of Sections 7–9 are
+confirmed and frozen. The dominant real-run cost at width 5 is **wall-clock**,
+not acceptance: the exact `ExactRatio` descriptor arithmetic runs
+substantially slower per candidate at width 5 than at widths 3–4, so the
+width-5 populations are the majority of the run's duration; this is a
+scheduling property of the human `--full` action (Section 16), not a
+scientific-design constraint. Widths `≥ 6` (`N ≥ 64`) are a **documented
+out-of-scope boundary** (generation cost and acceptance at `N ≥ 64` are
+deferred to a future identifier), recorded honestly in Section 19.
 
 ### 4.4 Feature scale and the transfer question
 
@@ -177,8 +181,9 @@ block and horizon one target scaler is shared across the three layouts.
 ## 7. Widths and populations
 
 The analysis-grouping dimension is the **width**, over the set `W = {3, 4, 5}`
-(provisional; Section 4.3). For **each** width `w ∈ W`, generate in-distribution
-populations across **three** fresh, pairwise-disjoint seed blocks:
+(confirmed reachable; Section 4.3). For **each** width `w ∈ W`, generate
+in-distribution populations across **three** fresh, pairwise-disjoint seed
+blocks:
 
 | Population | Accepted records |
 |---|---:|
