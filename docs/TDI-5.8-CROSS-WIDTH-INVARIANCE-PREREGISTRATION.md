@@ -152,6 +152,26 @@ however, a model fitted at one width carries that width's standardization, so
 despite the size-dependent moment scale — a scientifically meaningful stress,
 reported descriptively.
 
+### 4.5 The width-indicator baseline variable is structurally inert within each per-width fit
+
+The 13 inherited structural/entropic baseline variables (Section 3) include
+the candidate's own width as their 13th entry. Every prior TDI-5.x experiment
+pools widths 3 and 4 into one population per model, so this variable carries
+real within-population variance there. TDI-5.8 instead groups by width
+(Section 7): within any single width's own fitted model, this variable is
+therefore a **constant** equal to that width's `w`, so its raw variance is
+exactly zero and the ridge fit's zero-variance standardization guard assigns
+it a fixed fallback scale rather than dividing by zero; the resulting
+standardized column is identically `0` for every record, so the closed-form
+ridge solve necessarily assigns it coefficient `0` in every layout, at every
+horizon, in every block, at every width. This is an **expected, harmless**
+structural consequence of the per-width design, not a defect: the variable is
+identically inert in both the SK baseline and the SKT challenger of every
+TDI-5.8A/B/C confirmatory comparison, so it cannot bias any of them. It
+reduces the 13 baseline variables to 12 informative ones per width — recorded
+here so the observation is documented rather than a silent side effect of the
+relabelling from TDI-5.6's pooled-width design.
+
 ## 5. The exact descriptors
 
 Inherited unchanged from TDI-5.5 (δ, δ̄) and TDI-5.6 Section 5 (s₂, s₃). For a
@@ -239,16 +259,22 @@ inherited unchanged (bit-exact, integer seeds). TDI-5.8 uses fresh bootstrap
 seeds in the `0x5444_4935_3800_…` (`TDI5`/`38` = ".8") range, disjoint from
 every prior bootstrap seed:
 
-    block seed (width wi, block b) : 0x5444_4935_3800_0000 + (3·wi + b) + 1
-                                     (w3: …0001/0002/0003 … w5: …0007/0008/0009)
-    per-width aggregate seed (wi)  : 0x5444_4935_3800_4700 + wi
-                                     (w3: …4700 · w4: …4701 · w5: …4702)
+    block seed (width wi, block b)   : 0x5444_4935_3800_0000 + (3·wi + b) + 1
+                                       (w3: …0001/0002/0003 … w5: …0007/0008/0009)
+    per-width aggregate seed (wi)    : 0x5444_4935_3800_4700 + wi
+                                       (w3: …4700 · w4: …4701 · w5: …4702)
+    TDI-5.8B transfer aggregate seed : 0x5444_4935_3800_4703
 
 Each width's stratified-aggregate bootstrap runs over its own three blocks with
-its own aggregate seed. For each confirmatory comparison, report the two-sided
-95% interval of the baseline-minus-challenger MSE difference and, for
-equivalence classification, the two-sided 95% interval of the relative MSE
-difference.
+its own aggregate seed. The TDI-5.8B transfer comparison (Section 14) resamples
+the transfer-target width's holdout under the transfer-source width's fitted
+model, so it draws from its own dedicated aggregate seed — one past the last
+per-width aggregate seed — rather than the transfer-source width's own
+per-width seed, keeping the transfer comparison's resampling independent of
+that width's own grid-comparison resampling. For each confirmatory comparison,
+report the two-sided 95% interval of the baseline-minus-challenger MSE
+difference and, for equivalence classification, the two-sided 95% interval of
+the relative MSE difference.
 
 ## 11. Focal horizons and grid
 

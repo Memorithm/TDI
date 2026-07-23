@@ -148,6 +148,14 @@ fn width_aggregate_bootstrap_seed(group: WidthGroup) -> u64 {
     AGGREGATE_BOOTSTRAP_SEED_BASE + group.index()
 }
 
+// Dedicated stratified-aggregate bootstrap seed for the TDI-5.8B transfer
+// comparison (Section 10), one past the last per-width aggregate seed
+// (w3=…4700, w4=…4701, w5=…4702). The transfer resamples the
+// TRANSFER_TARGET_GROUP (width-5) holdout under the TRANSFER_SOURCE_GROUP
+// (width-3) fitted model, so it must draw from its own seed rather than
+// silently reusing either width's own per-width aggregate seed.
+const TRANSFER_BOOTSTRAP_SEED: u64 = 0x5444_4935_3800_4703;
+
 // Per-width generation budgets, inherited unchanged from TDI-5.2 Section 7
 // (Section 7): attempt multiplier and no-progress limit per width. Width 5 is a
 // real population width in TDI-5.8, so its (128 / 75,000) budget now governs
@@ -1039,10 +1047,12 @@ fn ratio_value(ratio: &ExactRatio) -> f64 {
 /// `(denominator - numerator) / denominator` and rounded to `f64` in a
 /// single `as_f64` step, so the descriptor is the exact rational converted
 /// to `f64` — not `1.0 - overlap.as_f64()`, which would round twice and
-/// deviate from the overlap up to one ULP. Every overlap this experiment
-/// produces (width <= 4) has `u128` components; the deterministic
-/// `1.0 - as_f64` form is retained only as an unreachable fallback rather
-/// than risking a panic on a hypothetical wider kernel.
+/// deviate from the overlap up to one ULP. Every overlap denominator this
+/// experiment produces divides `lcm(1..=2^w)` for its width `w` (at most
+/// `lcm(1..=32)` ≈ 1.44e14 for the preregistered `w <= 5`), tens of orders
+/// of magnitude below `u128::MAX`, so it always has `u128` components; the
+/// deterministic `1.0 - as_f64` form is retained only as an unreachable
+/// fallback rather than risking a panic on a hypothetical wider kernel.
 fn exact_total_variation(overlap: &ExactRatio) -> f64 {
     match overlap.components_u128() {
         Some((numerator, denominator)) => ExactRatio::new(denominator - numerator, denominator)
@@ -1619,6 +1629,22 @@ fn analyze_seed(context: AttemptContext) -> Result<CandidateOutcome, EvaluationE
         targets_u[horizon_index] = target_u;
     }
 
+    // The 13th baseline variable is the candidate's own width. Every prior
+    // TDI-5.x experiment pools widths 3 and 4 into one population per model,
+    // so this feature carries real within-population variance there. TDI-5.8
+    // instead groups by width (Section 7): within any single width's own
+    // fitted model, this feature is therefore a CONSTANT (equal to that
+    // width's `w`), so its raw variance is exactly zero and `fit_ridge`'s
+    // zero-variance guard substitutes the fallback scale 1.0 rather than
+    // dividing by it (avoiding a blow-up); every standardized value for this
+    // feature is then identically 0.0, so the closed-form ridge solve
+    // necessarily assigns it coefficient `0.0` in every layout, at every
+    // horizon, in every block, at every width. This is an expected, harmless
+    // structural consequence of the per-width design — not a defect — because
+    // the feature is identically inert in both the SK baseline and
+    // the SKT challenger of every TDI-5.8A/B/C confirmatory comparison, so it
+    // cannot bias any of them; see the `width_baseline_feature_is_structurally_inert_within_every_width`
+    // test below for the verified invariant.
     let baseline = [
         normalized_entropy(reference_entropy[0], context)?,
         normalized_entropy(reference_entropy[1], context)?,
@@ -2765,6 +2791,7 @@ struct BlockComparisonInputs<'a> {
 fn aggregate_paired_bootstrap(
     horizon_index: usize,
     blocks: &[BlockComparisonInputs<'_>],
+    bootstrap_seed: u64,
 ) -> Result<Tdi52BootstrapIntervals, String> {
     let seed_blocks = blocks
         .iter()
@@ -2774,10 +2801,12 @@ fn aggregate_paired_bootstrap(
     validate_frozen_block_order(&seed_blocks)
         .map_err(|error| format!("aggregate bootstrap {error}"))?;
 
-    // Every block in an aggregate belongs to the same width group (validated
-    // above); that width's stratified-aggregate bootstrap seed is disjoint
-    // from every other width's (Section 10).
-    let group = seed_blocks[0].group;
+    // The bootstrap seed is an explicit parameter (Section 10), not derived
+    // from the blocks' own width group: for the TDI-5.8B transfer comparison
+    // the blocks carry the TRANSFER_SOURCE_GROUP's identity (frozen block
+    // order) while the data being resampled is the TRANSFER_TARGET_GROUP's
+    // holdout, so deriving the seed from the blocks' group would silently
+    // reuse the source width's own per-width aggregate seed.
 
     for block in blocks {
         let count = block.records.len();
@@ -2792,7 +2821,7 @@ fn aggregate_paired_bootstrap(
         }
     }
 
-    let mut generator = DeterministicRng::new(width_aggregate_bootstrap_seed(group));
+    let mut generator = DeterministicRng::new(bootstrap_seed);
 
     let mut standardized_mse = Vec::with_capacity(BOOTSTRAP_REPLICATES);
     let mut reconstructed_mse = Vec::with_capacity(BOOTSTRAP_REPLICATES);
@@ -3016,6 +3045,7 @@ fn evaluate_aggregate_comparison(
     holdout_records: [&[Record]; SEED_BLOCK_COUNT],
     baseline_layout: FeatureLayout,
     challenger_layout: FeatureLayout,
+    bootstrap_seed: u64,
 ) -> Result<AggregateComparison, String> {
     let mut blocks = Vec::with_capacity(SEED_BLOCK_COUNT);
 
@@ -3054,7 +3084,8 @@ fn evaluate_aggregate_comparison(
         })
         .collect::<Vec<_>>();
 
-    let aggregate_bootstrap = aggregate_paired_bootstrap(horizon_index, &bootstrap_inputs)?;
+    let aggregate_bootstrap =
+        aggregate_paired_bootstrap(horizon_index, &bootstrap_inputs, bootstrap_seed)?;
 
     Ok(AggregateComparison {
         blocks,
@@ -3260,6 +3291,7 @@ fn evaluate_horizon_comparison(
     combined_holdout_records: [&[Record]; SEED_BLOCK_COUNT],
     baseline_layout: FeatureLayout,
     challenger_layout: FeatureLayout,
+    bootstrap_seed: u64,
 ) -> Result<HorizonComparison, String> {
     let comparison = evaluate_aggregate_comparison(
         horizon_index,
@@ -3267,6 +3299,7 @@ fn evaluate_horizon_comparison(
         combined_holdout_records,
         baseline_layout,
         challenger_layout,
+        bootstrap_seed,
     )?;
 
     let result = evaluate_criterion_c(&comparison);
@@ -3469,6 +3502,7 @@ fn run_width_pipeline(
             combined_holdout_refs,
             FeatureLayout::Sk,
             FeatureLayout::Skt,
+            width_aggregate_bootstrap_seed(group),
         )?);
     }
 
@@ -3537,6 +3571,7 @@ fn run_tdi58_pipeline(
             target_holdout_refs,
             FeatureLayout::Sk,
             FeatureLayout::Skt,
+            TRANSFER_BOOTSTRAP_SEED,
         )?);
     }
     let criterion_b = Tdi58CriterionB {
@@ -4456,6 +4491,7 @@ fn run_termination_smoke() -> Result<(), String> {
         holdout_refs,
         FeatureLayout::Sk,
         FeatureLayout::Skt,
+        width_aggregate_bootstrap_seed(aggregate_fit.group()),
     )?;
 
     println!(
@@ -4485,6 +4521,7 @@ fn run_termination_smoke() -> Result<(), String> {
         holdout_refs,
         FeatureLayout::Ck,
         FeatureLayout::Sk,
+        width_aggregate_bootstrap_seed(aggregate_fit.group()),
     )?;
 
     println!(
@@ -5314,6 +5351,7 @@ mod tests {
             super::width_aggregate_bootstrap_seed(WidthGroup::W5),
             0x5444_4935_3800_4702
         );
+        assert_eq!(super::TRANSFER_BOOTSTRAP_SEED, 0x5444_4935_3800_4703);
         // Anchored training bases (Section 9).
         assert_eq!(
             super::frozen_block_order(WidthGroup::W3)[0].population_base_seed(),
@@ -5324,11 +5362,14 @@ mod tests {
             7_800_000_000
         );
 
-        // Every reserved seed — population, block bootstrap, aggregate bootstrap —
-        // is distinct across the whole design.
+        // Every reserved seed — population, block bootstrap, aggregate bootstrap,
+        // and the dedicated TDI-5.8B transfer bootstrap seed — is distinct across
+        // the whole design. The transfer seed must never collide with (and so
+        // never silently reuse) either width's own per-width aggregate seed.
         let mut all = population_seeds.clone();
         all.extend_from_slice(&bootstrap_seeds);
         all.extend_from_slice(&aggregate_seeds);
+        all.push(super::TRANSFER_BOOTSTRAP_SEED);
         let unique: std::collections::HashSet<u64> = all.iter().copied().collect();
         assert_eq!(
             unique.len(),
@@ -5499,6 +5540,53 @@ mod tests {
             for &value in &record.spectral {
                 assert!(value.is_finite() && (0.0..=8.0).contains(&value));
             }
+        }
+    }
+
+    #[test]
+    fn width_baseline_feature_is_structurally_inert_within_every_width() {
+        // TDI-5.8 groups by width (Section 7): within any single width's own
+        // fitted model, the width-indicator baseline feature (index 12) is a
+        // CONSTANT, so it must hit fit_ridge's zero-variance floor and receive
+        // ridge coefficient 0.0 in every layout — an expected, harmless
+        // consequence of the per-width design (see the doc comment at the
+        // Record baseline-array construction site), not a defect, because it
+        // is identically inert in both the SK baseline and the SKT challenger.
+        let records: Vec<Record> = (0..24)
+            .map(|i| {
+                let o1 = 0.10 + 0.02 * f64::from(i % 7);
+                let o2 = 0.20 + 0.015 * f64::from(i % 5);
+                record_with_overlap(o1, o2)
+            })
+            .collect();
+
+        let targets = super::overlap_values(&records, super::primary_horizon_index());
+
+        for layout in [FeatureLayout::Sk, FeatureLayout::Skt] {
+            let design =
+                super::feature_matrix(&records, |record| super::feature_layout(record, layout));
+            let model = super::fit_ridge(&design, &targets).expect("ridge fit");
+
+            // `record_with_overlap`'s baseline[12] is the fixed literal 1.3 for
+            // every synthetic record, so its raw variance is exactly zero;
+            // fit_ridge's zero-variance guard (scale <= 1.0e-12) substitutes
+            // the safe fallback scale = 1.0 rather than dividing by ~0. The
+            // mean is compared with a tolerance: summing the 1.3 literal 24
+            // times and dividing by 24.0 does not round-trip to exactly 1.3
+            // in binary floating point.
+            assert!(
+                (model.means[12] - 1.3).abs() < 1.0e-12,
+                "width feature's mean must equal its constant value: {}",
+                model.means[12]
+            );
+            assert_eq!(
+                model.scales[12], 1.0,
+                "width feature must hit fit_ridge's zero-variance fallback scale"
+            );
+            assert_eq!(
+                model.coefficients[13], 0.0,
+                "width feature's ridge coefficient must be exactly zero (layout {layout:?})"
+            );
         }
     }
 
