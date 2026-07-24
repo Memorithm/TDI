@@ -54,14 +54,101 @@ computation is non-exact; candidate generation, target construction and the
 exact descriptors remain bit-exact, inherited unchanged.
 
 Frozen ancestor identities (verified at runtime and in CI): the v56 evaluator,
-the TDI-5.6 preregistration, and the full frozen chain **TDI-5.1 → TDI-5.8**
-(every ancestor evaluator and preregistration hash) are verified before any
-generation.
+the TDI-5.6 preregistration, and the full frozen chain **TDI-5.1 → TDI-5.8,
+TDI-6.1, TDI-6.2, TDI-6.5** (every ancestor evaluator and preregistration hash)
+are verified before any generation. Section 1.3 distinguishes this full
+verified chain from TDI-6.3's actual scientific/code ancestor.
 
 No full TDI-6.3 run may begin before all of the following are committed and
 frozen: this preregistration; the final evaluator; the evaluator SHA-256
 manifest; the scientific-code SHA-256 manifest; the deterministic reproduction
 script; the dedicated CI workflow; bounded unit and termination tests.
+
+### 1.1 Why TDI-6.3 is being built now, after TDI-6.1, TDI-6.2, TDI-6.5 and TDI-5.8
+
+TDI-6.3's identifier was **reserved at design time, not assigned at build
+time**. `docs/TDI-FORWARD-PROGRAM-ROADMAP.md` (an unfrozen design document, not
+a preregistration) named four planned TDI-6 sub-experiments in its Section 2
+("Track B"): 6.1 (literal spectral gap), 6.2 (nonlinear model families), 6.3
+(information decomposition / PID — "turns the 'which overlap carries what'
+question from ridge coefficients into an information-theoretic
+decomposition"), 6.4 (a causal probe). Its Section 3 ("Recommended sequence")
+explicitly left the order among them open: *"Then TDI-5.8 / TDI-6.2 / TDI-6.3 /
+TDI-6.4 as the questions each prior result sharpens."* The roadmap was a slot
+reservation, not a build queue — TDI-6.3 has been waiting on that reserved slot
+since TDI-6.1 was designed, not invented or renumbered now for convenience.
+
+TDI-6.5 is not in that original roadmap at all — it did not exist as a concept
+until TDI-6.1's own real confirmatory result came back. TDI-6.5's Section 1
+states its provenance directly: it is "derived from the completed and merged
+TDI-6.1 result," running exactly the generator-family-robustness control that
+"TDI-6.1 Section 21 named ... explicitly" as an open limitation. Because that
+question only became askable once TDI-6.1's result existed, and because
+answering it was a mechanical recombination of two *already-frozen* designs
+(TDI-5.7's generator-family machinery and TDI-6.1's literal-spectral
+descriptors — Section 1 of TDI-6.5 is explicit that it "combines two frozen
+designs without introducing any new scientific mechanism"), it required no new
+mathematical apparatus and was fast to design, build and freeze.
+
+TDI-6.3 depends on none of TDI-6.1, TDI-6.2 or TDI-6.5's results — its sole
+scientific ancestor is TDI-5.6 (Section 1.3), frozen since 2026-07-22
+(commit `6a9aaa3`, merged `b650d51`), before TDI-6.1 was even drafted. What
+TDI-6.3 needed instead was a genuinely new closed-form apparatus (a two-source
+partial information decomposition, Sections 5-6) with its own numerically
+verified derivation — design and verification work orthogonal to, and slower
+than, the mechanical ablation-machinery derivations behind 6.1/6.2/6.5/5.8.
+Building the faster, already-well-understood derivations first and the
+novel-apparatus experiment once it was fully designed and independently
+verified is an efficiency ordering, not a scheduling accident, an
+abandonment, or a re-numbering of a preregistered experiment.
+
+### 1.2 Relationship to TDI-6.5: an independent branch, not a sequential revision
+
+TDI-6.5 (frozen; PR #31, merge commit `9700c43`) and TDI-6.3 derive from
+different, disjoint points in the experiment tree — TDI-6.5 from TDI-6.1 (plus
+TDI-5.7), TDI-6.3 directly from TDI-5.6 — and neither reads, extends, patches,
+or reinterprets the other:
+
+- TDI-6.3's evaluator (`tdi-independent-overlap-ablation-v63.rs`) is
+  transplanted from TDI-5.6's evaluator (`v56.rs`); it shares no code, seed
+  range, criterion, or scientific claim with TDI-6.5's evaluator (`v65.rs`).
+- TDI-6.3 makes no statement about, and does not test, TDI-6.5's subject
+  (whether the literal-spectral control replicates across generator
+  families). TDI-6.3 uses the single base generator and TDI-5.6's original
+  population structure, not TDI-5.7/6.5's generator families.
+- The only place TDI-6.5 appears anywhere in the TDI-6.3 artifacts is as one
+  of two hash entries in TDI-6.3's own rolling `SCIENTIFIC-CODE.sha256`
+  manifest (Section 1.3) — a repository chain-of-custody entry every
+  experiment in this program includes for whichever two experiments were
+  most recently merged at its own build time, independent of scientific
+  relationship. (TDI-6.5's own manifest, symmetrically, cites TDI-6.1 and
+  TDI-6.2 for the same bookkeeping reason, despite deriving its actual design
+  from TDI-6.1 alone.) This citation is chain-of-custody bookkeeping, not a
+  scientific dependency claim, and must not be read as one.
+- TDI-6.5's preregistration, evaluator, manifests and (once its own `--full`
+  run is performed) results are untouched by the TDI-6.3 cycle. Every one of
+  TDI-6.5's three frozen hashes was independently re-verified immediately
+  before TDI-6.3 work resumed this session, with no drift.
+
+Building TDI-6.3 now therefore does not rewrite, reinterpret, or in any way
+revise TDI-6.5: the two stand as independent, permanently frozen siblings
+under the shared TDI-6 identifier, exactly as TDI-6.1 and TDI-6.2 do.
+
+### 1.3 The reproducibility chain: scientific ancestor vs. rolling-manifest ancestors vs. full verified chain
+
+Three distinct notions of "ancestor" apply to TDI-6.3, and this preregistration
+keeps them separate rather than collapsing them into one list:
+
+| Role | Experiment(s) | Why |
+|---|---|---|
+| **Direct scientific/code ancestor** | TDI-5.6 (`v56.rs`, frozen `6a9aaa3`, merged `b650d51`, PR #17) | TDI-6.3's population generation, target construction, and exact descriptors are transplanted verbatim from v56; the preregistration's single changed factor (Section 1) is defined relative to TDI-5.6 specifically. |
+| **Rolling scientific-code manifest ancestors** | TDI-5.8 (`v58.rs`, frozen `18671ad`, merged `0a3cf12`, PR #32); TDI-6.5 (`v65.rs`, frozen `f896ea2`, merged `9700c43`, PR #31) | The two most-recently-merged experiments at TDI-6.3's build time, included in `docs/TDI-6.3-SCIENTIFIC-CODE.sha256` per this program's established rolling-manifest convention (every experiment's manifest chains to the two immediately before it, regardless of derivation relationship), so the manifest also attests to the integrity of the whole chain-so-far. Not a claim that TDI-6.3 derives code or design from either. |
+| **Full verified ancestor chain** | TDI-5.1 → TDI-5.8, TDI-6.1, TDI-6.2, TDI-6.5 (eleven experiments; every evaluator + preregistration + scientific-code hash) | Re-verified by the TDI-6.3 reproduction script (Section 20) and CI before any generation, exactly as every prior experiment's script re-verifies its own complete ancestor set. This establishes non-regression of the whole frozen program, not a code-derivation claim. |
+
+TDI-5.6 is itself the frozen terminus of the TDI-5.1 → TDI-5.6 mechanical
+derivation chain (each a "single changed factor" step from the previous); that
+chain is transitively part of TDI-6.3's scientific lineage through TDI-5.6, and
+is covered by the full verified chain above.
 
 ## 2. Research questions
 
@@ -426,8 +513,8 @@ the authoring agent never invokes `--full` with the real token.
 
 git commit; compiler/Cargo versions; the declared FP regime and all
 tolerances; the v63 evaluator SHA-256; the TDI-6.3 preregistration and
-scientific-manifest SHA-256; the full frozen ancestor chain (TDI-5.1 → 5.8);
-all frozen constants; the seed-block definitions; per-block
+scientific-manifest SHA-256; the full frozen ancestor chain (TDI-5.1 → 5.8,
+TDI-6.1, TDI-6.2, TDI-6.5 — Section 1.3); all frozen constants; the seed-block definitions; per-block
 requested/accepted/rejected/attempted counts; rejection counts by reason;
 final exclusive seeds; the per-block and aggregate covariance matrices and
 correlations; the method-1/method-2 cross-check table; the TDI-6.3A focal
@@ -467,7 +554,8 @@ of Section 6. Wall-clock timestamps are reproduction metadata only.
 
 The TDI-6.3 reproduction script must satisfy every requirement of TDI-5.2
 Section 19 / TDI-6.1 Section 20 (refuse a dirty repository; verify all frozen
-hashes including TDI-5.1 … 5.8 and TDI-6.3; refuse an existing partial or
+hashes including TDI-5.1 … 5.8, TDI-6.1, TDI-6.2, TDI-6.5 and TDI-6.3 (Section
+1.3); refuse an existing partial or
 complete result; acquire an exclusive lock; compile offline in release mode;
 execute the evaluator exactly once with `--full`; capture complete output;
 verify all final criterion lines; write metadata and a completion marker; hash
@@ -492,7 +580,8 @@ workflow and the bounded tests are committed, this design is frozen: scientific
 code must not change; constants, tolerances and the FP-regime declaration must
 not change; the PID definition (Gaussian working model + MMI redundancy), the
 seed blocks and the criteria must not change; no full run may begin before all
-frozen hashes pass (TDI-5.1 … 5.8 and 6.3); any scientific-code defect
+frozen hashes pass (TDI-5.1 … 5.8, 6.1, 6.2, 6.5 and 6.3); any scientific-code
+defect
 discovered after freezing requires a new experiment identifier — TDI-6.3 may
 not be silently patched. The result classifications, once produced, are frozen
 as reported.
