@@ -341,9 +341,11 @@ prior bootstrap seed used by any TDI-5.x/6.x evaluator (`.1`→`0x31`,
 ## 12. Descriptor diagnostic (context only, no criterion)
 
 For each block, report the pooled means of the four exact descriptors δ,
-δ̄, s₂, s₃, and their simple correlation with the per-system `range(6)`
-(Section 4.5) — plain descriptive context, consumed by no TDI-6.4
-criterion.
+δ̄, s₂, s₃ (Section 4.5) — plain descriptive context, consumed by no TDI-6.4
+criterion. Their correlation with the per-system `range(6)` is reported
+separately, formally, as Criterion TDI-6.4C (Section 15) — not duplicated
+here, to avoid the two sections making conflicting claims about whether
+that correlation is itself a named criterion.
 
 ## 13. Criterion TDI-6.4A — per-system node-to-node heterogeneity (primary, descriptive)
 
