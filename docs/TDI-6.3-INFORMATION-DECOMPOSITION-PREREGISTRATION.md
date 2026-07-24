@@ -287,10 +287,12 @@ requirement of the analysis.
 
 Because candidate generation is inherited verbatim from TDI-5.6, every record
 still carries the 13 baseline variables and the exact contraction/spectral
-descriptors δ, δ̄, s₂, s₃. TDI-6.3 reports their block-holdout means as plain
-descriptive context (Section 13) — exactly as TDI-6.5's Section 15 diagnostic
-did for its own unused-by-criteria descriptors — but **no** TDI-6.3 criterion
-reads them; only `O_1, O_2` and `U_h` feed the decomposition.
+descriptors δ, δ̄, s₂, s₃. TDI-6.3 reports their pooled means (Section 4.5:
+all four populations of a block, not a holdout-only subset) as plain
+descriptive context (Section 12) — exactly as TDI-6.5's Section 19 (criterion
+TDI-6.5D) diagnostic did for its own unused-by-criteria descriptors — but
+**no** TDI-6.3 criterion reads them; only `O_1, O_2` and `U_h` feed the
+decomposition.
 
 ## 5. The two-source partial information decomposition (definitions)
 
@@ -344,10 +346,10 @@ substituted. `I(T;S_1)` and `I(T;S_2)` use the 1-D specialization
 `-0.5·log2(1-ρ²)` directly (no Cholesky needed for a 2×2 case; both are
 algebraically identical to the general log-det formula).
 
-**Cross-check method (method 2, tests only).** Compute the same three mutual
-informations via the classical **multiple-correlation-coefficient** identity,
-using a genuinely different arithmetic path from pairwise Pearson correlations
-alone:
+**Cross-check method (method 2, computed on both the real `--full` path and in
+tests).** Compute the same three mutual informations via the classical
+**multiple-correlation-coefficient** identity, using a genuinely different
+arithmetic path from pairwise Pearson correlations alone:
 
     R²_{T|S1,S2} = (ρ_{T,S1}² + ρ_{T,S2}² - 2·ρ_{T,S1}·ρ_{T,S2}·ρ_{S1,S2})
                    / (1 - ρ_{S1,S2}²)
@@ -432,14 +434,28 @@ decomposition across the full grid.
 
 Because TDI-6.3 has no baseline-vs-challenger comparison, its bootstrap
 resamples **records** (not paired predictions) to build a resampling
-distribution of the four PID components. For each block, and for the
-pooled/aggregate estimate across all three blocks (stratified by block, same
-discipline as every prior aggregate bootstrap), resample records with
-replacement (**4,000 replicates**, inherited replicate count), recompute the
-covariance matrix and the full decomposition (method 1 only; the bootstrap
-does not re-run the cross-check) on each replicate, and report the two-sided
-95% percentile interval for each of Red, Un_1, Un_2, Syn, and for their
-proportions of `I(T;{S_1,S_2})`. Bootstrap seeds are fresh, in the
+distribution of the four PID components. For each block, resample that
+block's own pooled records (Section 4.5) with replacement; for the
+aggregate, resample uniformly over the full pooled records of all three
+blocks combined — a **plain** (non-stratified) resample, not the
+block-stratified aggregate bootstrap of the ablation experiments (5.2 …
+6.5): those experiments' aggregate stratified by block because their
+aggregate metric was a paired-prediction comparison in which each block
+contributed a fixed-size fold; TDI-6.3's aggregate is a single covariance
+estimated directly from the pooled records (Section 4.5), which a plain
+uniform resample over that same pooled set estimates correctly, with no
+per-block fold to preserve. Resample with replacement (**4,000
+replicates**, inherited replicate count), recompute the covariance matrix
+and the full decomposition (method 1 only; the bootstrap does not re-run
+the cross-check) on each replicate, and report the two-sided 95%
+percentile interval for each of Red, Un_1, Un_2, Syn, and for the joint
+mutual information `I(T;{S_1,S_2})`. The point-estimate proportions of
+`I(T;{S_1,S_2})` (Section 5) are reported alongside these intervals, but
+are not themselves bootstrapped: a ratio-of-two-resampled-quantities
+interval is a materially different (and more involved) construction than
+the frozen `PidBootstrapIntervals` core module computes, so extending to
+proportion-level intervals is out of scope for this preregistration.
+Bootstrap seeds are fresh, in the
 `0x5444_4936_3300_…` (`TDI6`/`33` = ".3") range, disjoint from every prior
 bootstrap seed:
 
@@ -448,18 +464,19 @@ bootstrap seed:
 
 ## 12. Descriptor diagnostic (context only, no criterion)
 
-For each block, report the holdout-pooled means of the four exact descriptors
-δ, δ̄, s₂, s₃ (Section 4.6) — plain descriptive context, consistent with every
-prior experiment's practice of reporting the full frozen descriptor set, but
-consumed by **no** TDI-6.3 criterion.
+For each block, report the all-pooled means (Section 4.5) of the four exact
+descriptors δ, δ̄, s₂, s₃ (Section 4.6) — plain descriptive context, consistent
+with every prior experiment's practice of reporting the full frozen descriptor
+set, but consumed by **no** TDI-6.3 criterion.
 
 ## 13. Criterion TDI-6.3A — the decomposition at the focal horizons (primary, descriptive)
 
 At each focal horizon **U₃** and **U₆**, for each of the three blocks and for
 the pooled aggregate, report: `I(T;S_1)`, `I(T;S_2)`, `I(T;{S_1,S_2})`;
 Redundancy, Unique(O₁), Unique(O₂), Synergy (bits); each component's proportion
-of `I(T;{S_1,S_2})`; the 95% bootstrap interval for each component and
-proportion; and the method-1/method-2 cross-check agreement. TDI-6.3A further
+of `I(T;{S_1,S_2})`; the 95% bootstrap interval for each component (Section
+11 — proportions are reported as point estimates only, not bootstrapped);
+and the method-1/method-2 cross-check agreement. TDI-6.3A further
 reports, per block and for the aggregate, the **dominant component** — whichever
 of {Redundancy, Unique(O₁), Unique(O₂), Synergy} has the largest aggregate
 point estimate.

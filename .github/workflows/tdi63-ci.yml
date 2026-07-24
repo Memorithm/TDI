@@ -1,0 +1,247 @@
+name: TDI-6.3 CI
+
+on:
+  push:
+    branches:
+      - main
+      - claude/tdi-6-3-pid
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tdi63-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_HOME: /mnt/nvme/github-runners/home/.cargo
+  RUSTUP_HOME: /mnt/nvme/github-runners/home/.rustup
+
+jobs:
+  validation:
+    name: TDI-6.3 validation
+    runs-on: [self-hosted, Linux, ARM64, jetson, tdi]
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git init .
+
+          git remote remove origin 2>/dev/null || true
+          git remote add origin \
+            "https://github.com/${GITHUB_REPOSITORY}.git"
+
+          AUTH_HEADER="$(
+            printf 'x-access-token:%s' "$GITHUB_TOKEN" |
+              base64 -w 0
+          )"
+
+          git \
+            -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH_HEADER}" \
+            fetch \
+              --no-tags \
+              --prune \
+              --depth=1 \
+              origin \
+              "$GITHUB_REF"
+
+          git checkout \
+            --force \
+            --detach \
+            "$GITHUB_SHA"
+
+          git clean -ffdx
+
+      - name: Configure shared Rust
+        run: |
+          TARGET_DIR="${{ runner.temp }}/tdi63-target"
+
+          echo "CARGO_TARGET_DIR=$TARGET_DIR" >> "$GITHUB_ENV"
+          echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
+
+          mkdir -p "$TARGET_DIR"
+
+          "$CARGO_HOME/bin/rustc" --version
+          "$CARGO_HOME/bin/cargo" --version
+          "$CARGO_HOME/bin/rustfmt" --version
+          "$CARGO_HOME/bin/cargo" clippy --version
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run workspace tests offline
+        run: cargo test --workspace --offline
+
+      - name: Run Clippy offline
+        run: cargo clippy --workspace --all-targets --offline -- -D warnings
+
+      - name: Verify frozen TDI-5.1 hashes
+        run: |
+          sha256sum -c \
+            docs/TDI-5.1-CONTINUOUS-DEFICIT-GEOMETRY-PREREGISTRATION.sha256
+          sha256sum -c \
+            docs/TDI-5.1-CONTINUOUS-DEFICIT-GEOMETRY-EVALUATOR.sha256
+          sha256sum -c \
+            docs/TDI-5.1-SCIENTIFIC-CODE.sha256
+
+      - name: Verify frozen TDI-5.2 hashes
+        run: |
+          sha256sum -c \
+            docs/TDI-5.2-INDEPENDENT-OVERLAP-ABLATION-PREREGISTRATION.sha256
+          sha256sum -c \
+            docs/TDI-5.2-INDEPENDENT-OVERLAP-ABLATION-EVALUATOR.sha256
+          sha256sum -c \
+            docs/TDI-5.2-SCIENTIFIC-CODE.sha256
+
+      - name: Verify frozen TDI-5.3 hashes
+        run: |
+          sha256sum -c \
+            docs/TDI-5.3-INDEPENDENT-OVERLAP-ACTIVATION-PREREGISTRATION.sha256
+          sha256sum -c \
+            docs/TDI-5.3-INDEPENDENT-OVERLAP-ACTIVATION-EVALUATOR.sha256
+          sha256sum -c \
+            docs/TDI-5.3-SCIENTIFIC-CODE.sha256
+
+      - name: Verify frozen TDI-5.4 hashes
+        run: |
+          sha256sum -c \
+            docs/TDI-5.4-NONLINEAR-OVERLAP-SUFFICIENCY-PREREGISTRATION.sha256
+          sha256sum -c \
+            docs/TDI-5.4-NONLINEAR-OVERLAP-SUFFICIENCY-EVALUATOR.sha256
+          sha256sum -c \
+            docs/TDI-5.4-SCIENTIFIC-CODE.sha256
+
+      - name: Verify frozen TDI-5.5 hashes
+        run: |
+          sha256sum -c \
+            docs/TDI-5.5-OVERLAP-BASELINE-CHALLENGE-PREREGISTRATION.sha256
+          sha256sum -c \
+            docs/TDI-5.5-OVERLAP-BASELINE-CHALLENGE-EVALUATOR.sha256
+          sha256sum -c \
+            docs/TDI-5.5-SCIENTIFIC-CODE.sha256
+
+      - name: Verify frozen TDI-5.6 hashes
+        run: |
+          sha256sum -c \
+            docs/TDI-5.6-EXACT-SPECTRAL-CHALLENGE-PREREGISTRATION.sha256
+          sha256sum -c \
+            docs/TDI-5.6-EXACT-SPECTRAL-CHALLENGE-EVALUATOR.sha256
+          sha256sum -c \
+            docs/TDI-5.6-SCIENTIFIC-CODE.sha256
+
+      - name: Verify frozen TDI-5.7 hashes
+        run: |
+          sha256sum -c \
+            docs/TDI-5.7-GENERATOR-ROBUSTNESS-PREREGISTRATION.sha256
+          sha256sum -c \
+            docs/TDI-5.7-GENERATOR-ROBUSTNESS-EVALUATOR.sha256
+          sha256sum -c \
+            docs/TDI-5.7-SCIENTIFIC-CODE.sha256
+
+      - name: Verify frozen TDI-5.8 hashes
+        run: |
+          sha256sum -c \
+            docs/TDI-5.8-CROSS-WIDTH-INVARIANCE-PREREGISTRATION.sha256
+          sha256sum -c \
+            docs/TDI-5.8-CROSS-WIDTH-INVARIANCE-EVALUATOR.sha256
+          sha256sum -c \
+            docs/TDI-5.8-SCIENTIFIC-CODE.sha256
+
+      - name: Verify frozen TDI-6.1 hashes
+        run: |
+          sha256sum -c \
+            docs/TDI-6.1-SPECTRAL-GAP-MIXING-TIME-PREREGISTRATION.sha256
+          sha256sum -c \
+            docs/TDI-6.1-SPECTRAL-GAP-MIXING-TIME-EVALUATOR.sha256
+          sha256sum -c \
+            docs/TDI-6.1-SCIENTIFIC-CODE.sha256
+
+      - name: Verify frozen TDI-6.2 hashes
+        run: |
+          sha256sum -c \
+            docs/TDI-6.2-NONLINEAR-SUFFICIENCY-PREREGISTRATION.sha256
+          sha256sum -c \
+            docs/TDI-6.2-NONLINEAR-SUFFICIENCY-EVALUATOR.sha256
+          sha256sum -c \
+            docs/TDI-6.2-SCIENTIFIC-CODE.sha256
+
+      - name: Verify frozen TDI-6.5 hashes
+        run: |
+          sha256sum -c \
+            docs/TDI-6.5-GENERATOR-FAMILY-SPECTRAL-ROBUSTNESS-PREREGISTRATION.sha256
+          sha256sum -c \
+            docs/TDI-6.5-GENERATOR-FAMILY-SPECTRAL-ROBUSTNESS-EVALUATOR.sha256
+          sha256sum -c \
+            docs/TDI-6.5-SCIENTIFIC-CODE.sha256
+
+      - name: Verify TDI-6.3 hashes and shell syntax
+        run: |
+          sha256sum -c \
+            docs/TDI-6.3-INFORMATION-DECOMPOSITION-PREREGISTRATION.sha256
+          sha256sum -c \
+            docs/TDI-6.3-INFORMATION-DECOMPOSITION-EVALUATOR.sha256
+          sha256sum -c \
+            docs/TDI-6.3-SCIENTIFIC-CODE.sha256
+          bash -n scripts/reproduce-tdi5.1.sh
+          bash -n scripts/reproduce-tdi5.2.sh
+          bash -n scripts/reproduce-tdi5.3.sh
+          bash -n scripts/reproduce-tdi5.4.sh
+          bash -n scripts/reproduce-tdi5.5.sh
+          bash -n scripts/reproduce-tdi5.6.sh
+          bash -n scripts/reproduce-tdi5.7.sh
+          bash -n scripts/reproduce-tdi5.8.sh
+          bash -n scripts/reproduce-tdi6.1.sh
+          bash -n scripts/reproduce-tdi6.2.sh
+          bash -n scripts/reproduce-tdi6.5.sh
+          bash -n scripts/reproduce-tdi6.3.sh
+
+      - name: Bounded termination smoke test
+        run: >-
+          cargo run
+          --offline
+          --bin tdi-independent-overlap-ablation-v63
+          --
+          --termination-smoke
+
+      - name: Preflight (no scientific generation)
+        run: >-
+          cargo run
+          --offline
+          --bin tdi-independent-overlap-ablation-v63
+          --
+          --preflight
+
+      - name: Verify no-argument invocation refuses execution
+        run: |
+          if cargo run --offline --bin tdi-independent-overlap-ablation-v63; then
+            echo "::error::no-argument invocation must refuse execution"
+            exit 1
+          fi
+
+      - name: Verify --full without the confirmation token refuses execution
+        run: |
+          unset TDI63_CONFIRM_FULL_RUN
+          if cargo run --offline --bin tdi-independent-overlap-ablation-v63 -- --full; then
+            echo "::error::--full without the exact confirmation token must refuse execution"
+            exit 1
+          fi
+
+      - name: Verify --full with a wrong confirmation token still refuses
+        run: |
+          export TDI63_CONFIRM_FULL_RUN="wrong_value"
+          if cargo run --offline --bin tdi-independent-overlap-ablation-v63 -- --full; then
+            echo "::error::--full with an incorrect confirmation token must refuse execution"
+            exit 1
+          fi
+
+      - name: Verify --full with the TDI-5.6 token still refuses (cross-experiment token must not unlock TDI-6.3)
+        run: |
+          export TDI63_CONFIRM_FULL_RUN="I_ACCEPT_THE_TDI56_FREEZE_RULE"
+          if cargo run --offline --bin tdi-independent-overlap-ablation-v63 -- --full; then
+            echo "::error::a different experiment's confirmation token must not unlock TDI-6.3"
+            exit 1
+          fi
