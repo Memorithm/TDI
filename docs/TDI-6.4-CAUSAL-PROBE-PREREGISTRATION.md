@@ -1,14 +1,14 @@
 # TDI-6.4 — Causal Probe: Does Recovery Depend on *Which* Node Is Perturbed?
 
-## Preregistration (DRAFT — not yet frozen)
+## Preregistration
 
-> **Status: DRAFT.** This document is not yet frozen. It is posted for review
-> before any SHA-256 manifest, evaluator, reproduction script, or CI workflow
-> is committed. Once those are committed, Section 22's freeze rule applies:
-> no scientific constant, tolerance, definition, or criterion may change
-> without a new experiment identifier. Freezing the design does not authorize
-> a run; the real experiment begins only as the deliberate one-time human
-> action of Section 16. The authoring agent never invokes `--full`.
+This document is the frozen preregistration for TDI-6.4. Once its SHA-256
+manifest, the v64 evaluator, the reproduction script, the CI workflow and
+the bounded tests are committed, this design is frozen under the Section 22
+freeze rule: no scientific constant, definition, or criterion may change
+without a new experiment identifier. Freezing the design does not authorize
+a run; the real experiment begins only as the deliberate one-time human
+action of Section 16. The authoring agent never invokes `--full`.
 
 ## 1. Experimental status, provenance, and the single changed factor
 
@@ -230,6 +230,38 @@ predictor) against `U_i(6)` across the pooled population — reported as the
 simple bivariate correlations `corr(O_i(1), U_i(6))` and `corr(O_i(2),
 U_i(6))` (no multivariate fit; Section 4.3).
 
+### 5.1 Full recovery at a non-historical node is a valid outcome, not a degeneracy — and must not silently corrupt an aggregate
+
+The historical node `i*` already has a well-defined treatment for the
+boundary case `O_{i*}(h) = 1` exactly (full recovery, `U_{i*}(h)` undefined):
+the candidate is excluded at generation time
+(`RejectionReason::TargetFullyRecovered`), inherited unchanged from TDI-5.6.
+For every **other** node `i ≠ i*`, no such exclusion is possible — the
+record has already been accepted based on `i*` alone — and full recovery at
+some `(i, h)` is an entirely legitimate finding (that particular
+perturbation's influence happened to vanish exactly by horizon `h` for that
+system), not a computational defect. Because `U_i(h) = -log2(1 - O_i(h))
+= -log2(0) = +∞` in that case, it must **not** be allowed to silently
+enter any aggregate: an unguarded `range(h) = max_i U_i(h) - min_i U_i(h)`
+would become `+∞` the instant any single node fully recovers, corrupting
+every other (finite, informative) system's contribution to that horizon's
+statistics, and an unguarded correlation would be poisoned identically.
+
+**Rule:** for a given system and horizon `h`, if `U_i(h)` is undefined
+(full recovery) for **any** `i ∈ {0, ..., w-1}`, that system is excluded
+from Criterion 6.4A's `range(h)` statistic **at that horizon only** (other
+horizons for the same system are unaffected), and the exclusion is counted
+and reported explicitly (`full_recovery_exclusions(h)`, per block and
+aggregate) — never silently dropped. Criterion 6.4B's per-node correlations
+are computed only over the subset of the population where that specific
+node's `U_i(6)` (and, for the `(O_i(1), O_i(2))` predictors, `O_i(1)`,
+`O_i(2)` — always defined, since only the *joint* mutual-information-style
+transform can diverge, not the raw overlap itself) is defined, with the
+excluded count reported per node. This mirrors, at the per-node/per-horizon
+level, the same discipline TDI-6.3's finiteness guard applied to the PID
+components: a well-defined boundary case is tracked and reported, never
+averaged in as if it were an ordinary finite value.
+
 ## 6. Computation method
 
 Bit-exact rational arithmetic throughout candidate generation, the exact
@@ -270,10 +302,10 @@ from every prior block (TDI-5.7 ≤ 2.53×10⁹; TDI-6.1 3.0–3.23×10⁹; TDI-
 
 and the four populations start at `base + {0, 10, 20, 30} · 1_000_000`
 (training-w3, holdout-w3, training-w4, holdout-w4), identical in structure
-to TDI-6.3 Section 8. The evaluator verifies disjointness of all consumed
-ranges at runtime. Exact final values will be pinned against the built
-evaluator before freezing (Section 22); this draft fixes the base and
-structure, not yet the byte-exact hex constants.
+to TDI-6.3 Section 8. Explicitly the training-w3 bases: block 0 →
+9,000,000,000; block 1 → 9,100,000,000; block 2 → 9,200,000,000. Twelve
+total reservations. The evaluator verifies disjointness of all consumed
+ranges at runtime.
 
 ## 9. Metrics
 
@@ -298,33 +330,42 @@ is likewise a direct pooled-record estimate, not a paired-prediction
 comparison), resample records with replacement (4,000 replicates,
 inherited count) and recompute the mean `range(h)` and the Section 6.4B
 correlations on each replicate, reporting the two-sided 95% percentile
-interval. Bootstrap seeds are fresh (exact hex values to be pinned before
-freezing, disjoint from every prior bootstrap seed, following the same
-`0x5444_4936_XX00_...` structural convention as TDI-6.3's `0x5444_4936_
-3300_...`, with the experiment-digit byte advanced accordingly).
+interval. Bootstrap seeds are fresh, in the `0x5444_4936_3400_…`
+(`TDI6`/`0x34`= ASCII `'4'` = ".4") range, verified disjoint from every
+prior bootstrap seed used by any TDI-5.x/6.x evaluator (`.1`→`0x31`,
+`.2`→`0x32`, `.3`→`0x33`, `.5`→`0x35`):
+
+    block seed (block b)  : 0x5444_4936_3400_0000 + b + 1   (…0001/0002/0003)
+    aggregate seed         : 0x5444_4936_3400_4700
 
 ## 12. Descriptor diagnostic (context only, no criterion)
 
 For each block, report the pooled means of the four exact descriptors δ,
-δ̄, s₂, s₃, and their simple correlation with the per-system `range(6)`
-(Section 4.5) — plain descriptive context, consumed by no TDI-6.4
-criterion.
+δ̄, s₂, s₃ (Section 4.5) — plain descriptive context, consumed by no TDI-6.4
+criterion. Their correlation with the per-system `range(6)` is reported
+separately, formally, as Criterion TDI-6.4C (Section 15) — not duplicated
+here, to avoid the two sections making conflicting claims about whether
+that correlation is itself a named criterion.
 
 ## 13. Criterion TDI-6.4A — per-system node-to-node heterogeneity (primary, descriptive)
 
 For each block and the pooled aggregate, at every horizon of the dense
 grid, report the distribution (median, IQR, min, max) across the
-population of `range(h)` (Section 5), its 95% bootstrap interval, and the
+population of `range(h)` (Section 5), its 95% bootstrap interval, the
 proportion of systems for which `range(h)` exceeds a purely descriptive
 reference threshold (the population's own median `U_i(h)` scale, reported
-for context, not as a pass/fail cut). TDI-6.4A is a preregistered
-**descriptive** summary; it is not a pass/fail classification.
+for context, not as a pass/fail cut), and the count of systems excluded
+from that horizon's statistic under Section 5.1's full-recovery rule
+(`full_recovery_exclusions(h)`). TDI-6.4A is a preregistered **descriptive**
+summary; it is not a pass/fail classification.
 
 ## 14. Criterion TDI-6.4B — transfer of the early→late relationship across intervention choice (descriptive)
 
 For each node index `i` (0 to width−1, separately for width 3 and width
 4), report `corr(O_i(1), U_i(6))` and `corr(O_i(2), U_i(6))` across the
-pooled population, with 95% bootstrap intervals. Report whether these
+pooled population (excluding, per Section 5.1, systems where `U_i(6)` is
+undefined for that node — the excluded count is reported alongside each
+correlation), with 95% bootstrap intervals. Report whether these
 per-node correlations are **stable** (similar in sign and magnitude across
 every node) or **shift** (materially different for the historical node
 `i* = w-1` than for others), and if they shift, which node(s) differ and
