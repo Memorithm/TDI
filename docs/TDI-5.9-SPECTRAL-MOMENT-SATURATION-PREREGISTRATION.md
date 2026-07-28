@@ -2,13 +2,13 @@
 
 ## Preregistration
 
-> **Status: DRAFT.** This document will be frozen once its SHA-256 manifest,
-> the v59 evaluator, the reproduction script, the CI workflow and the bounded
-> tests are committed. Once frozen, no scientific constant, seed block,
-> feature definition, baseline or criterion may change without a new
-> experiment identifier (Section 23). Freezing the design does not authorize
-> a run; the real experiment may begin only as the deliberate one-time human
-> action described in Section 17.
+This document is the frozen preregistration for TDI-5.9. Once its SHA-256
+manifest, the v59 evaluator, the reproduction script, the CI workflow and
+the bounded tests are committed, this design is frozen under the Section 23
+freeze rule: no scientific constant, seed block, feature definition,
+baseline or criterion may change without a new experiment identifier.
+Freezing the design does not authorize a run; the real experiment may begin
+only as the deliberate one-time human action described in Section 17.
 
 ## 1. Experimental status and provenance
 
