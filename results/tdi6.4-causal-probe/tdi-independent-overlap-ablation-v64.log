@@ -1,0 +1,358 @@
+
+=== PROVENANCE ET INTÉGRITÉ (Section 17) ===
+git commit                     : 4b5255df50dccb44820543d5719d192866510b99
+rustc                          : rustc 1.97.1 (8bab26f4f 2026-07-14)
+cargo                          : cargo 1.97.1 (c980f4866 2026-06-30)
+évaluateur TDI-6.4 SHA-256      : 1c569c3d46eb7ef766f084c5051d3d437290e5357aa523305a61b5d63c9f51b5
+préenregistrement TDI-6.4 SHA-256 : 8933a389586ee22af9e1cddf7ed9d30d6205b7d10682fbde362a9a01e680333b
+manifeste scientifique TDI-6.4 SHA-256 : 832cc352fc0ccfba1bab56a7e9f1d1874cd6d2bcb834726ad50fa4edd9cb8110
+
+--- provenance TDI-5.1 (ancêtre gelé, inchangé) ---
+évaluateur TDI-5.1 SHA-256      : d69d42fa31d973603eabd0ded8ffd8ca2f0a4b0b8fcec5f9de42ed8c7ce37444
+préenregistrement TDI-5.1 SHA-256 : 25b65a07b7f248df3e043b9b7f63611c360f60f3d49a600a5612305440131852
+
+--- provenance TDI-5.2 (ancêtre gelé, inchangé) ---
+évaluateur TDI-5.2 SHA-256      : 2308607729659c7546a17530e69773f982d9a1cf41656ea7898e0123ca469ef7
+préenregistrement TDI-5.2 SHA-256 : f57a054bc95eb2e041434d6e2049509b0dce1a5397f9666d274b1bbac332be35
+
+--- provenance TDI-5.3 (ancêtre gelé, inchangé) ---
+évaluateur TDI-5.3 SHA-256      : 93181fb75d4882be2ca0b26c1babe9db747583d6e08e6992617ec12b7f65460f
+préenregistrement TDI-5.3 SHA-256 : 7223128dcfd751ebeb6488c01c3512d0a10b35937ec170504984295eb421682e
+
+--- provenance TDI-5.4 (ancêtre gelé, inchangé) ---
+évaluateur TDI-5.4 SHA-256      : dcf24d7eb1ccd938a81163738c38d31a693474c8a1d94046734bda243ca772bf
+préenregistrement TDI-5.4 SHA-256 : 229a0a8efa391c67c4dda1322b984109b142be3abf972d0a08f3c4ac742ec6ac
+
+--- provenance TDI-5.5 (ancêtre gelé, inchangé) ---
+évaluateur TDI-5.5 SHA-256      : 10df698d10f010b9f6c18e2a4d78042eb399d3812b8d69c2b4bb799de828b835
+préenregistrement TDI-5.5 SHA-256 : 37260b3349107659487e42e66c269ecad44efaf6131f8206bb28dfbcf83f9da1
+
+--- provenance TDI-5.6 (ancêtre gelé, inchangé) ---
+évaluateur TDI-5.6 SHA-256      : 0820274b3edb58a6e123c612dbed8dd8a1725221240365f142d9510404e1d1b2
+préenregistrement TDI-5.6 SHA-256 : 59e3375b82d0bb7aad7be0591b9d1eac074d4b194678dfe0e06e73c8aac89807
+
+--- provenance TDI-5.7 (ancêtre gelé, inchangé) ---
+évaluateur TDI-5.7 SHA-256      : 900031bc27a35e327038911d93f10d74458f913e64d9644b225963df699049ae
+préenregistrement TDI-5.7 SHA-256 : 2ca7d1a674d451e642beb5b01f8a0d8f08f8fadcf7f91032370e7fd5e3d91476
+
+--- provenance TDI-5.8 (ancêtre gelé, inchangé) ---
+évaluateur TDI-5.8 SHA-256      : e58d07e9ee01ab447be90fc90913661a0cbacd765e02f4670ada01965556f53a
+préenregistrement TDI-5.8 SHA-256 : 981dc709ae87f9191548bf6c31b4b0558b9550d196c6caa69220206101b9c0de
+
+--- provenance TDI-6.1 (ancêtre gelé, inchangé) ---
+évaluateur TDI-6.1 SHA-256      : bb9d155021117b70d1483a9abbc51f45f994caddb8a17365d7fb14f02201f278
+préenregistrement TDI-6.1 SHA-256 : 4d754f334c95b113078c28a24069ffd8fb3e93e2ba89055001aab3bf3ee1a159
+
+--- provenance TDI-6.2 (ancêtre gelé, inchangé) ---
+évaluateur TDI-6.2 SHA-256      : 793fc42d0567283c0f6c773e74597a6ff38d7278cf6e14fcdca7d60e33758a37
+préenregistrement TDI-6.2 SHA-256 : a5263642ee79fb946bc9a7aa6fea4b57c22945a91b7ffa6f2220c7e4d4a55869
+
+--- provenance TDI-6.3 (ancêtre gelé, inchangé) ---
+évaluateur TDI-6.3 SHA-256      : 7e61baa85ae9d4b48cb1d6f527497cbb3980ae655f7f5aca40745d9bcb69e893
+préenregistrement TDI-6.3 SHA-256 : bd220fe6621d35099e729d54fa7befa18c7bf9287fe4bb1e63a449de0b96097e
+
+--- provenance TDI-6.5 (ancêtre gelé, inchangé) ---
+évaluateur TDI-6.5 SHA-256      : 75bd5198486e7e3c6072deebbdebd256aa3152a7b43b60054349f8e181c200f0
+préenregistrement TDI-6.5 SHA-256 : f44eb21446ffdc6897c76818f4d4b22ecf266cf4f2707a4a8d995b0479acd589
+
+=== CONSTANTES GELÉES (Section 17, item 6) ===
+horizon d'observation                       : 2
+horizons cibles                             : [3, 4, 5, 6, 7, 8]
+horizon principal (U6, utilisé par 6.4B/6.4C) : 6
+largeur maximale supportée                   : 6
+espace des ensembles successeurs (largeur 6) : 18446744073709551616
+nombre de features baseline                  : 13
+nombre de features early-overlap             : 2
+nombre de features contraction (δ, δ̄)        : 2
+nombre de features spectrales (s2, s3)       : 2
+tailles de population — train w3=15000, holdout w3=5000, train w4=15000, holdout w4=5000 (aucune population OOD ; toutes les populations d'un bloc sont regroupées, Section 4.4)
+multiplicateurs de tentatives — w3=64, w4=96, w5=128, w6=256
+seuils sans-progrès — w3=25000, w4=50000, w5=75000, w6=100000
+réplicats bootstrap                          : 4000
+régime FP                                    : IEEE-754 binary64, mono-thread, ordre d'opérations fixe (pas de FMA/parallèle) ; reproduction octet-exacte (Section 1.2, 20)
+
+=== BLOCS DE GRAINES (Section 17, item 7) ===
+bloc V | train w3=9000000000 | holdout w3=9010000000 | train w4=9020000000 | holdout w4=9030000000 | graine bootstrap=0x5444493634000001
+bloc W | train w3=9100000000 | holdout w3=9110000000 | train w4=9120000000 | holdout w4=9130000000 | graine bootstrap=0x5444493634000002
+bloc X | train w3=9200000000 | holdout w3=9210000000 | train w4=9220000000 | holdout w4=9230000000 | graine bootstrap=0x5444493634000003
+graine bootstrap agrégat (Section 11) : 0x5444493634004700
+
+=== POPULATIONS — COMPTAGES, RAISONS DE REJET, GRAINES FINALES, BUDGETS (Section 17, items 8-11, 20) ===
+bloc V | training-w3 | demandé=15000 | accepté=15000 | rejeté=58 | tenté=15058 | max_tentatives=960000 | seuil_sans_progrès=25000 | graine initiale=9000000000 | graine finale exclusive=9000015058 | raisons de rejet=observation-fully-recovered=58
+bloc V | holdout-w3  | demandé=5000 | accepté=5000 | rejeté=20 | tenté=5020 | max_tentatives=320000 | seuil_sans_progrès=25000 | graine initiale=9010000000 | graine finale exclusive=9010005020 | raisons de rejet=observation-fully-recovered=20
+bloc V | training-w4 | demandé=15000 | accepté=15000 | rejeté=0 | tenté=15000 | max_tentatives=1440000 | seuil_sans_progrès=50000 | graine initiale=9020000000 | graine finale exclusive=9020015000 | raisons de rejet=none
+bloc V | holdout-w4  | demandé=5000 | accepté=5000 | rejeté=0 | tenté=5000 | max_tentatives=480000 | seuil_sans_progrès=50000 | graine initiale=9030000000 | graine finale exclusive=9030005000 | raisons de rejet=none
+bloc W | training-w3 | demandé=15000 | accepté=15000 | rejeté=63 | tenté=15063 | max_tentatives=960000 | seuil_sans_progrès=25000 | graine initiale=9100000000 | graine finale exclusive=9100015063 | raisons de rejet=observation-fully-recovered=62,target-fully-recovered-h3=1
+bloc W | holdout-w3  | demandé=5000 | accepté=5000 | rejeté=16 | tenté=5016 | max_tentatives=320000 | seuil_sans_progrès=25000 | graine initiale=9110000000 | graine finale exclusive=9110005016 | raisons de rejet=observation-fully-recovered=16
+bloc W | training-w4 | demandé=15000 | accepté=15000 | rejeté=0 | tenté=15000 | max_tentatives=1440000 | seuil_sans_progrès=50000 | graine initiale=9120000000 | graine finale exclusive=9120015000 | raisons de rejet=none
+bloc W | holdout-w4  | demandé=5000 | accepté=5000 | rejeté=0 | tenté=5000 | max_tentatives=480000 | seuil_sans_progrès=50000 | graine initiale=9130000000 | graine finale exclusive=9130005000 | raisons de rejet=none
+bloc X | training-w3 | demandé=15000 | accepté=15000 | rejeté=59 | tenté=15059 | max_tentatives=960000 | seuil_sans_progrès=25000 | graine initiale=9200000000 | graine finale exclusive=9200015059 | raisons de rejet=observation-fully-recovered=58,target-fully-recovered-h3=1
+bloc X | holdout-w3  | demandé=5000 | accepté=5000 | rejeté=22 | tenté=5022 | max_tentatives=320000 | seuil_sans_progrès=25000 | graine initiale=9210000000 | graine finale exclusive=9210005022 | raisons de rejet=observation-fully-recovered=22
+bloc X | training-w4 | demandé=15000 | accepté=15000 | rejeté=0 | tenté=15000 | max_tentatives=1440000 | seuil_sans_progrès=50000 | graine initiale=9220000000 | graine finale exclusive=9220015000 | raisons de rejet=none
+bloc X | holdout-w4  | demandé=5000 | accepté=5000 | rejeté=0 | tenté=5000 | max_tentatives=480000 | seuil_sans_progrès=50000 | graine initiale=9230000000 | graine finale exclusive=9230005000 | raisons de rejet=none
+
+Section 19 -- cohérence du nœud historique : SUCCÈS pour les 120000 enregistrements acceptés (chaque assert_eq! dans analyze_seed aurait paniqué avant d'atteindre cette impression en cas de divergence)
+
+=== DIAGNOSTIC DESCRIPTEURS — Section 12 (contexte ; sous-jacent à TDI-6.4C) ===
+bloc V | moyenne δ=0.949285506 | moyenne δ̄=0.582571003 | moyenne s2=1.121524198 | moyenne s3=1.018581368 | (hors Section 12, bookkeeping) moyenne baseline=1.626059546 | moyenne overlap brut=0.976617415
+bloc W | moyenne δ=0.949503564 | moyenne δ̄=0.582604794 | moyenne s2=1.120357918 | moyenne s3=1.018034462 | (hors Section 12, bookkeeping) moyenne baseline=1.626377510 | moyenne overlap brut=0.976731309
+bloc X | moyenne δ=0.949224221 | moyenne δ̄=0.582557142 | moyenne s2=1.120628948 | moyenne s3=1.018369357 | (hors Section 12, bookkeeping) moyenne baseline=1.626296123 | moyenne overlap brut=0.976701717
+agrégat | moyenne δ=0.949337764 | moyenne δ̄=0.582577646 | moyenne s2=1.120837022 | moyenne s3=1.018328396 | (hors Section 12, bookkeeping) moyenne baseline=1.626244393 | moyenne overlap brut=0.976683480
+
+=== TDI-6.4A — hétérogénéité nœud-à-nœud par système (Section 13, descriptif) ===
+
+--- bloc V — U_3 ---
+range(h) : n_inclus=39831 | n_exclus_pleine_récupération=169 | médiane=0.912626965 | IQR=[0.604589232, 1.301139306] | min=0.000000000 | max=6.454299294 | moyenne=1.013631180
+  IC 95 % bootstrap (moyenne de range(h)): [1.008009813, 1.019350019] (médiane 1.013633474)
+  seuil descriptif (médiane U_i(h) de la population)=4.332838817 | proportion dépassant ce seuil=0.000853606 (contexte seulement, non un critère pass/fail)
+
+--- bloc V — U_4 ---
+range(h) : n_inclus=39831 | n_exclus_pleine_récupération=169 | médiane=1.011400195 | IQR=[0.664323228, 1.455722692] | min=0.000000000 | max=8.532234153 | moyenne=1.134648670
+  IC 95 % bootstrap (moyenne de range(h)): [1.128055267, 1.141250555] (médiane 1.134555836)
+  seuil descriptif (médiane U_i(h) de la population)=6.138687626 | proportion dépassant ce seuil=0.000301273 (contexte seulement, non un critère pass/fail)
+
+--- bloc V — U_5 ---
+range(h) : n_inclus=39831 | n_exclus_pleine_récupération=169 | médiane=1.092078723 | IQR=[0.709804728, 1.584156264] | min=0.000000000 | max=10.609600800 | moyenne=1.235659184
+  IC 95 % bootstrap (moyenne de range(h)): [1.228240090, 1.243184238] (médiane 1.235593239)
+  seuil descriptif (médiane U_i(h) de la population)=7.929936186 | proportion dépassant ce seuil=0.000200849 (contexte seulement, non un critère pass/fail)
+
+--- bloc V — U_6 ---
+range(h) : n_inclus=39831 | n_exclus_pleine_récupération=169 | médiane=1.156892154 | IQR=[0.747083065, 1.697817209] | min=0.000000000 | max=12.687309681 | moyenne=1.321810683
+  IC 95 % bootstrap (moyenne de range(h)): [1.313629282, 1.329777716] (médiane 1.321815751)
+  seuil descriptif (médiane U_i(h) de la population)=9.709390848 | proportion dépassant ce seuil=0.000150636 (contexte seulement, non un critère pass/fail)
+
+--- bloc V — U_7 ---
+range(h) : n_inclus=39831 | n_exclus_pleine_récupération=169 | médiane=1.213013185 | IQR=[0.775033967, 1.792147093] | min=0.000000000 | max=14.764864354 | moyenne=1.395227250
+  IC 95 % bootstrap (moyenne de range(h)): [1.386272681, 1.403832621] (médiane 1.395262375)
+  seuil descriptif (médiane U_i(h) de la population)=11.462938898 | proportion dépassant ce seuil=0.000150636 (contexte seulement, non un critère pass/fail)
+
+--- bloc V — U_8 ---
+range(h) : n_inclus=39831 | n_exclus_pleine_récupération=169 | médiane=1.255937252 | IQR=[0.799975020, 1.871758848] | min=0.000000000 | max=16.842482033 | moyenne=1.456386802
+  IC 95 % bootstrap (moyenne de range(h)): [1.446859693, 1.465771737] (médiane 1.456449720)
+  seuil descriptif (médiane U_i(h) de la population)=13.204084185 | proportion dépassant ce seuil=0.000150636 (contexte seulement, non un critère pass/fail)
+
+--- bloc W — U_3 ---
+range(h) : n_inclus=39852 | n_exclus_pleine_récupération=148 | médiane=0.906653024 | IQR=[0.602355633, 1.299560282] | min=0.000000000 | max=5.631525388 | moyenne=1.011251921
+  IC 95 % bootstrap (moyenne de range(h)): [1.005647897, 1.016948611] (médiane 1.011172343)
+  seuil descriptif (médiane U_i(h) de la population)=4.343364821 | proportion dépassant ce seuil=0.000777878 (contexte seulement, non un critère pass/fail)
+
+--- bloc W — U_4 ---
+range(h) : n_inclus=39852 | n_exclus_pleine_récupération=148 | médiane=1.004849169 | IQR=[0.663109413, 1.451434520] | min=0.000000000 | max=6.874514489 | moyenne=1.134110488
+  IC 95 % bootstrap (moyenne de range(h)): [1.127485626, 1.140622636] (médiane 1.134119177)
+  seuil descriptif (médiane U_i(h) de la population)=6.145573799 | proportion dépassant ce seuil=0.000351300 (contexte seulement, non un critère pass/fail)
+
+--- bloc W — U_5 ---
+range(h) : n_inclus=39852 | n_exclus_pleine_récupération=148 | médiane=1.089414827 | IQR=[0.710476079, 1.581628079] | min=0.000000000 | max=9.293502137 | moyenne=1.237470033
+  IC 95 % bootstrap (moyenne de range(h)): [1.230037396, 1.244937313] (médiane 1.237416186)
+  seuil descriptif (médiane U_i(h) de la population)=7.943097022 | proportion dépassant ce seuil=0.000150557 (contexte seulement, non un critère pass/fail)
+
+--- bloc W — U_6 ---
+range(h) : n_inclus=39852 | n_exclus_pleine_récupération=148 | médiane=1.152164412 | IQR=[0.744290313, 1.697631638] | min=0.000000000 | max=10.306339605 | moyenne=1.322543784
+  IC 95 % bootstrap (moyenne de range(h)): [1.314209690, 1.330740385] (médiane 1.322519643)
+  seuil descriptif (médiane U_i(h) de la population)=9.718060415 | proportion dépassant ce seuil=0.000100371 (contexte seulement, non un critère pass/fail)
+
+--- bloc W — U_7 ---
+range(h) : n_inclus=39852 | n_exclus_pleine_récupération=148 | médiane=1.204759080 | IQR=[0.771323845, 1.793566797] | min=0.000000000 | max=12.000792421 | moyenne=1.396815373
+  IC 95 % bootstrap (moyenne de range(h)): [1.387767320, 1.405791475] (médiane 1.396832642)
+  seuil descriptif (médiane U_i(h) de la population)=11.473710687 | proportion dépassant ce seuil=0.000050186 (contexte seulement, non un critère pass/fail)
+
+--- bloc W — U_8 ---
+range(h) : n_inclus=39852 | n_exclus_pleine_récupération=148 | médiane=1.247292211 | IQR=[0.800715543, 1.876772715] | min=0.000000000 | max=13.544161649 | moyenne=1.460015376
+  IC 95 % bootstrap (moyenne de range(h)): [1.450474173, 1.469678980] (médiane 1.459920641)
+  seuil descriptif (médiane U_i(h) de la population)=13.217736832 | proportion dépassant ce seuil=0.000050186 (contexte seulement, non un critère pass/fail)
+
+--- bloc X — U_3 ---
+range(h) : n_inclus=39819 | n_exclus_pleine_récupération=181 | médiane=0.906952023 | IQR=[0.600556146, 1.299723659] | min=0.000000000 | max=6.341036918 | moyenne=1.010126178
+  IC 95 % bootstrap (moyenne de range(h)): [1.004352854, 1.015569972] (médiane 1.010234730)
+  seuil descriptif (médiane U_i(h) de la population)=4.336299388 | proportion dépassant ce seuil=0.000828750 (contexte seulement, non un critère pass/fail)
+
+--- bloc X — U_4 ---
+range(h) : n_inclus=39818 | n_exclus_pleine_récupération=182 | médiane=1.005288619 | IQR=[0.657225358, 1.453512227] | min=0.000000000 | max=9.721008020 | moyenne=1.130480662
+  IC 95 % bootstrap (moyenne de range(h)): [1.123681961, 1.137243438] (médiane 1.130515209)
+  seuil descriptif (médiane U_i(h) de la population)=6.141456358 | proportion dépassant ce seuil=0.000251143 (contexte seulement, non un critère pass/fail)
+
+--- bloc X — U_5 ---
+range(h) : n_inclus=39818 | n_exclus_pleine_récupération=182 | médiane=1.083844284 | IQR=[0.705185038, 1.590002014] | min=0.000000000 | max=13.101257864 | moyenne=1.235539559
+  IC 95 % bootstrap (moyenne de range(h)): [1.228011491, 1.243181675] (médiane 1.235629536)
+  seuil descriptif (médiane U_i(h) de la population)=7.927699151 | proportion dépassant ce seuil=0.000175800 (contexte seulement, non un critère pass/fail)
+
+--- bloc X — U_6 ---
+range(h) : n_inclus=39818 | n_exclus_pleine_récupération=182 | médiane=1.147137775 | IQR=[0.736371059, 1.699665941] | min=0.000000000 | max=16.478464940 | moyenne=1.318756118
+  IC 95 % bootstrap (moyenne de range(h)): [1.310600690, 1.327269108] (médiane 1.318844353)
+  seuil descriptif (médiane U_i(h) de la population)=9.709296044 | proportion dépassant ce seuil=0.000150686 (contexte seulement, non un critère pass/fail)
+
+--- bloc X — U_7 ---
+range(h) : n_inclus=39818 | n_exclus_pleine_récupération=182 | médiane=1.198208940 | IQR=[0.768696407, 1.797944888] | min=0.000000000 | max=19.855800796 | moyenne=1.393724792
+  IC 95 % bootstrap (moyenne de range(h)): [1.384822929, 1.402966539] (médiane 1.393770541)
+  seuil descriptif (médiane U_i(h) de la population)=11.468698561 | proportion dépassant ce seuil=0.000100457 (contexte seulement, non un critère pass/fail)
+
+--- bloc X — U_8 ---
+range(h) : n_inclus=39818 | n_exclus_pleine_récupération=182 | médiane=1.244456718 | IQR=[0.796133862, 1.861492984] | min=0.000000000 | max=23.232975752 | moyenne=1.454217421
+  IC 95 % bootstrap (moyenne de range(h)): [1.444802597, 1.464128710] (médiane 1.454195808)
+  seuil descriptif (médiane U_i(h) de la population)=13.204716966 | proportion dépassant ce seuil=0.000100457 (contexte seulement, non un critère pass/fail)
+
+--- agrégat — U_3 ---
+range(h) : n_inclus=119502 | n_exclus_pleine_récupération=498 | médiane=0.908996179 | IQR=[0.602549352, 1.300001636] | min=0.000000000 | max=6.454299294 | moyenne=1.011669841
+  IC 95 % bootstrap (moyenne de range(h)): [1.008360990, 1.014990539] (médiane 1.011648958)
+  seuil descriptif (médiane U_i(h) de la population)=4.337390284 | proportion dépassant ce seuil=0.000820070 (contexte seulement, non un critère pass/fail)
+
+--- agrégat — U_4 ---
+range(h) : n_inclus=119501 | n_exclus_pleine_récupération=499 | médiane=1.007306863 | IQR=[0.661324017, 1.453679304] | min=0.000000000 | max=9.721008020 | moyenne=1.133080404
+  IC 95 % bootstrap (moyenne de range(h)): [1.129283779, 1.136871955] (médiane 1.133042999)
+  seuil descriptif (médiane U_i(h) de la population)=6.141795954 | proportion dépassant ce seuil=0.000301253 (contexte seulement, non un critère pass/fail)
+
+--- agrégat — U_5 ---
+range(h) : n_inclus=119501 | n_exclus_pleine_récupération=499 | médiane=1.088846600 | IQR=[0.708317036, 1.585603349] | min=0.000000000 | max=13.101257864 | moyenne=1.236223219
+  IC 95 % bootstrap (moyenne de range(h)): [1.231937028, 1.240634094] (médiane 1.236226147)
+  seuil descriptif (médiane U_i(h) de la population)=7.933499268 | proportion dépassant ce seuil=0.000175731 (contexte seulement, non un critère pass/fail)
+
+--- agrégat — U_6 ---
+range(h) : n_inclus=119501 | n_exclus_pleine_récupération=499 | médiane=1.152005952 | IQR=[0.742691218, 1.698303974] | min=0.000000000 | max=16.478464940 | moyenne=1.321037375
+  IC 95 % bootstrap (moyenne de range(h)): [1.316395280, 1.325879851] (médiane 1.321021477)
+  seuil descriptif (médiane U_i(h) de la population)=9.712182116 | proportion dépassant ce seuil=0.000133890 (contexte seulement, non un critère pass/fail)
+
+--- agrégat — U_7 ---
+range(h) : n_inclus=119501 | n_exclus_pleine_récupération=499 | médiane=1.205097392 | IQR=[0.771810732, 1.794659725] | min=0.000000000 | max=19.855800796 | moyenne=1.395256246
+  IC 95 % bootstrap (moyenne de range(h)): [1.390314209, 1.400482182] (médiane 1.395265161)
+  seuil descriptif (médiane U_i(h) de la population)=11.468871119 | proportion dépassant ce seuil=0.000100418 (contexte seulement, non un critère pass/fail)
+
+--- agrégat — U_8 ---
+range(h) : n_inclus=119501 | n_exclus_pleine_récupération=499 | médiane=1.249386714 | IQR=[0.799333167, 1.869839141] | min=0.000000000 | max=23.232975752 | moyenne=1.456874041
+  IC 95 % bootstrap (moyenne de range(h)): [1.451575974, 1.462459061] (médiane 1.456834384)
+  seuil descriptif (médiane U_i(h) de la population)=13.208791934 | proportion dépassant ce seuil=0.000100418 (contexte seulement, non un critère pass/fail)
+
+=== TDI-6.4B — transfert précoce→tardif par nœud d'intervention (Section 14, descriptif ; agrégat uniquement) ===
+
+--- largeur 3 (nœuds 0-2) ---
+
+--- agrégat, largeur 3 — nœud 0 ---
+n_inclus=59755 | n_exclus (U_i(6) indéfini)=245
+corr(O_i(1), U_i(6))=0.449870002
+  IC 95 % bootstrap corr(O_i(1), U_i(6)): [0.443417796, 0.456424868] (médiane 0.449876705)
+corr(O_i(2), U_i(6))=0.711741593
+  IC 95 % bootstrap corr(O_i(2), U_i(6)): [0.707312575, 0.716218695] (médiane 0.711755553)
+
+--- agrégat, largeur 3 — nœud 1 ---
+n_inclus=59745 | n_exclus (U_i(6) indéfini)=255
+corr(O_i(1), U_i(6))=0.457755931
+  IC 95 % bootstrap corr(O_i(1), U_i(6)): [0.450916643, 0.464379267] (médiane 0.457773532)
+corr(O_i(2), U_i(6))=0.717028819
+  IC 95 % bootstrap corr(O_i(2), U_i(6)): [0.712587853, 0.721585427] (médiane 0.717110568)
+
+--- agrégat, largeur 3 — nœud 2 ---
+n_inclus=60000 | n_exclus (U_i(6) indéfini)=0
+corr(O_i(1), U_i(6))=0.461480337
+  IC 95 % bootstrap corr(O_i(1), U_i(6)): [0.455128815, 0.467823937] (médiane 0.461538494)
+corr(O_i(2), U_i(6))=0.717021050
+  IC 95 % bootstrap corr(O_i(2), U_i(6)): [0.712712838, 0.721512068] (médiane 0.717046526)
+
+largeur 3 — stabilité inter-nœuds (Section 14 ; "stable" opérationnalisé comme chevauchement de l'IC bootstrap du nœud i* = largeur - 1 avec celui de chaque autre nœud ; descriptif seulement, aucun seuil numérique nouveau) :
+  corr(O_i(1), U_i(6)) : stable (nœuds différant de i* : [])
+  corr(O_i(2), U_i(6)) : stable (nœuds différant de i* : [])
+
+--- largeur 4 (nœuds 0-3) ---
+
+--- agrégat, largeur 4 — nœud 0 ---
+n_inclus=60000 | n_exclus (U_i(6) indéfini)=0
+corr(O_i(1), U_i(6))=0.418022587
+  IC 95 % bootstrap corr(O_i(1), U_i(6)): [0.411291319, 0.424719992] (médiane 0.418093657)
+corr(O_i(2), U_i(6))=0.656288064
+  IC 95 % bootstrap corr(O_i(2), U_i(6)): [0.650772313, 0.661768524] (médiane 0.656222656)
+
+--- agrégat, largeur 4 — nœud 1 ---
+n_inclus=59999 | n_exclus (U_i(6) indéfini)=1
+corr(O_i(1), U_i(6))=0.424416175
+  IC 95 % bootstrap corr(O_i(1), U_i(6)): [0.417804618, 0.431293437] (médiane 0.424440623)
+corr(O_i(2), U_i(6))=0.660980318
+  IC 95 % bootstrap corr(O_i(2), U_i(6)): [0.655475616, 0.666299316] (médiane 0.660969385)
+
+--- agrégat, largeur 4 — nœud 2 ---
+n_inclus=60000 | n_exclus (U_i(6) indéfini)=0
+corr(O_i(1), U_i(6))=0.419176866
+  IC 95 % bootstrap corr(O_i(1), U_i(6)): [0.412455973, 0.425674663] (médiane 0.419183173)
+corr(O_i(2), U_i(6))=0.662212814
+  IC 95 % bootstrap corr(O_i(2), U_i(6)): [0.656637404, 0.667996059] (médiane 0.662204558)
+
+--- agrégat, largeur 4 — nœud 3 ---
+n_inclus=60000 | n_exclus (U_i(6) indéfini)=0
+corr(O_i(1), U_i(6))=0.426294306
+  IC 95 % bootstrap corr(O_i(1), U_i(6)): [0.419836093, 0.433005544] (médiane 0.426359373)
+corr(O_i(2), U_i(6))=0.662494003
+  IC 95 % bootstrap corr(O_i(2), U_i(6)): [0.657235449, 0.667754722] (médiane 0.662538111)
+
+largeur 4 — stabilité inter-nœuds (Section 14 ; "stable" opérationnalisé comme chevauchement de l'IC bootstrap du nœud i* = largeur - 1 avec celui de chaque autre nœud ; descriptif seulement, aucun seuil numérique nouveau) :
+  corr(O_i(1), U_i(6)) : stable (nœuds différant de i* : [])
+  corr(O_i(2), U_i(6)) : stable (nœuds différant de i* : [])
+
+=== TABLE COMPLÉMENTAIRE — moyenne U_i(h) par nœud et par horizon (Section 17 ; agrégat uniquement, mêmes largeurs que TDI-6.4B) ===
+
+--- agrégat, largeur 3 : moyenne U_i(h) par nœud et par horizon ---
+nœud 0 : U_3=3.570365 (n_inclus=59756, n_exclus=244) | U_4=4.956708 (n_inclus=59755, n_exclus=245) | U_5=6.309122 (n_inclus=59755, n_exclus=245) | U_6=7.641430 (n_inclus=59755, n_exclus=245) | U_7=8.955976 (n_inclus=59755, n_exclus=245) | U_8=10.263058 (n_inclus=59755, n_exclus=245)
+nœud 1 : U_3=3.572595 (n_inclus=59745, n_exclus=255) | U_4=4.955951 (n_inclus=59745, n_exclus=255) | U_5=6.310197 (n_inclus=59745, n_exclus=255) | U_6=7.644702 (n_inclus=59745, n_exclus=255) | U_7=8.957949 (n_inclus=59745, n_exclus=255) | U_8=10.262689 (n_inclus=59745, n_exclus=255)
+nœud 2 : U_3=3.577258 (n_inclus=60000, n_exclus=0) | U_4=4.963797 (n_inclus=60000, n_exclus=0) | U_5=6.318047 (n_inclus=60000, n_exclus=0) | U_6=7.650549 (n_inclus=60000, n_exclus=0) | U_7=8.965751 (n_inclus=60000, n_exclus=0) | U_8=10.270682 (n_inclus=60000, n_exclus=0)
+
+--- agrégat, largeur 4 : moyenne U_i(h) par nœud et par horizon ---
+nœud 0 : U_3=4.668979 (n_inclus=60000, n_exclus=0) | U_4=6.606896 (n_inclus=60000, n_exclus=0) | U_5=8.533749 (n_inclus=60000, n_exclus=0) | U_6=10.448794 (n_inclus=60000, n_exclus=0) | U_7=12.347824 (n_inclus=60000, n_exclus=0) | U_8=14.233853 (n_inclus=60000, n_exclus=0)
+nœud 1 : U_3=4.669733 (n_inclus=59999, n_exclus=1) | U_4=6.609169 (n_inclus=59999, n_exclus=1) | U_5=8.538581 (n_inclus=59999, n_exclus=1) | U_6=10.454898 (n_inclus=59999, n_exclus=1) | U_7=12.354364 (n_inclus=59999, n_exclus=1) | U_8=14.241673 (n_inclus=59999, n_exclus=1)
+nœud 2 : U_3=4.669619 (n_inclus=60000, n_exclus=0) | U_4=6.611070 (n_inclus=60000, n_exclus=0) | U_5=8.540928 (n_inclus=60000, n_exclus=0) | U_6=10.454983 (n_inclus=60000, n_exclus=0) | U_7=12.352600 (n_inclus=60000, n_exclus=0) | U_8=14.240213 (n_inclus=60000, n_exclus=0)
+nœud 3 : U_3=4.667732 (n_inclus=60000, n_exclus=0) | U_4=6.608766 (n_inclus=60000, n_exclus=0) | U_5=8.536625 (n_inclus=60000, n_exclus=0) | U_6=10.451730 (n_inclus=60000, n_exclus=0) | U_7=12.351991 (n_inclus=60000, n_exclus=0) | U_8=14.239233 (n_inclus=60000, n_exclus=0)
+
+=== TDI-6.4C — corrélats descripteurs de l'hétérogénéité (Section 15, descriptif) ===
+
+--- bloc V ---
+n_inclus (range(6) défini)=39831 | n_exclus=169
+corr(range(6), δ)      =0.067889695
+  IC 95 % bootstrap corr(range(6), δ): [0.058376025, 0.077551161] (médiane 0.067993072)
+corr(range(6), δ̄)      =0.051443061
+  IC 95 % bootstrap corr(range(6), δ̄): [0.040250249, 0.062489686] (médiane 0.051671125)
+corr(range(6), s2)     =0.227619477
+  IC 95 % bootstrap corr(range(6), s2): [0.214581708, 0.240672197] (médiane 0.227772345)
+corr(range(6), s3)     =0.127140808
+  IC 95 % bootstrap corr(range(6), s3): [0.108584601, 0.145716496] (médiane 0.127139533)
+
+--- bloc W ---
+n_inclus (range(6) défini)=39852 | n_exclus=148
+corr(range(6), δ)      =0.062871930
+  IC 95 % bootstrap corr(range(6), δ): [0.053806624, 0.072210386] (médiane 0.062875384)
+corr(range(6), δ̄)      =0.048547454
+  IC 95 % bootstrap corr(range(6), δ̄): [0.037509468, 0.059539516] (médiane 0.048534525)
+corr(range(6), s2)     =0.234481203
+  IC 95 % bootstrap corr(range(6), s2): [0.221195000, 0.247869366] (médiane 0.234254879)
+corr(range(6), s3)     =0.136634417
+  IC 95 % bootstrap corr(range(6), s3): [0.116313599, 0.156218117] (médiane 0.136752040)
+
+--- bloc X ---
+n_inclus (range(6) défini)=39818 | n_exclus=182
+corr(range(6), δ)      =0.070055804
+  IC 95 % bootstrap corr(range(6), δ): [0.060645257, 0.079312827] (médiane 0.070077699)
+corr(range(6), δ̄)      =0.057323914
+  IC 95 % bootstrap corr(range(6), δ̄): [0.046293949, 0.068106873] (médiane 0.057509881)
+corr(range(6), s2)     =0.249681282
+  IC 95 % bootstrap corr(range(6), s2): [0.236446860, 0.262735551] (médiane 0.249780798)
+corr(range(6), s3)     =0.147175403
+  IC 95 % bootstrap corr(range(6), s3): [0.128984898, 0.164830885] (médiane 0.147215676)
+
+--- agrégat ---
+n_inclus (range(6) défini)=119501 | n_exclus=499
+corr(range(6), δ)      =0.066945622
+  IC 95 % bootstrap corr(range(6), δ): [0.061468963, 0.072449964] (médiane 0.066973371)
+corr(range(6), δ̄)      =0.052447851
+  IC 95 % bootstrap corr(range(6), δ̄): [0.046029643, 0.058917034] (médiane 0.052503143)
+corr(range(6), s2)     =0.237291892
+  IC 95 % bootstrap corr(range(6), s2): [0.229798327, 0.244664358] (médiane 0.237241876)
+corr(range(6), s3)     =0.136984466
+  IC 95 % bootstrap corr(range(6), s3): [0.126568083, 0.147710448] (médiane 0.136932930)
+
+=== VERDICTS FINAUX (Section 17) ===
+TDI-6.4A — hétérogénéité nœud-à-nœud : descriptive uniquement, aucun verdict pass/fail (Section 13) ; voir la distribution de range(h) par bloc et agrégat ci-dessus.
+TDI-6.4A — U3 — agrégat : médiane range(h)=0.908996, IC95%[1.008361, 1.014991] sur la moyenne, exclusions pleine récupération=498
+TDI-6.4A — U4 — agrégat : médiane range(h)=1.007307, IC95%[1.129284, 1.136872] sur la moyenne, exclusions pleine récupération=499
+TDI-6.4A — U5 — agrégat : médiane range(h)=1.088847, IC95%[1.231937, 1.240634] sur la moyenne, exclusions pleine récupération=499
+TDI-6.4A — U6 — agrégat : médiane range(h)=1.152006, IC95%[1.316395, 1.325880] sur la moyenne, exclusions pleine récupération=499
+TDI-6.4A — U7 — agrégat : médiane range(h)=1.205097, IC95%[1.390314, 1.400482] sur la moyenne, exclusions pleine récupération=499
+TDI-6.4A — U8 — agrégat : médiane range(h)=1.249387, IC95%[1.451576, 1.462459] sur la moyenne, exclusions pleine récupération=499
+TDI-6.4B — transfert précoce→tardif par nœud : descriptif uniquement (Section 14) ; voir corr(O_i(1), U_i(6)) et corr(O_i(2), U_i(6)) par nœud ci-dessus.
+TDI-6.4B — largeur 3 : stable(O1)=true, stable(O2)=true
+TDI-6.4B — largeur 4 : stable(O1)=true, stable(O2)=true
+TDI-6.4C — corrélats descripteurs de l'hétérogénéité : descriptif uniquement (Section 15) ; voir corr(range(6), δ/δ̄/s2/s3) par bloc et agrégat ci-dessus.
+TDI-6.4C — agrégat : corr(range(6), δ)=0.066946, corr(range(6), δ̄)=0.052448, corr(range(6), s2)=0.237292, corr(range(6), s3)=0.136984
