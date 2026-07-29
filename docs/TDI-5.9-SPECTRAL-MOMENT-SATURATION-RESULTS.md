@@ -26,16 +26,28 @@ running out of road; the signal is not.
 
 | Item | Value |
 |---|---|
+| Run git commit | `79d7f11ff7e7991b60abb5bfbee5af9b5b17e049` |
 | Evaluator (v59) SHA-256 | `ffa55883c7a0f87e864f817e40518d3021281ae4886d7366c5f7318b1985be8e` |
 | Preregistration SHA-256 | `1fd2db07cfcad98c3c56b99270239a2cc5297fe3401846eb1a633b645177cab8` |
+| Scientific-manifest SHA-256 | `0522e5543121bd116b55f351b36ab694e3646cd1b8f84fa827183ab43a4a2419` |
 | Result log SHA-256 | `4a74257ecf08803ae57fd5b436e878a8c3285a0c83eb1fb696dfa9d9b8ccc7b7` |
-| Host | Linux `tarek`, aarch64 (Jetson, ARM64) |
-| End (UTC) | 2026-07-28T21:55:29Z |
+| Toolchain | rustc 1.97.1 (8bab26f4f 2026-07-14), cargo 1.97.1 (c980f4866 2026-06-30) |
+| Host | Linux `tarek` 6.8.12-tegra, aarch64 (Jetson, ARM64) |
+| Start / end (UTC) | 2026-07-28T21:28:50Z / 2026-07-28T21:55:29Z (~27 min) |
 
-The evaluator hash recorded above equals the committed frozen v59 evaluator
-and the frozen `EVALUATOR.sha256` manifest
-(`ffa55883…`, reverified independently in this working tree), and the
-preregistration hash equals the committed frozen document. Because
+The run git commit `79d7f11f` is exactly the merge commit of the pull request
+that froze this experiment's evaluator and manifests, so the run executed the
+merged, reviewed tree with nothing added on top.
+
+The evaluator hash recorded by the run equals the committed frozen v59
+evaluator and the frozen `EVALUATOR.sha256` manifest (`ffa55883…`), the
+preregistration hash equals the committed frozen document (`1fd2db07…`), and
+the scientific-manifest hash equals the committed
+`docs/TDI-5.9-SCIENTIFIC-CODE.sha256` (`0522e554…`) — all three reverified
+independently in this working tree against the run's own metadata. The
+committed log has been independently rehashed to
+`4a74257ecf08803ae57fd5b436e878a8c3285a0c83eb1fb696dfa9d9b8ccc7b7`, matching
+the value the run recorded for itself. Because
 `scripts/reproduce-tdi5.9.sh` verifies the **entire** frozen chain — all
 thirteen ancestors (TDI-5.1 → 5.8, 6.1, 6.2, 6.3, 6.5, 6.4) plus TDI-5.9's
 own three manifests — before any generation, and refuses a dirty repository,
@@ -58,6 +70,19 @@ prior block (TDI-6.4 consumes seeds to ≈ 9.23×10⁹; TDI-5.9 starts at
 1.0×10¹⁰) — with **40,000 accepted records per block, 120,000 total**, no OOD
 populations (preregistration Section 8).
 
+All twelve populations reached their requested count exactly (15,000 /
+5,000 / 15,000 / 5,000 per block); 120,242 candidates were attempted for
+120,000 accepted, i.e. **242 preregistered exclusions** (Y 89, Z 70, AA 83).
+Every exclusion occurred at width 3 — 241 `observation-fully-recovered` and a
+single `target-fully-recovered-h3` (block Y, training-w3); width 4 produced
+**zero** exclusions in all three blocks. Generation ran far inside its
+deterministic budgets: the worst-case population consumed 15,066 of 960,000
+permitted attempts (1.57%), so no result is near a termination limit. Each
+population's consumed seed range sits well inside its 10,000,000-wide
+reservation (largest span 15,066), so the Y/Z/AA reservations are pairwise
+disjoint with a very large margin, as the evaluator independently verifies at
+run time.
+
 The single changed factor versus the frozen TDI-5.6 ancestor is one
 descriptor: the fourth exact spectral moment, added as one more nested
 closed-walk loop over the same already-exact machinery,
@@ -78,12 +103,12 @@ genuine spectral information obtained without ever computing an eigenvalue.
 | **SK4** | baseline + δ + δ̄ + s₂ + s₃ + s₄ | 18 | full exact spectral baseline (5.9A/C baseline) |
 | **SKT4** | SK4 + O₁ + O₂ | 20 | full model |
 
-The aggregate holdout MSE nests cleanly and strictly at U₆,
-`CK ≥ SK ≥ SK4 ≥ SKT4`:
+The aggregate holdout MSE nests cleanly and strictly, `CK ≥ SK ≥ SK4 ≥ SKT4`,
+at both focal horizons:
 
 | Horizon | CK MSE | SK MSE | SK4 MSE | SKT4 MSE |
 |---|---:|---:|---:|---:|
-| U₃ | 0.347263 | 0.338423 | 0.337208 | — |
+| U₃ | 0.347263 | 0.338423 | 0.337208 | 0.176784 |
 | U₆ | 0.290546 | 0.248585 | 0.239127 | 0.183297 |
 
 Each successive increment is smaller than the one before it — the saturation
@@ -94,15 +119,16 @@ that criterion TDI-5.9D quantifies formally in Section 6.
 **SKT4** versus **SK4** on combined holdout at the focal horizons, four-way
 classification with the symmetric 2% relative-MSE margin:
 
-| Horizon | Classification | Aggregate rel-MSE reduction | Blocks confirming |
-|---|---|---:|---:|
-| **U₃** | **Beneficial** | 47.5741% | 3 / 3 |
-| **U₆** | **Beneficial** | 23.3474% | 3 / 3 |
+| Horizon | Classification | Aggregate rel-MSE reduction | Aggregate 95% CI | Blocks confirming |
+|---|---|---:|---|---:|
+| **U₃** | **Beneficial** | 47.5741% | [46.6374%, 48.4929%] | 3 / 3 |
+| **U₆** | **Beneficial** | 23.3474% | [22.3244%, 24.3198%] | 3 / 3 |
 
 At both focal horizons all three blocks individually confirm the benefit, the
 aggregate relative improvement exceeds the 2% margin by an order of
-magnitude, and the aggregate bootstrap lower bound is strictly positive. At
-U₆ the aggregate SK4 MSE 0.239127 falls to 0.183297 (R² 0.7660 → 0.8206).
+magnitude, and the aggregate bootstrap lower bound is strictly positive
+(U₃ aggregate SK4 MSE 0.337208 → SKT4 0.176784; U₆ SK4 0.239127 → SKT4
+0.183297, R² 0.7660 → 0.8206).
 
 **The overlaps carry predictive information that neither the exact
 contraction descriptors nor any of the three exact spectral moments
@@ -161,14 +187,14 @@ reading, though the margin narrows at U₆.
 SKT4-vs-SK4 across the dense grid, beside TDI-5.6's independently-measured
 SKT-vs-SK profile on different seed blocks:
 
-| Horizon | TDI-5.9 (SKT4 vs SK4) | TDI-5.6 (SKT vs SK) | Difference | Classification |
-|---|---:|---:|---:|---|
-| U₃ | 47.5741% | 47.08% | +0.49 pp | Beneficial |
-| U₄ | 36.3379% | 35.92% | +0.42 pp | Beneficial |
-| U₅ | 28.3884% | 28.25% | +0.14 pp | Beneficial |
-| U₆ | 23.3474% | 22.78% | +0.57 pp | Beneficial |
-| U₇ | 19.3296% | 18.70% | +0.63 pp | Beneficial |
-| U₈ | 16.4629% | 16.01% | +0.45 pp | Beneficial |
+| Horizon | TDI-5.9 (SKT4 vs SK4) | Aggregate 95% CI | TDI-5.6 (SKT vs SK) | Difference | Classification |
+|---|---:|---|---:|---:|---|
+| U₃ | 47.5741% | [46.6374%, 48.4929%] | 47.08% | +0.49 pp | Beneficial |
+| U₄ | 36.3379% | [35.3591%, 37.3192%] | 35.92% | +0.42 pp | Beneficial |
+| U₅ | 28.3884% | [27.3443%, 29.3988%] | 28.25% | +0.14 pp | Beneficial |
+| U₆ | 23.3474% | [22.3244%, 24.3198%] | 22.78% | +0.57 pp | Beneficial |
+| U₇ | 19.3296% | [18.3348%, 20.2904%] | 18.70% | +0.63 pp | Beneficial |
+| U₈ | 16.4629% | [15.5346%, 17.3918%] | 16.01% | +0.45 pp | Beneficial |
 
 - **`monotone_non_increasing` = true.**
 - **redundancy horizon `h★` = none** — Beneficial at every horizon in U₃…U₈;
@@ -180,20 +206,24 @@ SKT-vs-SK profile on different seed blocks:
 Two independent replications fall out of this run, neither of them planned as
 a criterion:
 
-1. **The decay profile reproduces.** All six horizons land within 0.63
-   percentage points of TDI-5.6's, on entirely fresh seed blocks, against a
-   richer baseline. The small positive offsets are **not** evidence that a
-   richer baseline *raises* the overlaps' value — the two experiments used
-   different seed blocks, so this is an uncontrolled cross-experiment
-   comparison, and the honest reading is that the profile is unchanged within
-   block-to-block variation.
+1. **The decay profile reproduces.** Every one of TDI-5.6's six point
+   estimates falls **inside** the corresponding TDI-5.9 95% bootstrap
+   interval — all six horizons, on entirely fresh seed blocks, against a
+   richer baseline. The uniformly positive offsets (+0.14 to +0.63 pp) are
+   **not** evidence that a richer baseline *raises* the overlaps' value: the
+   two experiments used different seed blocks, so this is an uncontrolled
+   cross-experiment comparison, and since every 5.6 estimate lies within
+   5.9's interval the differences are not separable from block-to-block
+   variation. The honest reading is that the profile is unchanged.
 2. **TDI-5.6B reproduces.** Criterion 5.9D(a) is a fresh re-measurement of
    TDI-5.6B's SK-vs-CK comparison on blocks Y/Z/AA: it returns 2.5457% at U₃
    and 14.4419% at U₆, against TDI-5.6B's 2.35% and 14.27% measured on blocks
    J/K/L. Each point estimate sits inside the other experiment's confidence
-   interval. A year-defining result this is not — but it is a clean,
-   independent confirmation that the TDI-5.6B finding was not a seed-block
-   artifact.
+   interval, in **both** directions, at both horizons. A year-defining result
+   this is not — but it is a clean, independent confirmation that the
+   TDI-5.6B finding was not a seed-block artifact, and it is what licenses
+   using the fresh 5.9D(a) measurement as the saturation baseline in
+   Section 6.
 
 ## 8. Interpretation and boundaries
 
