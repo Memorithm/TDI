@@ -1,0 +1,379 @@
+
+=== PROVENANCE ET INTÉGRITÉ (Section 17) ===
+git commit                     : 6f0c7c44a75bddc1eb3272a09763810b0fb48edd
+rustc                          : rustc 1.97.1 (8bab26f4f 2026-07-14)
+cargo                          : cargo 1.97.1 (c980f4866 2026-06-30)
+évaluateur TDI-6.3 SHA-256      : 7e61baa85ae9d4b48cb1d6f527497cbb3980ae655f7f5aca40745d9bcb69e893
+préenregistrement TDI-6.3 SHA-256 : bd220fe6621d35099e729d54fa7befa18c7bf9287fe4bb1e63a449de0b96097e
+manifeste scientifique TDI-6.3 SHA-256 : 02ad87a708369b1bd2c0e868bba5b1d094185e5cc5248bc4e1aa2592f6a809c6
+
+--- provenance TDI-5.1 (ancêtre gelé, inchangé) ---
+évaluateur TDI-5.1 SHA-256      : d69d42fa31d973603eabd0ded8ffd8ca2f0a4b0b8fcec5f9de42ed8c7ce37444
+préenregistrement TDI-5.1 SHA-256 : 25b65a07b7f248df3e043b9b7f63611c360f60f3d49a600a5612305440131852
+
+--- provenance TDI-5.2 (ancêtre gelé, inchangé) ---
+évaluateur TDI-5.2 SHA-256      : 2308607729659c7546a17530e69773f982d9a1cf41656ea7898e0123ca469ef7
+préenregistrement TDI-5.2 SHA-256 : f57a054bc95eb2e041434d6e2049509b0dce1a5397f9666d274b1bbac332be35
+
+--- provenance TDI-5.3 (ancêtre gelé, inchangé) ---
+évaluateur TDI-5.3 SHA-256      : 93181fb75d4882be2ca0b26c1babe9db747583d6e08e6992617ec12b7f65460f
+préenregistrement TDI-5.3 SHA-256 : 7223128dcfd751ebeb6488c01c3512d0a10b35937ec170504984295eb421682e
+
+--- provenance TDI-5.4 (ancêtre gelé, inchangé) ---
+évaluateur TDI-5.4 SHA-256      : dcf24d7eb1ccd938a81163738c38d31a693474c8a1d94046734bda243ca772bf
+préenregistrement TDI-5.4 SHA-256 : 229a0a8efa391c67c4dda1322b984109b142be3abf972d0a08f3c4ac742ec6ac
+
+--- provenance TDI-5.5 (ancêtre gelé, inchangé) ---
+évaluateur TDI-5.5 SHA-256      : 10df698d10f010b9f6c18e2a4d78042eb399d3812b8d69c2b4bb799de828b835
+préenregistrement TDI-5.5 SHA-256 : 37260b3349107659487e42e66c269ecad44efaf6131f8206bb28dfbcf83f9da1
+
+--- provenance TDI-5.6 (ancêtre gelé, inchangé) ---
+évaluateur TDI-5.6 SHA-256      : 0820274b3edb58a6e123c612dbed8dd8a1725221240365f142d9510404e1d1b2
+préenregistrement TDI-5.6 SHA-256 : 59e3375b82d0bb7aad7be0591b9d1eac074d4b194678dfe0e06e73c8aac89807
+
+--- provenance TDI-5.7 (ancêtre gelé, inchangé) ---
+évaluateur TDI-5.7 SHA-256      : 900031bc27a35e327038911d93f10d74458f913e64d9644b225963df699049ae
+préenregistrement TDI-5.7 SHA-256 : 2ca7d1a674d451e642beb5b01f8a0d8f08f8fadcf7f91032370e7fd5e3d91476
+
+--- provenance TDI-5.8 (ancêtre gelé, inchangé) ---
+évaluateur TDI-5.8 SHA-256      : e58d07e9ee01ab447be90fc90913661a0cbacd765e02f4670ada01965556f53a
+préenregistrement TDI-5.8 SHA-256 : 981dc709ae87f9191548bf6c31b4b0558b9550d196c6caa69220206101b9c0de
+
+--- provenance TDI-6.1 (ancêtre gelé, inchangé) ---
+évaluateur TDI-6.1 SHA-256      : bb9d155021117b70d1483a9abbc51f45f994caddb8a17365d7fb14f02201f278
+préenregistrement TDI-6.1 SHA-256 : 4d754f334c95b113078c28a24069ffd8fb3e93e2ba89055001aab3bf3ee1a159
+
+--- provenance TDI-6.2 (ancêtre gelé, inchangé) ---
+évaluateur TDI-6.2 SHA-256      : 793fc42d0567283c0f6c773e74597a6ff38d7278cf6e14fcdca7d60e33758a37
+préenregistrement TDI-6.2 SHA-256 : a5263642ee79fb946bc9a7aa6fea4b57c22945a91b7ffa6f2220c7e4d4a55869
+
+--- provenance TDI-6.5 (ancêtre gelé, inchangé) ---
+évaluateur TDI-6.5 SHA-256      : 75bd5198486e7e3c6072deebbdebd256aa3152a7b43b60054349f8e181c200f0
+préenregistrement TDI-6.5 SHA-256 : f44eb21446ffdc6897c76818f4d4b22ecf266cf4f2707a4a8d995b0479acd589
+
+=== CONSTANTES GELÉES (Section 17, item 6) ===
+horizon d'observation                      : 2
+horizons cibles                            : [3, 4, 5, 6, 7, 8]
+horizon principal                          : 6
+horizons focaux (U3, U6)                    : [3, 6]
+largeur maximale supportée                  : 6
+espace des ensembles successeurs (largeur 6) : 18446744073709551616
+nombre de features baseline                 : 13
+nombre de features early-overlap            : 2
+nombre de features contraction (δ, δ̄)       : 2
+nombre de features spectrales (s2, s3)      : 2
+tailles de population — train w3=15000, holdout w3=5000, train w4=15000, holdout w4=5000 (aucune population OOD ; toutes les populations d'un bloc sont regroupées, Section 4.5)
+multiplicateurs de tentatives — w3=64, w4=96, w5=128, w6=256
+seuils sans-progrès — w3=25000, w4=50000, w5=75000, w6=100000
+tolérance d'accord inter-méthodes (bits)    : 1e-9
+plancher de dégénérescence (pivot Cholesky) : 1e-12
+réplicats bootstrap PID                     : 4000
+régime FP                                  : IEEE-754 binary64, mono-thread, ordre d'opérations fixe (pas de FMA/parallèle)
+
+=== BLOCS DE GRAINES (Section 17, item 7) ===
+bloc S | train w3=8000000000 | holdout w3=8010000000 | train w4=8020000000 | holdout w4=8030000000 | graine bootstrap=0x5444493633000001
+bloc T | train w3=8100000000 | holdout w3=8110000000 | train w4=8120000000 | holdout w4=8130000000 | graine bootstrap=0x5444493633000002
+bloc U | train w3=8200000000 | holdout w3=8210000000 | train w4=8220000000 | holdout w4=8230000000 | graine bootstrap=0x5444493633000003
+graine bootstrap agrégat (Section 11) : 0x5444493633004700
+
+=== POPULATIONS — COMPTAGES, RAISONS DE REJET, GRAINES FINALES, BUDGETS (Section 17, items 8-11, 20) ===
+bloc S | training-w3 | demandé=15000 | accepté=15000 | rejeté=64 | tenté=15064 | max_tentatives=960000 | seuil_sans_progrès=25000 | graine initiale=8000000000 | graine finale exclusive=8000015064 | raisons de rejet=observation-fully-recovered=64
+bloc S | holdout-w3  | demandé=5000 | accepté=5000 | rejeté=16 | tenté=5016 | max_tentatives=320000 | seuil_sans_progrès=25000 | graine initiale=8010000000 | graine finale exclusive=8010005016 | raisons de rejet=observation-fully-recovered=16
+bloc S | training-w4 | demandé=15000 | accepté=15000 | rejeté=1 | tenté=15001 | max_tentatives=1440000 | seuil_sans_progrès=50000 | graine initiale=8020000000 | graine finale exclusive=8020015001 | raisons de rejet=observation-fully-recovered=1
+bloc S | holdout-w4  | demandé=5000 | accepté=5000 | rejeté=0 | tenté=5000 | max_tentatives=480000 | seuil_sans_progrès=50000 | graine initiale=8030000000 | graine finale exclusive=8030005000 | raisons de rejet=none
+bloc T | training-w3 | demandé=15000 | accepté=15000 | rejeté=65 | tenté=15065 | max_tentatives=960000 | seuil_sans_progrès=25000 | graine initiale=8100000000 | graine finale exclusive=8100015065 | raisons de rejet=observation-fully-recovered=65
+bloc T | holdout-w3  | demandé=5000 | accepté=5000 | rejeté=19 | tenté=5019 | max_tentatives=320000 | seuil_sans_progrès=25000 | graine initiale=8110000000 | graine finale exclusive=8110005019 | raisons de rejet=observation-fully-recovered=19
+bloc T | training-w4 | demandé=15000 | accepté=15000 | rejeté=0 | tenté=15000 | max_tentatives=1440000 | seuil_sans_progrès=50000 | graine initiale=8120000000 | graine finale exclusive=8120015000 | raisons de rejet=none
+bloc T | holdout-w4  | demandé=5000 | accepté=5000 | rejeté=0 | tenté=5000 | max_tentatives=480000 | seuil_sans_progrès=50000 | graine initiale=8130000000 | graine finale exclusive=8130005000 | raisons de rejet=none
+bloc U | training-w3 | demandé=15000 | accepté=15000 | rejeté=78 | tenté=15078 | max_tentatives=960000 | seuil_sans_progrès=25000 | graine initiale=8200000000 | graine finale exclusive=8200015078 | raisons de rejet=observation-fully-recovered=78
+bloc U | holdout-w3  | demandé=5000 | accepté=5000 | rejeté=21 | tenté=5021 | max_tentatives=320000 | seuil_sans_progrès=25000 | graine initiale=8210000000 | graine finale exclusive=8210005021 | raisons de rejet=observation-fully-recovered=21
+bloc U | training-w4 | demandé=15000 | accepté=15000 | rejeté=0 | tenté=15000 | max_tentatives=1440000 | seuil_sans_progrès=50000 | graine initiale=8220000000 | graine finale exclusive=8220015000 | raisons de rejet=none
+bloc U | holdout-w4  | demandé=5000 | accepté=5000 | rejeté=0 | tenté=5000 | max_tentatives=480000 | seuil_sans_progrès=50000 | graine initiale=8230000000 | graine finale exclusive=8230005000 | raisons de rejet=none
+
+=== DIAGNOSTIC DESCRIPTEURS — Section 12 (contexte, aucun critère) ===
+bloc S | moyenne δ=0.948971998 | moyenne δ̄=0.582082513 | moyenne s2=1.119936969 | moyenne s3=1.016544224 | (hors Section 12, bookkeeping) moyenne baseline=1.627248321 | moyenne overlap brut=0.976985567
+bloc T | moyenne δ=0.949147886 | moyenne δ̄=0.582757236 | moyenne s2=1.122261395 | moyenne s3=1.017217643 | (hors Section 12, bookkeeping) moyenne baseline=1.625860863 | moyenne overlap brut=0.976493931
+bloc U | moyenne δ=0.949090478 | moyenne δ̄=0.582798780 | moyenne s2=1.122302415 | moyenne s3=1.018621671 | (hors Section 12, bookkeeping) moyenne baseline=1.626240867 | moyenne overlap brut=0.976418040
+agrégat | moyenne δ=0.949070120 | moyenne δ̄=0.582546176 | moyenne s2=1.121500259 | moyenne s3=1.017461179 | (hors Section 12, bookkeeping) moyenne baseline=1.626450017 | moyenne overlap brut=0.976632513
+
+=== TDI-6.3A — décomposition aux horizons focaux (Section 13) ===
+
+--- U_3 ---
+
+--- bloc S — U_3 ---
+covariance : mean_t=4.120536349 mean_s1=0.415771314 mean_s2=0.792862410 var_t=1.010837075 var_s1=0.033211761 var_s2=0.013237174 cov_t_s1=0.100949712 cov_t_s2=0.098962110 cov_s1_s2=0.013496506
+corrélations : rho_t_s1=0.550958079 rho_t_s2=0.855521093 rho_s1_s2=0.643691476
+méthode 1 (canonique)  : I(T;S1)=0.260959133 I(T;S2)=0.949622403 I(T;{S1,S2})=0.949622729
+méthode 2 (cross-check): I(T;S1)=0.260959133 I(T;S2)=0.949622403 I(T;{S1,S2})=0.949622729
+accord inter-méthodes  : écart absolu max=0.000000000000 | dans la tolérance (1e-9)=true
+Redundancy  : 0.260959133 bits (proportion 0.274802956)
+Unique(O1)  : 0.000000000 bits (proportion 0.000000000)
+Unique(O2)  : 0.688663270 bits (proportion 0.725196700)
+Synergy     : 0.000000326 bits (proportion 0.000000343)
+I(T;{S1,S2}) (méthode 1) : 0.949622729 bits
+  IC 95 % bootstrap Redundancy: [0.252726949, 0.269115934] (médiane 0.261052339)
+  IC 95 % bootstrap Unique(O1): [0.000000000, 0.000000000] (médiane 0.000000000)
+  IC 95 % bootstrap Unique(O2): [0.676837030, 0.700739660] (médiane 0.688839219)
+  IC 95 % bootstrap Synergy: [0.000000019, 0.000124652] (médiane 0.000010326)
+  IC 95 % bootstrap I(T;{S1,S2}): [0.937688619, 0.961759343] (médiane 0.949714729)
+composante dominante   : unique(O2)
+
+--- bloc T — U_3 ---
+covariance : mean_t=4.118577936 mean_s1=0.415034470 mean_s2=0.792537429 var_t=1.033467640 var_s1=0.033897195 var_s2=0.013489935 cov_t_s1=0.105119833 cov_t_s2=0.101372686 cov_s1_s2=0.013882405
+corrélations : rho_t_s1=0.561635230 rho_t_s2=0.858553920 rho_s1_s2=0.649199086
+méthode 1 (canonique)  : I(T;S1)=0.273369366 I(T;S2)=0.963747678 I(T;{S1,S2})=0.963833869
+méthode 2 (cross-check): I(T;S1)=0.273369366 I(T;S2)=0.963747678 I(T;{S1,S2})=0.963833869
+accord inter-méthodes  : écart absolu max=0.000000000000 | dans la tolérance (1e-9)=true
+Redundancy  : 0.273369366 bits (proportion 0.283627059)
+Unique(O1)  : 0.000000000 bits (proportion 0.000000000)
+Unique(O2)  : 0.690378312 bits (proportion 0.716283516)
+Synergy     : 0.000086191 bits (proportion 0.000089425)
+I(T;{S1,S2}) (méthode 1) : 0.963833869 bits
+  IC 95 % bootstrap Redundancy: [0.265120570, 0.281853533] (médiane 0.273328619)
+  IC 95 % bootstrap Unique(O1): [0.000000000, 0.000000000] (médiane 0.000000000)
+  IC 95 % bootstrap Unique(O2): [0.678590284, 0.702501257] (médiane 0.690378799)
+  IC 95 % bootstrap Synergy: [0.000000544, 0.000366989] (médiane 0.000085355)
+  IC 95 % bootstrap I(T;{S1,S2}): [0.952118802, 0.975903256] (médiane 0.963988599)
+composante dominante   : unique(O2)
+
+--- bloc U — U_3 ---
+covariance : mean_t=4.124177800 mean_s1=0.416071448 mean_s2=0.792804955 var_t=1.026852032 var_s1=0.033938229 var_s2=0.013716617 cov_t_s1=0.104437238 cov_t_s2=0.101811258 cov_s1_s2=0.013945379
+corrélations : rho_t_s1=0.559444303 rho_t_s2=0.857863831 rho_s1_s2=0.646341757
+méthode 1 (canonique)  : I(T;S1)=0.270785823 I(T;S2)=0.960504803 I(T;{S1,S2})=0.960620750
+méthode 2 (cross-check): I(T;S1)=0.270785823 I(T;S2)=0.960504803 I(T;{S1,S2})=0.960620750
+accord inter-méthodes  : écart absolu max=0.000000000000 | dans la tolérance (1e-9)=true
+Redundancy  : 0.270785823 bits (proportion 0.281886294)
+Unique(O1)  : 0.000000000 bits (proportion 0.000000000)
+Unique(O2)  : 0.689718979 bits (proportion 0.717993005)
+Synergy     : 0.000115947 bits (proportion 0.000120700)
+I(T;{S1,S2}) (méthode 1) : 0.960620750 bits
+  IC 95 % bootstrap Redundancy: [0.262412403, 0.278847729] (médiane 0.270707525)
+  IC 95 % bootstrap Unique(O1): [0.000000000, 0.000000000] (médiane 0.000000000)
+  IC 95 % bootstrap Unique(O2): [0.678356137, 0.701648812] (médiane 0.689911417)
+  IC 95 % bootstrap Synergy: [0.000002219, 0.000396359] (médiane 0.000113610)
+  IC 95 % bootstrap I(T;{S1,S2}): [0.948983310, 0.972518595] (médiane 0.960849372)
+composante dominante   : unique(O2)
+
+--- agrégat — U_3 ---
+covariance : mean_t=4.121097361 mean_s1=0.415625744 mean_s2=0.792734931 var_t=1.023724299 var_s1=0.033682585 var_s2=0.013481262 cov_t_s1=0.103503188 cov_t_s2=0.100715565 cov_s1_s2=0.013774819
+corrélations : rho_t_s1=0.557390441 rho_t_s2=0.857313784 rho_s1_s2=0.646424650
+méthode 1 (canonique)  : I(T;S1)=0.268381405 I(T;S2)=0.957932275 I(T;{S1,S2})=0.957980207
+méthode 2 (cross-check): I(T;S1)=0.268381405 I(T;S2)=0.957932275 I(T;{S1,S2})=0.957980207
+accord inter-méthodes  : écart absolu max=0.000000000000 | dans la tolérance (1e-9)=true
+Redundancy  : 0.268381405 bits (proportion 0.280153393)
+Unique(O1)  : 0.000000000 bits (proportion 0.000000000)
+Unique(O2)  : 0.689550870 bits (proportion 0.719796573)
+Synergy     : 0.000047932 bits (proportion 0.000050034)
+I(T;{S1,S2}) (méthode 1) : 0.957980207 bits
+  IC 95 % bootstrap Redundancy: [0.263686862, 0.273013068] (médiane 0.268369660)
+  IC 95 % bootstrap Unique(O1): [0.000000000, 0.000000000] (médiane 0.000000000)
+  IC 95 % bootstrap Unique(O2): [0.682720149, 0.696521687] (médiane 0.689671696)
+  IC 95 % bootstrap Synergy: [0.000002208, 0.000152651] (médiane 0.000047482)
+  IC 95 % bootstrap I(T;{S1,S2}): [0.951101799, 0.964790368] (médiane 0.958131904)
+composante dominante   : unique(O2)
+
+--- U_6 ---
+
+--- bloc S — U_6 ---
+covariance : mean_t=9.057084130 mean_s1=0.415771314 mean_s2=0.792862410 var_t=4.480128841 var_s1=0.033211761 var_s2=0.013237174 cov_t_s1=0.146957611 cov_t_s2=0.182294911 cov_s1_s2=0.013496506
+corrélations : rho_t_s1=0.380978864 rho_t_s2=0.748568673 rho_s1_s2=0.643691476
+méthode 1 (canonique)  : I(T;S1)=0.113124093 I(T;S2)=0.592794612 I(T;{S1,S2})=0.621877102
+méthode 2 (cross-check): I(T;S1)=0.113124093 I(T;S2)=0.592794612 I(T;{S1,S2})=0.621877102
+accord inter-méthodes  : écart absolu max=0.000000000000 | dans la tolérance (1e-9)=true
+Redundancy  : 0.113124093 bits (proportion 0.181907474)
+Unique(O1)  : 0.000000000 bits (proportion 0.000000000)
+Unique(O2)  : 0.479670519 bits (proportion 0.771326871)
+Synergy     : 0.029082490 bits (proportion 0.046765655)
+I(T;{S1,S2}) (méthode 1) : 0.621877102 bits
+  IC 95 % bootstrap Redundancy: [0.107483906, 0.118910212] (médiane 0.113217844)
+  IC 95 % bootstrap Unique(O1): [0.000000000, 0.000000000] (médiane 0.000000000)
+  IC 95 % bootstrap Unique(O2): [0.469749330, 0.489515229] (médiane 0.479811244)
+  IC 95 % bootstrap Synergy: [0.026034287, 0.032196731] (médiane 0.029055611)
+  IC 95 % bootstrap I(T;{S1,S2}): [0.609606864, 0.633979910] (médiane 0.622084075)
+composante dominante   : unique(O2)
+
+--- bloc T — U_6 ---
+covariance : mean_t=9.053997326 mean_s1=0.415034470 mean_s2=0.792537429 var_t=4.610409105 var_s1=0.033897195 var_s2=0.013489935 cov_t_s1=0.156636650 cov_t_s2=0.188548884 cov_s1_s2=0.013882405
+corrélations : rho_t_s1=0.396224908 rho_t_s2=0.756047880 rho_s1_s2=0.649199086
+méthode 1 (canonique)  : I(T;S1)=0.123192750 I(T;S2)=0.611498946 I(T;{S1,S2})=0.638027885
+méthode 2 (cross-check): I(T;S1)=0.123192750 I(T;S2)=0.611498946 I(T;{S1,S2})=0.638027885
+accord inter-méthodes  : écart absolu max=0.000000000000 | dans la tolérance (1e-9)=true
+Redundancy  : 0.123192750 bits (proportion 0.193083646)
+Unique(O1)  : 0.000000000 bits (proportion 0.000000000)
+Unique(O2)  : 0.488306196 bits (proportion 0.765336763)
+Synergy     : 0.026528939 bits (proportion 0.041579591)
+I(T;{S1,S2}) (méthode 1) : 0.638027885 bits
+  IC 95 % bootstrap Redundancy: [0.117298928, 0.129155882] (médiane 0.123215193)
+  IC 95 % bootstrap Unique(O1): [0.000000000, 0.000000000] (médiane 0.000000000)
+  IC 95 % bootstrap Unique(O2): [0.478448468, 0.498356252] (médiane 0.488325366)
+  IC 95 % bootstrap Synergy: [0.023633684, 0.029649219] (médiane 0.026536710)
+  IC 95 % bootstrap I(T;{S1,S2}): [0.625883467, 0.650005396] (médiane 0.638121311)
+composante dominante   : unique(O2)
+
+--- bloc U — U_6 ---
+covariance : mean_t=9.054256646 mean_s1=0.416071448 mean_s2=0.792804955 var_t=4.602772857 var_s1=0.033938229 var_s2=0.013716617 cov_t_s1=0.155071417 cov_t_s2=0.189246271 cov_s1_s2=0.013945379
+corrélations : rho_t_s1=0.392353376 rho_t_s2=0.753171794 rho_s1_s2=0.646341757
+méthode 1 (canonique)  : I(T;S1)=0.120585057 I(T;S2)=0.604226727 I(T;{S1,S2})=0.630231786
+méthode 2 (cross-check): I(T;S1)=0.120585057 I(T;S2)=0.604226727 I(T;{S1,S2})=0.630231786
+accord inter-méthodes  : écart absolu max=0.000000000000 | dans la tolérance (1e-9)=true
+Redundancy  : 0.120585057 bits (proportion 0.191334458)
+Unique(O1)  : 0.000000000 bits (proportion 0.000000000)
+Unique(O2)  : 0.483641670 bits (proportion 0.767402852)
+Synergy     : 0.026005059 bits (proportion 0.041262690)
+I(T;{S1,S2}) (méthode 1) : 0.630231786 bits
+  IC 95 % bootstrap Redundancy: [0.114666173, 0.126655687] (médiane 0.120536281)
+  IC 95 % bootstrap Unique(O1): [0.000000000, 0.000000000] (médiane 0.000000000)
+  IC 95 % bootstrap Unique(O2): [0.473567372, 0.493588775] (médiane 0.483775745)
+  IC 95 % bootstrap Synergy: [0.023131928, 0.029068741] (médiane 0.026031745)
+  IC 95 % bootstrap I(T;{S1,S2}): [0.618061455, 0.642367481] (médiane 0.630342007)
+composante dominante   : unique(O2)
+
+--- agrégat — U_6 ---
+covariance : mean_t=9.055112701 mean_s1=0.415625744 mean_s2=0.792734931 var_t=4.564438889 var_s1=0.033682585 var_s2=0.013481262 cov_t_s1=0.152888748 cov_t_s2=0.186696826 cov_s1_s2=0.013774819
+corrélations : rho_t_s1=0.389923239 rho_t_s2=0.752623812 rho_s1_s2=0.646424650
+méthode 1 (canonique)  : I(T;S1)=0.118966054 I(T;S2)=0.602852548 I(T;{S1,S2})=0.630023453
+méthode 2 (cross-check): I(T;S1)=0.118966054 I(T;S2)=0.602852548 I(T;{S1,S2})=0.630023453
+accord inter-méthodes  : écart absolu max=0.000000000000 | dans la tolérance (1e-9)=true
+Redundancy  : 0.118966054 bits (proportion 0.188827977)
+Unique(O1)  : 0.000000000 bits (proportion 0.000000000)
+Unique(O2)  : 0.483886493 bits (proportion 0.768045206)
+Synergy     : 0.027170906 bits (proportion 0.043126817)
+I(T;{S1,S2}) (méthode 1) : 0.630023453 bits
+  IC 95 % bootstrap Redundancy: [0.115628303, 0.122305513] (médiane 0.118943633)
+  IC 95 % bootstrap Unique(O1): [0.000000000, 0.000000000] (médiane 0.000000000)
+  IC 95 % bootstrap Unique(O2): [0.478164218, 0.489508621] (médiane 0.483954970)
+  IC 95 % bootstrap Synergy: [0.025525537, 0.028960028] (médiane 0.027178841)
+  IC 95 % bootstrap I(T;{S1,S2}): [0.622952041, 0.636863821] (médiane 0.630095593)
+composante dominante   : unique(O2)
+
+=== TDI-6.3B — décomposition sur la grille dense (Section 14) ===
+
+--- agrégat — U_3 ---
+covariance : mean_t=4.121097361 mean_s1=0.415625744 mean_s2=0.792734931 var_t=1.023724299 var_s1=0.033682585 var_s2=0.013481262 cov_t_s1=0.103503188 cov_t_s2=0.100715565 cov_s1_s2=0.013774819
+corrélations : rho_t_s1=0.557390441 rho_t_s2=0.857313784 rho_s1_s2=0.646424650
+méthode 1 (canonique)  : I(T;S1)=0.268381405 I(T;S2)=0.957932275 I(T;{S1,S2})=0.957980207
+méthode 2 (cross-check): I(T;S1)=0.268381405 I(T;S2)=0.957932275 I(T;{S1,S2})=0.957980207
+accord inter-méthodes  : écart absolu max=0.000000000000 | dans la tolérance (1e-9)=true
+Redundancy  : 0.268381405 bits (proportion 0.280153393)
+Unique(O1)  : 0.000000000 bits (proportion 0.000000000)
+Unique(O2)  : 0.689550870 bits (proportion 0.719796573)
+Synergy     : 0.000047932 bits (proportion 0.000050034)
+I(T;{S1,S2}) (méthode 1) : 0.957980207 bits
+  IC 95 % bootstrap Redundancy: [0.263686862, 0.273013068] (médiane 0.268369660)
+  IC 95 % bootstrap Unique(O1): [0.000000000, 0.000000000] (médiane 0.000000000)
+  IC 95 % bootstrap Unique(O2): [0.682720149, 0.696521687] (médiane 0.689671696)
+  IC 95 % bootstrap Synergy: [0.000002208, 0.000152651] (médiane 0.000047482)
+  IC 95 % bootstrap I(T;{S1,S2}): [0.951101799, 0.964790368] (médiane 0.958131904)
+composante dominante   : unique(O2)
+
+--- agrégat — U_4 ---
+covariance : mean_t=5.786411977 mean_s1=0.415625744 mean_s2=0.792734931 var_t=1.859508037 var_s1=0.033682585 var_s2=0.013481262 cov_t_s1=0.119690191 cov_t_s2=0.128986327 cov_s1_s2=0.013774819
+corrélations : rho_t_s1=0.478252033 rho_t_s2=0.814665571 rho_s1_s2=0.646424650
+méthode 1 (canonique)  : I(T;S1)=0.187341380 I(T;S2)=0.786046743 I(T;{S1,S2})=0.794718153
+méthode 2 (cross-check): I(T;S1)=0.187341380 I(T;S2)=0.786046743 I(T;{S1,S2})=0.794718153
+accord inter-méthodes  : écart absolu max=0.000000000000 | dans la tolérance (1e-9)=true
+Redundancy  : 0.187341380 bits (proportion 0.235733107)
+Unique(O1)  : 0.000000000 bits (proportion 0.000000000)
+Unique(O2)  : 0.598705364 bits (proportion 0.753355590)
+Synergy     : 0.008671410 bits (proportion 0.010911303)
+I(T;{S1,S2}) (méthode 1) : 0.794718153 bits
+  IC 95 % bootstrap Redundancy: [0.183354052, 0.191429019] (médiane 0.187329884)
+  IC 95 % bootstrap Unique(O1): [0.000000000, 0.000000000] (médiane 0.000000000)
+  IC 95 % bootstrap Unique(O2): [0.592254791, 0.605060618] (médiane 0.598811159)
+  IC 95 % bootstrap Synergy: [0.007709498, 0.009715343] (médiane 0.008680035)
+  IC 95 % bootstrap I(T;{S1,S2}): [0.787260882, 0.801687211] (médiane 0.794815599)
+composante dominante   : unique(O2)
+
+--- agrégat — U_5 ---
+covariance : mean_t=7.428708177 mean_s1=0.415625744 mean_s2=0.792734931 var_t=3.037750018 var_s1=0.033682585 var_s2=0.013481262 cov_t_s1=0.136750914 cov_t_s2=0.157798714 cov_s1_s2=0.013774819
+corrélations : rho_t_s1=0.427515156 rho_t_s2=0.779762168 rho_s1_s2=0.646424650
+méthode 1 (canonique)  : I(T;S1)=0.145592266 I(T;S2)=0.675590658 I(T;{S1,S2})=0.694353828
+méthode 2 (cross-check): I(T;S1)=0.145592266 I(T;S2)=0.675590658 I(T;{S1,S2})=0.694353828
+accord inter-méthodes  : écart absolu max=0.000000000000 | dans la tolérance (1e-9)=true
+Redundancy  : 0.145592266 bits (proportion 0.209680223)
+Unique(O1)  : 0.000000000 bits (proportion 0.000000000)
+Unique(O2)  : 0.529998393 bits (proportion 0.763297286)
+Synergy     : 0.018763170 bits (proportion 0.027022491)
+I(T;{S1,S2}) (méthode 1) : 0.694353828 bits
+  IC 95 % bootstrap Redundancy: [0.141936723, 0.149251545] (médiane 0.145579394)
+  IC 95 % bootstrap Unique(O1): [0.000000000, 0.000000000] (médiane 0.000000000)
+  IC 95 % bootstrap Unique(O2): [0.523902062, 0.535831043] (médiane 0.530076537)
+  IC 95 % bootstrap Synergy: [0.017340122, 0.020239086] (médiane 0.018773779)
+  IC 95 % bootstrap I(T;{S1,S2}): [0.687157001, 0.701368815] (médiane 0.694381050)
+composante dominante   : unique(O2)
+
+--- agrégat — U_6 ---
+covariance : mean_t=9.055112701 mean_s1=0.415625744 mean_s2=0.792734931 var_t=4.564438889 var_s1=0.033682585 var_s2=0.013481262 cov_t_s1=0.152888748 cov_t_s2=0.186696826 cov_s1_s2=0.013774819
+corrélations : rho_t_s1=0.389923239 rho_t_s2=0.752623812 rho_s1_s2=0.646424650
+méthode 1 (canonique)  : I(T;S1)=0.118966054 I(T;S2)=0.602852548 I(T;{S1,S2})=0.630023453
+méthode 2 (cross-check): I(T;S1)=0.118966054 I(T;S2)=0.602852548 I(T;{S1,S2})=0.630023453
+accord inter-méthodes  : écart absolu max=0.000000000000 | dans la tolérance (1e-9)=true
+Redundancy  : 0.118966054 bits (proportion 0.188827977)
+Unique(O1)  : 0.000000000 bits (proportion 0.000000000)
+Unique(O2)  : 0.483886493 bits (proportion 0.768045206)
+Synergy     : 0.027170906 bits (proportion 0.043126817)
+I(T;{S1,S2}) (méthode 1) : 0.630023453 bits
+  IC 95 % bootstrap Redundancy: [0.115628303, 0.122305513] (médiane 0.118943633)
+  IC 95 % bootstrap Unique(O1): [0.000000000, 0.000000000] (médiane 0.000000000)
+  IC 95 % bootstrap Unique(O2): [0.478164218, 0.489508621] (médiane 0.483954970)
+  IC 95 % bootstrap Synergy: [0.025525537, 0.028960028] (médiane 0.027178841)
+  IC 95 % bootstrap I(T;{S1,S2}): [0.622952041, 0.636863821] (médiane 0.630095593)
+composante dominante   : unique(O2)
+
+--- agrégat — U_7 ---
+covariance : mean_t=10.662924846 mean_s1=0.415625744 mean_s2=0.792734931 var_t=6.442479842 var_s1=0.033682585 var_s2=0.013481262 cov_t_s1=0.169373637 cov_t_s2=0.215282608 cov_s1_s2=0.013774819
+corrélations : rho_t_s1=0.363593888 rho_t_s2=0.730494802 rho_s1_s2=0.646424650
+méthode 1 (canonique)  : I(T;S1)=0.102283183 I(T;S2)=0.550215193 I(T;{S1,S2})=0.582261781
+méthode 2 (cross-check): I(T;S1)=0.102283183 I(T;S2)=0.550215193 I(T;{S1,S2})=0.582261781
+accord inter-méthodes  : écart absolu max=0.000000000000 | dans la tolérance (1e-9)=true
+Redundancy  : 0.102283183 bits (proportion 0.175665287)
+Unique(O1)  : 0.000000000 bits (proportion 0.000000000)
+Unique(O2)  : 0.447932010 bits (proportion 0.769296602)
+Synergy     : 0.032046588 bits (proportion 0.055038111)
+I(T;{S1,S2}) (méthode 1) : 0.582261781 bits
+  IC 95 % bootstrap Redundancy: [0.099143934, 0.105424550] (médiane 0.102278940)
+  IC 95 % bootstrap Unique(O1): [0.000000000, 0.000000000] (médiane 0.000000000)
+  IC 95 % bootstrap Unique(O2): [0.442241945, 0.453395848] (médiane 0.447997223)
+  IC 95 % bootstrap Synergy: [0.030255509, 0.033947569] (médiane 0.032049668)
+  IC 95 % bootstrap I(T;{S1,S2}): [0.575273502, 0.589073702] (médiane 0.582341968)
+composante dominante   : unique(O2)
+
+--- agrégat — U_8 ---
+covariance : mean_t=12.258585596 mean_s1=0.415625744 mean_s2=0.792734931 var_t=8.670825484 var_s1=0.033682585 var_s2=0.013481262 cov_t_s1=0.185294700 cov_t_s2=0.243921472 cov_s1_s2=0.013774819
+corrélations : rho_t_s1=0.342870459 rho_t_s2=0.713435192 rho_s1_s2=0.646424650
+méthode 1 (canonique)  : I(T;S1)=0.090215078 I(T;S2)=0.513087511 I(T;{S1,S2})=0.549307025
+méthode 2 (cross-check): I(T;S1)=0.090215078 I(T;S2)=0.513087511 I(T;{S1,S2})=0.549307025
+accord inter-méthodes  : écart absolu max=0.000000000000 | dans la tolérance (1e-9)=true
+Redundancy  : 0.090215078 bits (proportion 0.164234342)
+Unique(O1)  : 0.000000000 bits (proportion 0.000000000)
+Unique(O2)  : 0.422872433 bits (proportion 0.769828919)
+Synergy     : 0.036219514 bits (proportion 0.065936739)
+I(T;{S1,S2}) (méthode 1) : 0.549307025 bits
+  IC 95 % bootstrap Redundancy: [0.087267654, 0.093163275] (médiane 0.090220078)
+  IC 95 % bootstrap Unique(O1): [0.000000000, 0.000000000] (médiane 0.000000000)
+  IC 95 % bootstrap Unique(O2): [0.417330854, 0.428280941] (médiane 0.422903974)
+  IC 95 % bootstrap Synergy: [0.034330063, 0.038234221] (médiane 0.036220816)
+  IC 95 % bootstrap I(T;{S1,S2}): [0.542358979, 0.556011299] (médiane 0.549358079)
+composante dominante   : unique(O2)
+
+TDI-6.3B — composante dominante stable : identique à tous les horizons de la grille
+
+=== TDI-6.3C — cohérence inter-blocs de la composante dominante (Section 15) ===
+
+U_3 — cross_block_dominant_component_consistent : true
+  bloc S — composante dominante : unique(O2)
+  bloc T — composante dominante : unique(O2)
+  bloc U — composante dominante : unique(O2)
+
+U_6 — cross_block_dominant_component_consistent : true
+  bloc S — composante dominante : unique(O2)
+  bloc T — composante dominante : unique(O2)
+  bloc U — composante dominante : unique(O2)
+
+=== VERDICTS FINAUX (Section 17) ===
+TDI-6.3A — décomposition aux horizons focaux : descriptive uniquement, aucun verdict pass/fail (Section 13) ; voir la décomposition par bloc et agrégat ci-dessus.
+TDI-6.3A — U3 — composante dominante agrégat : unique(O2)
+TDI-6.3A — U6 — composante dominante agrégat : unique(O2)
+TDI-6.3B — composante dominante sur la grille dense U3..U8 : stable (Section 14)
+TDI-6.3C — U3 — cross_block_dominant_component_consistent = true (Section 15)
+TDI-6.3C — U6 — cross_block_dominant_component_consistent = true (Section 15)
