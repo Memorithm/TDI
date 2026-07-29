@@ -1,0 +1,20 @@
+experiment=TDI-5.8 cross-width invariance (W = {3, 4, 5})
+start_utc=2026-07-29T18:54:32Z
+commit=4b6ef4796a3b326b9ea01a632626b27f4ed0c46c
+repository=/root/tdi-real-run
+command_line=target/release/tdi-independent-overlap-ablation-v58 --full
+rustc=rustc 1.97.1 (8bab26f4f 2026-07-14)
+cargo=cargo 1.97.1 (c980f4866 2026-06-30)
+uname=Linux tarek 6.8.12-tegra #1 SMP PREEMPT Tue Dec 30 15:40:41 PST 2025 aarch64 aarch64 aarch64 GNU/Linux
+cargo_target_dir=target
+exactness_regime=bit-exact (ExactRatio arithmetic); byte-exact reproduction
+evaluator_sha256=e58d07e9ee01ab447be90fc90913661a0cbacd765e02f4670ada01965556f53a
+preregistration_sha256=981dc709ae87f9191548bf6c31b4b0558b9550d196c6caa69220206101b9c0de
+scientific_manifest_sha256=83d265843ce213adc9375a2f54b664e8a2e3362c171bede1559350e5d55bb926
+frozen_tdi56_evaluator_sha256=0820274b3edb58a6e123c612dbed8dd8a1725221240365f142d9510404e1d1b2
+frozen_tdi56_preregistration_sha256=59e3375b82d0bb7aad7be0591b9d1eac074d4b194678dfe0e06e73c8aac89807
+end_utc=2026-07-29T21:20:18Z
+result_sha256=d639d70ab0d2ee803a8b1c032537d990870f98b19661e44fdeb6a7e3a7157921
+result_file=results/tdi5.8-cross-width-invariance/tdi-independent-overlap-ablation-v58.log
+result_hash_file=results/tdi5.8-cross-width-invariance/tdi-independent-overlap-ablation-v58.log.sha256
+completion_marker=results/tdi5.8-cross-width-invariance/tdi-independent-overlap-ablation-v58.complete
