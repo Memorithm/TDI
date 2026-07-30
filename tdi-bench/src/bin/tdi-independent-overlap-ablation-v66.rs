@@ -65,7 +65,7 @@ const TARGET_HORIZON_COUNT: usize = TARGET_HORIZONS.len();
 const PRIMARY_HORIZON: usize = 6;
 const PRIMARY_HORIZON_INDEX: usize = 3;
 
-// The two focal horizons at which TDI-6.5A/6.5B classify: U3 (near, where
+// The two focal horizons at which TDI-6.6A/6.6B classify: U3 (near, where
 // TDI-5.4B found a short-horizon benefit) and the primary U6.
 const FOCAL_HORIZONS: [usize; 2] = [3, 6];
 const FOCAL_HORIZON_COUNT: usize = FOCAL_HORIZONS.len();
@@ -73,7 +73,7 @@ const FOCAL_HORIZON_COUNT: usize = FOCAL_HORIZONS.len();
 const TRAIN_WIDTH_3: u8 = 3;
 const TRAIN_WIDTH_4: u8 = 4;
 // Widths 5 and 6 remain supported by the inherited frozen generator and its
-// exact cardinality/budget machinery, but TDI-6.5 generates no populations
+// exact cardinality/budget machinery, but TDI-6.6 generates no populations
 // at those widths (Section 8): there are no OOD populations.
 const WIDTH_5: u8 = 5;
 const WIDTH_6: u8 = 6;
@@ -83,7 +83,7 @@ const TRAIN_WIDTH_4_SYSTEMS: usize = 15_000;
 const HOLDOUT_WIDTH_3_SYSTEMS: usize = 5_000;
 const HOLDOUT_WIDTH_4_SYSTEMS: usize = 5_000;
 
-// TDI-6.5 runs the inherited 3-block per-generator machinery once per
+// TDI-6.6 runs the inherited 3-block per-generator machinery once per
 // generator family (Section 7). SEED_BLOCK_COUNT is the number of blocks
 // *within a family*; the four families give 12 blocks and 48 reservations.
 const GENERATOR_FAMILY_COUNT: usize = 4;
@@ -111,7 +111,7 @@ const SPECTRAL_CROSS_METHOD_TOLERANCE: f64 = 1e-9;
 const MIXING_EPSILON: f64 = 0.25;
 const MIXING_TIME_CAP: usize = 4096;
 
-// Linear layouts, inherited from TDI-5.2/5.3/5.4/5.5. In TDI-6.5 they are
+// Linear layouts, inherited from TDI-5.2/5.3/5.4/5.5. In TDI-6.6 they are
 // exploratory only (Section 6) and determine no confirmatory criterion.
 const B0_FEATURE_COUNT: usize = BASELINE_FEATURE_COUNT;
 const B1_FEATURE_COUNT: usize = BASELINE_FEATURE_COUNT + 1;
@@ -131,10 +131,10 @@ const LITERAL_SPECTRAL_FEATURE_COUNT: usize = 2;
 // two exact spectral moments; GK additionally adds the two literal spectral
 // descriptors g and τ_ε (the TDI-6.1 baseline); GKT additionally adds the two
 // early overlaps. GK minus SK isolates the literal spectral descriptors'
-// marginal value in each family (the descriptive 6.5D diagnostic); GKT minus GK
+// marginal value in each family (TDI-6.5D, not a TDI-6.6 criterion); GKT minus GK
 // isolates the overlaps' marginal value *after* the contraction descriptors, the
 // exact spectral moments AND the literal spectral gap + mixing time are already
-// present (the confirmatory comparison, criteria 6.5A, 6.5B, 6.5C).
+// present (the confirmatory comparison, criteria 6.6A, 6.6B, 6.6C, 6.6D).
 //   CK  = baseline + delta + delta_bar                              (13 + 2 = 15)
 //   SK  = baseline + delta + delta_bar + s2 + s3                    (13 + 4 = 17)
 //   GK  = baseline + delta + delta_bar + s2 + s3 + g + τ_ε          (13 + 6 = 19)
@@ -152,7 +152,7 @@ const MODEL_LAYOUT_COUNT: usize = 9;
 
 const RIDGE_LAMBDA: f64 = 1.0;
 const BOOTSTRAP_REPLICATES: usize = 4_000;
-// Fresh per-family stratified-aggregate bootstrap seeds (TDI-6.5 Section 12),
+// Fresh per-family stratified-aggregate bootstrap seeds (TDI-6.6 Section 9),
 // disjoint from every TDI-5.2 … 6.2 bootstrap seed. Each family aggregates its
 // own three blocks with seed base + family index.
 const AGGREGATE_BOOTSTRAP_SEED_BASE: u64 = 0x5444_4936_3600_4700;
@@ -318,7 +318,7 @@ fn population_specs() -> [PopulationSpec; TOTAL_SEED_RESERVATIONS] {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(usize)]
 enum FeatureLayout {
-    // Linear layouts B0..BD are exploratory in TDI-6.5. Their discriminants
+    // Linear layouts B0..BD are exploratory in TDI-6.6. Their discriminants
     // (0..4) are preserved so `layout as usize` indexing is unchanged from
     // TDI-5.2/5.3/5.4/5.5. The confirmatory layouts CK/SK/GK/GKT follow, with
     // strict nesting CK ⊂ SK ⊂ GK ⊂ GKT.
@@ -2071,7 +2071,7 @@ fn feature_layout(record: &Record, layout: FeatureLayout) -> Vec<f64> {
         FeatureLayout::BD => {
             features.push(second_overlap - first_overlap);
         }
-        // Confirmatory layouts (TDI-6.5 Section 11). Terms are the two exact
+        // Confirmatory layouts (TDI-6.6 Section 6). Terms are the two exact
         // contraction descriptors (delta, delta_bar); for SK/GK/GKT the two exact
         // spectral moments (s2, s3); for GK/GKT the two literal spectral
         // descriptors (g, τ_ε); and for GKT the two early overlaps (O1, O2) — all
@@ -2458,7 +2458,7 @@ fn preregistered_generation_limits(
             return Err(EvaluationError::new(
                 context,
                 FailureCategory::UnsupportedWidth,
-                format!("width {width} is not part of the TDI-6.5 preregistered populations"),
+                format!("width {width} is not part of the TDI-6.6 preregistered populations"),
             ));
         }
     };
@@ -2785,7 +2785,7 @@ impl BlockPopulations {
 
     /// Every population's full generation report, in `PopulationKind::ALL`
     /// order. Required-raw-output printing walks this instead of the four
-    /// named fields directly. TDI-6.5 has no OOD populations (Section 10).
+    /// named fields directly. TDI-6.6 has no OOD populations (Section 8).
     fn reports(&self) -> [&PopulationGenerationReport; POPULATIONS_PER_SEED_BLOCK] {
         [
             &self.training_width_3,
@@ -3558,7 +3558,7 @@ struct Tdi52PredictionSet {
 }
 
 /// One fitted layout's evaluation at a horizon: its standardized-U and
-/// reconstructed-O metrics and its prediction set. TDI-6.5 compares two
+/// reconstructed-O metrics and its prediction set. TDI-6.6 compares two
 /// fitted layouts, so this carries no layout identity of its own.
 #[derive(Clone, Debug)]
 struct PredictorEvaluation {
@@ -3640,7 +3640,7 @@ fn tdi52_predict(
 }
 
 /// Evaluates one fitted ridge layout at a horizon: its standardized-U and
-/// reconstructed-O metrics plus its prediction set. TDI-6.5 compares two
+/// reconstructed-O metrics plus its prediction set. TDI-6.6 compares two
 /// fitted layouts only — the naive persistence competitor of TDI-5.5 is
 /// dropped (preregistration Section 7), so every comparison runs through the
 /// identical paired / stratified-aggregate bootstrap and four-way classifier.
@@ -4606,7 +4606,7 @@ fn evaluate_cross_arm_comparison(
     })
 }
 
-/// Number of descriptors summarised by TDI-6.5D: the four exact descriptors
+/// Number of descriptors summarised by TDI-6.6 Section 17: the four exact descriptors
 /// delta, delta_bar, s2, s3 and the two literal spectral descriptors g, τ_ε.
 const DESCRIPTOR_MEAN_COUNT: usize =
     CONTRACTION_FEATURE_COUNT + SPECTRAL_FEATURE_COUNT + LITERAL_SPECTRAL_FEATURE_COUNT;
@@ -4740,7 +4740,7 @@ struct Tdi66CriterionD {
 }
 
 /// Holdout means of the six descriptors (delta, delta_bar, s2, s3, g, τ_ε) over
-/// a family's combined holdout populations (TDI-6.5D).
+/// a family's combined holdout populations (TDI-6.6 Section 17).
 fn family_descriptor_means(blocks: &[BlockPopulations]) -> [f64; DESCRIPTOR_MEAN_COUNT] {
     let mut sums = [0.0_f64; DESCRIPTOR_MEAN_COUNT];
     let mut count = 0_usize;
@@ -6237,7 +6237,7 @@ fn tdi66_full_run_confirmed(value: Option<&str>) -> bool {
 
 fn tdi66_usage_error() -> String {
     format!(
-        "usage: tdi-independent-overlap-ablation-v65 --termination-smoke|--preflight|--full\n\
+        "usage: tdi-independent-overlap-ablation-v66 --termination-smoke|--preflight|--full\n\
          a bare (no-argument) invocation does not start the experiment; the \
          real run additionally requires the exact environment variable \
          {TDI65_FULL_RUN_CONFIRMATION_VAR}={TDI65_FULL_RUN_CONFIRMATION_VALUE}"
@@ -6283,7 +6283,7 @@ fn run_full_experiment() -> Result<(), String> {
 
     if !tdi66_full_run_confirmed(confirmation.as_deref()) {
         return Err(format!(
-            "TDI-6.5 full execution requires the exact confirmation environment \
+            "TDI-6.6 full execution requires the exact confirmation environment \
              variable {TDI65_FULL_RUN_CONFIRMATION_VAR}={TDI65_FULL_RUN_CONFIRMATION_VALUE}; \
              refusing before any generation, fitting or bootstrap"
         ));
