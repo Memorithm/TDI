@@ -3422,6 +3422,299 @@ fn spearman_correlation(left: &[f64], right: &[f64]) -> f64 {
     pearson_correlation(&left_ranks, &right_ranks)
 }
 
+/// Spearman's ρ that **reports** degeneracy instead of hiding it.
+///
+/// `pearson_correlation` returns `0.0` when either variance vanishes, so
+/// `spearman_correlation` silently returns `0.0` for a constant argument. That
+/// convention produced a genuinely misleading published line: TDI-5.8's
+/// reconstructed-O "Spearman exactly 0.000000000" sits beside
+/// `fraction borne basse = 1.0`, i.e. every prediction clamped to one value, so
+/// the zero measured saturation rather than lost ordering.
+///
+/// TDI-6.8 Section 8 requires undefined cases to be counted, not absorbed, so
+/// every criterion path uses this function and `None` propagates.
+fn rank_correlation(left: &[f64], right: &[f64]) -> Option<f64> {
+    assert_eq!(left.len(), right.len());
+
+    if left.len() < 2 {
+        return None;
+    }
+
+    let left_ranks = average_ranks(left);
+    let right_ranks = average_ranks(right);
+
+    // A constant argument has zero rank variance; `ρ` is undefined, not zero.
+    if is_constant(&left_ranks) || is_constant(&right_ranks) {
+        return None;
+    }
+
+    Some(pearson_correlation(&left_ranks, &right_ranks))
+}
+
+fn is_constant(values: &[f64]) -> bool {
+    values
+        .iter()
+        .all(|value| value.total_cmp(&values[0]) == std::cmp::Ordering::Equal)
+}
+
+/// Kendall's τ-b — the companion rank statistic of Section 15.
+///
+/// Deliberately the direct `O(n²)` definition rather than a merge-sort inversion
+/// count. τ-b exists so that the choice of Spearman cannot be mistaken for a
+/// lever (Section 6); a subtle bug in a hand-rolled `O(n log n)` counter would
+/// defeat that purpose entirely, and the direct form is checkable against
+/// hand-computed cases. Measured cost at the preregistered scale
+/// (n = 10,000 per block): 0.177 s per cell, ≈ 1.1 min for all 384 cells.
+///
+/// Returns `None` when the tie-corrected denominator vanishes — either argument
+/// constant, or every pair tied — for the same reason as `rank_correlation`.
+fn kendall_tau_b(left: &[f64], right: &[f64]) -> Option<f64> {
+    assert_eq!(left.len(), right.len());
+
+    let count = left.len();
+
+    if count < 2 {
+        return None;
+    }
+
+    let mut concordant = 0_u64;
+    let mut discordant = 0_u64;
+    let mut left_ties = 0_u64;
+    let mut right_ties = 0_u64;
+
+    for first in 0..count {
+        for second in (first + 1)..count {
+            let left_order = left[first].total_cmp(&left[second]);
+            let right_order = right[first].total_cmp(&right[second]);
+
+            match (left_order, right_order) {
+                (std::cmp::Ordering::Equal, std::cmp::Ordering::Equal) => {
+                    left_ties += 1;
+                    right_ties += 1;
+                }
+                (std::cmp::Ordering::Equal, _) => left_ties += 1,
+                (_, std::cmp::Ordering::Equal) => right_ties += 1,
+                _ if left_order == right_order => concordant += 1,
+                _ => discordant += 1,
+            }
+        }
+    }
+
+    let pairs = (count * (count - 1) / 2) as f64;
+    let denominator = ((pairs - left_ties as f64) * (pairs - right_ties as f64)).sqrt();
+
+    if denominator <= 1.0e-15 {
+        return None;
+    }
+
+    Some((concordant as f64 - discordant as f64) / denominator)
+}
+
+/// The rank statistics of one (pair, layout, horizon, seed block) cell.
+///
+/// Section 16 requires the tie counts to be printed beside the correlations, so
+/// they are carried here rather than recomputed at print time.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct RankStatistics {
+    spearman: Option<f64>,
+    kendall_tau_b: Option<f64>,
+    tied_truth_pairs: u64,
+    tied_prediction_pairs: u64,
+}
+
+impl RankStatistics {
+    fn evaluate(truth: &[f64], prediction: &[f64]) -> Self {
+        Self {
+            spearman: rank_correlation(truth, prediction),
+            kendall_tau_b: kendall_tau_b(truth, prediction),
+            tied_truth_pairs: tied_pairs(truth),
+            tied_prediction_pairs: tied_pairs(prediction),
+        }
+    }
+
+    /// Whether Spearman and τ-b disagree in *direction* — the disagreement
+    /// Section 15 requires to be named explicitly wherever it occurs.
+    fn direction_disagreement(&self) -> bool {
+        match (self.spearman, self.kendall_tau_b) {
+            (Some(rho), Some(tau)) => rho * tau < 0.0,
+            _ => false,
+        }
+    }
+}
+
+/// Number of tied pairs within a sample, counted from the tie-group sizes so the
+/// cost stays `O(n log n)` rather than `O(n²)`.
+fn tied_pairs(values: &[f64]) -> u64 {
+    let mut sorted = values.to_vec();
+    sorted.sort_by(f64::total_cmp);
+
+    let mut total = 0_u64;
+    let mut start = 0_usize;
+
+    while start < sorted.len() {
+        let mut end = start + 1;
+
+        while end < sorted.len()
+            && sorted[start].total_cmp(&sorted[end]) == std::cmp::Ordering::Equal
+        {
+            end += 1;
+        }
+
+        let group = (end - start) as u64;
+        total += group * (group - 1) / 2;
+        start = end;
+    }
+
+    total
+}
+
+/// The frozen symmetric margin of TDI-6.8 Section 10, **absolute** on the
+/// bounded [−1, 1] rank scale.
+///
+/// Justified before any data existed: with 10,000 holdout records per block the
+/// standard error of a single Spearman ρ is about `1/√(n−1) ≈ 0.010`, so an
+/// increment inside ±0.02 cannot be told from sampling noise by the statistic
+/// itself. It is also the direct transposition of the campaign's frozen 2 %
+/// relative-MSE margin onto a bounded scale. This value may not be revisited
+/// after seeing a result.
+const RANK_EQUIVALENCE_MARGIN: f64 = 0.02;
+
+/// Section 8: above this fraction of undefined bootstrap replicates a cell's
+/// interval is reported as not-available and its classification forced to
+/// *Indeterminate*.
+const MAX_UNDEFINED_REPLICATE_FRACTION: f64 = 0.01;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RankClassification {
+    Beneficial,
+    Harmful,
+    Equivalent,
+    Indeterminate,
+}
+
+impl RankClassification {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Beneficial => "beneficial",
+            Self::Harmful => "harmful",
+            Self::Equivalent => "equivalent",
+            Self::Indeterminate => "indeterminate",
+        }
+    }
+}
+
+/// Every sub-condition of the Section 10 rule, carried alongside the verdict.
+///
+/// The campaign prints all sub-conditions rather than the classification alone,
+/// so a reader can see *which* condition decided a cell and no verdict can be
+/// quoted without the evidence that produced it.
+#[derive(Clone, Debug, PartialEq)]
+struct RankComparison {
+    classification: RankClassification,
+    /// `ρ̄(challenger) − ρ̄(baseline)`, the mean of the three per-block ρ each.
+    aggregate_increment: Option<f64>,
+    /// Per-block increments, in frozen block order.
+    block_increments: Vec<Option<f64>>,
+    interval: Option<ConfidenceInterval>,
+    undefined_replicates: usize,
+    total_replicates: usize,
+    /// Section 10 condition 1 and its mirror.
+    all_blocks_favour_challenger: bool,
+    all_blocks_favour_baseline: bool,
+    /// Section 10 condition 2 and its mirror.
+    aggregate_increment_at_least_margin: bool,
+    aggregate_decrement_at_least_margin: bool,
+    /// Section 10 condition 3 and its mirror.
+    interval_lower_bound_positive: bool,
+    interval_upper_bound_negative: bool,
+    /// Section 10 equivalence, both halves.
+    all_block_increments_within_margin: bool,
+    interval_within_margin: bool,
+}
+
+/// Applies the frozen Section 10 rule. Every input is already computed; this
+/// function performs no statistics, so the rule and its evidence cannot drift
+/// apart.
+fn classify_rank_increment(
+    block_increments: Vec<Option<f64>>,
+    interval: Option<ConfidenceInterval>,
+    undefined_replicates: usize,
+    total_replicates: usize,
+) -> RankComparison {
+    let defined = block_increments
+        .iter()
+        .flatten()
+        .copied()
+        .collect::<Vec<_>>();
+    let all_defined = defined.len() == block_increments.len() && !defined.is_empty();
+
+    let aggregate_increment = if all_defined {
+        Some(defined.iter().sum::<f64>() / defined.len() as f64)
+    } else {
+        None
+    };
+
+    let all_blocks_favour_challenger = all_defined && defined.iter().all(|&value| value > 0.0);
+    let all_blocks_favour_baseline = all_defined && defined.iter().all(|&value| value < 0.0);
+
+    let aggregate_increment_at_least_margin =
+        aggregate_increment.is_some_and(|value| value >= RANK_EQUIVALENCE_MARGIN);
+    let aggregate_decrement_at_least_margin =
+        aggregate_increment.is_some_and(|value| value <= -RANK_EQUIVALENCE_MARGIN);
+
+    let interval_lower_bound_positive = interval.is_some_and(|bounds| bounds.lower > 0.0);
+    let interval_upper_bound_negative = interval.is_some_and(|bounds| bounds.upper < 0.0);
+
+    let all_block_increments_within_margin = all_defined
+        && defined
+            .iter()
+            .all(|value| value.abs() <= RANK_EQUIVALENCE_MARGIN);
+    let interval_within_margin = interval.is_some_and(|bounds| {
+        bounds.lower >= -RANK_EQUIVALENCE_MARGIN && bounds.upper <= RANK_EQUIVALENCE_MARGIN
+    });
+
+    // Section 8: too many undefined replicates forces *Indeterminate* before any
+    // other condition is consulted.
+    let replicates_usable = total_replicates > 0
+        && (undefined_replicates as f64) / (total_replicates as f64)
+            <= MAX_UNDEFINED_REPLICATE_FRACTION;
+
+    let classification = if !replicates_usable {
+        RankClassification::Indeterminate
+    } else if all_blocks_favour_challenger
+        && aggregate_increment_at_least_margin
+        && interval_lower_bound_positive
+    {
+        RankClassification::Beneficial
+    } else if all_blocks_favour_baseline
+        && aggregate_decrement_at_least_margin
+        && interval_upper_bound_negative
+    {
+        RankClassification::Harmful
+    } else if all_block_increments_within_margin && interval_within_margin {
+        RankClassification::Equivalent
+    } else {
+        RankClassification::Indeterminate
+    };
+
+    RankComparison {
+        classification,
+        aggregate_increment,
+        block_increments,
+        interval: if replicates_usable { interval } else { None },
+        undefined_replicates,
+        total_replicates,
+        all_blocks_favour_challenger,
+        all_blocks_favour_baseline,
+        aggregate_increment_at_least_margin,
+        aggregate_decrement_at_least_margin,
+        interval_lower_bound_positive,
+        interval_upper_bound_negative,
+        all_block_increments_within_margin,
+        interval_within_margin,
+    }
+}
+
 fn percentile(sorted: &[f64], quantile: f64) -> f64 {
     let position = quantile * (sorted.len() - 1) as f64;
     let lower = position.floor() as usize;
@@ -4722,6 +5015,13 @@ struct ArmEvaluation {
     /// Criterion TDI-6.7B (Section 11): the transferred model beats predicting
     /// the target's mean.
     calibration_repaired: bool,
+    /// TDI-6.8 Section 6: the rank statistics of each seed block, **never**
+    /// pooled. One entry per `SEED_BLOCK_COUNT`, in frozen block order.
+    ///
+    /// Retained per block rather than aggregated here because Section 6 forbids
+    /// a pooled rank statistic from entering any criterion, and the only way to
+    /// make that structurally impossible is to never form one.
+    block_rank_statistics: Vec<RankStatistics>,
 }
 
 /// One ordered transfer pair at one layout and one focal horizon.
@@ -4762,6 +5062,9 @@ struct TransferPairReport {
     /// Section 15 companion: the same shift computed at `U₁` instead of `U₂`.
     /// Context only; no criterion consumes it.
     observable_shift_u1: f64,
+    /// TDI-6.8 Section 10: GKT against GK on the plain-transfer arm, one entry
+    /// per focal horizon, built from per-block rank statistics only.
+    rank_comparisons: Vec<(usize, RankComparison)>,
     /// Section 14, `oracle`: the **true** level shift `μ_hᵀ − μ_hˢ` per focal
     /// horizon, read from holdout labels. Never feeds B1; it answers *why* B1
     /// succeeded or failed. `(horizon, true shift, Δ / true shift)`.
@@ -5022,12 +5325,25 @@ fn evaluate_transfer_pair(
                 let (standardized, reconstructed) = pooled_arm_metrics(&blocks);
                 let r_squared_interval = arm_r_squared_bootstrap(&blocks, bootstrap_seed)?;
 
+                // TDI-6.8 Section 6: one rank statistic per seed block, computed
+                // from that block's own holdout, never across the concatenation.
+                let block_rank_statistics = blocks
+                    .iter()
+                    .map(|block| {
+                        RankStatistics::evaluate(
+                            &block.standardized_targets,
+                            &block.evaluation.predictions.standardized,
+                        )
+                    })
+                    .collect::<Vec<_>>();
+
                 arms.push(ArmEvaluation {
                     arm: *arm,
                     calibration_repaired: standardized.r_squared > 0.0,
                     standardized,
                     reconstructed,
                     r_squared_interval,
+                    block_rank_statistics,
                 });
             }
 
@@ -5113,6 +5429,45 @@ fn evaluate_transfer_pair(
         applied_shifts.push((TARGET_HORIZONS[horizon_index], scales, applied));
     }
 
+    // TDI-6.8 Section 10: GKT against GK on the plain-transfer arm, per focal
+    // horizon, from the per-block rank statistics alone.
+    //
+    // The interval is not yet available at this stage of the derivation, so
+    // `classify_rank_increment` receives no replicates and Section 8's
+    // usable-replicate guard forces every cell to *Indeterminate*. That is the
+    // honest state: the increments are real, the classification is not yet
+    // decidable, and no line may claim otherwise until the shared-resample
+    // bootstrap lands.
+    let mut rank_comparisons = Vec::with_capacity(FOCAL_HORIZON_COUNT);
+
+    for horizon in FOCAL_HORIZONS {
+        let baseline = cells
+            .iter()
+            .find(|cell| cell.layout == FeatureLayout::Gk && cell.horizon() == horizon)
+            .ok_or_else(|| format!("missing GK cell at U{horizon}"))?
+            .arm(TransferArm::SourceStandardized);
+        let challenger = cells
+            .iter()
+            .find(|cell| cell.layout == FeatureLayout::Gkt && cell.horizon() == horizon)
+            .ok_or_else(|| format!("missing GKT cell at U{horizon}"))?
+            .arm(TransferArm::SourceStandardized);
+
+        let block_increments = baseline
+            .block_rank_statistics
+            .iter()
+            .zip(&challenger.block_rank_statistics)
+            .map(|(base, chal)| match (base.spearman, chal.spearman) {
+                (Some(low), Some(high)) => Some(high - low),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        rank_comparisons.push((
+            horizon,
+            classify_rank_increment(block_increments, None, 0, 0),
+        ));
+    }
+
     Ok(TransferPairReport {
         source: source.family,
         target: target.family,
@@ -5121,6 +5476,7 @@ fn evaluate_transfer_pair(
         observable_shift: shift,
         observable_shift_u1,
         true_level_shifts,
+        rank_comparisons,
     })
 }
 
@@ -5779,6 +6135,77 @@ fn print_tdi52_aggregate_comparison(label: &str, horizon: usize, comparison: &Ag
     );
 }
 
+/// TDI-6.8 Sections 6, 10 and 15: per-seed-block rank statistics and the
+/// GKT-against-GK increment.
+///
+/// Every correlation is printed per block. No pooled rank statistic appears
+/// here, because Section 6 forbids one from entering a criterion and the
+/// evaluator never forms one.
+fn print_tdi68_rank_statistics(report: &Tdi68ExperimentReport) {
+    println!();
+    println!("=== STATISTIQUES DE RANG PAR BLOC (Sections 6, 10, 15) ===");
+
+    let render = |value: Option<f64>| match value {
+        Some(number) => format!("{number:.12}"),
+        None => "indéfini".to_owned(),
+    };
+
+    for pair in &report.criterion_d.pairs {
+        for &horizon in &FOCAL_HORIZONS {
+            for layout in TRANSFER_LAYOUTS {
+                let Some(cell) = pair
+                    .cells
+                    .iter()
+                    .find(|cell| cell.layout == layout && cell.horizon() == horizon)
+                else {
+                    continue;
+                };
+
+                let arm = cell.arm(TransferArm::SourceStandardized);
+
+                for (index, statistics) in arm.block_rank_statistics.iter().enumerate() {
+                    println!(
+                        "  {} → {} — {} — U{horizon} — bloc {index} : ρ = {} | τ-b = {} | \
+                         paires égales vérité/prédiction = {}/{}{}",
+                        pair.source.label(),
+                        pair.target.label(),
+                        layout.label(),
+                        render(statistics.spearman),
+                        render(statistics.kendall_tau_b),
+                        statistics.tied_truth_pairs,
+                        statistics.tied_prediction_pairs,
+                        if statistics.direction_disagreement() {
+                            "  [DÉSACCORD DE DIRECTION ρ / τ-b — Section 15]"
+                        } else {
+                            ""
+                        }
+                    );
+                }
+            }
+        }
+
+        for (horizon, comparison) in &pair.rank_comparisons {
+            println!(
+                "  {} → {} — GKT contre GK à U{horizon} : incréments par bloc = [{}] | \
+                 moyenne = {} | marge = ±{RANK_EQUIVALENCE_MARGIN} | réplicats indéfinis = {}/{} \
+                 | classification = {}",
+                pair.source.label(),
+                pair.target.label(),
+                comparison
+                    .block_increments
+                    .iter()
+                    .map(|value| render(*value))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                render(comparison.aggregate_increment),
+                comparison.undefined_replicates,
+                comparison.total_replicates,
+                comparison.classification.label()
+            );
+        }
+    }
+}
+
 /// Per-criterion block-level and aggregate conditions (Section 19).
 fn print_tdi68_criteria_conditions(report: &Tdi68ExperimentReport) {
     println!();
@@ -6196,6 +6623,7 @@ fn print_tdi68_required_raw_output(report: &Tdi68ExperimentReport) {
     }
 
     print_tdi68_criteria_conditions(report);
+    print_tdi68_rank_statistics(report);
     print_tdi68_final_verdicts(report);
 }
 
@@ -8131,5 +8559,237 @@ mod tests {
         seeds.sort_unstable();
         seeds.dedup();
         assert_eq!(seeds.len(), total);
+    }
+
+    // ---- TDI-6.8 : noyau de rang (Sections 6, 8, 10) ----
+
+    /// Spearman on a hand-computed case: perfectly monotone but non-linear data
+    /// must give exactly 1, which Pearson on the raw values would not.
+    #[test]
+    fn rank_correlation_is_one_for_a_monotone_nonlinear_relation() {
+        let truth = [1.0_f64, 2.0, 3.0, 4.0, 5.0];
+        let prediction = [1.0_f64, 4.0, 9.0, 16.0, 25.0];
+
+        let rho = super::rank_correlation(&truth, &prediction).expect("defined");
+        assert!((rho - 1.0).abs() < 1.0e-12, "rho = {rho}");
+
+        let pearson = super::pearson_correlation(&truth, &prediction);
+        assert!(pearson < 0.99, "raw Pearson must not be 1: {pearson}");
+    }
+
+    /// The degeneracy that produced TDI-5.8's misleading published zero: a
+    /// constant argument must report *undefined*, never `0.0`.
+    #[test]
+    fn rank_correlation_reports_undefined_for_a_constant_argument() {
+        let truth = [1.0_f64, 2.0, 3.0, 4.0];
+        let clamped = [0.5_f64; 4];
+
+        assert_eq!(super::rank_correlation(&truth, &clamped), None);
+        assert_eq!(super::rank_correlation(&clamped, &truth), None);
+
+        // The inherited helper still returns the misleading zero; this pins the
+        // difference so the two can never be confused again.
+        assert_eq!(super::spearman_correlation(&truth, &clamped), 0.0);
+    }
+
+    /// TDI-6.7 §5: an additive constant preserves rank exactly *within a block*.
+    /// This is the property that makes every correction arm vacuous under a rank
+    /// criterion, and therefore the reason TDI-6.8 compares layouts instead.
+    #[test]
+    fn rank_correlation_is_invariant_under_an_additive_shift() {
+        let truth = [0.3_f64, -1.2, 4.5, 2.2, -0.7, 8.1];
+        let prediction = [0.1_f64, -2.0, 3.9, 1.7, -1.4, 7.2];
+        let shifted = prediction.map(|value| value - 2.003_845_989);
+
+        let base = super::rank_correlation(&truth, &prediction).expect("defined");
+        let moved = super::rank_correlation(&truth, &shifted).expect("defined");
+
+        assert_eq!(base.to_bits(), moved.to_bits());
+    }
+
+    /// Kendall τ-b against a case small enough to count by hand: one discordant
+    /// pair out of six gives (5 − 1) / 6.
+    #[test]
+    fn kendall_tau_b_matches_a_hand_counted_case() {
+        let left = [1.0_f64, 2.0, 3.0, 4.0];
+        let right = [1.0_f64, 2.0, 4.0, 3.0];
+
+        let tau = super::kendall_tau_b(&left, &right).expect("defined");
+        assert!((tau - (4.0 / 6.0)).abs() < 1.0e-12, "tau = {tau}");
+    }
+
+    #[test]
+    fn kendall_tau_b_reports_undefined_when_every_pair_is_tied() {
+        let constant = [2.0_f64; 5];
+        let varied = [1.0_f64, 2.0, 3.0, 4.0, 5.0];
+
+        assert_eq!(super::kendall_tau_b(&constant, &varied), None);
+        assert_eq!(super::kendall_tau_b(&varied, &constant), None);
+    }
+
+    #[test]
+    fn tied_pairs_counts_group_combinations() {
+        // Groups of sizes 3, 2 and 1 give 3 + 1 + 0 tied pairs.
+        let values = [1.0_f64, 1.0, 1.0, 2.0, 2.0, 3.0];
+        assert_eq!(super::tied_pairs(&values), 4);
+        assert_eq!(super::tied_pairs(&[1.0_f64, 2.0, 3.0]), 0);
+    }
+
+    #[test]
+    fn rank_statistics_flag_direction_disagreement_only_when_signs_differ() {
+        let truth = [1.0_f64, 2.0, 3.0, 4.0, 5.0];
+        let agreeing = super::RankStatistics::evaluate(&truth, &[1.0, 2.0, 3.0, 4.0, 5.0]);
+        assert!(!agreeing.direction_disagreement());
+
+        let opposing = super::RankStatistics::evaluate(&truth, &[5.0, 4.0, 3.0, 2.0, 1.0]);
+        assert!(
+            !opposing.direction_disagreement(),
+            "both negative is agreement"
+        );
+
+        // ρ and τ-b almost never disagree on real data, so the true branch is
+        // exercised directly rather than left untested.
+        let contrived = super::RankStatistics {
+            spearman: Some(0.4),
+            kendall_tau_b: Some(-0.1),
+            tied_truth_pairs: 0,
+            tied_prediction_pairs: 0,
+        };
+        assert!(contrived.direction_disagreement());
+
+        // An undefined member is not a disagreement.
+        let undefined = super::RankStatistics {
+            spearman: None,
+            kendall_tau_b: Some(-0.1),
+            tied_truth_pairs: 0,
+            tied_prediction_pairs: 0,
+        };
+        assert!(!undefined.direction_disagreement());
+    }
+
+    // ---- Section 10 : frontières exactes du classificateur ----
+
+    fn interval(lower: f64, upper: f64) -> super::ConfidenceInterval {
+        super::ConfidenceInterval {
+            lower,
+            median: (lower + upper) / 2.0,
+            upper,
+        }
+    }
+
+    #[test]
+    fn rank_classifier_requires_all_three_beneficial_conditions() {
+        let strong = vec![Some(0.05), Some(0.04), Some(0.03)];
+
+        assert_eq!(
+            super::classify_rank_increment(strong.clone(), Some(interval(0.01, 0.07)), 0, 4000)
+                .classification,
+            super::RankClassification::Beneficial
+        );
+
+        // One block below zero breaks condition 1 even though the mean clears the margin.
+        let mixed = vec![Some(0.09), Some(0.06), Some(-0.01)];
+        assert_eq!(
+            super::classify_rank_increment(mixed, Some(interval(0.01, 0.07)), 0, 4000)
+                .classification,
+            super::RankClassification::Indeterminate
+        );
+
+        // A non-positive lower bound breaks condition 3.
+        assert_eq!(
+            super::classify_rank_increment(strong, Some(interval(-0.001, 0.07)), 0, 4000)
+                .classification,
+            super::RankClassification::Indeterminate
+        );
+    }
+
+    #[test]
+    fn rank_classifier_margin_is_inclusive_at_exactly_two_hundredths() {
+        let at_margin = vec![Some(0.02), Some(0.02), Some(0.02)];
+        let comparison =
+            super::classify_rank_increment(at_margin, Some(interval(0.005, 0.03)), 0, 4000);
+
+        assert!(comparison.aggregate_increment_at_least_margin);
+        assert_eq!(
+            comparison.classification,
+            super::RankClassification::Beneficial
+        );
+
+        let below = vec![Some(0.019), Some(0.019), Some(0.019)];
+        assert!(
+            !super::classify_rank_increment(below, Some(interval(0.005, 0.03)), 0, 4000)
+                .aggregate_increment_at_least_margin
+        );
+    }
+
+    #[test]
+    fn rank_classifier_is_symmetric_for_harm() {
+        let comparison = super::classify_rank_increment(
+            vec![Some(-0.05), Some(-0.04), Some(-0.03)],
+            Some(interval(-0.07, -0.01)),
+            0,
+            4000,
+        );
+
+        assert_eq!(
+            comparison.classification,
+            super::RankClassification::Harmful
+        );
+        assert!(comparison.all_blocks_favour_baseline);
+        assert!(comparison.interval_upper_bound_negative);
+    }
+
+    #[test]
+    fn rank_classifier_declares_equivalence_only_when_blocks_and_interval_agree() {
+        let tiny = vec![Some(0.001), Some(-0.002), Some(0.003)];
+
+        assert_eq!(
+            super::classify_rank_increment(tiny.clone(), Some(interval(-0.01, 0.01)), 0, 4000)
+                .classification,
+            super::RankClassification::Equivalent
+        );
+
+        // Blocks inside the margin but a wide interval is *not* equivalence.
+        assert_eq!(
+            super::classify_rank_increment(tiny, Some(interval(-0.05, 0.05)), 0, 4000)
+                .classification,
+            super::RankClassification::Indeterminate
+        );
+    }
+
+    /// Section 8: beyond 1 % undefined replicates the cell is forced to
+    /// *Indeterminate* and its interval withheld, whatever the increments say.
+    #[test]
+    fn rank_classifier_withholds_a_verdict_when_too_many_replicates_are_undefined() {
+        let strong = vec![Some(0.05), Some(0.04), Some(0.03)];
+
+        let usable =
+            super::classify_rank_increment(strong.clone(), Some(interval(0.01, 0.07)), 40, 4000);
+        assert_eq!(usable.classification, super::RankClassification::Beneficial);
+        assert!(usable.interval.is_some());
+
+        let unusable = super::classify_rank_increment(strong, Some(interval(0.01, 0.07)), 41, 4000);
+        assert_eq!(
+            unusable.classification,
+            super::RankClassification::Indeterminate
+        );
+        assert!(unusable.interval.is_none(), "interval must be withheld");
+    }
+
+    #[test]
+    fn rank_classifier_treats_an_undefined_block_as_undecidable() {
+        let comparison = super::classify_rank_increment(
+            vec![Some(0.05), None, Some(0.03)],
+            Some(interval(0.01, 0.07)),
+            0,
+            4000,
+        );
+
+        assert_eq!(comparison.aggregate_increment, None);
+        assert!(!comparison.all_blocks_favour_challenger);
+        assert_eq!(
+            comparison.classification,
+            super::RankClassification::Indeterminate
+        );
     }
 }
