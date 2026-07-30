@@ -7554,4 +7554,336 @@ mod tests {
         let root = Complex64::new(-1.0, 0.0).sqrt();
         assert!(root.re.abs() < 1e-9 && (root.im - 1.0).abs() < 1e-9);
     }
+
+    // ---- TDI-6.6 re-standardization ------------------------------------
+
+    /// Distinct-looking records so the two domains have genuinely different
+    /// feature statistics.
+    fn restandardization_records(scale: f64, target_offset: f64) -> Vec<super::Record> {
+        (0..12)
+            .map(|index| {
+                let step = f64::from(index) / 12.0;
+                let mut record = record_with_overlap(0.2 + scale * step, 0.7 - scale * step * 0.5);
+
+                record.contraction = [0.3 + scale * step, 0.9 - scale * step];
+                record.spectral = [1.0 + scale * step, 1.2 + scale * step * 0.5];
+                record.literal_spectral = [0.4 + scale * step, 0.1 + scale * step];
+                record.targets_u = std::array::from_fn(|horizon| {
+                    1.0 + target_offset + step * (1.0 + horizon as f64)
+                });
+
+                record
+            })
+            .collect()
+    }
+
+    fn restandardization_fit() -> super::AggregateModelFit {
+        let training = restandardization_records(1.0, 0.0);
+        let blocks = super::frozen_block_order(super::GeneratorFamily::F0Base)
+            .map(|seed_block| super::fit_block_models(seed_block, &training, &training).unwrap());
+
+        super::AggregateModelFit::assemble(blocks).unwrap()
+    }
+
+    /// **Preregistration Section 4.3, required proof.**
+    ///
+    /// The A1 arm claims to be label-free. A code-reading argument is not
+    /// sufficient evidence for that claim, so this asserts it behaviourally:
+    /// arbitrarily perturbing every target value in the target-domain records
+    /// must leave A1's re-standardized model **bit-identical**. If a future edit
+    /// ever routes a target value into A1's statistics, this fails.
+    #[test]
+    fn a1_is_bit_identical_when_target_domain_labels_are_perturbed() {
+        let source_fit = restandardization_fit();
+        let clean = restandardization_records(2.5, 0.0);
+
+        let mut perturbed = clean.clone();
+        for (index, record) in perturbed.iter_mut().enumerate() {
+            // Arbitrary, large, sign-flipping perturbation of the labels only.
+            record.targets_u = std::array::from_fn(|horizon| {
+                -1_000.0 * (index as f64 + 1.0) * (horizon as f64 + 1.0)
+            });
+        }
+
+        let clean_refs: [&[super::Record]; super::SEED_BLOCK_COUNT] = [&clean, &clean, &clean];
+        let perturbed_refs: [&[super::Record]; super::SEED_BLOCK_COUNT] =
+            [&perturbed, &perturbed, &perturbed];
+
+        let from_clean = super::restandardize_aggregate_fit(
+            &source_fit,
+            clean_refs,
+            super::TransferArm::FeatureRestandardized,
+        )
+        .unwrap();
+        let from_perturbed = super::restandardize_aggregate_fit(
+            &source_fit,
+            perturbed_refs,
+            super::TransferArm::FeatureRestandardized,
+        )
+        .unwrap();
+
+        for seed_block in super::frozen_block_order(super::GeneratorFamily::F0Base) {
+            let clean_block = from_clean.block(seed_block);
+            let perturbed_block = from_perturbed.block(seed_block);
+
+            assert_eq!(
+                clean_block.target_scalers, perturbed_block.target_scalers,
+                "A1 must keep the SOURCE target scaler, untouched by target labels"
+            );
+
+            for horizon_index in 0..super::TARGET_HORIZON_COUNT {
+                for layout in super::FeatureLayout::ALL {
+                    let clean_model = clean_block.models.get(horizon_index, layout);
+                    let perturbed_model = perturbed_block.models.get(horizon_index, layout);
+
+                    assert_eq!(
+                        clean_model.means, perturbed_model.means,
+                        "A1 feature means leaked a target label"
+                    );
+                    assert_eq!(
+                        clean_model.scales, perturbed_model.scales,
+                        "A1 feature scales leaked a target label"
+                    );
+                    assert_eq!(
+                        clean_model.coefficients, perturbed_model.coefficients,
+                        "A1 must never refit coefficients (Section 4.5)"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The oracle arm is the one that *does* read labels — the contrast that
+    /// makes the test above meaningful rather than vacuous.
+    #[test]
+    fn a2_target_scaler_does_move_when_target_domain_labels_are_perturbed() {
+        let source_fit = restandardization_fit();
+        let clean = restandardization_records(2.5, 0.0);
+        let mut perturbed = clean.clone();
+        for record in &mut perturbed {
+            record.targets_u = std::array::from_fn(|horizon| 500.0 + 17.0 * horizon as f64);
+        }
+
+        let clean_refs: [&[super::Record]; super::SEED_BLOCK_COUNT] = [&clean, &clean, &clean];
+        let perturbed_refs: [&[super::Record]; super::SEED_BLOCK_COUNT] =
+            [&perturbed, &perturbed, &perturbed];
+
+        let from_clean = super::restandardize_aggregate_fit(
+            &source_fit,
+            clean_refs,
+            super::TransferArm::OracleRestandardized,
+        )
+        .unwrap();
+        let from_perturbed = super::restandardize_aggregate_fit(
+            &source_fit,
+            perturbed_refs,
+            super::TransferArm::OracleRestandardized,
+        )
+        .unwrap();
+
+        let block = super::frozen_block_order(super::GeneratorFamily::F0Base)[0];
+
+        assert_ne!(
+            from_clean.block(block).target_scalers,
+            from_perturbed.block(block).target_scalers,
+            "A2 reads target labels by construction; if this ever stops being true \
+             the oracle labelling is a lie"
+        );
+    }
+
+    /// A0 is the untouched TDI-6.5C behaviour; A1 and A2 move the feature
+    /// statistics but never the coefficients.
+    #[test]
+    fn a0_is_the_identity_and_restandardization_never_touches_coefficients() {
+        let source_fit = restandardization_fit();
+        let target = restandardization_records(4.0, 3.0);
+        let refs: [&[super::Record]; super::SEED_BLOCK_COUNT] = [&target, &target, &target];
+        let block = super::frozen_block_order(super::GeneratorFamily::F0Base)[0];
+
+        let a0 = super::restandardize_aggregate_fit(
+            &source_fit,
+            refs,
+            super::TransferArm::SourceStandardized,
+        )
+        .unwrap();
+        let a1 = super::restandardize_aggregate_fit(
+            &source_fit,
+            refs,
+            super::TransferArm::FeatureRestandardized,
+        )
+        .unwrap();
+
+        let original = source_fit
+            .block(block)
+            .models
+            .get(0, super::FeatureLayout::Gkt);
+        let untouched = a0.block(block).models.get(0, super::FeatureLayout::Gkt);
+        let aligned = a1.block(block).models.get(0, super::FeatureLayout::Gkt);
+
+        assert_eq!(original.means, untouched.means);
+        assert_eq!(original.scales, untouched.scales);
+        assert_ne!(
+            original.means, aligned.means,
+            "A1 must actually replace the feature means"
+        );
+        assert_eq!(
+            original.coefficients, aligned.coefficients,
+            "coefficients are frozen in every arm (Section 4.5)"
+        );
+    }
+
+    /// The re-standardization statistics must come from the *same* code the
+    /// ridge fit uses, or the fitted and transfer-time standardizations could
+    /// drift apart silently.
+    #[test]
+    fn feature_standardization_is_the_same_computation_the_ridge_fit_performs() {
+        let records = restandardization_records(1.7, 0.0);
+        let matrix = super::feature_matrix(&records, |record| {
+            super::model_features(record, super::FeatureLayout::Gk)
+        });
+        let (means, scales) = super::feature_standardization(&matrix).unwrap();
+
+        let targets = records
+            .iter()
+            .map(|record| record.targets_u[0])
+            .collect::<Vec<_>>();
+        let model = super::fit_ridge(&matrix, &targets).unwrap();
+
+        assert_eq!(model.means, means);
+        assert_eq!(model.scales, scales);
+    }
+
+    /// A degenerate (constant) feature must hit the frozen floor and become
+    /// scale 1.0 — identically in every arm.
+    #[test]
+    fn degenerate_feature_scale_hits_the_frozen_floor() {
+        let matrix = vec![vec![3.0, 1.0], vec![3.0, 2.0], vec![3.0, 3.0]];
+        let (means, scales) = super::feature_standardization(&matrix).unwrap();
+
+        assert_eq!(means[0], 3.0);
+        assert_eq!(
+            scales[0], 1.0,
+            "constant column must fall back to unit scale"
+        );
+        assert!(scales[1] > super::DEGENERATE_SCALE_FLOOR);
+    }
+
+    /// **Preregistration Section 14.1 made executable.** A relative-MSE
+    /// comparison between arms whose ground truth is standardized by different
+    /// scalers measures scaler variance, not model quality. The evaluator must
+    /// refuse rather than return a number.
+    #[test]
+    fn cross_arm_comparison_refuses_arms_with_different_target_scalers() {
+        let source_fit = restandardization_fit();
+        let target = restandardization_records(3.0, 9.0);
+        let refs: [&[super::Record]; super::SEED_BLOCK_COUNT] = [&target, &target, &target];
+
+        let a0 = super::restandardize_aggregate_fit(
+            &source_fit,
+            refs,
+            super::TransferArm::SourceStandardized,
+        )
+        .unwrap();
+        let a2 = super::restandardize_aggregate_fit(
+            &source_fit,
+            refs,
+            super::TransferArm::OracleRestandardized,
+        )
+        .unwrap();
+
+        let error = super::evaluate_cross_arm_comparison(
+            0,
+            super::FeatureLayout::Gkt,
+            &a0,
+            &a2,
+            refs,
+            0x5444_4936_3600_4700,
+        )
+        .expect_err("A0-vs-A2 must be refused, not silently computed");
+
+        assert!(
+            error.contains("different target scalers"),
+            "the refusal must name the reason: {error}"
+        );
+    }
+
+    /// A1-vs-A0 shares the source scaler, so it is well posed and must succeed.
+    #[test]
+    fn cross_arm_comparison_accepts_a1_against_a0() {
+        let source_fit = restandardization_fit();
+        let target = restandardization_records(3.0, 9.0);
+        let refs: [&[super::Record]; super::SEED_BLOCK_COUNT] = [&target, &target, &target];
+
+        let a0 = super::restandardize_aggregate_fit(
+            &source_fit,
+            refs,
+            super::TransferArm::SourceStandardized,
+        )
+        .unwrap();
+        let a1 = super::restandardize_aggregate_fit(
+            &source_fit,
+            refs,
+            super::TransferArm::FeatureRestandardized,
+        )
+        .unwrap();
+
+        let comparison = super::evaluate_cross_arm_comparison(
+            0,
+            super::FeatureLayout::Gkt,
+            &a0,
+            &a1,
+            refs,
+            0x5444_4936_3600_4700,
+        )
+        .expect("A1-vs-A0 shares the source scaler and must be well posed");
+
+        assert_eq!(comparison.horizon, super::TARGET_HORIZONS[0]);
+    }
+
+    /// Exactly one arm reads target labels, and the predicate reporting paths
+    /// consult agrees with it.
+    #[test]
+    fn exactly_one_arm_declares_that_it_uses_target_labels() {
+        let label_users = super::TransferArm::ALL
+            .iter()
+            .filter(|arm| arm.uses_target_labels())
+            .count();
+
+        assert_eq!(label_users, 1);
+        assert!(super::TransferArm::OracleRestandardized.uses_target_labels());
+        assert!(!super::TransferArm::SourceStandardized.restandardizes_features());
+        assert!(super::TransferArm::FeatureRestandardized.restandardizes_features());
+    }
+
+    /// The 12 ordered pairs of Section 15: every ordered pair of distinct
+    /// families, no self-pairs, no duplicates.
+    #[test]
+    fn ordered_transfer_pairs_cover_all_twelve_without_self_pairs() {
+        let pairs = super::ordered_transfer_pairs();
+
+        assert_eq!(pairs.len(), 12);
+        assert!(pairs.iter().all(|(source, target)| source != target));
+
+        let mut seen = pairs.clone();
+        seen.sort_by_key(|(source, target)| (source.index(), target.index()));
+        seen.dedup();
+        assert_eq!(seen.len(), 12);
+
+        assert!(pairs.contains(&super::CONFIRMATORY_TRANSFER_PAIR));
+    }
+
+    /// Each ordered pair gets its own bootstrap stream (Section 10).
+    #[test]
+    fn transfer_pair_bootstrap_seeds_are_pairwise_distinct() {
+        let mut seeds = super::ordered_transfer_pairs()
+            .into_iter()
+            .map(|(source, target)| super::transfer_pair_bootstrap_seed(source, target))
+            .collect::<Vec<_>>();
+
+        let total = seeds.len();
+        seeds.sort_unstable();
+        seeds.dedup();
+
+        assert_eq!(seeds.len(), total, "pair bootstrap seeds must not collide");
+    }
 }
