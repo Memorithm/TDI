@@ -2957,7 +2957,10 @@ impl TransferArm {
 
     /// Whether this arm replaces the feature means and scales.
     const fn restandardizes_features(self) -> bool {
-        matches!(self, Self::FeatureRestandardized | Self::OracleRestandardized)
+        matches!(
+            self,
+            Self::FeatureRestandardized | Self::OracleRestandardized
+        )
     }
 }
 
@@ -2976,7 +2979,7 @@ fn restandardize_aggregate_fit(
     target_training_records: [&[Record]; SEED_BLOCK_COUNT],
     arm: TransferArm,
 ) -> Result<AggregateModelFit, String> {
-    if arm == TransferArm::SourceStandardized {
+    if !arm.restandardizes_features() {
         return Ok(source_fit.clone());
     }
 
@@ -3794,6 +3797,32 @@ fn aggregate_paired_bootstrap(
     // from every other family's (Section 9).
     let family = seed_blocks[0].family;
 
+    aggregate_paired_bootstrap_with_seed(
+        horizon_index,
+        blocks,
+        family_aggregate_bootstrap_seed(family),
+    )
+}
+
+/// The paired-bootstrap core with an explicit stream seed.
+///
+/// TDI-6.6D runs 12 ordered transfer pairs; keying the stream on the source
+/// family alone (which is all `aggregate_paired_bootstrap` can infer from the
+/// block identities) would give every pair sharing a source the same resampling
+/// pattern. Pair comparisons pass `transfer_pair_bootstrap_seed` instead.
+fn aggregate_paired_bootstrap_with_seed(
+    horizon_index: usize,
+    blocks: &[BlockComparisonInputs<'_>],
+    seed: u64,
+) -> Result<Tdi52BootstrapIntervals, String> {
+    let seed_blocks = blocks
+        .iter()
+        .map(|block| block.seed_block)
+        .collect::<Vec<_>>();
+
+    validate_frozen_block_order(&seed_blocks)
+        .map_err(|error| format!("aggregate bootstrap {error}"))?;
+
     for block in blocks {
         let count = block.records.len();
 
@@ -3807,7 +3836,7 @@ fn aggregate_paired_bootstrap(
         }
     }
 
-    let mut generator = DeterministicRng::new(family_aggregate_bootstrap_seed(family));
+    let mut generator = DeterministicRng::new(seed);
 
     let mut standardized_mse = Vec::with_capacity(BOOTSTRAP_REPLICATES);
     let mut reconstructed_mse = Vec::with_capacity(BOOTSTRAP_REPLICATES);
@@ -4476,78 +4505,236 @@ fn evaluate_horizon_comparison(
     })
 }
 
+/// Compares **two arms on the same layout**, which is the shape TDI-6.6A needs
+/// and the inherited layout-vs-layout comparison cannot express.
+///
+/// # Well-posedness
+///
+/// Refuses unless both fits carry **identical** target scalers on every block.
+/// That is the precondition of preregistration Section 14.1: a relative-MSE
+/// comparison between arms whose ground truth is standardized differently would
+/// measure the ratio of two scaler variances rather than any property of the
+/// models. A0 and A1 both keep the source scaler and pass; any comparison
+/// involving A2 fails here rather than silently producing a meaningless number.
+fn evaluate_cross_arm_comparison(
+    horizon_index: usize,
+    layout: FeatureLayout,
+    baseline_fit: &AggregateModelFit,
+    challenger_fit: &AggregateModelFit,
+    target_holdouts: [&[Record]; SEED_BLOCK_COUNT],
+    bootstrap_seed: u64,
+) -> Result<HorizonComparison, String> {
+    let baseline_blocks =
+        evaluate_arm_blocks(baseline_fit, target_holdouts, horizon_index, layout)?;
+    let challenger_blocks =
+        evaluate_arm_blocks(challenger_fit, target_holdouts, horizon_index, layout)?;
+
+    let mut blocks = Vec::with_capacity(SEED_BLOCK_COUNT);
+
+    for (baseline, challenger) in baseline_blocks.iter().zip(&challenger_blocks) {
+        if baseline.scaler != challenger.scaler {
+            return Err(format!(
+                "cross-arm comparison on block {} would compare errors standardized by \
+                 different target scalers, which measures scaler variance rather than model \
+                 quality (Section 14.1)",
+                baseline.seed_block.label()
+            ));
+        }
+
+        blocks.push(BlockComparison {
+            seed_block: baseline.seed_block,
+            standardized_targets: baseline.standardized_targets.clone(),
+            overlap_targets: baseline.overlap_targets.clone(),
+            baseline: baseline.evaluation.clone(),
+            challenger: challenger.evaluation.clone(),
+            bootstrap: tdi52_paired_bootstrap(
+                baseline.seed_block,
+                target_holdouts[usize::from(baseline.seed_block.block)],
+                horizon_index,
+                baseline.scaler,
+                &baseline.evaluation.predictions,
+                &challenger.evaluation.predictions,
+            )?,
+        });
+    }
+
+    let (aggregate_baseline_standardized, aggregate_challenger_standardized) =
+        pooled_standardized_metrics(&blocks);
+
+    let (aggregate_baseline_reconstructed, aggregate_challenger_reconstructed) =
+        pooled_reconstructed_metrics(&blocks);
+
+    // The scaler is taken from the baseline arm's per-block evaluation; the
+    // equality check above guarantees the challenger's is the same value.
+    let bootstrap_inputs = blocks
+        .iter()
+        .zip(target_holdouts)
+        .zip(&baseline_blocks)
+        .map(|((comparison, records), baseline)| BlockComparisonInputs {
+            seed_block: comparison.seed_block,
+            records,
+            scaler: baseline.scaler,
+            baseline: &comparison.baseline.predictions,
+            challenger: &comparison.challenger.predictions,
+        })
+        .collect::<Vec<_>>();
+
+    let aggregate_bootstrap =
+        aggregate_paired_bootstrap_with_seed(horizon_index, &bootstrap_inputs, bootstrap_seed)?;
+
+    let comparison = AggregateComparison {
+        blocks,
+        aggregate_baseline_standardized,
+        aggregate_challenger_standardized,
+        aggregate_baseline_reconstructed,
+        aggregate_challenger_reconstructed,
+        aggregate_bootstrap,
+    };
+
+    let result = evaluate_criterion_c(&comparison);
+
+    let aggregate_relative_reduction = tdi52_relative_reduction(
+        comparison.aggregate_baseline_standardized.mse,
+        comparison.aggregate_challenger_standardized.mse,
+    );
+
+    Ok(HorizonComparison {
+        horizon: TARGET_HORIZONS[horizon_index],
+        comparison,
+        result,
+        aggregate_relative_reduction,
+    })
+}
+
 /// Number of descriptors summarised by TDI-6.5D: the four exact descriptors
 /// delta, delta_bar, s2, s3 and the two literal spectral descriptors g, τ_ε.
 const DESCRIPTOR_MEAN_COUNT: usize =
     CONTRACTION_FEATURE_COUNT + SPECTRAL_FEATURE_COUNT + LITERAL_SPECTRAL_FEATURE_COUNT;
 
-/// One generator family's GKT-vs-GK result at the focal horizons (Section 17),
-/// the descriptive GK-vs-SK focal diagnostic (Section 19, TDI-6.5D), plus the
-/// descriptor holdout means used by TDI-6.5D.
+/// One generator family's populations, its fitted models, and its descriptor
+/// holdout means.
+///
+/// TDI-6.6 carries **no** within-family comparison: every criterion is about
+/// transfer between families (Sections 12-15), so TDI-6.5's per-family
+/// GKT-vs-GK grid and GK-vs-SK focal diagnostic are not computed here. A family
+/// exists in this experiment to be a transfer source (`aggregate_fit`), a
+/// transfer target (`blocks`, supplying both the re-standardization statistics
+/// and the scored holdouts), and a row of the drift table (`descriptor_means`).
 #[derive(Clone, Debug)]
 struct FamilyReport {
     family: GeneratorFamily,
     blocks: Vec<BlockPopulations>,
     aggregate_fit: AggregateModelFit,
-    /// GKT-vs-GK comparison at every grid horizon H = {3..8} (TARGET_HORIZONS
-    /// order). The prereg reports per-family per-horizon reductions across the
-    /// grid (Sections 16, 21); the focal horizons U3/U6 that drive criteria
-    /// 6.5A/6.5B are the entries at `focal_horizon_indices()`.
-    grid: Vec<HorizonComparison>,
-    /// The descriptive GK-vs-SK comparison at the two focal horizons (the
-    /// per-family analogue of TDI-6.1B, reported under criterion 6.5D): the
-    /// marginal value of the literal spectral descriptors g, τ_ε in this family.
-    gk_vs_sk_focal: [HorizonComparison; FOCAL_HORIZON_COUNT],
     /// Holdout means of [delta, delta_bar, s2, s3, g, τ_ε] on this family's
-    /// holdout.
+    /// holdout (Section 17, context only).
     descriptor_means: [f64; DESCRIPTOR_MEAN_COUNT],
 }
 
-/// Criterion TDI-6.5A (Section 17): per-family GKT-vs-GK focal classifications
-/// and the replication verdict — Beneficial at U3 and U6 for every family.
-/// `non_replications` names each (family, horizon) that is not Beneficial (the
-/// located non-replication).
+/// The two layouts every transfer cell is evaluated under (Section 6). GK is
+/// carried alongside GKT so that any re-standardization effect can be attributed
+/// to the alignment rather than to the overlaps (Section 12).
+const TRANSFER_LAYOUTS: [FeatureLayout; 2] = [FeatureLayout::Gk, FeatureLayout::Gkt];
+
+/// One arm's evaluation of one (ordered pair, layout, focal horizon).
+///
+/// `standardized` and `reconstructed` are pooled across the three seed blocks.
+/// Only the scale-free members — `r_squared_interval`, `calibration_repaired`,
+/// and the Spearman and calibration slope inside `standardized` — may be
+/// compared across arms; `mse` and `mae` may not, because A2 standardizes its
+/// ground truth with a different scaler (Section 14.1).
 #[derive(Clone, Debug)]
-struct Tdi65CriterionA {
-    per_family_focal: Vec<(
-        GeneratorFamily,
-        [CriterionCClassification; FOCAL_HORIZON_COUNT],
-    )>,
-    replicated: bool,
-    non_replications: Vec<(GeneratorFamily, usize)>,
+struct ArmEvaluation {
+    arm: TransferArm,
+    standardized: Metrics,
+    reconstructed: Metrics,
+    r_squared_interval: ConfidenceInterval,
+    /// Criterion TDI-6.6B (Section 13): the transferred model beats predicting
+    /// the target's mean.
+    calibration_repaired: bool,
 }
 
-/// One focal horizon's across-family effect-size heterogeneity (Section 18).
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct FocalHeterogeneity {
-    horizon: usize,
-    minimum: f64,
-    maximum: f64,
-    range: f64,
-    all_exceed_margin: bool,
+/// One ordered transfer pair at one layout and one focal horizon.
+#[derive(Clone, Debug)]
+struct TransferCell {
+    layout: FeatureLayout,
+    /// One entry per `TransferArm::ALL`, in that order.
+    arms: Vec<ArmEvaluation>,
+    /// A1 against A0 — the **only** relative-MSE comparison the design admits,
+    /// because those two arms share the source target scaler (Section 14.1).
+    a1_vs_a0: HorizonComparison,
 }
 
-/// Criterion TDI-6.5B (Section 18): the across-family spread of the GKT-vs-GK
-/// aggregate relative-MSE reduction, per focal horizon. Descriptive.
-#[derive(Clone, Debug)]
-struct Tdi65CriterionB {
-    per_focal: Vec<FocalHeterogeneity>,
+impl TransferCell {
+    /// Read from the comparison rather than stored alongside it, so a cell
+    /// cannot claim one horizon while its comparison holds another.
+    fn horizon(&self) -> usize {
+        self.a1_vs_a0.horizon
+    }
+
+    fn arm(&self, arm: TransferArm) -> &ArmEvaluation {
+        self.arms
+            .iter()
+            .find(|entry| entry.arm == arm)
+            .expect("every transfer cell holds one evaluation per arm")
+    }
 }
 
-/// Criterion TDI-6.5C (Section 19, descriptive): GKT-vs-GK transfer from F0's
-/// fitted models to F1's holdout at the focal horizons.
+/// One ordered pair `source → target`: every (layout, focal horizon) cell.
 #[derive(Clone, Debug)]
-struct Tdi65CriterionC {
-    transfer_focal: Vec<HorizonComparison>,
-    focal_classifications: [CriterionCClassification; FOCAL_HORIZON_COUNT],
+struct TransferPairReport {
+    source: GeneratorFamily,
+    target: GeneratorFamily,
+    cells: Vec<TransferCell>,
 }
 
-/// Criterion TDI-6.5D (Section 19, descriptive): per-family descriptor holdout
-/// means [delta, delta_bar, s2, s3, g, τ_ε] and their across-family range,
-/// together with each family's descriptive GK-vs-SK focal reduction (held on the
-/// `FamilyReport`).
+impl TransferPairReport {
+    fn cell(&self, layout: FeatureLayout, horizon: usize) -> &TransferCell {
+        self.cells
+            .iter()
+            .find(|cell| cell.layout == layout && cell.horizon() == horizon)
+            .expect("every pair report holds one cell per layout and focal horizon")
+    }
+}
+
+/// Criterion TDI-6.6A (Section 12, primary): on the F0→F1 pair, the A1-vs-A0
+/// classification per layout and focal horizon.
 #[derive(Clone, Debug)]
-struct Tdi65CriterionD {
+struct Tdi66CriterionA {
+    per_cell: Vec<(FeatureLayout, usize, CriterionCClassification, f64)>,
+}
+
+/// Criterion TDI-6.6B (Section 13, primary): `calibration_repaired` on the
+/// F0→F1 pair. `repaired` is the preregistered conjunction — true iff the
+/// **A1/GKT** cell has `R² > 0` at **both** focal horizons; `non_repairs` names
+/// each (layout, horizon) still at or below zero under A1 (the located
+/// non-repair).
+#[derive(Clone, Debug)]
+struct Tdi66CriterionB {
+    repaired: bool,
+    non_repairs: Vec<(FeatureLayout, usize)>,
+}
+
+/// Criterion TDI-6.6C (Section 14, descriptive): the oracle arm's scale-free
+/// summary on the F0→F1 pair, and the localization it supports.
+#[derive(Clone, Debug)]
+struct Tdi66CriterionC {
+    /// `(layout, horizon, A1 repaired, A2 repaired)`.
+    per_cell: Vec<(FeatureLayout, usize, bool, bool)>,
+    /// True iff some cell has A2 repaired while A1 is not — the residual failure
+    /// is then in the target scale, which no label-free procedure can reach.
+    residual_failure_in_target_scale: bool,
+}
+
+/// Criterion TDI-6.6D (Section 15, descriptive): all 12 ordered pairs, the
+/// consistency of the A1-vs-A0 direction across them, and the per-family
+/// descriptor drift table of Section 17.
+#[derive(Clone, Debug)]
+struct Tdi66CriterionD {
+    pairs: Vec<TransferPairReport>,
+    /// True iff the A1-vs-A0 classification is identical in every pair at the
+    /// GKT layout and both focal horizons.
+    direction_consistent: bool,
+    divergent_pairs: Vec<(GeneratorFamily, GeneratorFamily, FeatureLayout, usize)>,
     per_family_means: Vec<(GeneratorFamily, [f64; DESCRIPTOR_MEAN_COUNT])>,
     ranges: [f64; DESCRIPTOR_MEAN_COUNT],
 }
@@ -4577,27 +4764,6 @@ fn family_descriptor_means(blocks: &[BlockPopulations]) -> [f64; DESCRIPTOR_MEAN
     sums.map(|sum| sum / count as f64)
 }
 
-#[derive(Clone, Debug)]
-struct Tdi65ExperimentReport {
-    families: Vec<FamilyReport>,
-    criterion_a: Tdi65CriterionA,
-    criterion_b: Tdi65CriterionB,
-    criterion_c: Tdi65CriterionC,
-    criterion_d: Tdi65CriterionD,
-}
-
-/// Runs the full TDI-6.5 pipeline (generation of the width-3/width-4
-/// populations across the per-family seed blocks, per-block ridge fitting on
-/// the contraction- and spectral-inclusive design, aggregation, and the
-/// TDI-6.5
-/// criteria) over an arbitrary set of population specifications. Callers
-/// control scale entirely through `population_specs`: the preregistered
-/// `population_specs()` output requests the real 120,000-record run, while
-/// tests and the termination smoke path pass tiny synthetic-scale specs
-/// instead. This function is called with the real specs only from
-/// `run_full_experiment`'s `--full` path, and only after that path's exact
-/// confirmation-token check has passed; tests and the termination smoke
-/// path never reach that branch.
 fn run_family_pipeline(
     family: GeneratorFamily,
     population_specs: &[PopulationSpec],
@@ -4629,173 +4795,288 @@ fn run_family_pipeline(
     })?;
 
     let aggregate_fit = AggregateModelFit::assemble(block_fits)?;
-
-    let combined_holdouts = blocks
-        .iter()
-        .map(BlockPopulations::combined_holdout)
-        .collect::<Vec<_>>();
-
-    let combined_holdout_refs: [&[Record]; SEED_BLOCK_COUNT] =
-        std::array::from_fn(|index| combined_holdouts[index].as_slice());
-
-    // GKT (challenger) vs GK (baseline) at EVERY grid horizon H = {3..8}: the
-    // per-family per-horizon reductions the prereg reports (Sections 16, 21).
-    // The focal horizons U3/U6 that drive criteria 6.5A/6.5B are the grid
-    // entries at focal_horizon_indices().
-    let mut grid = Vec::with_capacity(TARGET_HORIZON_COUNT);
-    for horizon_index in 0..TARGET_HORIZON_COUNT {
-        grid.push(evaluate_horizon_comparison(
-            horizon_index,
-            &aggregate_fit,
-            combined_holdout_refs,
-            FeatureLayout::Gk,
-            FeatureLayout::Gkt,
-        )?);
-    }
-
-    // Descriptive GK-vs-SK diagnostic at the two focal horizons only (the
-    // per-family analogue of TDI-6.1B, reported under criterion 6.5D): the
-    // marginal value of the literal spectral descriptors g, τ_ε in this family.
-    let focal_indices = focal_horizon_indices();
-    let gk_vs_sk_list = focal_indices
-        .iter()
-        .map(|&horizon_index| {
-            evaluate_horizon_comparison(
-                horizon_index,
-                &aggregate_fit,
-                combined_holdout_refs,
-                FeatureLayout::Sk,
-                FeatureLayout::Gk,
-            )
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let gk_vs_sk_focal: [HorizonComparison; FOCAL_HORIZON_COUNT] =
-        gk_vs_sk_list.try_into().map_err(|_| {
-            format!(
-                "family {}: expected exactly {FOCAL_HORIZON_COUNT} GK-vs-SK focal comparisons",
-                family.label()
-            )
-        })?;
-
     let descriptor_means = family_descriptor_means(&blocks);
 
     Ok(FamilyReport {
         family,
         blocks,
         aggregate_fit,
-        grid,
-        gk_vs_sk_focal,
         descriptor_means,
     })
 }
 
-/// Runs the full TDI-6.5 pipeline: the inherited per-generator sub-pipeline
-/// (generate 3 blocks, fit, aggregate, GKT-vs-GK at the focal horizons plus the
-/// descriptive GK-vs-SK focal diagnostic) once per generator family F0..F3, then
-/// assembles the four cross-family criteria (Sections 17-19). Callers control
-/// scale entirely through `population_specs`; the real 480,000-record run is
-/// reached only from `run_full_experiment`'s confirmed `--full` path.
-fn run_tdi65_pipeline(
-    population_specs: &[PopulationSpec],
-) -> Result<Tdi65ExperimentReport, String> {
-    validate_seed_reservations(population_specs)?;
+impl FamilyReport {
+    /// This family's per-block combined holdouts — the records a transfer is
+    /// scored on.
+    fn combined_holdouts(&self) -> Vec<Vec<Record>> {
+        self.blocks
+            .iter()
+            .map(BlockPopulations::combined_holdout)
+            .collect()
+    }
 
+    /// This family's per-block combined **training** populations — the source of
+    /// the re-standardization statistics when it is a transfer *target*
+    /// (Section 4.2). Deliberately not the holdout.
+    fn combined_trainings(&self) -> Vec<Vec<Record>> {
+        self.blocks
+            .iter()
+            .map(BlockPopulations::combined_training)
+            .collect()
+    }
+}
+
+#[derive(Clone, Debug)]
+struct Tdi66ExperimentReport {
+    families: Vec<FamilyReport>,
+    criterion_a: Tdi66CriterionA,
+    criterion_b: Tdi66CriterionB,
+    criterion_c: Tdi66CriterionC,
+    criterion_d: Tdi66CriterionD,
+}
+
+/// The confirmatory transfer pair of Sections 12-14: F0-base's fitted models
+/// evaluated on F1-sparse's holdouts, inherited from TDI-6.5C.
+const CONFIRMATORY_TRANSFER_PAIR: (GeneratorFamily, GeneratorFamily) =
+    (GeneratorFamily::F0Base, GeneratorFamily::F1Sparse);
+
+/// Every ordered pair of distinct families, in frozen order (Section 15).
+fn ordered_transfer_pairs() -> Vec<(GeneratorFamily, GeneratorFamily)> {
+    let mut pairs = Vec::with_capacity(GENERATOR_FAMILY_COUNT * (GENERATOR_FAMILY_COUNT - 1));
+
+    for source in GeneratorFamily::ALL {
+        for target in GeneratorFamily::ALL {
+            if source != target {
+                pairs.push((source, target));
+            }
+        }
+    }
+
+    pairs
+}
+
+/// Evaluates one ordered transfer pair under all three arms, at both layouts and
+/// both focal horizons.
+fn evaluate_transfer_pair(
+    source: &FamilyReport,
+    target: &FamilyReport,
+) -> Result<TransferPairReport, String> {
+    let target_holdouts = target.combined_holdouts();
+    let target_holdout_refs: [&[Record]; SEED_BLOCK_COUNT] =
+        std::array::from_fn(|index| target_holdouts[index].as_slice());
+
+    // Section 4.2: the re-standardization statistics come from the target's
+    // TRAINING populations, never from the holdouts scored just above.
+    let target_trainings = target.combined_trainings();
+    let target_training_refs: [&[Record]; SEED_BLOCK_COUNT] =
+        std::array::from_fn(|index| target_trainings[index].as_slice());
+
+    let bootstrap_seed = transfer_pair_bootstrap_seed(source.family, target.family);
+
+    // One re-standardized fit per arm, derived once and reused across layouts
+    // and horizons.
+    let mut arm_fits = Vec::with_capacity(TransferArm::ALL.len());
+
+    for arm in TransferArm::ALL {
+        arm_fits.push((
+            arm,
+            restandardize_aggregate_fit(&source.aggregate_fit, target_training_refs, arm)?,
+        ));
+    }
+
+    let focal_indices = focal_horizon_indices();
+    let mut cells = Vec::with_capacity(TRANSFER_LAYOUTS.len() * FOCAL_HORIZON_COUNT);
+
+    for layout in TRANSFER_LAYOUTS {
+        for &horizon_index in &focal_indices {
+            let mut arms = Vec::with_capacity(TransferArm::ALL.len());
+
+            for (arm, fit) in &arm_fits {
+                let blocks = evaluate_arm_blocks(fit, target_holdout_refs, horizon_index, layout)?;
+                let (standardized, reconstructed) = pooled_arm_metrics(&blocks);
+                let r_squared_interval = arm_r_squared_bootstrap(&blocks, bootstrap_seed)?;
+
+                arms.push(ArmEvaluation {
+                    arm: *arm,
+                    calibration_repaired: standardized.r_squared > 0.0,
+                    standardized,
+                    reconstructed,
+                    r_squared_interval,
+                });
+            }
+
+            let baseline_fit = &arm_fits
+                .iter()
+                .find(|(arm, _)| *arm == TransferArm::SourceStandardized)
+                .expect("arm fits always contain A0")
+                .1;
+            let challenger_fit = &arm_fits
+                .iter()
+                .find(|(arm, _)| *arm == TransferArm::FeatureRestandardized)
+                .expect("arm fits always contain A1")
+                .1;
+
+            let a1_vs_a0 = evaluate_cross_arm_comparison(
+                horizon_index,
+                layout,
+                baseline_fit,
+                challenger_fit,
+                target_holdout_refs,
+                bootstrap_seed,
+            )?;
+
+            cells.push(TransferCell {
+                layout,
+                arms,
+                a1_vs_a0,
+            });
+        }
+    }
+
+    Ok(TransferPairReport {
+        source: source.family,
+        target: target.family,
+        cells,
+    })
+}
+
+/// Runs the full TDI-6.6 pipeline: the inherited per-generator sub-pipeline
+/// (generate 3 blocks, fit, aggregate) once per family F0..F3, then every
+/// ordered transfer pair under the three arms, then the four criteria
+/// (Sections 12-15). Callers control scale entirely through `population_specs`;
+/// the real 480,000-record run is reached only from `run_full_experiment`'s
+/// confirmed `--full` path.
+fn run_tdi66_pipeline(
+    population_specs: &[PopulationSpec],
+) -> Result<Tdi66ExperimentReport, String> {
     let mut families = Vec::with_capacity(GENERATOR_FAMILY_COUNT);
+
     for family in GeneratorFamily::ALL {
         families.push(run_family_pipeline(family, population_specs)?);
     }
 
-    // TDI-6.5A — replication: GKT-vs-GK Beneficial at U3 and U6 for every family.
-    // The focal comparisons are the grid entries at focal_horizon_indices()
-    // (U3 -> grid[0], U6 -> grid[3]).
-    let focal_indices = focal_horizon_indices();
-    let mut per_family_focal = Vec::with_capacity(GENERATOR_FAMILY_COUNT);
-    let mut non_replications = Vec::new();
-    for family_report in &families {
-        let focal_classifications: [CriterionCClassification; FOCAL_HORIZON_COUNT] =
-            std::array::from_fn(|slot| {
-                family_report.grid[focal_indices[slot]]
-                    .result
-                    .classification
-            });
-
-        for (slot, &classification) in focal_classifications.iter().enumerate() {
-            if classification != CriterionCClassification::Beneficial {
-                non_replications.push((family_report.family, FOCAL_HORIZONS[slot]));
-            }
-        }
-
-        per_family_focal.push((family_report.family, focal_classifications));
-    }
-    let criterion_a = Tdi65CriterionA {
-        per_family_focal,
-        replicated: non_replications.is_empty(),
-        non_replications,
+    let family_report = |wanted: GeneratorFamily| -> Result<&FamilyReport, String> {
+        families
+            .iter()
+            .find(|report| report.family == wanted)
+            .ok_or_else(|| format!("missing family {} in the pipeline", wanted.label()))
     };
 
-    // TDI-6.5B — effect-size heterogeneity across families, per focal horizon.
-    let mut per_focal = Vec::with_capacity(FOCAL_HORIZON_COUNT);
-    for (slot, &horizon) in FOCAL_HORIZONS.iter().enumerate() {
-        let reductions = families
-            .iter()
-            .map(|family_report| {
-                family_report.grid[focal_indices[slot]].aggregate_relative_reduction
-            })
-            .collect::<Vec<_>>();
+    let mut pairs = Vec::with_capacity(GENERATOR_FAMILY_COUNT * (GENERATOR_FAMILY_COUNT - 1));
 
-        let minimum = reductions.iter().copied().fold(f64::INFINITY, f64::min);
-        let maximum = reductions.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-        let all_exceed_margin = reductions
-            .iter()
-            .all(|&value| value > CriterionCResult::MARGIN);
-
-        per_focal.push(FocalHeterogeneity {
-            horizon,
-            minimum,
-            maximum,
-            range: maximum - minimum,
-            all_exceed_margin,
-        });
-    }
-    let criterion_b = Tdi65CriterionB { per_focal };
-
-    // TDI-6.5C — transfer: F0's fitted GK/GKT models evaluated on F1's holdout.
-    let source = families
-        .iter()
-        .find(|report| report.family == GeneratorFamily::F0Base)
-        .ok_or_else(|| "missing family F0 in the pipeline".to_owned())?;
-    let target = families
-        .iter()
-        .find(|report| report.family == GeneratorFamily::F1Sparse)
-        .ok_or_else(|| "missing family F1 in the pipeline".to_owned())?;
-
-    let target_holdouts = target
-        .blocks
-        .iter()
-        .map(BlockPopulations::combined_holdout)
-        .collect::<Vec<_>>();
-    let target_holdout_refs: [&[Record]; SEED_BLOCK_COUNT] =
-        std::array::from_fn(|index| target_holdouts[index].as_slice());
-
-    let focal_indices = focal_horizon_indices();
-    let mut transfer_focal = Vec::with_capacity(FOCAL_HORIZON_COUNT);
-    for &horizon_index in &focal_indices {
-        transfer_focal.push(evaluate_horizon_comparison(
-            horizon_index,
-            &source.aggregate_fit,
-            target_holdout_refs,
-            FeatureLayout::Gk,
-            FeatureLayout::Gkt,
+    for (source, target) in ordered_transfer_pairs() {
+        pairs.push(evaluate_transfer_pair(
+            family_report(source)?,
+            family_report(target)?,
         )?);
     }
-    let criterion_c = Tdi65CriterionC {
-        focal_classifications: std::array::from_fn(|slot| {
-            transfer_focal[slot].result.classification
-        }),
-        transfer_focal,
+
+    let (confirmatory_source, confirmatory_target) = CONFIRMATORY_TRANSFER_PAIR;
+    let confirmatory = pairs
+        .iter()
+        .find(|pair| pair.source == confirmatory_source && pair.target == confirmatory_target)
+        .ok_or_else(|| "missing the confirmatory transfer pair in the pipeline".to_owned())?;
+
+    let focal_horizons = FOCAL_HORIZONS;
+
+    // TDI-6.6A — A1 versus A0 on the confirmatory pair (Section 12).
+    let mut per_cell = Vec::with_capacity(TRANSFER_LAYOUTS.len() * FOCAL_HORIZON_COUNT);
+
+    for layout in TRANSFER_LAYOUTS {
+        for horizon in focal_horizons {
+            let cell = confirmatory.cell(layout, horizon);
+
+            per_cell.push((
+                layout,
+                horizon,
+                cell.a1_vs_a0.result.classification,
+                cell.a1_vs_a0.aggregate_relative_reduction,
+            ));
+        }
+    }
+
+    let criterion_a = Tdi66CriterionA { per_cell };
+
+    // TDI-6.6B — is calibration repaired under A1? The preregistered conjunction
+    // is over the GKT layout at both focal horizons; other cells are reported as
+    // located non-repairs but do not gate the verdict.
+    let mut non_repairs = Vec::new();
+
+    for layout in TRANSFER_LAYOUTS {
+        for horizon in focal_horizons {
+            let repaired = confirmatory
+                .cell(layout, horizon)
+                .arm(TransferArm::FeatureRestandardized)
+                .calibration_repaired;
+
+            if !repaired {
+                non_repairs.push((layout, horizon));
+            }
+        }
+    }
+
+    let repaired = focal_horizons.iter().all(|&horizon| {
+        confirmatory
+            .cell(FeatureLayout::Gkt, horizon)
+            .arm(TransferArm::FeatureRestandardized)
+            .calibration_repaired
+    });
+
+    let criterion_b = Tdi66CriterionB {
+        repaired,
+        non_repairs,
     };
 
-    // TDI-6.5D — descriptor drift: per-family holdout means and their range.
+    // TDI-6.6C — the oracle arm, and the localization it supports (Section 14).
+    let mut oracle_cells = Vec::with_capacity(TRANSFER_LAYOUTS.len() * FOCAL_HORIZON_COUNT);
+    let mut residual_failure_in_target_scale = false;
+
+    for layout in TRANSFER_LAYOUTS {
+        for horizon in focal_horizons {
+            let cell = confirmatory.cell(layout, horizon);
+            let a1 = cell
+                .arm(TransferArm::FeatureRestandardized)
+                .calibration_repaired;
+            let a2 = cell
+                .arm(TransferArm::OracleRestandardized)
+                .calibration_repaired;
+
+            if a2 && !a1 {
+                residual_failure_in_target_scale = true;
+            }
+
+            oracle_cells.push((layout, horizon, a1, a2));
+        }
+    }
+
+    let criterion_c = Tdi66CriterionC {
+        per_cell: oracle_cells,
+        residual_failure_in_target_scale,
+    };
+
+    // TDI-6.6D — every ordered pair, direction consistency, descriptor drift.
+    let reference = confirmatory
+        .cell(FeatureLayout::Gkt, focal_horizons[0])
+        .a1_vs_a0
+        .result
+        .classification;
+
+    let mut divergent_pairs = Vec::new();
+
+    for pair in &pairs {
+        for horizon in focal_horizons {
+            let classification = pair
+                .cell(FeatureLayout::Gkt, horizon)
+                .a1_vs_a0
+                .result
+                .classification;
+
+            if classification != reference {
+                divergent_pairs.push((pair.source, pair.target, FeatureLayout::Gkt, horizon));
+            }
+        }
+    }
+
     let per_family_means = families
         .iter()
         .map(|report| (report.family, report.descriptor_means))
@@ -4811,12 +5092,16 @@ fn run_tdi65_pipeline(
             .fold(f64::NEG_INFINITY, f64::max);
         maximum - minimum
     });
-    let criterion_d = Tdi65CriterionD {
+
+    let criterion_d = Tdi66CriterionD {
+        direction_consistent: divergent_pairs.is_empty(),
+        divergent_pairs,
+        pairs,
         per_family_means,
         ranges,
     };
 
-    Ok(Tdi65ExperimentReport {
+    Ok(Tdi66ExperimentReport {
         families,
         criterion_a,
         criterion_b,
@@ -5309,147 +5594,181 @@ fn print_tdi52_aggregate_comparison(label: &str, horizon: usize, comparison: &Ag
     );
 }
 
-/// TDI-6.5 Section 21: every block-level and aggregate-level sub-condition of
-/// each family's per-horizon GKT-vs-GK classification, the per-family focal
-/// GK-vs-SK diagnostic and the F0→F1 transfer classification, plus the four
-/// criterion summaries (A replication, B heterogeneity, C transfer, D descriptor
-/// drift), printed via `Debug` so the output can never silently drift from the
-/// named fields it reflects.
-fn print_tdi52_criteria_conditions(report: &Tdi65ExperimentReport) {
+/// Per-criterion block-level and aggregate conditions (Section 19).
+fn print_tdi66_criteria_conditions(report: &Tdi66ExperimentReport) {
     println!();
-    println!("=== CONDITIONS PAR CRITÈRE — niveau bloc et agrégat (Section 21) ===");
+    println!("=== CONDITIONS PAR CRITÈRE — niveau bloc et agrégat (Section 19) ===");
 
-    // TDI-6.5A/B — per-family GKT-vs-GK at every grid horizon H = {3..8}. The
-    // criteria classify at the focal U3/U6; all horizons are reported (§16/§21).
-    for family_report in &report.families {
-        for comparison in &family_report.grid {
-            println!();
-            println!(
-                "TDI-6.5 (grille) — GKT vs GK — famille {} à U_{} : {:#?}",
-                family_report.family.label(),
-                comparison.horizon,
-                comparison.result
-            );
-        }
-    }
+    let (source, target) = CONFIRMATORY_TRANSFER_PAIR;
+    println!();
+    println!(
+        "paire confirmatoire : {} → {} (Sections 12-14)",
+        source.label(),
+        target.label()
+    );
 
-    // TDI-6.5D — per-family GK-vs-SK diagnostic at each focal horizon.
-    for family_report in &report.families {
-        for comparison in &family_report.gk_vs_sk_focal {
-            println!();
-            println!(
-                "TDI-6.5D — GK vs SK — famille {} à U_{} : {:#?}",
-                family_report.family.label(),
-                comparison.horizon,
-                comparison.result
-            );
-        }
-    }
-
-    // TDI-6.5C — transfer F0 → F1 GKT-vs-GK at each focal horizon.
-    for comparison in &report.criterion_c.transfer_focal {
+    for (layout, horizon, classification, reduction) in &report.criterion_a.per_cell {
         println!();
         println!(
-            "TDI-6.5C — transfert F0→F1 — GKT vs GK à U_{} : {:#?}",
-            comparison.horizon, comparison.result
+            "TDI-6.6A — {} — A1 contre A0 à U_{horizon} : réduction relative MSE = {reduction:.6} \
+             | {classification:#?}",
+            layout.label()
         );
     }
 
-    println!();
-    println!("TDI-6.5A (réplication) : {:#?}", report.criterion_a);
-    println!();
-    println!("TDI-6.5B (hétérogénéité) : {:#?}", report.criterion_b);
-    println!();
-    println!("TDI-6.5C (transfert F0→F1) : {:#?}", report.criterion_c);
-    println!();
-    println!(
-        "TDI-6.5D (dérive des descripteurs) : {:#?}",
-        report.criterion_d
-    );
-}
-
-/// TDI-6.5 Section 21: the TDI-6.5A per-family focal classifications and
-/// replication verdict, the TDI-6.5B across-family heterogeneity summary, the
-/// TDI-6.5C F0→F1 transfer classification, and the TDI-6.5D descriptor-drift
-/// table (six descriptors + the per-family GK-vs-SK focal reduction). All are
-/// preregistered classifications / descriptive summaries; none is forced to a
-/// positive result and none is a pass/fail gate.
-fn print_tdi52_final_verdicts(report: &Tdi65ExperimentReport) {
-    println!();
-    println!("=== VERDICTS FINAUX (Section 21) ===");
-
-    // TDI-6.5A — per-family GKT-vs-GK focal classifications + replication verdict.
-    for (family, classifications) in &report.criterion_a.per_family_focal {
-        for (slot, &horizon) in FOCAL_HORIZONS.iter().enumerate() {
+    for pair in &report.criterion_d.pairs {
+        for cell in &pair.cells {
+            println!();
             println!(
-                "TDI-6.5A — GKT vs GK — famille {} à U{horizon} : {}",
-                family.label(),
-                classifications[slot].label()
+                "--- {} → {} — {} — U_{} ---",
+                pair.source.label(),
+                pair.target.label(),
+                cell.layout.label(),
+                cell.horizon()
+            );
+
+            for arm in &cell.arms {
+                let oracle = if arm.arm.uses_target_labels() {
+                    "  [oracle — utilise les étiquettes du domaine cible, PAS une méthode de \
+                     prédiction]"
+                } else {
+                    ""
+                };
+
+                println!("  bras {}{oracle}", arm.arm.label());
+                println!(
+                    "    R² (U standardisé)     : {:.12}  IC 95 % [{:.9}, {:.9}] (médiane {:.9})",
+                    arm.standardized.r_squared,
+                    arm.r_squared_interval.lower,
+                    arm.r_squared_interval.median,
+                    arm.r_squared_interval.upper
+                );
+                println!(
+                    "    calibration_repaired   : {} (R² > 0)",
+                    arm.calibration_repaired
+                );
+                println!(
+                    "    Spearman               : {:.12}",
+                    arm.standardized.spearman
+                );
+                println!(
+                    "    pente de calibration   : {:.12}",
+                    arm.standardized.calibration_slope
+                );
+                println!(
+                    "    R² (O reconstruit)     : {:.12}",
+                    arm.reconstructed.r_squared
+                );
+                println!(
+                    "    MSE / MAE              : {:.12} / {:.12}  [NON comparables entre bras — \
+                     Section 14.1]",
+                    arm.standardized.mse, arm.standardized.mae
+                );
+            }
+
+            println!(
+                "  A1 contre A0 (seule comparaison MSE bien posée) : réduction relative = \
+                 {:.6} | {:#?}",
+                cell.a1_vs_a0.aggregate_relative_reduction, cell.a1_vs_a0.result
             );
         }
     }
+}
+
+/// Final verdict lines for TDI-6.6A, 6.6B, 6.6C and 6.6D (Section 19).
+fn print_tdi66_final_verdicts(report: &Tdi66ExperimentReport) {
+    println!();
+    println!("=== VERDICTS FINAUX (Section 19) ===");
+
+    let (source, target) = CONFIRMATORY_TRANSFER_PAIR;
+    let pair_label = format!("{} → {}", source.label(), target.label());
+
+    for (layout, horizon, classification, reduction) in &report.criterion_a.per_cell {
+        println!(
+            "TDI-6.6A — {pair_label} — {} à U{horizon} — A1 contre A0 : réduction relative MSE = \
+             {reduction:.6}, classification = {}",
+            layout.label(),
+            classification.label()
+        );
+    }
+
     println!(
-        "TDI-6.5A — réplication (bénéfique à U3 et U6 pour les 4 familles) : {}",
-        if report.criterion_a.replicated {
+        "TDI-6.6B — calibration réparée (A1, GKT, aux deux horizons focaux) : {}",
+        if report.criterion_b.repaired {
             "oui"
         } else {
             "non"
         }
     );
-    for (family, horizon) in &report.criterion_a.non_replications {
-        println!(
-            "TDI-6.5A — non-réplication localisée : famille {} à U{horizon}",
-            family.label()
-        );
-    }
 
-    // TDI-6.5 (grille) — per-family per-horizon GKT-vs-GK reductions across the
-    // dense grid H = {3..8} (reported per Section 16; the confirmatory criteria
-    // classify only at the focal horizons U3/U6).
-    for family_report in &report.families {
-        for comparison in &family_report.grid {
+    if report.criterion_b.non_repairs.is_empty() {
+        println!("TDI-6.6B — non-réparations localisées : aucune");
+    } else {
+        for (layout, horizon) in &report.criterion_b.non_repairs {
             println!(
-                "TDI-6.5 (grille) — famille {} à U{} : réduction relative MSE = {:.6}, \
-                 classification = {}",
-                family_report.family.label(),
-                comparison.horizon,
-                comparison.aggregate_relative_reduction,
-                comparison.result.classification.label()
+                "TDI-6.6B — non-réparation localisée : {} à U{horizon} (R² ≤ 0 sous A1)",
+                layout.label()
             );
         }
     }
 
-    // TDI-6.5B — effect-size heterogeneity across families, per focal horizon.
-    for focal in &report.criterion_b.per_focal {
+    for (layout, horizon, a1, a2) in &report.criterion_c.per_cell {
         println!(
-            "TDI-6.5B — U{} : réduction relative min={:.6}, max={:.6}, étendue={:.6}, \
-             les 4 familles dépassent 2 % = {}",
-            focal.horizon,
-            focal.minimum,
-            focal.maximum,
-            focal.range,
-            if focal.all_exceed_margin {
-                "oui"
-            } else {
-                "non"
-            }
+            "TDI-6.6C — oracle — {} à U{horizon} : A1 réparée = {a1}, A2 réparée = {a2}",
+            layout.label()
         );
     }
 
-    // TDI-6.5C — transfer F0 → F1 classification, per focal horizon.
-    for (slot, &horizon) in FOCAL_HORIZONS.iter().enumerate() {
+    println!(
+        "TDI-6.6C — échec résiduel situé dans l'échelle de la cible (A2 répare là où A1 échoue) : \
+         {}",
+        if report.criterion_c.residual_failure_in_target_scale {
+            "oui — aucune procédure sans étiquette ne peut l'atteindre"
+        } else {
+            "non"
+        }
+    );
+
+    for pair in &report.criterion_d.pairs {
+        for horizon in FOCAL_HORIZONS {
+            let cell = pair.cell(FeatureLayout::Gkt, horizon);
+            let a1 = cell.arm(TransferArm::FeatureRestandardized);
+
+            println!(
+                "TDI-6.6D — {} → {} — GKT à U{horizon} : A1 contre A0 = {}, réduction = {:.6}, \
+                 R² sous A1 = {:.6}, calibration_repaired = {}",
+                pair.source.label(),
+                pair.target.label(),
+                cell.a1_vs_a0.result.classification.label(),
+                cell.a1_vs_a0.aggregate_relative_reduction,
+                a1.standardized.r_squared,
+                a1.calibration_repaired
+            );
+        }
+    }
+
+    println!(
+        "TDI-6.6D — direction cohérente sur les 12 paires ordonnées (GKT, deux horizons focaux) : \
+         {}",
+        if report.criterion_d.direction_consistent {
+            "oui"
+        } else {
+            "non"
+        }
+    );
+
+    for (source, target, layout, horizon) in &report.criterion_d.divergent_pairs {
         println!(
-            "TDI-6.5C — transfert F0→F1 (GKT vs GK, U{horizon}) : {}",
-            report.criterion_c.focal_classifications[slot].label()
+            "TDI-6.6D — paire divergente : {} → {} — {} à U{horizon}",
+            source.label(),
+            target.label(),
+            layout.label()
         );
     }
 
-    // TDI-6.5D — descriptor drift: per-family holdout means over the SIX
-    // descriptors and their across-family range, plus each family's descriptive
-    // GK-vs-SK focal reduction (the marginal value of g, τ_ε in that family).
     for (family, means) in &report.criterion_d.per_family_means {
         println!(
-            "TDI-6.5D — famille {} : δ={:.6}, δ̄={:.6}, s2={:.6}, s3={:.6}, g={:.6}, τ_ε={:.6}",
+            "TDI-6.6D — famille {} : δ={:.6}, δ̄={:.6}, s2={:.6}, s3={:.6}, g={:.6}, τ_ε={:.6}",
             family.label(),
             means[0],
             means[1],
@@ -5459,27 +5778,13 @@ fn print_tdi52_final_verdicts(report: &Tdi65ExperimentReport) {
             means[5]
         );
     }
+
+    let ranges = report.criterion_d.ranges;
     println!(
-        "TDI-6.5D — étendues inter-familles : δ={:.6}, δ̄={:.6}, s2={:.6}, s3={:.6}, g={:.6}, τ_ε={:.6}",
-        report.criterion_d.ranges[0],
-        report.criterion_d.ranges[1],
-        report.criterion_d.ranges[2],
-        report.criterion_d.ranges[3],
-        report.criterion_d.ranges[4],
-        report.criterion_d.ranges[5]
+        "TDI-6.6D — étendues inter-familles : δ={:.6}, δ̄={:.6}, s2={:.6}, s3={:.6}, g={:.6}, \
+         τ_ε={:.6}",
+        ranges[0], ranges[1], ranges[2], ranges[3], ranges[4], ranges[5]
     );
-    for family_report in &report.families {
-        for comparison in &family_report.gk_vs_sk_focal {
-            println!(
-                "TDI-6.5D — GK vs SK (diagnostic) — famille {} à U{} : réduction relative MSE = {:.6}, \
-                 classification = {}",
-                family_report.family.label(),
-                comparison.horizon,
-                comparison.aggregate_relative_reduction,
-                comparison.result.classification.label()
-            );
-        }
-    }
 }
 
 /// The three-method spectral cross-validation table (Section 21). For a bounded
@@ -5606,85 +5911,53 @@ fn spectral_cross_validation_samples() -> Vec<(GeneratorFamily, u8, u64, Vec<Vec
     samples
 }
 
-/// Prints the complete TDI-6.5 required raw output (Section 21) for a
-/// completed pipeline run. Purely a presentation layer over
-/// `Tdi65ExperimentReport`: it has no scale-awareness of its own, so it is
-/// exercised at tiny scale by the termination smoke path and by tests. It
-/// only ever prints the real 480,000-record run's output when called from
-/// `run_full_experiment`'s `--full` path, and only after that path's exact
-/// confirmation-token check has passed.
-fn print_tdi52_required_raw_output(report: &Tdi65ExperimentReport) {
+/// Required raw output in the frozen order of Section 19.
+fn print_tdi66_required_raw_output(report: &Tdi66ExperimentReport) {
     print_tdi52_provenance();
     print_tdi52_frozen_constants();
     print_tdi65_family_rules();
     print_tdi52_seed_block_definitions();
     print_spectral_cross_validation_table();
 
-    // Per-family population accounting (counts, rejection reasons, seeds, budgets).
     for family_report in &report.families {
         print_tdi52_population_accounting(&family_report.blocks);
     }
 
-    // CK/SK/GK/GKT model coefficients and target scalers for every family and block.
     for family_report in &report.families {
         for seed_block in frozen_block_order(family_report.family) {
             let fit = family_report.aggregate_fit.block(seed_block);
 
             println!();
             println!(
-                "### BLOC {} — normalisations et modèles (Section 21) ###",
+                "### BLOC {} — normalisations et modèles (Section 19) ###",
                 seed_block.label()
             );
             tdi52_print_models(&fit.models, &fit.target_scalers);
         }
     }
 
-    // Per-family per-horizon GKT-vs-GK comparisons across the grid H = {3..8}
-    // (metrics + bootstrap intervals); Sections 16, 21.
-    for family_report in &report.families {
-        for comparison in &family_report.grid {
+    // The A1-vs-A0 comparison for every ordered pair, layout and focal horizon:
+    // the only relative-MSE comparison the design admits (Section 14.1). The
+    // per-arm scale-free quantities are printed by the criteria-conditions
+    // section, which walks the same cells.
+    for pair in &report.criterion_d.pairs {
+        for cell in &pair.cells {
             print_tdi52_aggregate_comparison(
                 &format!(
-                    "TDI-6.5 (grille) — GKT vs GK — famille {} à U_{}",
-                    family_report.family.label(),
-                    comparison.horizon
+                    "TDI-6.6 — {} → {} — {} — A1 contre A0 à U_{}",
+                    pair.source.label(),
+                    pair.target.label(),
+                    cell.layout.label(),
+                    cell.horizon()
                 ),
-                comparison.horizon,
-                &comparison.comparison,
+                cell.horizon(),
+                &cell.a1_vs_a0.comparison,
             );
         }
     }
 
-    // TDI-6.5D per-family focal GK-vs-SK diagnostic comparisons (the marginal
-    // value of the literal spectral descriptors g, τ_ε in each family).
-    for family_report in &report.families {
-        for comparison in &family_report.gk_vs_sk_focal {
-            print_tdi52_aggregate_comparison(
-                &format!(
-                    "TDI-6.5D — GK vs SK — famille {} à U_{}",
-                    family_report.family.label(),
-                    comparison.horizon
-                ),
-                comparison.horizon,
-                &comparison.comparison,
-            );
-        }
-    }
-
-    // TDI-6.5C transfer comparisons: F0's fitted models evaluated on F1's holdout.
-    for comparison in &report.criterion_c.transfer_focal {
-        print_tdi52_aggregate_comparison(
-            &format!(
-                "TDI-6.5C — transfert F0→F1 — GKT vs GK à U_{}",
-                comparison.horizon
-            ),
-            comparison.horizon,
-            &comparison.comparison,
-        );
-    }
-
-    print_tdi52_criteria_conditions(report);
-    print_tdi52_final_verdicts(report);
+    print_tdi66_criteria_conditions(report);
+    print_tdi66_final_verdicts(report);
 }
 
 fn run_termination_smoke() -> Result<(), String> {
@@ -5916,13 +6189,14 @@ fn run_termination_smoke() -> Result<(), String> {
     });
 
     let pipeline_report =
-        run_tdi65_pipeline(&tiny_population_specs).map_err(|error| error.to_string())?;
+        run_tdi66_pipeline(&tiny_population_specs).map_err(|error| error.to_string())?;
 
     println!(
-        "identity smoke pipeline      : familles={}, 6.5A répliqué={}, 6.5C[U3]={}",
+        "identity smoke pipeline      : familles={}, paires={}, 6.6A[GK,U3]={}, 6.6B réparée={}",
         pipeline_report.families.len(),
-        pipeline_report.criterion_a.replicated,
-        pipeline_report.criterion_c.focal_classifications[0].label()
+        pipeline_report.criterion_d.pairs.len(),
+        pipeline_report.criterion_a.per_cell[0].2.label(),
+        pipeline_report.criterion_b.repaired
     );
     println!(
         "identity smoke pipeline fit  : famille {} bloc {} model count={}",
@@ -5936,7 +6210,7 @@ fn run_termination_smoke() -> Result<(), String> {
             .len()
     );
 
-    print_tdi52_required_raw_output(&pipeline_report);
+    print_tdi66_required_raw_output(&pipeline_report);
 
     println!("bounded smoke result         : PASS");
 
@@ -5945,11 +6219,11 @@ fn run_termination_smoke() -> Result<(), String> {
 
 /// Name of the environment variable that must carry the exact TDI-6.5
 /// full-run confirmation value. See TDI-6.5 preregistration Section 20.
-const TDI65_FULL_RUN_CONFIRMATION_VAR: &str = "TDI65_CONFIRM_FULL_RUN";
+const TDI65_FULL_RUN_CONFIRMATION_VAR: &str = "TDI66_CONFIRM_FULL_RUN";
 
 /// The one accepted value for `TDI65_FULL_RUN_CONFIRMATION_VAR`. Any other
 /// value, or the variable being unset, must refuse `--full`.
-const TDI65_FULL_RUN_CONFIRMATION_VALUE: &str = "I_ACCEPT_THE_TDI65_FREEZE_RULE";
+const TDI65_FULL_RUN_CONFIRMATION_VALUE: &str = "I_ACCEPT_THE_TDI66_FREEZE_RULE";
 
 /// Pure decision function: takes the confirmation value as a plain
 /// `Option<&str>` rather than reading the environment itself, so every
@@ -5957,11 +6231,11 @@ const TDI65_FULL_RUN_CONFIRMATION_VALUE: &str = "I_ACCEPT_THE_TDI65_FREEZE_RULE"
 /// unit tested directly without ever touching a real environment variable
 /// or risking the accepted branch reaching `run_full_experiment` (and,
 /// through it, the real pipeline).
-fn tdi65_full_run_confirmed(value: Option<&str>) -> bool {
+fn tdi66_full_run_confirmed(value: Option<&str>) -> bool {
     value == Some(TDI65_FULL_RUN_CONFIRMATION_VALUE)
 }
 
-fn tdi65_usage_error() -> String {
+fn tdi66_usage_error() -> String {
     format!(
         "usage: tdi-independent-overlap-ablation-v65 --termination-smoke|--preflight|--full\n\
          a bare (no-argument) invocation does not start the experiment; the \
@@ -5971,7 +6245,7 @@ fn tdi65_usage_error() -> String {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Tdi65Mode {
+enum Tdi66Mode {
     TerminationSmoke,
     Preflight,
     Full,
@@ -5980,22 +6254,22 @@ enum Tdi65Mode {
 /// Pure command-line dispatch decision, independent of `main`'s I/O, so
 /// that "a bare invocation can never select `--full`" is directly unit
 /// testable against plain string slices rather than real process argv.
-fn tdi65_parse_mode(arguments: &[String]) -> Result<Tdi65Mode, String> {
+fn tdi66_parse_mode(arguments: &[String]) -> Result<Tdi66Mode, String> {
     match arguments {
-        [flag] if flag == "--termination-smoke" => Ok(Tdi65Mode::TerminationSmoke),
-        [flag] if flag == "--preflight" => Ok(Tdi65Mode::Preflight),
-        [flag] if flag == "--full" => Ok(Tdi65Mode::Full),
-        _ => Err(tdi65_usage_error()),
+        [flag] if flag == "--termination-smoke" => Ok(Tdi66Mode::TerminationSmoke),
+        [flag] if flag == "--preflight" => Ok(Tdi66Mode::Preflight),
+        [flag] if flag == "--full" => Ok(Tdi66Mode::Full),
+        _ => Err(tdi66_usage_error()),
     }
 }
 
 fn main() -> Result<(), String> {
     let arguments = std::env::args().skip(1).collect::<Vec<_>>();
 
-    match tdi65_parse_mode(&arguments)? {
-        Tdi65Mode::TerminationSmoke => run_termination_smoke(),
-        Tdi65Mode::Preflight => run_preflight(),
-        Tdi65Mode::Full => run_full_experiment(),
+    match tdi66_parse_mode(&arguments)? {
+        Tdi66Mode::TerminationSmoke => run_termination_smoke(),
+        Tdi66Mode::Preflight => run_preflight(),
+        Tdi66Mode::Full => run_full_experiment(),
     }
 }
 
@@ -6007,7 +6281,7 @@ fn main() -> Result<(), String> {
 fn run_full_experiment() -> Result<(), String> {
     let confirmation = std::env::var(TDI65_FULL_RUN_CONFIRMATION_VAR).ok();
 
-    if !tdi65_full_run_confirmed(confirmation.as_deref()) {
+    if !tdi66_full_run_confirmed(confirmation.as_deref()) {
         return Err(format!(
             "TDI-6.5 full execution requires the exact confirmation environment \
              variable {TDI65_FULL_RUN_CONFIRMATION_VAR}={TDI65_FULL_RUN_CONFIRMATION_VALUE}; \
@@ -6015,9 +6289,9 @@ fn run_full_experiment() -> Result<(), String> {
         ));
     }
 
-    let report = run_tdi65_pipeline(&population_specs())?;
+    let report = run_tdi66_pipeline(&population_specs())?;
 
-    print_tdi52_required_raw_output(&report);
+    print_tdi66_required_raw_output(&report);
 
     Ok(())
 }
@@ -6102,7 +6376,7 @@ fn run_preflight() -> Result<(), String> {
         );
     }
     println!(
-        "pipeline complet câblé à --full                 : oui (run_tdi65_pipeline, \
+        "pipeline complet câblé à --full                 : oui (run_tdi66_pipeline, \
          subordonné à {TDI65_FULL_RUN_CONFIRMATION_VAR})"
     );
 
@@ -6138,8 +6412,14 @@ mod tests {
             .unwrap_or_else(|error| panic!("failed to read {relative_path}: {error}"))
     }
 
+    /// This evaluator's **own** source.
+    ///
+    /// The v65 derivation left this pointing at the ancestor, so every
+    /// source-inspecting guard in this file was silently validating v65 instead
+    /// of itself — the guards would have stayed green while v66 drifted. The
+    /// frozen-ancestor hash tests below read v65 deliberately and separately.
     fn evaluator_source() -> String {
-        read_repo_file("tdi-bench/src/bin/tdi-independent-overlap-ablation-v65.rs")
+        read_repo_file("tdi-bench/src/bin/tdi-independent-overlap-ablation-v66.rs")
     }
 
     fn record_with_overlap(o1: f64, o2: f64) -> Record {
@@ -6459,46 +6739,46 @@ mod tests {
 
     #[test]
     fn full_run_confirmation_accepts_only_the_exact_value() {
-        assert!(super::tdi65_full_run_confirmed(Some(
+        assert!(super::tdi66_full_run_confirmed(Some(
             TDI65_FULL_RUN_CONFIRMATION_VALUE
         )));
-        assert!(!super::tdi65_full_run_confirmed(None));
-        assert!(!super::tdi65_full_run_confirmed(Some("")));
-        assert!(!super::tdi65_full_run_confirmed(Some(
+        assert!(!super::tdi66_full_run_confirmed(None));
+        assert!(!super::tdi66_full_run_confirmed(Some("")));
+        assert!(!super::tdi66_full_run_confirmed(Some(
             "i_accept_the_tdi65_freeze_rule"
         )));
         // The frozen TDI-5.4 token must never unlock TDI-6.5.
-        assert!(!super::tdi65_full_run_confirmed(Some(
+        assert!(!super::tdi66_full_run_confirmed(Some(
             "I_ACCEPT_THE_TDI54_FREEZE_RULE"
         )));
     }
 
     #[test]
     fn parse_mode_rejects_a_bare_no_argument_invocation() {
-        assert!(super::tdi65_parse_mode(&[]).is_err());
-        assert!(super::tdi65_parse_mode(&["--full".to_owned(), "extra".to_owned()]).is_err());
+        assert!(super::tdi66_parse_mode(&[]).is_err());
+        assert!(super::tdi66_parse_mode(&["--full".to_owned(), "extra".to_owned()]).is_err());
     }
 
     #[test]
     fn parse_mode_selects_full_only_for_the_exact_single_flag() {
         assert_eq!(
-            super::tdi65_parse_mode(&["--full".to_owned()]).unwrap(),
-            super::Tdi65Mode::Full
+            super::tdi66_parse_mode(&["--full".to_owned()]).unwrap(),
+            super::Tdi66Mode::Full
         );
         assert_eq!(
-            super::tdi65_parse_mode(&["--preflight".to_owned()]).unwrap(),
-            super::Tdi65Mode::Preflight
+            super::tdi66_parse_mode(&["--preflight".to_owned()]).unwrap(),
+            super::Tdi66Mode::Preflight
         );
         assert_eq!(
-            super::tdi65_parse_mode(&["--termination-smoke".to_owned()]).unwrap(),
-            super::Tdi65Mode::TerminationSmoke
+            super::tdi66_parse_mode(&["--termination-smoke".to_owned()]).unwrap(),
+            super::Tdi66Mode::TerminationSmoke
         );
-        assert!(super::tdi65_parse_mode(&["--Full".to_owned()]).is_err());
+        assert!(super::tdi66_parse_mode(&["--Full".to_owned()]).is_err());
     }
 
     #[test]
     fn usage_error_mentions_every_flag_and_the_confirmation_variable() {
-        let usage = super::tdi65_usage_error();
+        let usage = super::tdi66_usage_error();
         assert!(usage.contains("--termination-smoke"));
         assert!(usage.contains("--preflight"));
         assert!(usage.contains("--full"));
@@ -6532,11 +6812,11 @@ mod tests {
         let body = &source[start..end];
 
         assert!(
-            body.contains("run_tdi65_pipeline(&population_specs())"),
+            body.contains("run_tdi66_pipeline(&population_specs())"),
             "accepted path must call the real pipeline over the real specs"
         );
-        assert!(body.contains("tdi65_full_run_confirmed"));
-        assert!(body.contains("print_tdi52_required_raw_output"));
+        assert!(body.contains("tdi66_full_run_confirmed"));
+        assert!(body.contains("print_tdi66_required_raw_output"));
     }
 
     #[test]
@@ -6546,14 +6826,14 @@ mod tests {
             .find("fn run_termination_smoke()")
             .expect("run_termination_smoke must exist");
         let end = source[start..]
-            .find("\nfn tdi65_full_run_confirmed")
+            .find("\nfn tdi66_full_run_confirmed")
             .map(|offset| start + offset)
-            .expect("tdi65_full_run_confirmed must follow run_termination_smoke");
+            .expect("tdi66_full_run_confirmed must follow run_termination_smoke");
         let body = &source[start..end];
 
         assert!(body.contains("target_count: 1"));
         assert!(
-            !body.contains("run_tdi65_pipeline(&population_specs())"),
+            !body.contains("run_tdi66_pipeline(&population_specs())"),
             "the smoke path must never run the real-scale pipeline"
         );
     }
@@ -6605,11 +6885,10 @@ mod tests {
 
     #[test]
     fn family_seed_blocks_are_derived_fresh_and_pairwise_distinct() {
-        // Four families × three blocks, every population seed ≥ 1.4e9 — entirely
-        // above the TDI-5.6 blocks J/K/L (1060M..1290M), the TDI-5.5 blocks
-        // G/H/I (760M..990M) and every earlier block. All 48 population seeds,
-        // all 12 block bootstrap seeds and all 4 family aggregate seeds are
-        // distinct (Sections 8, 9).
+        // Four families × three blocks, every population seed ≥ 6.2e9 — entirely
+        // above TDI-6.5's last reservation (6.13e9 + 5030) and every earlier
+        // block. All 48 population seeds, all 12 block bootstrap seeds and all 4
+        // family aggregate seeds are distinct (Sections 8, 9).
         let mut population_seeds = Vec::new();
         let mut bootstrap_seeds = Vec::new();
         let mut aggregate_seeds = Vec::new();
@@ -6625,7 +6904,7 @@ mod tests {
                 let base = seed_block.population_base_seed();
                 for offset in [0_u64, 10_000_000, 20_000_000, 30_000_000] {
                     let seed = base + offset;
-                    assert!(seed >= 5_000_000_000);
+                    assert!(seed >= 6_200_000_000);
                     population_seeds.push(seed);
                 }
                 bootstrap_seeds.push(seed_block.bootstrap_seed());
@@ -6634,21 +6913,21 @@ mod tests {
         }
 
         // Anchored constants: the first and last derived bootstrap seeds and the
-        // first family aggregate seed (base 0x5444_4936_3500_….., distinct from
-        // the TDI-5.6 base 0x5444_4935_3600_…..).
+        // first family aggregate seed (base 0x5444_4936_3600_….., distinct from
+        // the TDI-6.5 base 0x5444_4936_3500_…..).
         assert_eq!(GeneratorFamily::F0Base.index(), 0);
         assert_eq!(
             super::frozen_block_order(GeneratorFamily::F0Base)[0].bootstrap_seed(),
-            0x5444_4936_3500_0001
+            0x5444_4936_3600_0001
         );
         assert_eq!(
             super::frozen_block_order(GeneratorFamily::F3Local)[SEED_BLOCK_COUNT - 1]
                 .bootstrap_seed(),
-            0x5444_4936_3500_000C
+            0x5444_4936_3600_000C
         );
         assert_eq!(
             super::family_aggregate_bootstrap_seed(GeneratorFamily::F0Base),
-            0x5444_4936_3500_4700
+            0x5444_4936_3600_4700
         );
 
         // Every reserved seed — population, block bootstrap, aggregate bootstrap —
