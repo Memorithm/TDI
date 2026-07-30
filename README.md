@@ -59,16 +59,19 @@ However, both models were badly calibrated and produced negative rank
 correlations. This supports a relative signal, but not successful universal
 transfer across system widths.
 
-### TDI-5 series — preregistered confirmatory battery (branching systems)
+### TDI-5 series — the exact confirmatory battery (branching systems)
 
 The TDI-5 series is a chain of independently preregistered,
 SHA-256-frozen, confirmation-gated experiments on the branching systems of
 TDI-2. Each experiment freezes its design, evaluator, reproduction script,
 CI workflow and bounded tests before a single, deliberate, human-only
-`--full` run; the full frozen chain (TDI-5.1 → TDI-5.5) is verified before
-any generation. Computation is exact-rational and deterministic, and results
-are reproduced bit-for-bit on an independent ARM64 host. Full per-experiment
+`--full` run, and verifies the full frozen ancestor chain before any
+generation. Computation is exact-rational and deterministic; results are
+reproduced **bit-for-bit** on an independent ARM64 host. Full per-experiment
 reports are in [`docs/`](docs/).
+
+Each experiment changes exactly **one** factor relative to a frozen ancestor,
+and each one strengthens the baseline the overlaps must beat:
 
 - **TDI-5.1** — continuous deficit geometry: the exact target geometry
   `U_h = -log2(1 - O_h)` over the early-overlap predictors `O_1, O_2`.
@@ -80,26 +83,89 @@ reports are in [`docs/`](docs/).
   *incremental nonlinear* value over `O_2` is real at short horizons
   (Beneficial at U₃) but decays monotonically into practical equivalence by
   mid-horizon — a horizon-localized effect.
-- **TDI-5.5** — the baseline challenge: within the exact scope, `{O_1, O_2}`
-  carry predictive signal **beyond an exact contraction descriptor** (the
-  Dobrushin coefficient and mean pairwise total variation) **and beyond a
-  naive temporal-persistence competitor**, Beneficial at **every** horizon
-  U₃…U₈ with no redundancy horizon. The decisive test against *non-exact*
-  contraction descriptors (spectral gap, mixing time) is deferred to a
-  future track.
+- **TDI-5.5** — the baseline challenge: the overlaps carry signal **beyond an
+  exact contraction descriptor** (Dobrushin coefficient, mean pairwise total
+  variation) **and beyond a naive temporal-persistence competitor**, at every
+  horizon U₃…U₈.
+- **TDI-5.6** — the exact spectral challenge: still Beneficial at every horizon
+  against a baseline further augmented with the **exact spectral moments**
+  `s_2 = trace(P^2)`, `s_3 = trace(P^3)`. The moments are themselves
+  informative, so this is a strictly harder test than 5.5.
+- **TDI-5.7** — generator robustness: 5.6's result **replicates across all four
+  structurally distinct exact generator families**, 3/3 seed blocks in each.
+  The effect *size* is heterogeneous across families, and the same fitted model
+  transports across generators in direction only, not calibration.
+- **TDI-5.8** — cross-width invariance: **all 18** width × horizon cells
+  (widths 3, 4, 5) are Beneficial, and the relative effect size is nearly
+  width-invariant (0.61 pp spread at U₆). Cross-width **calibration fails**
+  (every R² far below zero) while **rank ordering survives** through the
+  overlaps (Spearman 0.695) and not through the exact descriptors (−0.040).
+- **TDI-5.9** — spectral-moment saturation: adding a fourth exact moment
+  `s_4 = trace(P^4)` buys far less than the second and third did (14 % as much
+  at U₃), while the overlaps remain Beneficial at every horizon. **The exact
+  descriptor ladder is saturating; the signal is not.**
+
+### TDI-6 series — the non-exact frontier
+
+TDI-6 relaxes **bit-exactness only**, and only under an explicit preregistered
+non-exact determinism discipline: IEEE-754 binary64, single-threaded, fixed
+operation order, declared tolerances, and a multi-method cross-validation table
+for every non-exact quantity. Reproduction is tolerance-based rather than
+byte-exact; the ±2 % classifier margins dwarf the declared tolerances.
+
+- **TDI-6.1** — the literal spectral gap: the overlaps stay Beneficial at both
+  focal horizons against a baseline containing the **literal** `|λ₂|` and the
+  ε-mixing time of the one-step kernel. The "TDI is just the spectral gap"
+  hypothesis is refuted within this scope.
+- **TDI-6.2** — nonlinear sufficiency: given a degree-2 interaction ridge, the
+  spectral baseline improves — and the overlaps' advantage **grows** rather
+  than shrinks, at all six horizons (54.2 % vs 47.0 % at U₃). The signal is not
+  a linear-modeling artifact.
+- **TDI-6.3** — information decomposition (Gaussian/MMI PID): total information
+  and redundancy both decay with horizon, while **synergy is the only component
+  that grows** (0.005 % → 6.6 %). Note that `Unique(O_1) = 0` throughout is
+  *definitional* under MMI, not an empirical finding.
+- **TDI-6.4** — causal probe: the recovery trajectory **does** depend on which
+  node is perturbed, but the heterogeneity falls from 23.3 % to 11.0 % of the
+  deficit level with horizon, and the early→late coupling is node-invariant.
+  The intervention target changes the *magnitude*, not the *relationship*.
+- **TDI-6.5** — generator-family robustness of the literal-spectral control:
+  Beneficial at both focal horizons in all four families, **24/24** grid cells.
+  But the effect size ranges over 39.8 pp across families, and in the one
+  family where the literal descriptors are *censored* (`|λ₂| = 1` exactly for a
+  large fraction of candidates) they add nothing at U₃.
 
 ## Current conclusion
 
-Within the preregistered width-3 population, early
-intervention-conditioned distribution overlap adds predictive information
-beyond an entropy and topology baseline using the same observation horizon.
+Within small synthetic finite-state branching families, and under
+preregistered one-shot evaluation, early intervention-conditioned distribution
+overlap adds predictive information beyond:
 
-The current results do not yet establish:
+- an entropy and topology baseline at the same observation horizon;
+- an **exact contraction** descriptor and a temporal-persistence competitor;
+- **exact spectral moments** `s_2, s_3` — and a fourth moment `s_4`, which the
+  descriptor ladder is visibly saturating against;
+- the **literal** spectral gap `|λ₂|` and ε-mixing time;
+- all of the above **under a nonlinear (degree-2 interaction) model**;
 
-- a universal physical law;
-- invariance across system sizes;
-- reliable absolute prediction outside the training width;
-- superiority over every possible dynamical baseline.
+and this replicates across **four generator families** (twice, exactly and
+non-exactly) and across **widths 3, 4 and 5**.
+
+The current results do **not** establish:
+
+- a universal physical law, or anything outside small synthetic finite-state
+  families;
+- **transportable calibration.** This is now a measured failure, not merely an
+  untested question: neither across widths (TDI-5.8B) nor across generators
+  (TDI-6.5C) does a fitted model predict absolute deficit levels in a new
+  domain. What transfers is rank ordering;
+- **a transportable effect size.** Nearly width-invariant (0.61 pp spread) but
+  strongly generator-dependent (39.8 pp) — no single number is "the" effect;
+- superiority over an arbitrarily expressive learner. Degree-2 interaction
+  ridge is the strongest model tested; kernel methods and tree ensembles are
+  untested;
+- causal structure beyond TDI-6.4's node-exchangeability probe, or a
+  decomposition under any PID definition other than Gaussian/MMI.
 
 ## Workspace
 
@@ -140,20 +206,29 @@ cargo clippy --workspace --all-targets -- -D warnings
 ./scripts/reproduce-tdi2.sh
 ```
 
-## Reproduce the TDI-5 series
+## Reproduce the TDI-5 and TDI-6 series
 
-The TDI-5 confirmatory runs are gated behind an explicit, exact human
-confirmation token and are a deliberate one-time action; no CI workflow ever
-supplies the token. Each experiment has its own script and frozen
-preregistration, e.g.:
+Every confirmatory run is gated behind an explicit, exact human confirmation
+token and is a deliberate one-time action; **no commit, test or CI workflow
+ever supplies the token**, and the authoring agent never runs `--full`. Each
+experiment has its own script and frozen preregistration, e.g.:
 
 ```bash
 TDI55_CONFIRM_FULL_RUN=I_ACCEPT_THE_TDI55_FREEZE_RULE \
   bash scripts/reproduce-tdi5.5.sh
+
+TDI65_CONFIRM_FULL_RUN=I_ACCEPT_THE_TDI65_FREEZE_RULE \
+  bash scripts/reproduce-tdi6.5.sh
 ```
 
+Each script refuses without the exact token, refuses a dirty repository,
+verifies the full frozen hash chain before any generation, runs the evaluator
+once, verifies the final criterion lines, and writes read-only artifacts under
+`results/`. TDI-5.x runs reproduce **byte-exactly**; TDI-6.x runs reproduce
+under their declared tolerances.
+
 See [`docs/`](docs/) for every preregistration and result report, and
-`scripts/reproduce-tdi5.*.sh` for the other experiments.
+`scripts/reproduce-tdi5.*.sh` / `scripts/reproduce-tdi6.*.sh` for the rest.
 
 ## Validated release
 
