@@ -3011,30 +3011,33 @@ fn observable_shift(
     observable_shift_at(source_training, target_training, ObservedHorizon::Last)
 }
 
+/// Mean observed deficit pooled over a domain's blocks, in the frozen
+/// accumulation order (preregistration Section 3.1, step 2).
+fn pooled_observed_deficit(blocks: &[&[Record]], horizon: ObservedHorizon) -> Result<f64, String> {
+    let mut total = 0.0_f64;
+    let mut count = 0_usize;
+
+    for block in blocks {
+        for record in *block {
+            total += observed_deficit(record, horizon)?;
+            count += 1;
+        }
+    }
+
+    if count == 0 {
+        return Err("cannot pool the observed deficit of an empty domain".to_owned());
+    }
+
+    Ok(total / count as f64)
+}
+
 fn observable_shift_at(
     source_training: &[&[Record]],
     target_training: &[&[Record]],
     horizon: ObservedHorizon,
 ) -> Result<f64, String> {
-    let pooled = |blocks: &[&[Record]]| -> Result<f64, String> {
-        let mut total = 0.0_f64;
-        let mut count = 0_usize;
-
-        for block in blocks {
-            for record in *block {
-                total += observed_deficit(record, horizon)?;
-                count += 1;
-            }
-        }
-
-        if count == 0 {
-            return Err("cannot pool the observed deficit of an empty domain".to_owned());
-        }
-
-        Ok(total / count as f64)
-    };
-
-    Ok(pooled(target_training)? - pooled(source_training)?)
+    Ok(pooled_observed_deficit(target_training, horizon)?
+        - pooled_observed_deficit(source_training, horizon)?)
 }
 
 /// Derives the transfer-time model for one arm from a source-domain fit.
@@ -4689,8 +4692,13 @@ struct FamilyReport {
     blocks: Vec<BlockPopulations>,
     aggregate_fit: AggregateModelFit,
     /// Holdout means of [delta, delta_bar, s2, s3, g, τ_ε] on this family's
-    /// holdout (Section 17, context only).
+    /// holdout (Section 15, context only).
     descriptor_means: [f64; DESCRIPTOR_MEAN_COUNT],
+    /// Section 15 companion: this family's mean **observed** deficits
+    /// `[u₁, u₂]` on its training populations — the quantities the offset
+    /// estimator reads. Reported so each pair's `Δ` can be read against the
+    /// levels it was formed from.
+    observed_deficit_means: [f64; 2],
 }
 
 /// The two layouts every transfer cell is evaluated under (Section 6). GK is
@@ -4758,6 +4766,10 @@ struct TransferPairReport {
     /// horizon, read from holdout labels. Never feeds B1; it answers *why* B1
     /// succeeded or failed. `(horizon, true shift, Δ / true shift)`.
     true_level_shifts: Vec<(usize, f64, f64)>,
+    /// Section 16: `Δ`, `sˢ_h` and `Δ̂_std` must be printed **separately** so
+    /// the applied correction can be audited rather than inferred from the
+    /// predictions. `(horizon, per-block sˢ_h, per-block Δ̂_std)`.
+    applied_shifts: Vec<(usize, [f64; SEED_BLOCK_COUNT], [f64; SEED_BLOCK_COUNT])>,
 }
 
 impl TransferPairReport {
@@ -4886,11 +4898,22 @@ fn run_family_pipeline(
     let aggregate_fit = AggregateModelFit::assemble(block_fits)?;
     let descriptor_means = family_descriptor_means(&blocks);
 
+    let trainings = blocks
+        .iter()
+        .map(BlockPopulations::combined_training)
+        .collect::<Vec<_>>();
+    let training_refs = trainings.iter().map(Vec::as_slice).collect::<Vec<_>>();
+    let observed_deficit_means = [
+        pooled_observed_deficit(&training_refs, ObservedHorizon::First)?,
+        pooled_observed_deficit(&training_refs, ObservedHorizon::Last)?,
+    ];
+
     Ok(FamilyReport {
         family,
         blocks,
         aggregate_fit,
         descriptor_means,
+        observed_deficit_means,
     })
 }
 
@@ -5078,10 +5101,23 @@ fn evaluate_transfer_pair(
         true_level_shifts.push((TARGET_HORIZONS[horizon_index], true_shift, ratio));
     }
 
+    let mut applied_shifts = Vec::with_capacity(FOCAL_HORIZON_COUNT);
+
+    for &horizon_index in &focal_indices {
+        let blocks = frozen_block_order(source.family);
+        let scales: [f64; SEED_BLOCK_COUNT] = std::array::from_fn(|index| {
+            source.aggregate_fit.block(blocks[index]).target_scalers[horizon_index].scale
+        });
+        let applied: [f64; SEED_BLOCK_COUNT] = std::array::from_fn(|index| shift / scales[index]);
+
+        applied_shifts.push((TARGET_HORIZONS[horizon_index], scales, applied));
+    }
+
     Ok(TransferPairReport {
         source: source.family,
         target: target.family,
         cells,
+        applied_shifts,
         observable_shift: shift,
         observable_shift_u1,
         true_level_shifts,
@@ -5883,6 +5919,21 @@ fn print_tdi67_final_verdicts(report: &Tdi67ExperimentReport) {
             pair.observable_shift_u1
         );
 
+        // Section 16: the three components of the applied correction are
+        // printed separately, so `Δ̂_std` can be audited against `Δ` and `sˢ_h`
+        // rather than inferred from the predictions it produced.
+        for (horizon, scales, applied) in &pair.applied_shifts {
+            for (index, (scale, shift)) in scales.iter().zip(applied).enumerate() {
+                println!(
+                    "TDI-6.7C — {} → {} — bloc b{index} à U{horizon} : Δ = {:.9}, \
+                     sˢ_h = {scale:.9}, Δ̂_std = {shift:.9}",
+                    pair.source.label(),
+                    pair.target.label(),
+                    pair.observable_shift
+                );
+            }
+        }
+
         for (horizon, true_shift, ratio) in &pair.true_level_shifts {
             println!(
                 "TDI-6.7C — oracle — {} → {} à U{horizon} : vrai décalage de niveau = \
@@ -5941,6 +5992,16 @@ fn print_tdi67_final_verdicts(report: &Tdi67ExperimentReport) {
             source.label(),
             target.label(),
             layout.label()
+        );
+    }
+
+    for family_report in &report.families {
+        println!(
+            "TDI-6.7D — famille {} : moyenne u1 = {:.9}, moyenne u2 = {:.9} \
+             (Section 15, contexte)",
+            family_report.family.label(),
+            family_report.observed_deficit_means[0],
+            family_report.observed_deficit_means[1]
         );
     }
 
@@ -6461,7 +6522,7 @@ fn run_full_experiment() -> Result<(), String> {
 
     if !tdi67_full_run_confirmed(confirmation.as_deref()) {
         return Err(format!(
-            "TDI-6.6 full execution requires the exact confirmation environment \
+            "TDI-6.7 full execution requires the exact confirmation environment \
              variable {TDI65_FULL_RUN_CONFIRMATION_VAR}={TDI65_FULL_RUN_CONFIRMATION_VALUE}; \
              refusing before any generation, fitting or bootstrap"
         ));
