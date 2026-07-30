@@ -225,17 +225,45 @@ and TDI-6.5C — calibration dies, ordering survives — gains an actionable
 refinement: **if only the ranking is wanted, aligning the features is a real
 improvement; if the level is wanted, it is actively harmful.**
 
-**Caveat on a small inconsistency.** A1 and A2 share identical feature
-statistics, and the standardized prediction does not depend on the target
-scaler, so their standardized predictions are bit-identical and their Spearman
-values should coincide exactly (a target scaler is a monotone affine map, and
-Spearman is rank-based). The reported values differ slightly — typically
-~1 × 10⁻⁴, sign-varying, and at most 5 × 10⁻³ on F0→F1. This is consistent with
-floating-point tie formation changing the average-rank assignment, and the
-largest discrepancies fall on F1-sparse, whose out-degree-1–2 dynamics make its
-`U_h` values heavily tied. It is reported as an unexplained numerical artifact
-rather than as a demonstrated cause. **No criterion depends on Spearman**, so no
-classification is affected.
+### 8.1 Why A1 and A2 report slightly different Spearman values
+
+A1 and A2 share identical feature statistics, and the standardized prediction
+does not depend on the target scaler, so their standardized predictions are
+**bit-identical**. A single target scaler is a monotone affine map and Spearman
+is rank-based, so at first sight the two arms' Spearman values should coincide
+exactly. They do not: the reported values differ by ~1 × 10⁻⁴ typically,
+sign-varying, and by 5 × 10⁻³ at most (F0→F1).
+
+**The cause is pooling, not arithmetic.** Aggregate metrics concatenate the
+three seed blocks, and **each block carries its own target scaler**. Under A1
+the three scalers are the source family's three per-block scalers; under A2 they
+are the target family's. The map taking A1's pooled ground truth to A2's is
+therefore not a single affine map but a **piecewise** one, with a different
+piece per block — and a piecewise-affine map does **not** preserve the global
+rank order of the pooled vector. Two records in different blocks can swap
+relative rank between arms, which moves the pooled Spearman.
+
+This is demonstrated, not conjectured. Simulating the pooled computation with
+three blocks and per-block scalers reproduces a discrepancy of the observed
+order (≈ 6 × 10⁻⁵); forcing the scalers to be **identical across blocks**, with
+everything else unchanged, drives the discrepancy to **exactly zero**. The
+control isolates the cause.
+
+> **Correction.** An earlier revision of this section attributed the discrepancy
+> to floating-point tie formation in the average-rank assignment. That
+> explanation is **wrong** and has been tested: an affine rescaling does not
+> differentially merge `f64` values, and a direct simulation produced a Spearman
+> difference of exactly zero. It was reported at the time as an undemonstrated
+> conjecture; it is now replaced by the demonstrated cause above.
+
+**Nothing else is affected.** No criterion depends on Spearman. No prior
+experiment is touched either: every earlier comparison contrasts two *layouts*
+evaluated under the **same** per-block scalers, so their pooled ground truth is
+identical and the effect cannot arise. It appears in TDI-6.6 only because this
+is the first design that compares predictors carrying **different** target
+scalers. The per-block Spearman values printed in the raw output are unaffected
+by construction, and the reported A0→A1 ordering gains of Section 8 are three
+orders of magnitude larger than this effect.
 
 ## 9. Interpretation and boundaries
 
