@@ -157,7 +157,7 @@ const BOOTSTRAP_REPLICATES: usize = 4_000;
 // Fresh per-family stratified-aggregate bootstrap seeds (TDI-6.7 Section 7),
 // disjoint from every TDI-5.2 … 6.2 bootstrap seed. Each family aggregates its
 // own three blocks with seed base + family index.
-const AGGREGATE_BOOTSTRAP_SEED_BASE: u64 = 0x5444_4936_3700_4700;
+const AGGREGATE_BOOTSTRAP_SEED_BASE: u64 = 0x5444_4936_3800_4800;
 
 fn family_aggregate_bootstrap_seed(family: GeneratorFamily) -> u64 {
     AGGREGATE_BOOTSTRAP_SEED_BASE + family.index()
@@ -187,18 +187,24 @@ impl SeedBlockId {
         format!("{}/b{}", self.family.label(), self.block)
     }
 
-    /// `base(f, b) = 6.2e9 + f·300e6 + b·100e6` (Section 9). The four
-    /// populations start at this base + `{0, 10, 20, 30}·1e6`. The 6.2e9 origin
-    /// clears TDI-6.6's last reservation (7.33e9 + 5030), so every TDI-6.7 seed
+    /// `base(f, b) = 8.6e9 + f·300e6 + b·100e6` (Section 7). The four
+    /// populations start at this base + `{0, 10, 20, 30}·1e6`. The 8.6e9 origin
+    /// clears TDI-6.7's last reservation (8,530,005,038), so every TDI-6.8 seed
     /// is disjoint from every prior experiment's.
+    ///
+    /// This comment was wrong in both ancestors — it announced a 6.2e9 origin
+    /// while `v67`'s code used 7.4e9 — because a copy derivation carries stale
+    /// prose forward silently. The freshness it describes is not cosmetic: it is
+    /// what lets Section 1.3 admit a rank criterion whose hypothesis came from
+    /// already-observed data.
     fn population_base_seed(self) -> u64 {
-        7_400_000_000 + self.family.index() * 300_000_000 + u64::from(self.block) * 100_000_000
+        8_600_000_000 + self.family.index() * 300_000_000 + u64::from(self.block) * 100_000_000
     }
 
-    /// `0x5444_4936_3700_0000 + (SEED_BLOCK_COUNT·f + b) + 1` (Section 9) — the
-    /// series ASCII scheme "TDI" + "6" + "6".
+    /// `0x5444_4936_3800_0000 + (SEED_BLOCK_COUNT·f + b) + 1` (Section 7) — the
+    /// series ASCII scheme "TDI" + "6" + "8".
     fn bootstrap_seed(self) -> u64 {
-        0x5444_4936_3700_0000
+        0x5444_4936_3800_0000
             + (SEED_BLOCK_COUNT as u64 * self.family.index() + u64::from(self.block))
             + 1
     }
@@ -4484,6 +4490,133 @@ fn pooled_arm_metrics(blocks: &[ArmBlockEvaluation]) -> (Metrics, Metrics) {
 ///
 /// Resampling mirrors the inherited paired bootstrap exactly: `count` draws per
 /// block, in frozen block order, from one deterministic stream.
+/// The paired rank bootstrap of TDI-6.8 Section 8.
+///
+/// **One resample per (pair, horizon, seed block), shared by both layouts.**
+/// Section 8 requires the two layouts of a comparison to be resampled with the
+/// same indices so the increment is paired; sharing one draw across both
+/// satisfies that and additionally lets the resampled truth ranks be computed
+/// once instead of twice. Measured at the preregistered scale, the shared form
+/// costs 3.09 ms per replicate against 7.72 ms for independent paired
+/// comparisons — 2.5×, or 15 minutes against 37 for the 72 transfer cells.
+///
+/// Resampling is **within** a block (Section 8), and the aggregate replicate
+/// value is the mean of the three per-block ρ at that replicate — never a
+/// resampling of a pooled sample, which Section 6 forbids outright.
+///
+/// Returns the increment interval together with the undefined-replicate count,
+/// which Section 8 requires to be reported and which drives the 1 % guard.
+fn rank_increment_bootstrap(
+    baseline_blocks: &[ArmBlockEvaluation],
+    challenger_blocks: &[ArmBlockEvaluation],
+    seed: u64,
+) -> Result<(Option<ConfidenceInterval>, usize, usize), String> {
+    if baseline_blocks.len() != challenger_blocks.len() || baseline_blocks.is_empty() {
+        return Err("rank bootstrap needs matching, non-empty block sets".to_owned());
+    }
+
+    for (baseline, challenger) in baseline_blocks.iter().zip(challenger_blocks) {
+        if baseline.seed_block != challenger.seed_block {
+            return Err("rank bootstrap block order disagrees between layouts".to_owned());
+        }
+
+        if baseline.records_len != challenger.records_len || baseline.records_len == 0 {
+            return Err("rank bootstrap dimensions disagree between layouts".to_owned());
+        }
+
+        // Both layouts score the same records under the same target scaler, so
+        // the standardized truth must be identical. Asserted rather than
+        // assumed, because the shared truth ranks below depend on it.
+        if baseline.standardized_targets != challenger.standardized_targets {
+            return Err("rank bootstrap layouts disagree on the standardized truth".to_owned());
+        }
+    }
+
+    let mut generator = DeterministicRng::new(seed);
+    let mut increments = Vec::with_capacity(BOOTSTRAP_REPLICATES);
+    let mut undefined = 0_usize;
+
+    let mut indices = Vec::new();
+    let mut truth = Vec::new();
+    let mut baseline_predictions = Vec::new();
+    let mut challenger_predictions = Vec::new();
+
+    for _ in 0..BOOTSTRAP_REPLICATES {
+        let mut baseline_total = 0.0_f64;
+        let mut challenger_total = 0.0_f64;
+        let mut defined = true;
+
+        for (baseline, challenger) in baseline_blocks.iter().zip(challenger_blocks) {
+            indices.clear();
+            truth.clear();
+            baseline_predictions.clear();
+            challenger_predictions.clear();
+
+            // The single shared draw: both layouts see exactly these records.
+            for _ in 0..baseline.records_len {
+                indices.push(generator.index(baseline.records_len));
+            }
+
+            for &index in &indices {
+                truth.push(baseline.standardized_targets[index]);
+                baseline_predictions.push(baseline.evaluation.predictions.standardized[index]);
+                challenger_predictions.push(challenger.evaluation.predictions.standardized[index]);
+            }
+
+            // Computed once for both layouts — the whole point of sharing.
+            let truth_ranks = average_ranks(&truth);
+
+            if is_constant(&truth_ranks) {
+                defined = false;
+                break;
+            }
+
+            let Some(baseline_rho) = rank_correlation_against(&truth_ranks, &baseline_predictions)
+            else {
+                defined = false;
+                break;
+            };
+            let Some(challenger_rho) =
+                rank_correlation_against(&truth_ranks, &challenger_predictions)
+            else {
+                defined = false;
+                break;
+            };
+
+            baseline_total += baseline_rho;
+            challenger_total += challenger_rho;
+        }
+
+        if defined {
+            let blocks = baseline_blocks.len() as f64;
+            increments.push(challenger_total / blocks - baseline_total / blocks);
+        } else {
+            undefined += 1;
+        }
+    }
+
+    let interval = if increments.is_empty() {
+        None
+    } else {
+        Some(confidence_interval(increments))
+    };
+
+    Ok((interval, undefined, BOOTSTRAP_REPLICATES))
+}
+
+/// Spearman's ρ against an already-ranked argument, so a shared truth need not
+/// be re-ranked per layout. Degeneracy propagates as `None`, exactly as in
+/// `rank_correlation`.
+fn rank_correlation_against(left_ranks: &[f64], right: &[f64]) -> Option<f64> {
+    let right_ranks = average_ranks(right);
+
+    if is_constant(&right_ranks) {
+        return None;
+    }
+
+    Some(pearson_correlation(left_ranks, &right_ranks))
+}
+
 fn arm_r_squared_bootstrap(
     blocks: &[ArmBlockEvaluation],
     seed: u64,
@@ -5430,41 +5563,66 @@ fn evaluate_transfer_pair(
     }
 
     // TDI-6.8 Section 10: GKT against GK on the plain-transfer arm, per focal
-    // horizon, from the per-block rank statistics alone.
+    // horizon, with the paired shared-resample interval of Section 8.
     //
-    // The interval is not yet available at this stage of the derivation, so
-    // `classify_rank_increment` receives no replicates and Section 8's
-    // usable-replicate guard forces every cell to *Indeterminate*. That is the
-    // honest state: the increments are real, the classification is not yet
-    // decidable, and no line may claim otherwise until the shared-resample
-    // bootstrap lands.
+    // The blocks are recomputed here rather than retained from the cell loop
+    // above: holding every layout's prediction vectors alive across the whole
+    // pipeline would cost over a gigabyte, and `evaluate_arm_blocks` is `O(n)`,
+    // negligible beside the bootstrap it feeds.
+    let plain_fit = &arm_fits
+        .iter()
+        .find(|(arm, _)| *arm == TransferArm::SourceStandardized)
+        .expect("arm fits always contain the plain-transfer arm")
+        .1;
+
     let mut rank_comparisons = Vec::with_capacity(FOCAL_HORIZON_COUNT);
 
-    for horizon in FOCAL_HORIZONS {
-        let baseline = cells
-            .iter()
-            .find(|cell| cell.layout == FeatureLayout::Gk && cell.horizon() == horizon)
-            .ok_or_else(|| format!("missing GK cell at U{horizon}"))?
-            .arm(TransferArm::SourceStandardized);
-        let challenger = cells
-            .iter()
-            .find(|cell| cell.layout == FeatureLayout::Gkt && cell.horizon() == horizon)
-            .ok_or_else(|| format!("missing GKT cell at U{horizon}"))?
-            .arm(TransferArm::SourceStandardized);
+    for (position, &horizon_index) in focal_indices.iter().enumerate() {
+        let horizon = FOCAL_HORIZONS[position];
 
-        let block_increments = baseline
-            .block_rank_statistics
+        let baseline_blocks = evaluate_arm_blocks(
+            plain_fit,
+            target_holdout_refs,
+            horizon_index,
+            FeatureLayout::Gk,
+        )?;
+        let challenger_blocks = evaluate_arm_blocks(
+            plain_fit,
+            target_holdout_refs,
+            horizon_index,
+            FeatureLayout::Gkt,
+        )?;
+
+        let block_increments = baseline_blocks
             .iter()
-            .zip(&challenger.block_rank_statistics)
-            .map(|(base, chal)| match (base.spearman, chal.spearman) {
-                (Some(low), Some(high)) => Some(high - low),
-                _ => None,
+            .zip(&challenger_blocks)
+            .map(|(baseline, challenger)| {
+                let low = rank_correlation(
+                    &baseline.standardized_targets,
+                    &baseline.evaluation.predictions.standardized,
+                );
+                let high = rank_correlation(
+                    &challenger.standardized_targets,
+                    &challenger.evaluation.predictions.standardized,
+                );
+
+                match (low, high) {
+                    (Some(low), Some(high)) => Some(high - low),
+                    _ => None,
+                }
             })
             .collect::<Vec<_>>();
 
+        // Section 7 defines one bootstrap stream per ordered pair and no
+        // per-horizon term, so both focal horizons re-enter the same frozen
+        // stream. The blocks hold the same records at either horizon, so this
+        // additionally pairs U₃ against U₆ on identical resamples.
+        let (interval, undefined, total) =
+            rank_increment_bootstrap(&baseline_blocks, &challenger_blocks, bootstrap_seed)?;
+
         rank_comparisons.push((
             horizon,
-            classify_rank_increment(block_increments, None, 0, 0),
+            classify_rank_increment(block_increments, interval, undefined, total),
         ));
     }
 
@@ -7571,7 +7729,7 @@ mod tests {
                 let base = seed_block.population_base_seed();
                 for offset in [0_u64, 10_000_000, 20_000_000, 30_000_000] {
                     let seed = base + offset;
-                    assert!(seed >= 7_400_000_000);
+                    assert!(seed >= 8_600_000_000);
                     population_seeds.push(seed);
                 }
                 bootstrap_seeds.push(seed_block.bootstrap_seed());
@@ -7580,21 +7738,21 @@ mod tests {
         }
 
         // Anchored constants: the first and last derived bootstrap seeds and the
-        // first family aggregate seed (base 0x5444_4936_3700_….., distinct from
-        // the TDI-6.6 base 0x5444_4936_3600_…..).
+        // first family aggregate seed (base 0x5444_4936_3800_….., distinct from
+        // the TDI-6.6 base 0x5444_4936_3700_…..).
         assert_eq!(GeneratorFamily::F0Base.index(), 0);
         assert_eq!(
             super::frozen_block_order(GeneratorFamily::F0Base)[0].bootstrap_seed(),
-            0x5444_4936_3700_0001
+            0x5444_4936_3800_0001
         );
         assert_eq!(
             super::frozen_block_order(GeneratorFamily::F3Local)[SEED_BLOCK_COUNT - 1]
                 .bootstrap_seed(),
-            0x5444_4936_3700_000C
+            0x5444_4936_3800_000C
         );
         assert_eq!(
             super::family_aggregate_bootstrap_seed(GeneratorFamily::F0Base),
-            0x5444_4936_3700_4700
+            0x5444_4936_3800_4800
         );
 
         // Every reserved seed — population, block bootstrap, aggregate bootstrap —
@@ -8527,7 +8685,7 @@ mod tests {
             &b0,
             &b2,
             refs,
-            0x5444_4936_3700_4700,
+            0x5444_4936_3800_4800,
         )
         .expect_err("B0-vs-B2 must be refused, not silently computed");
         assert!(error.contains("different target scalers"), "{error}");
@@ -8538,7 +8696,7 @@ mod tests {
             &b0,
             &b1,
             refs,
-            0x5444_4936_3700_4700,
+            0x5444_4936_3800_4800,
         )
         .expect("B1-vs-B0 shares the source scaler and must be well posed");
     }
@@ -8791,5 +8949,182 @@ mod tests {
             comparison.classification,
             super::RankClassification::Indeterminate
         );
+    }
+
+    // ---- TDI-6.8 : graines fraîches et bootstrap apparié (Sections 7, 8) ----
+
+    /// The defect this test exists to prevent was nearly shipped: the mechanical
+    /// derivation renamed every *textual* TDI-6.7 identity but could not touch
+    /// the seeds, which carry their identity in hex and decimal literals. Had it
+    /// survived, TDI-6.8 would have regenerated TDI-6.7's exact populations and
+    /// reused its bootstrap streams — destroying the freshness that Section 1.3
+    /// relies on to make a rank criterion admissible at all.
+    #[test]
+    fn seeds_are_disjoint_from_the_tdi67_scheme() {
+        const TDI67_POPULATION_ORIGIN: u64 = 7_400_000_000;
+        const TDI67_LAST_RESERVATION: u64 = 8_530_005_038;
+        const TDI67_BOOTSTRAP_BASE: u64 = 0x5444_4936_3700_4700;
+
+        assert_eq!(super::AGGREGATE_BOOTSTRAP_SEED_BASE, 0x5444_4936_3800_4800);
+        assert_ne!(super::AGGREGATE_BOOTSTRAP_SEED_BASE, TDI67_BOOTSTRAP_BASE);
+
+        for family in super::GeneratorFamily::ALL {
+            for block in 0..super::SEED_BLOCK_COUNT {
+                let identity = super::SeedBlockId {
+                    family,
+                    block: block as u8,
+                };
+                let base = identity.population_base_seed();
+
+                assert!(
+                    base > TDI67_LAST_RESERVATION,
+                    "{} block {block} base {base} must clear TDI-6.7's last reservation",
+                    family.label()
+                );
+                assert!(base > TDI67_POPULATION_ORIGIN);
+            }
+        }
+    }
+
+    /// Section 7's frozen per-ordered-pair formula, checked on the exact
+    /// arithmetic rather than on whatever the constant happens to be.
+    #[test]
+    fn transfer_pair_bootstrap_seed_follows_the_frozen_formula() {
+        for source in super::GeneratorFamily::ALL {
+            for target in super::GeneratorFamily::ALL {
+                assert_eq!(
+                    super::transfer_pair_bootstrap_seed(source, target),
+                    0x5444_4936_3800_4800 + 0x10 * (1 + source.index()) + target.index()
+                );
+            }
+        }
+    }
+
+    /// Placeholder metrics for bootstrap fixtures: `rank_increment_bootstrap`
+    /// reads only the truths and predictions, never these.
+    fn flat_metrics() -> super::Metrics {
+        super::Metrics {
+            mse: 0.0,
+            mae: 0.0,
+            r_squared: 0.0,
+            spearman: 0.0,
+            bias: 0.0,
+            observed_mean: 0.0,
+            predicted_mean: 0.0,
+            calibration_intercept: 0.0,
+            calibration_slope: 0.0,
+            zero_fraction: 0.0,
+            one_fraction: 0.0,
+        }
+    }
+
+    fn rank_block(
+        seed_block: super::SeedBlockId,
+        targets: Vec<f64>,
+        predictions: Vec<f64>,
+    ) -> super::ArmBlockEvaluation {
+        let records_len = targets.len();
+
+        super::ArmBlockEvaluation {
+            seed_block,
+            scaler: super::TargetScaler {
+                mean: 0.0,
+                scale: 1.0,
+            },
+            records_len,
+            standardized_targets: targets,
+            overlap_targets: vec![0.0; records_len],
+            evaluation: super::PredictorEvaluation {
+                standardized: flat_metrics(),
+                reconstructed: flat_metrics(),
+                predictions: super::Tdi52PredictionSet {
+                    standardized: predictions,
+                    reconstructed_overlap: vec![0.0; records_len],
+                },
+            },
+        }
+    }
+
+    /// The property that makes the shared draw *correct*, not merely fast: both
+    /// layouts see identical indices, so identical predictions must give an
+    /// increment of exactly zero in every replicate — bound included.
+    #[test]
+    fn shared_resample_gives_an_exactly_zero_increment_for_identical_layouts() {
+        let blocks = super::frozen_block_order(super::GeneratorFamily::F0Base);
+        let targets = (0..64).map(f64::from).collect::<Vec<_>>();
+        let predictions = targets
+            .iter()
+            .map(|value| value * 0.5 + 1.0)
+            .collect::<Vec<_>>();
+
+        let baseline = blocks
+            .iter()
+            .map(|&id| rank_block(id, targets.clone(), predictions.clone()))
+            .collect::<Vec<_>>();
+        let challenger = baseline.clone();
+
+        let (interval, undefined, total) =
+            super::rank_increment_bootstrap(&baseline, &challenger, 0x5444_4936_3800_4811)
+                .expect("well-formed");
+
+        let interval = interval.expect("defined");
+        assert_eq!(undefined, 0);
+        assert_eq!(total, super::BOOTSTRAP_REPLICATES);
+        assert_eq!(interval.lower, 0.0);
+        assert_eq!(interval.median, 0.0);
+        assert_eq!(interval.upper, 0.0);
+    }
+
+    /// A constant prediction makes every replicate undefined, and Section 8's
+    /// 1 % guard must then withhold the verdict rather than report a zero.
+    #[test]
+    fn a_degenerate_layout_makes_every_replicate_undefined() {
+        let blocks = super::frozen_block_order(super::GeneratorFamily::F0Base);
+        let targets = (0..64).map(f64::from).collect::<Vec<_>>();
+
+        let baseline = blocks
+            .iter()
+            .map(|&id| rank_block(id, targets.clone(), targets.clone()))
+            .collect::<Vec<_>>();
+        let challenger = blocks
+            .iter()
+            .map(|&id| rank_block(id, targets.clone(), vec![0.5; targets.len()]))
+            .collect::<Vec<_>>();
+
+        let (interval, undefined, total) =
+            super::rank_increment_bootstrap(&baseline, &challenger, 0x5444_4936_3800_4812)
+                .expect("well-formed");
+
+        assert!(interval.is_none());
+        assert_eq!(undefined, super::BOOTSTRAP_REPLICATES);
+        assert_eq!(total, super::BOOTSTRAP_REPLICATES);
+
+        let comparison =
+            super::classify_rank_increment(vec![None, None, None], interval, undefined, total);
+        assert_eq!(
+            comparison.classification,
+            super::RankClassification::Indeterminate
+        );
+    }
+
+    /// The shared truth ranks are only sound if both layouts really carry the
+    /// same standardized truth; the guard must refuse rather than silently rank
+    /// one layout's predictions against the other's truth.
+    #[test]
+    fn rank_bootstrap_refuses_layouts_that_disagree_on_the_truth() {
+        let blocks = super::frozen_block_order(super::GeneratorFamily::F0Base);
+        let targets = (0..32).map(f64::from).collect::<Vec<_>>();
+        let shifted = targets.iter().map(|value| value + 1.0).collect::<Vec<_>>();
+
+        let baseline = blocks
+            .iter()
+            .map(|&id| rank_block(id, targets.clone(), targets.clone()))
+            .collect::<Vec<_>>();
+        let challenger = blocks
+            .iter()
+            .map(|&id| rank_block(id, shifted.clone(), shifted.clone()))
+            .collect::<Vec<_>>();
+
+        assert!(super::rank_increment_bootstrap(&baseline, &challenger, 1).is_err());
     }
 }
