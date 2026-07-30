@@ -1,0 +1,86 @@
+# Dependabot configuration for TDI.
+#
+# ---------------------------------------------------------------------------
+# READ THIS BEFORE MERGING ANY DEPENDABOT PULL REQUEST
+# ---------------------------------------------------------------------------
+#
+# TDI is a frozen scientific artifact, and its dependency files are part of the
+# frozen record. `Cargo.lock` is covered by **20** SHA-256 scientific manifests
+# under `docs/`; the TDI-6.8 manifest additionally covers `Cargo.toml`, both
+# crate manifests, and two workflow files.
+#
+# Every reproduction script verifies those manifests *before* generating,
+# fitting or bootstrapping anything. A merged dependency bump therefore does not
+# merely change a version — it makes `sha256sum -c` fail, which makes all ten
+# `scripts/reproduce-tdi*.sh` refuse to run and fails the hash-verification
+# steps of every `tdi*-ci.yml` workflow.
+#
+# So a Dependabot PR here is never a one-click merge. It requires:
+#
+#   1. regenerating every affected `docs/TDI-*-SCIENTIFIC-CODE.sha256`;
+#   2. re-running the full gate — `cargo fmt --check`, `cargo clippy
+#      --all-targets -- -D warnings`, `cargo test --workspace`, and each
+#      reproduction script's `bash -n`;
+#   3. recording, in the pull request, that the frozen manifests were
+#      regenerated and why.
+#
+# Step 3 matters most. Published results were verified against the *old*
+# hashes. Regenerating a manifest silently would mean the results reports point
+# at code that no longer hashes to what they claim. If the bump changes any
+# numerical behaviour, the affected experiment's result is no longer reproduced
+# by the current tree and must be re-run or explicitly marked as historical.
+#
+# ---------------------------------------------------------------------------
+# WHY THIS IS CONFIGURED CONSERVATIVELY
+# ---------------------------------------------------------------------------
+#
+# TDI's entire third-party surface is four crates — `autocfg`, `num-bigint`,
+# `num-integer`, `num-traits` — all pure arbitrary-precision arithmetic. None
+# performs I/O, parses untrusted input, or uses FFI. The realistic security
+# exposure is very small, while the cost of churn against the frozen record is
+# real and immediate.
+#
+# The 19 workflows use **no third-party GitHub Actions** at all: every step is
+# a `run:` on the self-hosted runner. The `github-actions` entry below is
+# therefore future-proofing, not current coverage — it exists so that the day
+# someone adds an action, it is watched from the start.
+#
+# Both ecosystems are set to a monthly cadence with all updates grouped into a
+# single pull request, so the frozen manifests are disturbed at most once per
+# month per ecosystem rather than once per dependency. Security updates are not
+# suppressed: a real advisory still opens a pull request, which is the whole
+# point of enabling this.
+
+version: 2
+
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 1
+    groups:
+      cargo-dependencies:
+        patterns:
+          - "*"
+    labels:
+      - "dependencies"
+      - "requires-manifest-regeneration"
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 1
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "requires-manifest-regeneration"
+    commit-message:
+      prefix: "ci"
