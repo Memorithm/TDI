@@ -5133,7 +5133,7 @@ fn tdi52_sha256_of_repo_file(relative_path: &str) -> String {
 /// provenance (Section 1).
 fn print_tdi52_provenance() {
     println!();
-    println!("=== PROVENANCE ET INTÉGRITÉ (Section 21) ===");
+    println!("=== PROVENANCE ET INTÉGRITÉ (Section 16) ===");
     println!(
         "git commit                     : {}",
         tdi52_command_output("git", &["rev-parse", "HEAD"])
@@ -5146,6 +5146,55 @@ fn print_tdi52_provenance() {
         "cargo                          : {}",
         tdi52_command_output("cargo", &["--version"])
     );
+    // The head of the chain is THIS evaluator, then the one it derives from.
+    // The inherited block named TDI-6.5 as the parent and omitted 6.6, 6.7 and
+    // its own hash entirely — a copy that four derivations carried forward while
+    // Section 16 asks for the *full* frozen ancestor chain. The same defect was
+    // repaired once for v57 and reintroduced by the next copy.
+    println!(
+        "évaluateur TDI-6.8 SHA-256      : {}",
+        tdi52_sha256_of_repo_file("tdi-bench/src/bin/tdi-independent-overlap-ablation-v68.rs")
+    );
+    println!(
+        "préenregistrement TDI-6.8 SHA-256 : {}",
+        tdi52_sha256_of_repo_file("docs/TDI-6.8-TRANSPORTABLE-ORDERING-PREREGISTRATION.md")
+    );
+    println!(
+        "lignée                         : TDI-6.8 dérive de TDI-6.7 (v67) en changeant \
+         exactement un facteur — la statistique mesurée, un rang au lieu d'un niveau ; \
+         cœur littéral-spectral hérité de TDI-6.1 (v61), machinerie exacte des familles \
+         héritée de TDI-5.7 (v57)"
+    );
+    println!();
+    println!("--- provenance TDI-6.7 (ancêtre scientifique direct) ---");
+    println!(
+        "évaluateur TDI-6.7 SHA-256      : {}",
+        tdi52_sha256_of_repo_file("tdi-bench/src/bin/tdi-independent-overlap-ablation-v67.rs")
+    );
+    println!(
+        "préenregistrement TDI-6.7 SHA-256 : {}",
+        tdi52_sha256_of_repo_file("docs/TDI-6.7-OBSERVABLE-OFFSET-TRANSFER-PREREGISTRATION.md")
+    );
+    println!(
+        "manifeste scientifique TDI-6.7 SHA-256 : {}",
+        tdi52_sha256_of_repo_file("docs/TDI-6.7-SCIENTIFIC-CODE.sha256")
+    );
+    println!();
+    println!("--- provenance TDI-6.6 (ancêtre gelé) ---");
+    println!(
+        "évaluateur TDI-6.6 SHA-256      : {}",
+        tdi52_sha256_of_repo_file("tdi-bench/src/bin/tdi-independent-overlap-ablation-v66.rs")
+    );
+    println!(
+        "préenregistrement TDI-6.6 SHA-256 : {}",
+        tdi52_sha256_of_repo_file("docs/TDI-6.6-RESTANDARDIZED-TRANSFER-PREREGISTRATION.md")
+    );
+    println!(
+        "manifeste scientifique TDI-6.6 SHA-256 : {}",
+        tdi52_sha256_of_repo_file("docs/TDI-6.6-SCIENTIFIC-CODE.sha256")
+    );
+    println!();
+    println!("--- provenance TDI-6.5 (ancêtre gelé) ---");
     println!(
         "évaluateur TDI-6.5 SHA-256      : {}",
         tdi52_sha256_of_repo_file("tdi-bench/src/bin/tdi-independent-overlap-ablation-v65.rs")
@@ -5159,10 +5208,6 @@ fn print_tdi52_provenance() {
     println!(
         "manifeste scientifique TDI-6.5 SHA-256 : {}",
         tdi52_sha256_of_repo_file("docs/TDI-6.5-SCIENTIFIC-CODE.sha256")
-    );
-    println!(
-        "lignée combinée                : cœur littéral-spectral hérité de TDI-6.1 (v61), \
-         machinerie exacte des familles héritée de TDI-5.7 (v57)"
     );
     println!();
     println!("--- provenance TDI-6.2 (ancêtre gelé, inchangé) ---");
@@ -7149,6 +7194,35 @@ mod tests {
             (
                 "docs/TDI-6.2-NONLINEAR-SUFFICIENCY-PREREGISTRATION.md",
                 "a5263642ee79fb946bc9a7aa6fea4b57c22945a91b7ffa6f2220c7e4d4a55869",
+            ),
+            // The head of the chain. The inherited list stopped at TDI-6.2 and
+            // so protected neither TDI-6.5, nor TDI-6.6, nor TDI-6.7 — the
+            // evaluator this one derives from. A frozen-ancestor test that omits
+            // the most recent ancestors leaves exactly the files a derivation is
+            // most likely to touch unguarded.
+            (
+                "tdi-bench/src/bin/tdi-independent-overlap-ablation-v65.rs",
+                "75bd5198486e7e3c6072deebbdebd256aa3152a7b43b60054349f8e181c200f0",
+            ),
+            (
+                "docs/TDI-6.5-GENERATOR-FAMILY-SPECTRAL-ROBUSTNESS-PREREGISTRATION.md",
+                "f44eb21446ffdc6897c76818f4d4b22ecf266cf4f2707a4a8d995b0479acd589",
+            ),
+            (
+                "tdi-bench/src/bin/tdi-independent-overlap-ablation-v66.rs",
+                "b563a712b80bd983bfc3d6c7d4ffecc7b7fec35e6f3be8fea539ecb984346e7b",
+            ),
+            (
+                "docs/TDI-6.6-RESTANDARDIZED-TRANSFER-PREREGISTRATION.md",
+                "5216be5d8103505d63a0c9fd78d57f668d7005afd525a8481e259736df7276a9",
+            ),
+            (
+                "tdi-bench/src/bin/tdi-independent-overlap-ablation-v67.rs",
+                "f47b4b295431009ae78ebe292467411a172203d5ca84c1f69bec56edb629577d",
+            ),
+            (
+                "docs/TDI-6.7-OBSERVABLE-OFFSET-TRANSFER-PREREGISTRATION.md",
+                "46e92e9f8abf1bab828c45b18128e3b8affe6a6546f30800015e169c6082993b",
             ),
         ];
 
