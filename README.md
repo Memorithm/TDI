@@ -134,6 +134,21 @@ byte-exact; the ±2 % classifier margins dwarf the declared tolerances.
   But the effect size ranges over 39.8 pp across families, and in the one
   family where the literal descriptors are *censored* (`|λ₂| = 1` exactly for a
   large fraction of candidates) they add nothing at U₃.
+- **TDI-6.6** — re-standardized cross-generator transfer: the first candidate
+  repair for the transfer failure. Label-free re-standardization of the
+  features with the target domain's statistics is ***Harmful*** in all four
+  confirmatory cells and does not repair calibration. The oracle arm — which
+  also replaces the target scaler — *does* repair it, locating the residual
+  failure in the target domain's **deficit level**, the very quantity being
+  predicted.
+- **TDI-6.7** — observable-offset cross-generator transfer: the second
+  candidate repair, aimed at the level identified by TDI-6.6. Since `O₂` is a
+  feature, the shift `Δ = μ₂ᵀ − μ₂ˢ` is computable without labels; adding it to
+  the intercept is ***Harmful*** in all four confirmatory cells and repairs
+  nothing. The mechanism is exact: an additive constant moves **only** the bias
+  (residual spread invariant to `3e-12` across 144 blocks), and the frozen
+  model has already carried the level shift through the features. A *perfect*
+  `Δ` would help in **fewer** cells (9/24) than the imperfect one (12/24).
 
 ## Current conclusion
 
@@ -158,7 +173,12 @@ The current results do **not** establish:
 - **transportable calibration.** This is now a measured failure, not merely an
   untested question: neither across widths (TDI-5.8B) nor across generators
   (TDI-6.5C) does a fitted model predict absolute deficit levels in a new
-  domain. What transfers is rank ordering;
+  domain. What transfers is rank ordering. Two label-free repairs have since
+  been preregistered and tested, and **both were refuted**: feature
+  re-standardization (TDI-6.6) and an additive observable offset (TDI-6.7) are
+  each *Harmful* in every confirmatory cell. Their mechanisms differ and are
+  both identified, which bounds the family of remedies rather than merely
+  failing to find one;
 - **a transportable effect size.** Nearly width-invariant (0.61 pp spread) but
   strongly generator-dependent (39.8 pp) — no single number is "the" effect;
 - superiority over an arbitrarily expressive learner. Degree-2 interaction
