@@ -3984,6 +3984,183 @@ fn pooled_standardized_metrics(blocks: &[BlockComparison]) -> (Metrics, Metrics)
     )
 }
 
+/// Distinct stratified-bootstrap stream per ordered transfer pair.
+///
+/// TDI-6.5C had a single pair and could key the stream on the source family
+/// alone. TDI-6.6D evaluates 12 ordered pairs, and pairs sharing a source would
+/// otherwise share a resampling stream; keying on both families keeps each
+/// pair's interval independent of the others. Disjoint from the per-family
+/// aggregate seeds because the pair offsets start at `0x10`.
+fn transfer_pair_bootstrap_seed(source: GeneratorFamily, target: GeneratorFamily) -> u64 {
+    AGGREGATE_BOOTSTRAP_SEED_BASE + 0x10 * (1 + source.index()) + target.index()
+}
+
+/// One seed block's single-arm evaluation on a transfer target's holdout.
+///
+/// TDI-6.6 needs a *single-predictor* evaluation, which the inherited
+/// comparison machinery cannot express: `evaluate_block_comparison` derives one
+/// set of standardized ground-truth values from one scaler and shares it between
+/// its two predictors. That is correct for A0-vs-A1 (both carry the source
+/// scaler) but cannot represent A2, whose ground truth is standardized by the
+/// target scaler (preregistration Section 14.1).
+#[derive(Clone, Debug)]
+struct ArmBlockEvaluation {
+    seed_block: SeedBlockId,
+    scaler: TargetScaler,
+    records_len: usize,
+    standardized_targets: Vec<f64>,
+    overlap_targets: Vec<f64>,
+    evaluation: PredictorEvaluation,
+}
+
+/// Evaluates one arm's fit on one target family's per-block holdouts.
+fn evaluate_arm_blocks(
+    fit: &AggregateModelFit,
+    target_holdouts: [&[Record]; SEED_BLOCK_COUNT],
+    horizon_index: usize,
+    layout: FeatureLayout,
+) -> Result<Vec<ArmBlockEvaluation>, String> {
+    let mut blocks = Vec::with_capacity(SEED_BLOCK_COUNT);
+
+    for (seed_block, records) in frozen_block_order(fit.family())
+        .into_iter()
+        .zip(target_holdouts)
+    {
+        if records.is_empty() {
+            return Err("cannot evaluate an empty transfer population".to_owned());
+        }
+
+        let block_fit = fit.block(seed_block);
+        let scaler = block_fit.target_scalers[horizon_index];
+
+        let standardized_targets = records
+            .iter()
+            .map(|record| scaler.standardize(record.targets_u[horizon_index]))
+            .collect::<Vec<_>>();
+
+        let overlap_targets = overlap_values(records, horizon_index);
+
+        let evaluation = evaluate_layout(
+            layout,
+            records,
+            horizon_index,
+            &block_fit.models,
+            scaler,
+            &standardized_targets,
+            &overlap_targets,
+        )?;
+
+        blocks.push(ArmBlockEvaluation {
+            seed_block,
+            scaler,
+            records_len: records.len(),
+            standardized_targets,
+            overlap_targets,
+            evaluation,
+        });
+    }
+
+    Ok(blocks)
+}
+
+/// Pools one arm's per-block predictions into aggregate standardized and
+/// reconstructed metrics, concatenating in frozen block order exactly as the
+/// inherited `pooled_*_metrics` do.
+fn pooled_arm_metrics(blocks: &[ArmBlockEvaluation]) -> (Metrics, Metrics) {
+    let mut standardized_targets = Vec::new();
+    let mut standardized_predictions = Vec::new();
+    let mut overlap_targets = Vec::new();
+    let mut overlap_predictions = Vec::new();
+
+    for block in blocks {
+        standardized_targets.extend_from_slice(&block.standardized_targets);
+        standardized_predictions.extend_from_slice(&block.evaluation.predictions.standardized);
+        overlap_targets.extend_from_slice(&block.overlap_targets);
+        overlap_predictions.extend_from_slice(&block.evaluation.predictions.reconstructed_overlap);
+    }
+
+    (
+        calculate_metrics(&standardized_targets, &standardized_predictions),
+        calculate_metrics(&overlap_targets, &overlap_predictions),
+    )
+}
+
+/// Stratified bootstrap interval for a **single** arm's standardized-U `R²`.
+///
+/// `R² = 1 − RSS/TSS` is recomputed inside each replicate, with `TSS` taken
+/// about that replicate's own resampled mean — the resampled sample is the
+/// population whose mean the model is being asked to beat. Both sums scale
+/// identically under an affine rescaling of the target, which is what makes this
+/// interval comparable across arms that carry different target scalers
+/// (preregistration Section 14.1).
+///
+/// Resampling mirrors the inherited paired bootstrap exactly: `count` draws per
+/// block, in frozen block order, from one deterministic stream.
+fn arm_r_squared_bootstrap(
+    blocks: &[ArmBlockEvaluation],
+    seed: u64,
+) -> Result<ConfidenceInterval, String> {
+    let seed_blocks = blocks
+        .iter()
+        .map(|block| block.seed_block)
+        .collect::<Vec<_>>();
+
+    validate_frozen_block_order(&seed_blocks)
+        .map_err(|error| format!("arm R² bootstrap {error}"))?;
+
+    for block in blocks {
+        if block.records_len == 0
+            || block.evaluation.predictions.standardized.len() != block.records_len
+            || block.standardized_targets.len() != block.records_len
+        {
+            return Err("invalid arm R² bootstrap dimensions".to_owned());
+        }
+    }
+
+    let mut generator = DeterministicRng::new(seed);
+    let mut values = Vec::with_capacity(BOOTSTRAP_REPLICATES);
+
+    for _ in 0..BOOTSTRAP_REPLICATES {
+        let mut targets = Vec::new();
+        let mut residual_squares = 0.0_f64;
+
+        for block in blocks {
+            for _ in 0..block.records_len {
+                let index = generator.index(block.records_len);
+                let target = block.standardized_targets[index];
+                let residual = target - block.evaluation.predictions.standardized[index];
+
+                residual_squares += residual * residual;
+                targets.push(target);
+            }
+        }
+
+        let count = targets.len() as f64;
+        let mean = targets.iter().sum::<f64>() / count;
+        let total_squares = targets
+            .iter()
+            .map(|value| {
+                let deviation = value - mean;
+
+                deviation * deviation
+            })
+            .sum::<f64>();
+
+        // A degenerate resample (every target identical) has no variance to
+        // explain; the frozen scale floor is reused rather than inventing a
+        // second convention.
+        let r_squared = if total_squares <= DEGENERATE_SCALE_FLOOR {
+            0.0
+        } else {
+            1.0 - residual_squares / total_squares
+        };
+
+        values.push(r_squared);
+    }
+
+    Ok(confidence_interval(values))
+}
+
 fn pooled_reconstructed_metrics(blocks: &[BlockComparison]) -> (Metrics, Metrics) {
     let mut targets = Vec::new();
     let mut baseline_predictions = Vec::new();
