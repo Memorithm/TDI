@@ -1,53 +1,59 @@
-//! TDI-6.7 observable-offset cross-generator transfer (can a level shift
-//! estimated from *observed* deficits repair what feature alignment could not?).
+//! TDI-6.8 transportable ordering (does the overlap improve *transferred
+//! ordering*, and does the ordering transfer at all?).
 //!
-//! This file derives from the frozen TDI-6.6 evaluator
-//! (`tdi-independent-overlap-ablation-v66.rs`) by changing exactly one factor —
-//! **what the label-free transfer correction is**. TDI-5.1 … TDI-5.9 and
-//! TDI-6.1 … TDI-6.6 remain frozen and untouched.
+//! This file derives from the frozen TDI-6.7 evaluator
+//! (`tdi-independent-overlap-ablation-v67.rs`) by changing exactly one factor —
+//! **what is measured**: a rank statistic instead of a level statistic.
+//! TDI-5.1 … TDI-5.9 and TDI-6.1 … TDI-6.7 remain frozen and untouched.
 //!
-//! TDI-6.6 aligned the feature *scale* and made transfer dramatically worse. Its
-//! §5 showed why: re-standardizing on the target domain's own mean centres the
-//! features at zero **by construction**, annihilating the domain displacement
-//! that was carrying the level. Its 6.6C then localized the residual failure in
-//! the target scale — the deficit *level*, which is the quantity being predicted.
+//! Four experiments in a row found cross-generator transfer of the deficit
+//! *level* to be broken, and none of the four repairs worked. Each time, the
+//! reading offered was that the *ordering* might still survive even where the
+//! level does not. That reading was asserted four times and tested zero times.
+//! TDI-6.8 tests it.
 //!
-//! TDI-6.7 tests whether that pessimism is complete, because a proxy for the
-//! level is **observable without any label**. The series geometry is
-//! `U_h = −log₂(1 − O_h)` and the observation horizon is 2, so `O₁` and `O₂` —
-//! which are *features* on every record — give `U₁` and `U₂` directly. `U₂` is
-//! the last fully observed deficit, and the between-domain shift of its mean is
-//! a statistic of an unlabelled sample.
+//! **One arm, four layouts** (Section 3). No correction of any kind is applied:
+//! the model fitted on the source's training populations is applied to the
+//! target's holdouts carrying the source's feature statistics and the source's
+//! target scaler, coefficients never refitted. TDI-6.7's B1 (observable offset)
+//! and B2 (oracle target scaler) are absent by preregistration — B2 in
+//! particular fitted the target scaler, and Section 12 states flatly that **no
+//! target label is read anywhere in TDI-6.8, in any arm, for any criterion**.
+//! The experiment has no oracle arm, because on a bounded rank scale there is no
+//! scale to supply. The layouts are the ladder CK ⊂ SK ⊂ GK ⊂ GKT
+//! (15 / 17 / 19 / 21 features); the primary comparison is GKT against GK.
 //!
-//! Three arms, coefficients **never refitted** (preregistration Section 3):
+//! The statistic is Spearman's ρ **per seed block**, never pooled: pooling three
+//! blocks whose deficit levels differ would rank across domains and manufacture
+//! correlation from the level gap alone. `ρ̄` is the mean of the three per-block
+//! values and is undefined if any block is (Section 6).
 //!
-//!   * **B0 `SourceStandardized`** — source feature statistics and source target
-//!     scaler: byte-for-byte TDI-6.6's A0, carried forward so the B1-vs-B0
-//!     comparison is paired on identical populations;
-//!   * **B1 `ObservableOffset`** — B0 plus an additive `Δ̂_std = Δ / sˢ_h`, where
-//!     `Δ = μ₂ᵀ − μ₂ˢ` over both domains' **training** populations. Applied to
-//!     each model's intercept, so every feature statistic is left intact and the
-//!     mechanism that destroyed A1 cannot arise. This is the experiment;
-//!   * **B2 `OracleTargetScaler`** — source feature statistics, **target**
-//!     scaler. Unlike TDI-6.6's A2 it does not re-standardize features, so it
-//!     isolates the target-scale contribution alone — exactly what B1
-//!     approximates. It reads target labels and is **not a prediction method**;
-//!     every line naming it is labelled `oracle`.
+//! Criteria: 6.8A (GKT vs GK on the confirmatory pair, margin `m = 0.02`
+//! absolute on the bounded [−1, 1] scale — two standard errors of a single ρ at
+//! 10,000 records); 6.8B (`rank_transfers` — does the ordering transfer at all,
+//! which can disagree with 6.8A: an increment can be *Beneficial* while both
+//! correlations sit at zero); 6.8C (`retention = ρ̄_transfer / ρ̄_within`,
+//! descriptive); 6.8D (all 12 ordered pairs and the direction consistency
+//! across them, with the preregistered reading rule that a *Beneficial*
+//! increment accompanied by `ρ̄(GKT) ≤ 0` is **better-ordered noise, not
+//! transfer**). Section 14 reports transferred ordering against the label-free
+//! domain distance `|ū₂ᵀ − ū₂ˢ|` — the statistic TDI-6.7 applied as `Δ` and
+//! TDI-6.8 only reports.
 //!
-//! Criteria: 6.7A (B1 vs B0 on the confirmatory pair), 6.7B
-//! (`calibration_repaired ≡ R² > 0`), 6.7C (`recovered_fraction`, placing B1 on
-//! the segment between doing nothing and knowing the answer), 6.7D (all 12
-//! ordered pairs, with the preregistered reading rule that a *Beneficial* cell
-//! whose `R²` is still ≤ 0 is less bad, not good). Section 14's `oracle`
-//! diagnostic reports the observable `Δ` against the **true** level shift, which
-//! never feeds B1 and exists to explain the verdict either way.
+//! No outcome is a success or a failure. *Harmful* or *Equivalent* would
+//! establish that the four prior discussions were reading a pooling artifact or
+//! a within-domain effect, which is a result of the same weight as confirmation.
 //!
-//! Everything else is inherited verbatim from TDI-6.6: the four generator
+//! Everything else is inherited verbatim from TDI-6.7: the four generator
 //! families, the population contract, the CK/SK/GK/GKT layouts, the linear ridge
 //! (λ = 1), the horizons, the deterministic bootstrap, the four-way classifier,
 //! and the non-exact determinism discipline in which `g` and `τ_ε` are the only
-//! non-exact quantities. The offset adds none — it is a mean of `log₂` values in
-//! the same regime.
+//! non-exact quantities. The rank statistic adds none — ranks of finite doubles
+//! are exact.
+//!
+//! Populations and bootstrap streams are **fresh** (Section 7): the 8.6e9 seed
+//! origin clears TDI-6.7's last reservation. That freshness is what lets Section
+//! 1.3 admit a rank criterion whose hypothesis came from already-observed data.
 //!
 //! The full run is gated behind an explicit, exact human confirmation
 //! environment variable (see `run_full_experiment` and
@@ -67,7 +73,7 @@ const TARGET_HORIZON_COUNT: usize = TARGET_HORIZONS.len();
 const PRIMARY_HORIZON: usize = 6;
 const PRIMARY_HORIZON_INDEX: usize = 3;
 
-// The two focal horizons at which TDI-6.7A/6.7B classify: U3 (near, where
+// The two focal horizons at which TDI-6.8A/6.8B classify: U3 (near, where
 // TDI-5.4B found a short-horizon benefit) and the primary U6.
 const FOCAL_HORIZONS: [usize; 2] = [3, 6];
 const FOCAL_HORIZON_COUNT: usize = FOCAL_HORIZONS.len();
@@ -136,7 +142,7 @@ const LITERAL_SPECTRAL_FEATURE_COUNT: usize = 2;
 // marginal value in each family (TDI-6.5D, not a TDI-6.7 criterion); GKT minus GK
 // isolates the overlaps' marginal value *after* the contraction descriptors, the
 // exact spectral moments AND the literal spectral gap + mixing time are already
-// present (the confirmatory comparison, criteria 6.6A, 6.6B, 6.6C, 6.6D).
+// present (the confirmatory comparison, criteria 6.8A, 6.8B, 6.8C, 6.8D).
 //   CK  = baseline + delta + delta_bar                              (13 + 2 = 15)
 //   SK  = baseline + delta + delta_bar + s2 + s3                    (13 + 4 = 17)
 //   GK  = baseline + delta + delta_bar + s2 + s3 + g + τ_ε          (13 + 6 = 19)
@@ -2922,48 +2928,21 @@ enum TransferArm {
     /// **B0** — source feature statistics and source target scaler: byte-for-byte
     /// TDI-6.6's A0, carried forward so the B1-vs-B0 comparison is paired.
     SourceStandardized,
-    /// **B1** — B0 plus an additive shift `Δ̂_std` (Section 3.1).
-    ///
-    /// This is the experiment. `Δ = μ₂ᵀ − μ₂ˢ` is the between-domain shift in
-    /// mean *observed* deficit `u₂ = −log₂(1 − O₂)`, computed on both domains'
-    /// training populations. `O₂` is a feature, so no target label is read.
-    ObservableOffset,
-    /// **B2** — source feature statistics, **target** scaler.
-    ///
-    /// Unlike TDI-6.6's A2 this does *not* re-standardize features: it isolates
-    /// the target-scale contribution alone, which is exactly what B1 tries to
-    /// approximate. Fitting the target scaler reads the target domain's `U_h`
-    /// values, so **B2 is not a prediction method** — it is the upper bound, and
-    /// every output line naming it is labelled `oracle`.
-    OracleTargetScaler,
 }
 
 impl TransferArm {
-    const ALL: [Self; 3] = [
-        Self::SourceStandardized,
-        Self::ObservableOffset,
-        Self::OracleTargetScaler,
-    ];
+    /// TDI-6.8 has exactly **one** arm. Section 3: "No correction of any kind
+    /// is applied." TDI-6.7's B1 (observable offset) and B2 (oracle target
+    /// scaler) are absent by preregistration — B2 in particular fitted the
+    /// target scaler, which reads target-domain `U_h`, and Section 12 states
+    /// flatly that no target label is read anywhere in TDI-6.8, in any arm, for
+    /// any criterion.
+    const ALL: [Self; 1] = [Self::SourceStandardized];
 
     fn label(self) -> &'static str {
         match self {
-            Self::SourceStandardized => "B0-source",
-            Self::ObservableOffset => "B1-observable-offset",
-            Self::OracleTargetScaler => "B2-oracle-target-scaler",
+            Self::SourceStandardized => "plain-transfer",
         }
-    }
-
-    /// Whether this arm's construction reads any target-domain label. True for
-    /// `B2` alone; every reporting path consults this rather than re-deriving
-    /// the property, so the `oracle` labelling cannot disagree with what the arm
-    /// actually does.
-    const fn uses_target_labels(self) -> bool {
-        matches!(self, Self::OracleTargetScaler)
-    }
-
-    /// Whether this arm shifts the predicted level.
-    const fn applies_observable_offset(self) -> bool {
-        matches!(self, Self::ObservableOffset)
     }
 }
 
@@ -2997,13 +2976,8 @@ fn observed_deficit(record: &Record, horizon: ObservedHorizon) -> Result<f64, St
     Ok(deficit)
 }
 
-/// The raw observable shift `Δ = μ₂ᵀ − μ₂ˢ` between two domains
-/// (preregistration Section 3.1, step 3).
-///
-/// Both means are taken over **training** populations, never the scored holdout,
-/// so the design is not transductive.
 /// Which observed horizon the deficit proxy is read at. `Last` (`U₂`) is the
-/// criterion path; `First` (`U₁`) is the Section 15 companion.
+/// Section 14 path; `First` (`U₁`) is the Section 15 companion.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ObservedHorizon {
     First,
@@ -3044,95 +3018,6 @@ fn observable_shift_at(
 ) -> Result<f64, String> {
     Ok(pooled_observed_deficit(target_training, horizon)?
         - pooled_observed_deficit(source_training, horizon)?)
-}
-
-/// Derives the transfer-time model for one arm from a source-domain fit.
-///
-/// `B0` returns the source fit unchanged. `B1` adds `Δ / sˢ_h` to every model's
-/// intercept — shifting each standardized prediction by exactly that scalar
-/// while leaving every feature statistic untouched, so the mechanism that
-/// destroyed TDI-6.6's A1 cannot arise. `B2` keeps the source models verbatim
-/// and replaces only the target scalers, which is the step that reads labels.
-fn derive_transfer_fit(
-    source_fit: &AggregateModelFit,
-    target_training_records: [&[Record]; SEED_BLOCK_COUNT],
-    observable_shift: f64,
-    arm: TransferArm,
-) -> Result<AggregateModelFit, String> {
-    if arm == TransferArm::SourceStandardized {
-        return Ok(source_fit.clone());
-    }
-
-    if !observable_shift.is_finite() {
-        return Err("the observable shift is not finite".to_owned());
-    }
-
-    let source_family = source_fit.family();
-    let mut blocks = Vec::with_capacity(SEED_BLOCK_COUNT);
-
-    for (seed_block, records) in frozen_block_order(source_family)
-        .into_iter()
-        .zip(target_training_records)
-    {
-        if records.is_empty() {
-            return Err(format!(
-                "transfer derivation for block {} received no target training records",
-                seed_block.label()
-            ));
-        }
-
-        let source_block = source_fit.block(seed_block);
-        let mut models = Vec::with_capacity(TARGET_HORIZON_COUNT * MODEL_LAYOUT_COUNT);
-
-        for horizon_index in 0..TARGET_HORIZON_COUNT {
-            // Section 3.1 step 4: the shift is expressed in the units B0's
-            // predictions already live in, i.e. divided by the SOURCE scaler
-            // this arm still carries.
-            let standardized_shift = if arm.applies_observable_offset() {
-                observable_shift / source_block.target_scalers[horizon_index].scale
-            } else {
-                0.0
-            };
-
-            for layout in FeatureLayout::ALL {
-                let source_model = source_block.models.get(horizon_index, layout);
-                let mut coefficients = source_model.coefficients.clone();
-
-                // Adding to the intercept shifts every standardized prediction by
-                // exactly `standardized_shift`, leaving the fitted relationship
-                // and every feature statistic untouched.
-                coefficients[0] += standardized_shift;
-
-                models.push(RidgeModel {
-                    means: source_model.means.clone(),
-                    scales: source_model.scales.clone(),
-                    coefficients,
-                });
-            }
-        }
-
-        let target_scalers = if arm.uses_target_labels() {
-            fit_target_scalers(records)?
-        } else {
-            source_block.target_scalers
-        };
-
-        blocks.push(BlockModelFit {
-            seed_block,
-            target_scalers,
-            models: HorizonModels { models },
-        });
-    }
-
-    let blocks: [BlockModelFit; SEED_BLOCK_COUNT] =
-        blocks.try_into().map_err(|values: Vec<BlockModelFit>| {
-            format!(
-                "expected {SEED_BLOCK_COUNT} derived blocks, received {}",
-                values.len()
-            )
-        })?;
-
-    AggregateModelFit::assemble(blocks)
 }
 
 fn fit_ridge(features: &[Vec<f64>], targets: &[f64]) -> Result<RidgeModel, String> {
@@ -3910,42 +3795,20 @@ fn print_model(label: &str, model: &RidgeModel) {
     }
 }
 
-fn print_interval(label: &str, interval: ConfidenceInterval) {
-    println!(
-        "{label}: [{:.9}, {:.9}] (médiane {:.9})",
-        interval.lower, interval.upper, interval.median
-    );
-}
 #[derive(Clone, Debug)]
 struct Tdi52PredictionSet {
     standardized: Vec<f64>,
     reconstructed_overlap: Vec<f64>,
 }
 
-/// One fitted layout's evaluation at a horizon: its standardized-U and
-/// reconstructed-O metrics and its prediction set. TDI-6.6 compares two
-/// fitted layouts, so this carries no layout identity of its own.
+/// One fitted layout's prediction set at a horizon.
+///
+/// TDI-6.8 pools its metrics across the three seed blocks (`pooled_arm_metrics`)
+/// and computes every rank statistic from the predictions directly, so no
+/// per-block metric is retained here.
 #[derive(Clone, Debug)]
 struct PredictorEvaluation {
-    standardized: Metrics,
-    reconstructed: Metrics,
     predictions: Tdi52PredictionSet,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct Tdi52BootstrapIntervals {
-    standardized_mse: ConfidenceInterval,
-    reconstructed_mse: ConfidenceInterval,
-    reconstructed_mae: ConfidenceInterval,
-    relative_standardized_mse: ConfidenceInterval,
-}
-
-fn tdi52_relative_reduction(baseline: f64, challenger: f64) -> f64 {
-    if !baseline.is_finite() || !challenger.is_finite() || baseline.abs() <= 1.0e-15 {
-        0.0
-    } else {
-        (baseline - challenger) / baseline
-    }
 }
 
 fn tdi52_reconstruct_overlap(target_u: f64) -> (f64, bool) {
@@ -4004,19 +3867,16 @@ fn tdi52_predict(
     })
 }
 
-/// Evaluates one fitted ridge layout at a horizon: its standardized-U and
-/// reconstructed-O metrics plus its prediction set. TDI-6.6 compares two
-/// fitted layouts only — the naive persistence competitor of TDI-5.5 is
-/// dropped (preregistration Section 7), so every comparison runs through the
-/// identical paired / stratified-aggregate bootstrap and four-way classifier.
+/// Evaluates one fitted ridge layout at a horizon, yielding its prediction set.
+///
+/// Metrics are not computed per block: TDI-6.8 pools them across the three seed
+/// blocks and derives every rank statistic from the predictions directly.
 fn evaluate_layout(
     layout: FeatureLayout,
     records: &[Record],
     horizon_index: usize,
     models: &HorizonModels,
     scaler: TargetScaler,
-    standardized_targets: &[f64],
-    overlap_targets: &[f64],
 ) -> Result<PredictorEvaluation, String> {
     let predictions = tdi52_predict(
         records,
@@ -4026,362 +3886,13 @@ fn evaluate_layout(
         scaler,
     )?;
 
-    let standardized = calculate_metrics(standardized_targets, &predictions.standardized);
-    let reconstructed = calculate_metrics(overlap_targets, &predictions.reconstructed_overlap);
-
-    Ok(PredictorEvaluation {
-        standardized,
-        reconstructed,
-        predictions,
-    })
-}
-
-fn tdi52_paired_bootstrap(
-    seed_block: SeedBlockId,
-    records: &[Record],
-    horizon_index: usize,
-    scaler: TargetScaler,
-    baseline: &Tdi52PredictionSet,
-    challenger: &Tdi52PredictionSet,
-) -> Result<Tdi52BootstrapIntervals, String> {
-    let count = records.len();
-
-    if count == 0
-        || baseline.standardized.len() != count
-        || challenger.standardized.len() != count
-        || baseline.reconstructed_overlap.len() != count
-        || challenger.reconstructed_overlap.len() != count
-    {
-        return Err("invalid paired-bootstrap dimensions".to_owned());
-    }
-
-    let mut generator = DeterministicRng::new(seed_block.bootstrap_seed());
-
-    let mut standardized_mse = Vec::with_capacity(BOOTSTRAP_REPLICATES);
-
-    let mut reconstructed_mse = Vec::with_capacity(BOOTSTRAP_REPLICATES);
-
-    let mut reconstructed_mae = Vec::with_capacity(BOOTSTRAP_REPLICATES);
-
-    let mut relative_standardized_mse = Vec::with_capacity(BOOTSTRAP_REPLICATES);
-
-    for _ in 0..BOOTSTRAP_REPLICATES {
-        let mut baseline_standardized_squared = 0.0;
-        let mut challenger_standardized_squared = 0.0;
-
-        let mut baseline_overlap_squared = 0.0;
-        let mut challenger_overlap_squared = 0.0;
-
-        let mut baseline_overlap_absolute = 0.0;
-        let mut challenger_overlap_absolute = 0.0;
-
-        for _ in 0..count {
-            let index = generator.index(count);
-            let record = &records[index];
-
-            let standardized_target = scaler.standardize(record.targets_u[horizon_index]);
-
-            let baseline_standardized_residual = standardized_target - baseline.standardized[index];
-
-            let challenger_standardized_residual =
-                standardized_target - challenger.standardized[index];
-
-            baseline_standardized_squared +=
-                baseline_standardized_residual * baseline_standardized_residual;
-
-            challenger_standardized_squared +=
-                challenger_standardized_residual * challenger_standardized_residual;
-
-            let overlap_target = record.overlaps[horizon_index];
-
-            let baseline_overlap_residual = overlap_target - baseline.reconstructed_overlap[index];
-
-            let challenger_overlap_residual =
-                overlap_target - challenger.reconstructed_overlap[index];
-
-            baseline_overlap_squared += baseline_overlap_residual * baseline_overlap_residual;
-
-            challenger_overlap_squared += challenger_overlap_residual * challenger_overlap_residual;
-
-            baseline_overlap_absolute += baseline_overlap_residual.abs();
-
-            challenger_overlap_absolute += challenger_overlap_residual.abs();
-        }
-
-        let denominator = count as f64;
-
-        let baseline_standardized_mse = baseline_standardized_squared / denominator;
-        let challenger_standardized_mse = challenger_standardized_squared / denominator;
-
-        standardized_mse.push(baseline_standardized_mse - challenger_standardized_mse);
-
-        relative_standardized_mse.push(tdi52_relative_reduction(
-            baseline_standardized_mse,
-            challenger_standardized_mse,
-        ));
-
-        reconstructed_mse.push(
-            baseline_overlap_squared / denominator - challenger_overlap_squared / denominator,
-        );
-
-        reconstructed_mae.push(
-            baseline_overlap_absolute / denominator - challenger_overlap_absolute / denominator,
-        );
-    }
-
-    Ok(Tdi52BootstrapIntervals {
-        standardized_mse: confidence_interval(standardized_mse),
-        reconstructed_mse: confidence_interval(reconstructed_mse),
-        reconstructed_mae: confidence_interval(reconstructed_mae),
-        relative_standardized_mse: confidence_interval(relative_standardized_mse),
-    })
-}
-
-struct BlockComparisonInputs<'a> {
-    seed_block: SeedBlockId,
-    records: &'a [Record],
-    scaler: TargetScaler,
-    baseline: &'a Tdi52PredictionSet,
-    challenger: &'a Tdi52PredictionSet,
-}
-
-fn aggregate_paired_bootstrap(
-    horizon_index: usize,
-    blocks: &[BlockComparisonInputs<'_>],
-) -> Result<Tdi52BootstrapIntervals, String> {
-    let seed_blocks = blocks
-        .iter()
-        .map(|block| block.seed_block)
-        .collect::<Vec<_>>();
-
-    validate_frozen_block_order(&seed_blocks)
-        .map_err(|error| format!("aggregate bootstrap {error}"))?;
-
-    // Every block in an aggregate belongs to the same family (validated
-    // above); that family's stratified-aggregate bootstrap seed is disjoint
-    // from every other family's (Section 9).
-    let family = seed_blocks[0].family;
-
-    aggregate_paired_bootstrap_with_seed(
-        horizon_index,
-        blocks,
-        family_aggregate_bootstrap_seed(family),
-    )
-}
-
-/// The paired-bootstrap core with an explicit stream seed.
-///
-/// TDI-6.6D runs 12 ordered transfer pairs; keying the stream on the source
-/// family alone (which is all `aggregate_paired_bootstrap` can infer from the
-/// block identities) would give every pair sharing a source the same resampling
-/// pattern. Pair comparisons pass `transfer_pair_bootstrap_seed` instead.
-fn aggregate_paired_bootstrap_with_seed(
-    horizon_index: usize,
-    blocks: &[BlockComparisonInputs<'_>],
-    seed: u64,
-) -> Result<Tdi52BootstrapIntervals, String> {
-    let seed_blocks = blocks
-        .iter()
-        .map(|block| block.seed_block)
-        .collect::<Vec<_>>();
-
-    validate_frozen_block_order(&seed_blocks)
-        .map_err(|error| format!("aggregate bootstrap {error}"))?;
-
-    for block in blocks {
-        let count = block.records.len();
-
-        if count == 0
-            || block.baseline.standardized.len() != count
-            || block.challenger.standardized.len() != count
-            || block.baseline.reconstructed_overlap.len() != count
-            || block.challenger.reconstructed_overlap.len() != count
-        {
-            return Err("invalid aggregate paired-bootstrap dimensions".to_owned());
-        }
-    }
-
-    let mut generator = DeterministicRng::new(seed);
-
-    let mut standardized_mse = Vec::with_capacity(BOOTSTRAP_REPLICATES);
-    let mut reconstructed_mse = Vec::with_capacity(BOOTSTRAP_REPLICATES);
-    let mut reconstructed_mae = Vec::with_capacity(BOOTSTRAP_REPLICATES);
-    let mut relative_standardized_mse = Vec::with_capacity(BOOTSTRAP_REPLICATES);
-
-    for _ in 0..BOOTSTRAP_REPLICATES {
-        let mut baseline_standardized_squared = 0.0;
-        let mut challenger_standardized_squared = 0.0;
-
-        let mut baseline_overlap_squared = 0.0;
-        let mut challenger_overlap_squared = 0.0;
-
-        let mut baseline_overlap_absolute = 0.0;
-        let mut challenger_overlap_absolute = 0.0;
-
-        let mut total_count = 0_usize;
-
-        for block in blocks {
-            let count = block.records.len();
-
-            for _ in 0..count {
-                let index = generator.index(count);
-                let record = &block.records[index];
-
-                let standardized_target = block.scaler.standardize(record.targets_u[horizon_index]);
-
-                let baseline_standardized_residual =
-                    standardized_target - block.baseline.standardized[index];
-
-                let challenger_standardized_residual =
-                    standardized_target - block.challenger.standardized[index];
-
-                baseline_standardized_squared +=
-                    baseline_standardized_residual * baseline_standardized_residual;
-
-                challenger_standardized_squared +=
-                    challenger_standardized_residual * challenger_standardized_residual;
-
-                let overlap_target = record.overlaps[horizon_index];
-
-                let baseline_overlap_residual =
-                    overlap_target - block.baseline.reconstructed_overlap[index];
-
-                let challenger_overlap_residual =
-                    overlap_target - block.challenger.reconstructed_overlap[index];
-
-                baseline_overlap_squared += baseline_overlap_residual * baseline_overlap_residual;
-
-                challenger_overlap_squared +=
-                    challenger_overlap_residual * challenger_overlap_residual;
-
-                baseline_overlap_absolute += baseline_overlap_residual.abs();
-                challenger_overlap_absolute += challenger_overlap_residual.abs();
-            }
-
-            total_count += count;
-        }
-
-        let denominator = total_count as f64;
-
-        let baseline_standardized_mse = baseline_standardized_squared / denominator;
-        let challenger_standardized_mse = challenger_standardized_squared / denominator;
-
-        standardized_mse.push(baseline_standardized_mse - challenger_standardized_mse);
-
-        relative_standardized_mse.push(tdi52_relative_reduction(
-            baseline_standardized_mse,
-            challenger_standardized_mse,
-        ));
-
-        reconstructed_mse.push(
-            baseline_overlap_squared / denominator - challenger_overlap_squared / denominator,
-        );
-
-        reconstructed_mae.push(
-            baseline_overlap_absolute / denominator - challenger_overlap_absolute / denominator,
-        );
-    }
-
-    Ok(Tdi52BootstrapIntervals {
-        standardized_mse: confidence_interval(standardized_mse),
-        reconstructed_mse: confidence_interval(reconstructed_mse),
-        reconstructed_mae: confidence_interval(reconstructed_mae),
-        relative_standardized_mse: confidence_interval(relative_standardized_mse),
-    })
-}
-
-#[derive(Clone, Debug)]
-struct BlockComparison {
-    seed_block: SeedBlockId,
-    standardized_targets: Vec<f64>,
-    overlap_targets: Vec<f64>,
-    baseline: PredictorEvaluation,
-    challenger: PredictorEvaluation,
-    bootstrap: Tdi52BootstrapIntervals,
-}
-
-fn evaluate_block_comparison(
-    seed_block: SeedBlockId,
-    holdout_records: &[Record],
-    horizon_index: usize,
-    models: &HorizonModels,
-    scalers: &[TargetScaler; TARGET_HORIZON_COUNT],
-    baseline_layout: FeatureLayout,
-    challenger_layout: FeatureLayout,
-) -> Result<BlockComparison, String> {
-    if holdout_records.is_empty() {
-        return Err("cannot evaluate an empty population".to_owned());
-    }
-
-    let scaler = scalers[horizon_index];
-
-    let standardized_targets = holdout_records
-        .iter()
-        .map(|record| scaler.standardize(record.targets_u[horizon_index]))
-        .collect::<Vec<_>>();
-
-    let overlap_targets = overlap_values(holdout_records, horizon_index);
-
-    let baseline = evaluate_layout(
-        baseline_layout,
-        holdout_records,
-        horizon_index,
-        models,
-        scaler,
-        &standardized_targets,
-        &overlap_targets,
-    )?;
-
-    let challenger = evaluate_layout(
-        challenger_layout,
-        holdout_records,
-        horizon_index,
-        models,
-        scaler,
-        &standardized_targets,
-        &overlap_targets,
-    )?;
-
-    let bootstrap = tdi52_paired_bootstrap(
-        seed_block,
-        holdout_records,
-        horizon_index,
-        scaler,
-        &baseline.predictions,
-        &challenger.predictions,
-    )?;
-
-    Ok(BlockComparison {
-        seed_block,
-        standardized_targets,
-        overlap_targets,
-        baseline,
-        challenger,
-        bootstrap,
-    })
-}
-
-fn pooled_standardized_metrics(blocks: &[BlockComparison]) -> (Metrics, Metrics) {
-    let mut targets = Vec::new();
-    let mut baseline_predictions = Vec::new();
-    let mut challenger_predictions = Vec::new();
-
-    for block in blocks {
-        targets.extend_from_slice(&block.standardized_targets);
-        baseline_predictions.extend_from_slice(&block.baseline.predictions.standardized);
-        challenger_predictions.extend_from_slice(&block.challenger.predictions.standardized);
-    }
-
-    (
-        calculate_metrics(&targets, &baseline_predictions),
-        calculate_metrics(&targets, &challenger_predictions),
-    )
+    Ok(PredictorEvaluation { predictions })
 }
 
 /// Distinct stratified-bootstrap stream per ordered transfer pair.
 ///
 /// TDI-6.5C had a single pair and could key the stream on the source family
-/// alone. TDI-6.6D evaluates 12 ordered pairs, and pairs sharing a source would
+/// alone. TDI-6.8D evaluates 12 ordered pairs, and pairs sharing a source would
 /// otherwise share a resampling stream; keying on both families keeps each
 /// pair's interval independent of the others. Disjoint from the per-family
 /// aggregate seeds because the pair offsets start at `0x10`.
@@ -4400,7 +3911,6 @@ fn transfer_pair_bootstrap_seed(source: GeneratorFamily, target: GeneratorFamily
 #[derive(Clone, Debug)]
 struct ArmBlockEvaluation {
     seed_block: SeedBlockId,
-    scaler: TargetScaler,
     records_len: usize,
     standardized_targets: Vec<f64>,
     overlap_targets: Vec<f64>,
@@ -4434,19 +3944,11 @@ fn evaluate_arm_blocks(
 
         let overlap_targets = overlap_values(records, horizon_index);
 
-        let evaluation = evaluate_layout(
-            layout,
-            records,
-            horizon_index,
-            &block_fit.models,
-            scaler,
-            &standardized_targets,
-            &overlap_targets,
-        )?;
+        let evaluation =
+            evaluate_layout(layout, records, horizon_index, &block_fit.models, scaler)?;
 
         blocks.push(ArmBlockEvaluation {
             seed_block,
-            scaler,
             records_len: records.len(),
             standardized_targets,
             overlap_targets,
@@ -4479,129 +3981,238 @@ fn pooled_arm_metrics(blocks: &[ArmBlockEvaluation]) -> (Metrics, Metrics) {
     )
 }
 
-/// Stratified bootstrap interval for a **single** arm's standardized-U `R²`.
+/// What one shared-resample run yields, for every layout at once.
+#[derive(Clone, Debug)]
+struct RankBootstrapOutcome {
+    /// Per layout, in the order supplied: the interval of `ρ̄` and how many
+    /// replicates were undefined for that layout. Section 11 needs this
+    /// per-layout interval; Section 10 needs the increments below.
+    per_layout: Vec<(FeatureLayout, Option<ConfidenceInterval>, usize)>,
+    /// Per requested `(challenger, baseline)` comparison: the interval of
+    /// `Δρ = ρ̄(challenger) − ρ̄(baseline)` and its undefined count. A replicate
+    /// counts as undefined here if *either* side was undefined at it.
+    increments: Vec<(
+        FeatureLayout,
+        FeatureLayout,
+        Option<ConfidenceInterval>,
+        usize,
+    )>,
+    replicates: usize,
+}
+
+impl RankBootstrapOutcome {
+    fn layout(&self, layout: FeatureLayout) -> (Option<ConfidenceInterval>, usize) {
+        self.per_layout
+            .iter()
+            .find(|(candidate, _, _)| *candidate == layout)
+            .map(|(_, interval, undefined)| (*interval, *undefined))
+            .expect("every requested layout is present in its own bootstrap outcome")
+    }
+
+    fn increment(
+        &self,
+        challenger: FeatureLayout,
+        baseline: FeatureLayout,
+    ) -> (Option<ConfidenceInterval>, usize) {
+        self.increments
+            .iter()
+            .find(|(high, low, _, _)| *high == challenger && *low == baseline)
+            .map(|(_, _, interval, undefined)| (*interval, *undefined))
+            .expect("every requested comparison is present in its own bootstrap outcome")
+    }
+}
+
+/// The shared-resample rank bootstrap of TDI-6.8 Section 8.
 ///
-/// `R² = 1 − RSS/TSS` is recomputed inside each replicate, with `TSS` taken
-/// about that replicate's own resampled mean — the resampled sample is the
-/// population whose mean the model is being asked to beat. Both sums scale
-/// identically under an affine rescaling of the target, which is what makes this
-/// interval comparable across arms that carry different target scalers
-/// (preregistration Section 6).
-///
-/// Resampling mirrors the inherited paired bootstrap exactly: `count` draws per
-/// block, in frozen block order, from one deterministic stream.
-/// The paired rank bootstrap of TDI-6.8 Section 8.
-///
-/// **One resample per (pair, horizon, seed block), shared by both layouts.**
+/// **One resample per (pair, horizon, seed block), shared by every layout.**
 /// Section 8 requires the two layouts of a comparison to be resampled with the
-/// same indices so the increment is paired; sharing one draw across both
-/// satisfies that and additionally lets the resampled truth ranks be computed
-/// once instead of twice. Measured at the preregistered scale, the shared form
-/// costs 3.09 ms per replicate against 7.72 ms for independent paired
-/// comparisons — 2.5×, or 15 minutes against 37 for the 72 transfer cells.
+/// same indices so the increment is paired. Sharing a single draw across all
+/// four layouts satisfies that for every comparison simultaneously, lets the
+/// resampled truth ranks be computed once instead of once per layout, and makes
+/// the whole descriptor ladder — CK→SK→GK→GKT — paired on identical draws
+/// rather than merely comparable. Measured at the preregistered scale, the
+/// shared form costs 3.09 ms per replicate against 7.72 ms for independent
+/// paired comparisons.
 ///
-/// Resampling is **within** a block (Section 8), and the aggregate replicate
+/// Resampling is **within** a block (Section 8), and a replicate's aggregate
 /// value is the mean of the three per-block ρ at that replicate — never a
 /// resampling of a pooled sample, which Section 6 forbids outright.
 ///
-/// Returns the increment interval together with the undefined-replicate count,
-/// which Section 8 requires to be reported and which drives the 1 % guard.
-fn rank_increment_bootstrap(
-    baseline_blocks: &[ArmBlockEvaluation],
-    challenger_blocks: &[ArmBlockEvaluation],
+/// Undefined-replicate counts are returned rather than silently dropped:
+/// Section 8 requires them reported, and they drive the 1 % guard.
+fn rank_bootstrap(
+    layout_blocks: &[(FeatureLayout, &[ArmBlockEvaluation])],
+    comparisons: &[(FeatureLayout, FeatureLayout)],
     seed: u64,
-) -> Result<(Option<ConfidenceInterval>, usize, usize), String> {
-    if baseline_blocks.len() != challenger_blocks.len() || baseline_blocks.is_empty() {
-        return Err("rank bootstrap needs matching, non-empty block sets".to_owned());
+) -> Result<RankBootstrapOutcome, String> {
+    let Some((_, reference)) = layout_blocks.first() else {
+        return Err("rank bootstrap needs at least one layout".to_owned());
+    };
+
+    if reference.is_empty() {
+        return Err("rank bootstrap needs a non-empty block set".to_owned());
     }
 
-    for (baseline, challenger) in baseline_blocks.iter().zip(challenger_blocks) {
-        if baseline.seed_block != challenger.seed_block {
-            return Err("rank bootstrap block order disagrees between layouts".to_owned());
+    for (_, blocks) in layout_blocks {
+        if blocks.len() != reference.len() {
+            return Err("rank bootstrap block counts disagree between layouts".to_owned());
         }
 
-        if baseline.records_len != challenger.records_len || baseline.records_len == 0 {
-            return Err("rank bootstrap dimensions disagree between layouts".to_owned());
-        }
+        for (candidate, anchor) in blocks.iter().zip(*reference) {
+            if candidate.seed_block != anchor.seed_block {
+                return Err("rank bootstrap block order disagrees between layouts".to_owned());
+            }
 
-        // Both layouts score the same records under the same target scaler, so
-        // the standardized truth must be identical. Asserted rather than
-        // assumed, because the shared truth ranks below depend on it.
-        if baseline.standardized_targets != challenger.standardized_targets {
-            return Err("rank bootstrap layouts disagree on the standardized truth".to_owned());
+            if candidate.records_len != anchor.records_len || candidate.records_len == 0 {
+                return Err("rank bootstrap dimensions disagree between layouts".to_owned());
+            }
+
+            // Every layout scores the same records under the same target scaler,
+            // so the standardized truth must be identical across them. Asserted
+            // rather than assumed, because the shared truth ranks below — the
+            // whole point of one draw — depend on it.
+            if candidate.standardized_targets != anchor.standardized_targets {
+                return Err("rank bootstrap layouts disagree on the standardized truth".to_owned());
+            }
         }
     }
 
+    for (challenger, baseline) in comparisons {
+        for layout in [challenger, baseline] {
+            if !layout_blocks
+                .iter()
+                .any(|(candidate, _)| candidate == layout)
+            {
+                return Err(format!(
+                    "rank bootstrap comparison names {}, which was not supplied",
+                    layout.label()
+                ));
+            }
+        }
+    }
+
+    let count = layout_blocks.len();
+    let block_count = reference.len();
     let mut generator = DeterministicRng::new(seed);
-    let mut increments = Vec::with_capacity(BOOTSTRAP_REPLICATES);
-    let mut undefined = 0_usize;
+
+    // One `Option<f64>` per layout per replicate. Held in full because Section 10
+    // pairs increments replicate-by-replicate: a layout's r-th value is only
+    // meaningful beside another layout's r-th value from the same draw.
+    let mut per_replicate = vec![Vec::with_capacity(BOOTSTRAP_REPLICATES); count];
 
     let mut indices = Vec::new();
     let mut truth = Vec::new();
-    let mut baseline_predictions = Vec::new();
-    let mut challenger_predictions = Vec::new();
+    let mut predictions = Vec::new();
 
     for _ in 0..BOOTSTRAP_REPLICATES {
-        let mut baseline_total = 0.0_f64;
-        let mut challenger_total = 0.0_f64;
-        let mut defined = true;
+        let mut totals = vec![0.0_f64; count];
+        let mut defined = vec![true; count];
 
-        for (baseline, challenger) in baseline_blocks.iter().zip(challenger_blocks) {
+        for block_index in 0..block_count {
+            let records_len = reference[block_index].records_len;
+
+            // The single shared draw. Note it happens unconditionally, before any
+            // layout is consulted: the stream must not depend on which layouts
+            // have already gone degenerate, or determinism would hinge on the
+            // data rather than on the seed alone.
             indices.clear();
+            for _ in 0..records_len {
+                indices.push(generator.index(records_len));
+            }
+
             truth.clear();
-            baseline_predictions.clear();
-            challenger_predictions.clear();
-
-            // The single shared draw: both layouts see exactly these records.
-            for _ in 0..baseline.records_len {
-                indices.push(generator.index(baseline.records_len));
-            }
-
             for &index in &indices {
-                truth.push(baseline.standardized_targets[index]);
-                baseline_predictions.push(baseline.evaluation.predictions.standardized[index]);
-                challenger_predictions.push(challenger.evaluation.predictions.standardized[index]);
+                truth.push(reference[block_index].standardized_targets[index]);
             }
 
-            // Computed once for both layouts — the whole point of sharing.
+            // Computed once for every layout — the whole point of sharing.
             let truth_ranks = average_ranks(&truth);
+            let truth_defined = !is_constant(&truth_ranks);
 
-            if is_constant(&truth_ranks) {
-                defined = false;
-                break;
+            for (layout_index, (_, blocks)) in layout_blocks.iter().enumerate() {
+                if !defined[layout_index] {
+                    continue;
+                }
+
+                if !truth_defined {
+                    defined[layout_index] = false;
+                    continue;
+                }
+
+                predictions.clear();
+                for &index in &indices {
+                    predictions
+                        .push(blocks[block_index].evaluation.predictions.standardized[index]);
+                }
+
+                match rank_correlation_against(&truth_ranks, &predictions) {
+                    Some(rho) => totals[layout_index] += rho,
+                    None => defined[layout_index] = false,
+                }
             }
-
-            let Some(baseline_rho) = rank_correlation_against(&truth_ranks, &baseline_predictions)
-            else {
-                defined = false;
-                break;
-            };
-            let Some(challenger_rho) =
-                rank_correlation_against(&truth_ranks, &challenger_predictions)
-            else {
-                defined = false;
-                break;
-            };
-
-            baseline_total += baseline_rho;
-            challenger_total += challenger_rho;
         }
 
-        if defined {
-            let blocks = baseline_blocks.len() as f64;
-            increments.push(challenger_total / blocks - baseline_total / blocks);
-        } else {
-            undefined += 1;
+        for layout_index in 0..count {
+            per_replicate[layout_index]
+                .push(defined[layout_index].then(|| totals[layout_index] / block_count as f64));
         }
     }
 
-    let interval = if increments.is_empty() {
-        None
-    } else {
-        Some(confidence_interval(increments))
+    let per_layout = layout_blocks
+        .iter()
+        .enumerate()
+        .map(|(index, (layout, _))| {
+            let values = per_replicate[index]
+                .iter()
+                .flatten()
+                .copied()
+                .collect::<Vec<_>>();
+            let undefined = BOOTSTRAP_REPLICATES - values.len();
+
+            (
+                *layout,
+                (!values.is_empty()).then(|| confidence_interval(values)),
+                undefined,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let position = |wanted: FeatureLayout| {
+        layout_blocks
+            .iter()
+            .position(|(candidate, _)| *candidate == wanted)
+            .expect("comparison layouts were validated above")
     };
 
-    Ok((interval, undefined, BOOTSTRAP_REPLICATES))
+    let increments = comparisons
+        .iter()
+        .map(|&(challenger, baseline)| {
+            let high = position(challenger);
+            let low = position(baseline);
+            let mut values = Vec::new();
+            let mut undefined = 0_usize;
+
+            for (high, low) in per_replicate[high].iter().zip(&per_replicate[low]) {
+                match (high, low) {
+                    (Some(high), Some(low)) => values.push(high - low),
+                    _ => undefined += 1,
+                }
+            }
+
+            (
+                challenger,
+                baseline,
+                (!values.is_empty()).then(|| confidence_interval(values)),
+                undefined,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    Ok(RankBootstrapOutcome {
+        per_layout,
+        increments,
+        replicates: BOOTSTRAP_REPLICATES,
+    })
 }
 
 /// Spearman's ρ against an already-ranked argument, so a shared truth need not
@@ -4617,6 +4228,14 @@ fn rank_correlation_against(left_ranks: &[f64], right: &[f64]) -> Option<f64> {
     Some(pearson_correlation(left_ranks, &right_ranks))
 }
 
+/// Stratified bootstrap interval for a **single** arm's standardized-U `R²`.
+///
+/// `R² = 1 − RSS/TSS` is recomputed inside each replicate, with `TSS` taken
+/// about that replicate's own resampled mean — the resampled sample is the
+/// population whose mean the model is being asked to beat.
+///
+/// Resampling mirrors the inherited paired bootstrap exactly: `count` draws per
+/// block, in frozen block order, from one deterministic stream.
 fn arm_r_squared_bootstrap(
     blocks: &[ArmBlockEvaluation],
     seed: u64,
@@ -4682,419 +4301,10 @@ fn arm_r_squared_bootstrap(
     Ok(confidence_interval(values))
 }
 
-fn pooled_reconstructed_metrics(blocks: &[BlockComparison]) -> (Metrics, Metrics) {
-    let mut targets = Vec::new();
-    let mut baseline_predictions = Vec::new();
-    let mut challenger_predictions = Vec::new();
-
-    for block in blocks {
-        targets.extend_from_slice(&block.overlap_targets);
-        baseline_predictions.extend_from_slice(&block.baseline.predictions.reconstructed_overlap);
-        challenger_predictions
-            .extend_from_slice(&block.challenger.predictions.reconstructed_overlap);
-    }
-
-    (
-        calculate_metrics(&targets, &baseline_predictions),
-        calculate_metrics(&targets, &challenger_predictions),
-    )
-}
-
-#[derive(Clone, Debug)]
-struct AggregateComparison {
-    blocks: Vec<BlockComparison>,
-    aggregate_baseline_standardized: Metrics,
-    aggregate_challenger_standardized: Metrics,
-    aggregate_baseline_reconstructed: Metrics,
-    aggregate_challenger_reconstructed: Metrics,
-    aggregate_bootstrap: Tdi52BootstrapIntervals,
-}
-
-impl AggregateComparison {
-    fn family(&self) -> GeneratorFamily {
-        self.blocks[0].seed_block.family
-    }
-
-    fn block(&self, seed_block: SeedBlockId) -> &BlockComparison {
-        self.blocks
-            .iter()
-            .find(|comparison| comparison.seed_block == seed_block)
-            .expect("AggregateComparison always contains exactly one comparison per seed block")
-    }
-}
-
-fn evaluate_aggregate_comparison(
-    horizon_index: usize,
-    aggregate_fit: &AggregateModelFit,
-    holdout_records: [&[Record]; SEED_BLOCK_COUNT],
-    baseline_layout: FeatureLayout,
-    challenger_layout: FeatureLayout,
-) -> Result<AggregateComparison, String> {
-    let mut blocks = Vec::with_capacity(SEED_BLOCK_COUNT);
-
-    for (seed_block, records) in frozen_block_order(aggregate_fit.family())
-        .into_iter()
-        .zip(holdout_records)
-    {
-        let block_fit = aggregate_fit.block(seed_block);
-
-        blocks.push(evaluate_block_comparison(
-            seed_block,
-            records,
-            horizon_index,
-            &block_fit.models,
-            &block_fit.target_scalers,
-            baseline_layout,
-            challenger_layout,
-        )?);
-    }
-
-    let (aggregate_baseline_standardized, aggregate_challenger_standardized) =
-        pooled_standardized_metrics(&blocks);
-
-    let (aggregate_baseline_reconstructed, aggregate_challenger_reconstructed) =
-        pooled_reconstructed_metrics(&blocks);
-
-    let bootstrap_inputs = blocks
-        .iter()
-        .zip(holdout_records)
-        .map(|(comparison, records)| BlockComparisonInputs {
-            seed_block: comparison.seed_block,
-            records,
-            scaler: aggregate_fit.block(comparison.seed_block).target_scalers[horizon_index],
-            baseline: &comparison.baseline.predictions,
-            challenger: &comparison.challenger.predictions,
-        })
-        .collect::<Vec<_>>();
-
-    let aggregate_bootstrap = aggregate_paired_bootstrap(horizon_index, &bootstrap_inputs)?;
-
-    Ok(AggregateComparison {
-        blocks,
-        aggregate_baseline_standardized,
-        aggregate_challenger_standardized,
-        aggregate_baseline_reconstructed,
-        aggregate_challenger_reconstructed,
-        aggregate_bootstrap,
-    })
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum CriterionCClassification {
-    Beneficial,
-    Equivalent,
-    Harmful,
-    Inconclusive,
-}
-
-impl CriterionCClassification {
-    const fn label(self) -> &'static str {
-        match self {
-            Self::Beneficial => "beneficial",
-            Self::Equivalent => "equivalent",
-            Self::Harmful => "harmful",
-            Self::Inconclusive => "inconclusive",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct CriterionCResult {
-    classification: CriterionCClassification,
-    blocks_confirming_benefit: usize,
-    aggregate_relative_improvement_at_least_2_percent: bool,
-    aggregate_bootstrap_lower_bound_positive: bool,
-    all_block_point_estimates_within_equivalence_margin: bool,
-    block_intervals_within_equivalence_margin: usize,
-    aggregate_interval_within_equivalence_margin: bool,
-    blocks_confirming_harm: usize,
-    aggregate_relative_worsening_at_least_2_percent: bool,
-    aggregate_bootstrap_upper_bound_negative: bool,
-}
-
-impl CriterionCResult {
-    const MARGIN: f64 = 0.02;
-
-    fn is_beneficial(&self) -> bool {
-        self.blocks_confirming_benefit >= 2
-            && self.aggregate_relative_improvement_at_least_2_percent
-            && self.aggregate_bootstrap_lower_bound_positive
-    }
-
-    fn is_equivalent(&self) -> bool {
-        self.all_block_point_estimates_within_equivalence_margin
-            && self.block_intervals_within_equivalence_margin >= 2
-            && self.aggregate_interval_within_equivalence_margin
-    }
-
-    fn is_harmful(&self) -> bool {
-        self.blocks_confirming_harm >= 2
-            && self.aggregate_relative_worsening_at_least_2_percent
-            && self.aggregate_bootstrap_upper_bound_negative
-    }
-
-    /// Fixed precedence Beneficial > Equivalent > Harmful > Inconclusive
-    /// over the already-computed sub-condition flags. Factored out so the
-    /// precedence is unit-testable from a hand-built `CriterionCResult`
-    /// without constructing an `AggregateComparison`.
-    fn classify(&self) -> CriterionCClassification {
-        if self.is_beneficial() {
-            CriterionCClassification::Beneficial
-        } else if self.is_equivalent() {
-            CriterionCClassification::Equivalent
-        } else if self.is_harmful() {
-            CriterionCClassification::Harmful
-        } else {
-            CriterionCClassification::Inconclusive
-        }
-    }
-}
-
-fn evaluate_criterion_c(comparison: &AggregateComparison) -> CriterionCResult {
-    let order = frozen_block_order(comparison.family());
-
-    let block_relative_reductions = order.map(|seed_block| {
-        let block = comparison.block(seed_block);
-
-        tdi52_relative_reduction(
-            block.baseline.standardized.mse,
-            block.challenger.standardized.mse,
-        )
-    });
-
-    let blocks_confirming_benefit = order
-        .iter()
-        .zip(block_relative_reductions)
-        .filter(|&(&seed_block, relative_reduction)| {
-            relative_reduction >= CriterionCResult::MARGIN
-                && comparison
-                    .block(seed_block)
-                    .bootstrap
-                    .standardized_mse
-                    .lower
-                    > 0.0
-        })
-        .count();
-
-    let blocks_confirming_harm = order
-        .iter()
-        .zip(block_relative_reductions)
-        .filter(|&(&seed_block, relative_reduction)| {
-            relative_reduction <= -CriterionCResult::MARGIN
-                && comparison
-                    .block(seed_block)
-                    .bootstrap
-                    .standardized_mse
-                    .upper
-                    < 0.0
-        })
-        .count();
-
-    let all_block_point_estimates_within_equivalence_margin =
-        block_relative_reductions.iter().all(|&reduction| {
-            (-CriterionCResult::MARGIN..=CriterionCResult::MARGIN).contains(&reduction)
-        });
-
-    let block_intervals_within_equivalence_margin = order
-        .iter()
-        .filter(|&&seed_block| {
-            let interval = comparison
-                .block(seed_block)
-                .bootstrap
-                .relative_standardized_mse;
-
-            interval.lower >= -CriterionCResult::MARGIN
-                && interval.upper <= CriterionCResult::MARGIN
-        })
-        .count();
-
-    let aggregate_relative_reduction = tdi52_relative_reduction(
-        comparison.aggregate_baseline_standardized.mse,
-        comparison.aggregate_challenger_standardized.mse,
-    );
-
-    let aggregate_relative_improvement_at_least_2_percent =
-        aggregate_relative_reduction >= CriterionCResult::MARGIN;
-
-    let aggregate_relative_worsening_at_least_2_percent =
-        aggregate_relative_reduction <= -CriterionCResult::MARGIN;
-
-    let aggregate_bootstrap_lower_bound_positive =
-        comparison.aggregate_bootstrap.standardized_mse.lower > 0.0;
-
-    let aggregate_bootstrap_upper_bound_negative =
-        comparison.aggregate_bootstrap.standardized_mse.upper < 0.0;
-
-    let aggregate_relative_interval = comparison.aggregate_bootstrap.relative_standardized_mse;
-
-    let aggregate_interval_within_equivalence_margin = aggregate_relative_interval.lower
-        >= -CriterionCResult::MARGIN
-        && aggregate_relative_interval.upper <= CriterionCResult::MARGIN;
-
-    let mut result = CriterionCResult {
-        classification: CriterionCClassification::Inconclusive,
-        blocks_confirming_benefit,
-        aggregate_relative_improvement_at_least_2_percent,
-        aggregate_bootstrap_lower_bound_positive,
-        all_block_point_estimates_within_equivalence_margin,
-        block_intervals_within_equivalence_margin,
-        aggregate_interval_within_equivalence_margin,
-        blocks_confirming_harm,
-        aggregate_relative_worsening_at_least_2_percent,
-        aggregate_bootstrap_upper_bound_negative,
-    };
-
-    result.classification = result.classify();
-
-    result
-}
-
 fn focal_horizon_indices() -> [usize; FOCAL_HORIZON_COUNT] {
     std::array::from_fn(|slot| {
         target_horizon_index(FOCAL_HORIZONS[slot])
             .expect("every focal horizon belongs to the target horizons")
-    })
-}
-
-/// One horizon's comparison of a challenger predictor against a baseline
-/// predictor: the aggregate comparison, its four-way classification, and the
-/// aggregate relative-MSE reduction of the challenger over the baseline in
-/// standardized-U space (the challenger's marginal value at that horizon).
-#[derive(Clone, Debug)]
-struct HorizonComparison {
-    horizon: usize,
-    comparison: AggregateComparison,
-    result: CriterionCResult,
-    aggregate_relative_reduction: f64,
-}
-
-fn evaluate_horizon_comparison(
-    horizon_index: usize,
-    aggregate_fit: &AggregateModelFit,
-    combined_holdout_records: [&[Record]; SEED_BLOCK_COUNT],
-    baseline_layout: FeatureLayout,
-    challenger_layout: FeatureLayout,
-) -> Result<HorizonComparison, String> {
-    let comparison = evaluate_aggregate_comparison(
-        horizon_index,
-        aggregate_fit,
-        combined_holdout_records,
-        baseline_layout,
-        challenger_layout,
-    )?;
-
-    let result = evaluate_criterion_c(&comparison);
-
-    let aggregate_relative_reduction = tdi52_relative_reduction(
-        comparison.aggregate_baseline_standardized.mse,
-        comparison.aggregate_challenger_standardized.mse,
-    );
-
-    Ok(HorizonComparison {
-        horizon: TARGET_HORIZONS[horizon_index],
-        comparison,
-        result,
-        aggregate_relative_reduction,
-    })
-}
-
-/// Compares **two arms on the same layout**, which is the shape TDI-6.6A needs
-/// and the inherited layout-vs-layout comparison cannot express.
-///
-/// # Well-posedness
-///
-/// Refuses unless both fits carry **identical** target scalers on every block.
-/// That is the precondition of preregistration Section 6: a relative-MSE
-/// comparison between arms whose ground truth is standardized differently would
-/// measure the ratio of two scaler variances rather than any property of the
-/// models. A0 and A1 both keep the source scaler and pass; any comparison
-/// involving A2 fails here rather than silently producing a meaningless number.
-fn evaluate_cross_arm_comparison(
-    horizon_index: usize,
-    layout: FeatureLayout,
-    baseline_fit: &AggregateModelFit,
-    challenger_fit: &AggregateModelFit,
-    target_holdouts: [&[Record]; SEED_BLOCK_COUNT],
-    bootstrap_seed: u64,
-) -> Result<HorizonComparison, String> {
-    let baseline_blocks =
-        evaluate_arm_blocks(baseline_fit, target_holdouts, horizon_index, layout)?;
-    let challenger_blocks =
-        evaluate_arm_blocks(challenger_fit, target_holdouts, horizon_index, layout)?;
-
-    let mut blocks = Vec::with_capacity(SEED_BLOCK_COUNT);
-
-    for (baseline, challenger) in baseline_blocks.iter().zip(&challenger_blocks) {
-        if baseline.scaler != challenger.scaler {
-            return Err(format!(
-                "cross-arm comparison on block {} would compare errors standardized by \
-                 different target scalers, which measures scaler variance rather than model \
-                 quality (Section 6)",
-                baseline.seed_block.label()
-            ));
-        }
-
-        blocks.push(BlockComparison {
-            seed_block: baseline.seed_block,
-            standardized_targets: baseline.standardized_targets.clone(),
-            overlap_targets: baseline.overlap_targets.clone(),
-            baseline: baseline.evaluation.clone(),
-            challenger: challenger.evaluation.clone(),
-            bootstrap: tdi52_paired_bootstrap(
-                baseline.seed_block,
-                target_holdouts[usize::from(baseline.seed_block.block)],
-                horizon_index,
-                baseline.scaler,
-                &baseline.evaluation.predictions,
-                &challenger.evaluation.predictions,
-            )?,
-        });
-    }
-
-    let (aggregate_baseline_standardized, aggregate_challenger_standardized) =
-        pooled_standardized_metrics(&blocks);
-
-    let (aggregate_baseline_reconstructed, aggregate_challenger_reconstructed) =
-        pooled_reconstructed_metrics(&blocks);
-
-    // The scaler is taken from the baseline arm's per-block evaluation; the
-    // equality check above guarantees the challenger's is the same value.
-    let bootstrap_inputs = blocks
-        .iter()
-        .zip(target_holdouts)
-        .zip(&baseline_blocks)
-        .map(|((comparison, records), baseline)| BlockComparisonInputs {
-            seed_block: comparison.seed_block,
-            records,
-            scaler: baseline.scaler,
-            baseline: &comparison.baseline.predictions,
-            challenger: &comparison.challenger.predictions,
-        })
-        .collect::<Vec<_>>();
-
-    let aggregate_bootstrap =
-        aggregate_paired_bootstrap_with_seed(horizon_index, &bootstrap_inputs, bootstrap_seed)?;
-
-    let comparison = AggregateComparison {
-        blocks,
-        aggregate_baseline_standardized,
-        aggregate_challenger_standardized,
-        aggregate_baseline_reconstructed,
-        aggregate_challenger_reconstructed,
-        aggregate_bootstrap,
-    };
-
-    let result = evaluate_criterion_c(&comparison);
-
-    let aggregate_relative_reduction = tdi52_relative_reduction(
-        comparison.aggregate_baseline_standardized.mse,
-        comparison.aggregate_challenger_standardized.mse,
-    );
-
-    Ok(HorizonComparison {
-        horizon: TARGET_HORIZONS[horizon_index],
-        comparison,
-        result,
-        aggregate_relative_reduction,
     })
 }
 
@@ -5127,15 +4337,30 @@ struct FamilyReport {
     observed_deficit_means: [f64; 2],
 }
 
-/// The two layouts every transfer cell is evaluated under (Section 6). GK is
-/// carried alongside GKT so that any re-standardization effect can be attributed
-/// to the alignment rather than to the overlaps (Section 12).
-const TRANSFER_LAYOUTS: [FeatureLayout; 2] = [FeatureLayout::Gk, FeatureLayout::Gkt];
+/// The four layout arms of Section 3, in ladder order CK ⊂ SK ⊂ GK ⊂ GKT
+/// (15 / 17 / 19 / 21 features). The primary comparison is GKT against GK; CK
+/// and SK are carried so the ladder is visible and any GKT effect can be read
+/// against what the descriptor ladder already contributes. No criterion is
+/// defined on CK or SK.
+const TRANSFER_LAYOUTS: [FeatureLayout; 4] = [
+    FeatureLayout::Ck,
+    FeatureLayout::Sk,
+    FeatureLayout::Gk,
+    FeatureLayout::Gkt,
+];
+
+/// The three adjacent rungs of the Section 10 ladder, as `(challenger,
+/// baseline)`. Only the first is a criterion; the other two are reported.
+const LADDER_COMPARISONS: [(FeatureLayout, FeatureLayout); 3] = [
+    (FeatureLayout::Gkt, FeatureLayout::Gk),
+    (FeatureLayout::Gk, FeatureLayout::Sk),
+    (FeatureLayout::Sk, FeatureLayout::Ck),
+];
 
 /// One arm's evaluation of one (ordered pair, layout, focal horizon).
 ///
 /// `standardized` and `reconstructed` are pooled across the three seed blocks.
-/// Only the scale-free members — `r_squared_interval`, `calibration_repaired`,
+/// Only the scale-free members — `r_squared_interval`,
 /// and the Spearman and calibration slope inside `standardized` — may be
 /// compared across arms; `mse` and `mae` may not, because A2 standardizes its
 /// ground truth with a different scaler (Section 6).
@@ -5145,9 +4370,11 @@ struct ArmEvaluation {
     standardized: Metrics,
     reconstructed: Metrics,
     r_squared_interval: ConfidenceInterval,
-    /// Criterion TDI-6.7B (Section 11): the transferred model beats predicting
-    /// the target's mean.
-    calibration_repaired: bool,
+    /// Section 16 context: the transferred model's standardized-`R²` interval.
+    /// No TDI-6.8 criterion reads it — the criteria are on ranks — but Section
+    /// 16 requires it printed, and a negative `R²` beside a positive `ρ̄` is
+    /// exactly the "orders but does not level" reading the experiment exists to
+    /// separate from "does neither".
     /// TDI-6.8 Section 6: the rank statistics of each seed block, **never**
     /// pooled. One entry per `SEED_BLOCK_COUNT`, in frozen block order.
     ///
@@ -5161,18 +4388,15 @@ struct ArmEvaluation {
 #[derive(Clone, Debug)]
 struct TransferCell {
     layout: FeatureLayout,
-    /// One entry per `TransferArm::ALL`, in that order.
+    horizon: usize,
+    /// One entry per `TransferArm::ALL` — which, in TDI-6.8, is the single
+    /// plain-transfer arm of Section 3.
     arms: Vec<ArmEvaluation>,
-    /// A1 against A0 — the **only** relative-MSE comparison the design admits,
-    /// because those two arms share the source target scaler (Section 6).
-    a1_vs_a0: HorizonComparison,
 }
 
 impl TransferCell {
-    /// Read from the comparison rather than stored alongside it, so a cell
-    /// cannot claim one horizon while its comparison holds another.
     fn horizon(&self) -> usize {
-        self.a1_vs_a0.horizon
+        self.horizon
     }
 
     fn arm(&self, arm: TransferArm) -> &ArmEvaluation {
@@ -5189,89 +4413,108 @@ struct TransferPairReport {
     source: GeneratorFamily,
     target: GeneratorFamily,
     cells: Vec<TransferCell>,
-    /// The raw observable shift `Δ = μ₂ᵀ − μ₂ˢ` (Section 3.1). One scalar per
-    /// pair, computed from features only.
+    /// Section 14's label-free domain separation `ū₂ᵀ − ū₂ˢ`, computed from
+    /// features only over the two domains' TRAINING populations. Section 14
+    /// reports its magnitude; TDI-6.8 never applies it to anything.
     observable_shift: f64,
     /// Section 15 companion: the same shift computed at `U₁` instead of `U₂`.
     /// Context only; no criterion consumes it.
     observable_shift_u1: f64,
-    /// TDI-6.8 Section 10: GKT against GK on the plain-transfer arm, one entry
-    /// per focal horizon, built from per-block rank statistics only.
-    rank_comparisons: Vec<(usize, RankComparison)>,
-    /// Section 14, `oracle`: the **true** level shift `μ_hᵀ − μ_hˢ` per focal
-    /// horizon, read from holdout labels. Never feeds B1; it answers *why* B1
-    /// succeeded or failed. `(horizon, true shift, Δ / true shift)`.
-    true_level_shifts: Vec<(usize, f64, f64)>,
-    /// Section 16: `Δ`, `sˢ_h` and `Δ̂_std` must be printed **separately** so
-    /// the applied correction can be audited rather than inferred from the
-    /// predictions. `(horizon, per-block sˢ_h, per-block Δ̂_std)`.
-    applied_shifts: Vec<(usize, [f64; SEED_BLOCK_COUNT], [f64; SEED_BLOCK_COUNT])>,
+    /// Sections 11-12, one entry per (layout, focal horizon).
+    rank_cells: Vec<RankCell>,
+    /// Section 10's three ladder rungs at each focal horizon. Only
+    /// `(GKT, GK)` carries a criterion; the other two are reported.
+    ladder: Vec<LadderComparison>,
 }
 
-impl TransferPairReport {
-    fn cell(&self, layout: FeatureLayout, horizon: usize) -> &TransferCell {
-        self.cells
-            .iter()
-            .find(|cell| cell.layout == layout && cell.horizon() == horizon)
-            .expect("every pair report holds one cell per layout and focal horizon")
-    }
+/// Section 16's rank record for one (pair, layout, focal horizon).
+///
+/// Every field the preregistration demands on a `rank_transfers` or `retention`
+/// line is held here explicitly, so printing can never present a boolean
+/// without the three per-block ρ and the interval that produced it.
+#[derive(Clone, Debug)]
+struct RankCell {
+    layout: FeatureLayout,
+    horizon: usize,
+    /// The three per-block ρ on the **target**'s holdout, in frozen block order.
+    block_rho: [Option<f64>; SEED_BLOCK_COUNT],
+    /// `ρ̄` — the mean of the three, undefined if any block is (Section 6).
+    mean_rho: Option<f64>,
+    /// Section 8's interval for `ρ̄`, with its undefined-replicate count.
+    interval: Option<ConfidenceInterval>,
+    undefined_replicates: usize,
+    /// Section 11: `ρ > 0` in all three blocks **and** a strictly positive
+    /// bootstrap lower bound.
+    rank_transfers: bool,
+    /// Section 12: the same fitted model scored on the **source**'s own holdout.
+    within_rho: Option<f64>,
+    /// Section 12: `ρ̄_transfer / ρ̄_within` when `ρ̄_within > 0`, else
+    /// not-applicable. Never a success or a failure.
+    retention: Option<f64>,
 }
 
-/// Criterion TDI-6.7A (Section 10, primary): on the F0→F1 pair, the B1-vs-B0
-/// classification per layout and focal horizon.
+/// One rung of the Section 10 ladder at one focal horizon.
+#[derive(Clone, Debug)]
+struct LadderComparison {
+    challenger: FeatureLayout,
+    baseline: FeatureLayout,
+    horizon: usize,
+    comparison: RankComparison,
+}
+
+/// Criterion TDI-6.8A (Section 10, primary): on the confirmatory F0→F1 pair, the
+/// GKT-against-GK rank classification at each focal horizon, with the other two
+/// ladder rungs reported beside it so any GKT effect can be read against what
+/// the descriptor ladder already contributes. No criterion is defined on those.
 #[derive(Clone, Debug)]
 struct Tdi68CriterionA {
-    per_cell: Vec<(FeatureLayout, usize, CriterionCClassification, f64)>,
+    per_horizon: Vec<(usize, RankComparison)>,
+    ladder: Vec<LadderComparison>,
 }
 
-/// Criterion TDI-6.7B (Section 11, primary): `calibration_repaired` on the
-/// F0→F1 pair. `repaired` is the preregistered conjunction — true iff the
-/// **B1/GKT** cell has `R² > 0` at **both** focal horizons; `non_repairs` names
-/// each (layout, horizon) still at or below zero under A1 (the located
-/// non-repair).
+/// Criterion TDI-6.8B (Section 11, primary): does the ordering transfer at all?
+///
+/// `transfers` is the preregistered conjunction — `rank_transfers` under **GKT**
+/// at **both** focal horizons on the confirmatory pair. `located_failures` names
+/// every (layout, horizon) whose ordering is at or below zero, which is what the
+/// preregistration asks be reported when the conjunction fails.
+///
+/// This can disagree with TDI-6.8A, and the disagreement is informative: an
+/// increment can be *Beneficial* while both correlations sit at zero.
 #[derive(Clone, Debug)]
 struct Tdi68CriterionB {
-    repaired: bool,
-    non_repairs: Vec<(FeatureLayout, usize)>,
+    transfers: bool,
+    located_failures: Vec<(FeatureLayout, usize)>,
 }
 
-/// Criterion TDI-6.7C (Section 12, descriptive): the oracle arm's scale-free
-/// summary on the F0→F1 pair, and the localization it supports.
+/// Criterion TDI-6.8C (Section 12, descriptive): how much ordering survives the
+/// domain change. `(layout, horizon, ρ̄_transfer, ρ̄_within, retention)`.
+///
+/// `retention` is `None` — printed `not-applicable` — whenever `ρ̄_within ≤ 0`,
+/// because a ratio against a non-positive reference states nothing. Descriptive:
+/// no threshold is preregistered and no value is a success.
+/// `(layout, focal horizon, ρ̄_transfer, ρ̄_within, retention)` — the five values
+/// Section 16 requires on every retention line, kept together so none can be
+/// printed without the others.
+type RetentionCell = (FeatureLayout, usize, Option<f64>, Option<f64>, Option<f64>);
+
 #[derive(Clone, Debug)]
 struct Tdi68CriterionC {
-    /// `(layout, horizon, R² B0, R² B1, R² B2, recovered_fraction)`.
-    ///
-    /// `recovered_fraction = (R²_B1 − R²_B0) / (R²_B2 − R²_B0)` places B1 on the
-    /// segment between doing nothing and knowing the answer. It is `None` —
-    /// printed `not-applicable` — when `R²_B2 ≤ R²_B0`, i.e. when the oracle
-    /// itself buys nothing and the segment is degenerate. Descriptive: no
-    /// threshold is preregistered and no value is a success (Section 12).
-    per_cell: Vec<(FeatureLayout, usize, f64, f64, f64, Option<f64>)>,
+    per_cell: Vec<RetentionCell>,
 }
 
-/// `(R²_B1 − R²_B0) / (R²_B2 − R²_B0)`, or `None` when the oracle buys nothing.
-fn recovered_fraction(baseline: f64, offset: f64, oracle: f64) -> Option<f64> {
-    let span = oracle - baseline;
-
-    if span <= 0.0 || !span.is_finite() {
-        return None;
-    }
-
-    let recovered = (offset - baseline) / span;
-
-    recovered.is_finite().then_some(recovered)
-}
-
-/// Criterion TDI-6.7D (Section 13, descriptive): all 12 ordered pairs, the
-/// consistency of the B1-vs-B0 direction across them, and the per-family
-/// descriptor drift table of Section 17.
+/// Criterion TDI-6.8D (Section 13, descriptive): all twelve ordered pairs, the
+/// consistency of the GKT-against-GK direction across them, and the per-family
+/// descriptor drift table.
 #[derive(Clone, Debug)]
 struct Tdi68CriterionD {
     pairs: Vec<TransferPairReport>,
-    /// True iff the B1-vs-B0 classification is identical in every pair at the
-    /// GKT layout and both focal horizons.
+    /// True iff the GKT-against-GK classification is identical across all twelve
+    /// pairs at both focal horizons (Section 13).
     direction_consistent: bool,
-    divergent_pairs: Vec<(GeneratorFamily, GeneratorFamily, FeatureLayout, usize)>,
+    /// Every `(source, target, horizon)` whose classification differs from the
+    /// confirmatory pair's at U₃. The preregistration requires each to be named.
+    divergent_pairs: Vec<(GeneratorFamily, GeneratorFamily, usize)>,
     per_family_means: Vec<(GeneratorFamily, [f64; DESCRIPTOR_MEAN_COUNT])>,
     ranges: [f64; DESCRIPTOR_MEAN_COUNT],
 }
@@ -5416,8 +4659,6 @@ fn evaluate_transfer_pair(
     // Section 4.2: the re-standardization statistics come from the target's
     // TRAINING populations, never from the holdouts scored just above.
     let target_trainings = target.combined_trainings();
-    let target_training_refs: [&[Record]; SEED_BLOCK_COUNT] =
-        std::array::from_fn(|index| target_trainings[index].as_slice());
 
     let bootstrap_seed = transfer_pair_bootstrap_seed(source.family, target.family);
 
@@ -5433,18 +4674,18 @@ fn evaluate_transfer_pair(
         .iter()
         .map(Vec::as_slice)
         .collect::<Vec<_>>();
+    // Section 14's label-free domain distance. TDI-6.7 applied this quantity as
+    // a correction; TDI-6.8 only *reports* its magnitude, because Section 3
+    // admits no correction of any kind.
     let shift = observable_shift(&source_training_refs, &target_training_slices)?;
 
-    // One re-standardized fit per arm, derived once and reused across layouts
-    // and horizons.
-    let mut arm_fits = Vec::with_capacity(TransferArm::ALL.len());
-
-    for arm in TransferArm::ALL {
-        arm_fits.push((
-            arm,
-            derive_transfer_fit(&source.aggregate_fit, target_training_refs, shift, arm)?,
-        ));
-    }
+    // Section 3: the source fit is applied to the target's holdouts verbatim.
+    // There is exactly one arm and it transforms nothing, so the fit is carried
+    // through unchanged — no target training record is read here, and no target
+    // scaler is fitted anywhere in TDI-6.8.
+    let arm_fits = TransferArm::ALL
+        .map(|arm| (arm, source.aggregate_fit.clone()))
+        .to_vec();
 
     let focal_indices = focal_horizon_indices();
     let mut cells = Vec::with_capacity(TRANSFER_LAYOUTS.len() * FOCAL_HORIZON_COUNT);
@@ -5472,7 +4713,6 @@ fn evaluate_transfer_pair(
 
                 arms.push(ArmEvaluation {
                     arm: *arm,
-                    calibration_repaired: standardized.r_squared > 0.0,
                     standardized,
                     reconstructed,
                     r_squared_interval,
@@ -5480,30 +4720,10 @@ fn evaluate_transfer_pair(
                 });
             }
 
-            let baseline_fit = &arm_fits
-                .iter()
-                .find(|(arm, _)| *arm == TransferArm::SourceStandardized)
-                .expect("arm fits always contain A0")
-                .1;
-            let challenger_fit = &arm_fits
-                .iter()
-                .find(|(arm, _)| *arm == TransferArm::ObservableOffset)
-                .expect("arm fits always contain A1")
-                .1;
-
-            let a1_vs_a0 = evaluate_cross_arm_comparison(
-                horizon_index,
-                layout,
-                baseline_fit,
-                challenger_fit,
-                target_holdout_refs,
-                bootstrap_seed,
-            )?;
-
             cells.push(TransferCell {
                 layout,
+                horizon: TARGET_HORIZONS[horizon_index],
                 arms,
-                a1_vs_a0,
             });
         }
     }
@@ -5516,126 +4736,156 @@ fn evaluate_transfer_pair(
         ObservedHorizon::First,
     )?;
 
-    // Section 14, `oracle`: the TRUE level shift, read from holdout labels. It
-    // never feeds B1 — it exists to explain the verdict.
-    let source_holdouts = source.combined_holdouts();
-    let mut true_level_shifts = Vec::with_capacity(FOCAL_HORIZON_COUNT);
-
-    for &horizon_index in &focal_indices {
-        let mean_of = |blocks: &[Vec<Record>]| -> f64 {
-            let mut total = 0.0_f64;
-            let mut count = 0_usize;
-
-            for block in blocks {
-                for record in block {
-                    total += record.targets_u[horizon_index];
-                    count += 1;
-                }
-            }
-
-            if count == 0 {
-                0.0
-            } else {
-                total / count as f64
-            }
-        };
-
-        let true_shift = mean_of(&target_holdouts) - mean_of(&source_holdouts);
-        let ratio = if true_shift == 0.0 {
-            f64::NAN
-        } else {
-            shift / true_shift
-        };
-
-        true_level_shifts.push((TARGET_HORIZONS[horizon_index], true_shift, ratio));
-    }
-
-    let mut applied_shifts = Vec::with_capacity(FOCAL_HORIZON_COUNT);
-
-    for &horizon_index in &focal_indices {
-        let blocks = frozen_block_order(source.family);
-        let scales: [f64; SEED_BLOCK_COUNT] = std::array::from_fn(|index| {
-            source.aggregate_fit.block(blocks[index]).target_scalers[horizon_index].scale
-        });
-        let applied: [f64; SEED_BLOCK_COUNT] = std::array::from_fn(|index| shift / scales[index]);
-
-        applied_shifts.push((TARGET_HORIZONS[horizon_index], scales, applied));
-    }
-
-    // TDI-6.8 Section 10: GKT against GK on the plain-transfer arm, per focal
-    // horizon, with the paired shared-resample interval of Section 8.
+    // Sections 10-12. All four layouts are evaluated at each focal horizon and
+    // fed to ONE shared-resample bootstrap, so every rung of the ladder is paired
+    // on identical draws (Section 8).
     //
-    // The blocks are recomputed here rather than retained from the cell loop
-    // above: holding every layout's prediction vectors alive across the whole
-    // pipeline would cost over a gigabyte, and `evaluate_arm_blocks` is `O(n)`,
-    // negligible beside the bootstrap it feeds.
+    // Blocks are recomputed here rather than retained from the cell loop above:
+    // holding every layout's prediction vectors alive across the whole pipeline
+    // would cost over a gigabyte, and `evaluate_arm_blocks` is `O(n)`, negligible
+    // beside the bootstrap it feeds.
     let plain_fit = &arm_fits
         .iter()
         .find(|(arm, _)| *arm == TransferArm::SourceStandardized)
         .expect("arm fits always contain the plain-transfer arm")
         .1;
 
-    let mut rank_comparisons = Vec::with_capacity(FOCAL_HORIZON_COUNT);
+    let source_holdouts = source.combined_holdouts();
+    let source_holdout_refs: [&[Record]; SEED_BLOCK_COUNT] =
+        std::array::from_fn(|index| source_holdouts[index].as_slice());
+
+    let mut rank_cells = Vec::with_capacity(TRANSFER_LAYOUTS.len() * FOCAL_HORIZON_COUNT);
+    let mut ladder = Vec::with_capacity(LADDER_COMPARISONS.len() * FOCAL_HORIZON_COUNT);
 
     for (position, &horizon_index) in focal_indices.iter().enumerate() {
         let horizon = FOCAL_HORIZONS[position];
 
-        let baseline_blocks = evaluate_arm_blocks(
-            plain_fit,
-            target_holdout_refs,
-            horizon_index,
-            FeatureLayout::Gk,
-        )?;
-        let challenger_blocks = evaluate_arm_blocks(
-            plain_fit,
-            target_holdout_refs,
-            horizon_index,
-            FeatureLayout::Gkt,
-        )?;
+        let mut transfer_blocks = Vec::with_capacity(TRANSFER_LAYOUTS.len());
 
-        let block_increments = baseline_blocks
+        for layout in TRANSFER_LAYOUTS {
+            transfer_blocks.push((
+                layout,
+                evaluate_arm_blocks(plain_fit, target_holdout_refs, horizon_index, layout)?,
+            ));
+        }
+
+        let bootstrap_input = transfer_blocks
             .iter()
-            .zip(&challenger_blocks)
-            .map(|(baseline, challenger)| {
-                let low = rank_correlation(
-                    &baseline.standardized_targets,
-                    &baseline.evaluation.predictions.standardized,
-                );
-                let high = rank_correlation(
-                    &challenger.standardized_targets,
-                    &challenger.evaluation.predictions.standardized,
-                );
-
-                match (low, high) {
-                    (Some(low), Some(high)) => Some(high - low),
-                    _ => None,
-                }
-            })
+            .map(|(layout, blocks)| (*layout, blocks.as_slice()))
             .collect::<Vec<_>>();
 
         // Section 7 defines one bootstrap stream per ordered pair and no
         // per-horizon term, so both focal horizons re-enter the same frozen
         // stream. The blocks hold the same records at either horizon, so this
         // additionally pairs U₃ against U₆ on identical resamples.
-        let (interval, undefined, total) =
-            rank_increment_bootstrap(&baseline_blocks, &challenger_blocks, bootstrap_seed)?;
+        let outcome = rank_bootstrap(&bootstrap_input, &LADDER_COMPARISONS, bootstrap_seed)?;
 
-        rank_comparisons.push((
-            horizon,
-            classify_rank_increment(block_increments, interval, undefined, total),
-        ));
+        for (layout, blocks) in &transfer_blocks {
+            let block_rho = per_block_rank_correlations(blocks);
+            let mean_rho = mean_of_defined(&block_rho);
+            let (interval, undefined_replicates) = outcome.layout(*layout);
+
+            // Section 11, both conjuncts. The per-block condition is checked on
+            // the blocks themselves; the interval condition on the bootstrap.
+            let rank_transfers = block_rho.iter().all(|rho| rho.is_some_and(|rho| rho > 0.0))
+                && interval.is_some_and(|interval| interval.lower > 0.0);
+
+            // Section 12: the same fitted model, scored on the source's own
+            // holdout. Source labels are available in the source domain by
+            // construction and are never fitted on; no target label is read.
+            let within_blocks =
+                evaluate_arm_blocks(plain_fit, source_holdout_refs, horizon_index, *layout)?;
+            let within_rho = mean_of_defined(&per_block_rank_correlations(&within_blocks));
+
+            let retention = match (mean_rho, within_rho) {
+                (Some(transfer), Some(within)) if within > 0.0 => Some(transfer / within),
+                _ => None,
+            };
+
+            rank_cells.push(RankCell {
+                layout: *layout,
+                horizon,
+                block_rho,
+                mean_rho,
+                interval,
+                undefined_replicates,
+                rank_transfers,
+                within_rho,
+                retention,
+            });
+        }
+
+        for (challenger, baseline) in LADDER_COMPARISONS {
+            let high = transfer_blocks
+                .iter()
+                .find(|(layout, _)| *layout == challenger)
+                .expect("every ladder layout is evaluated above");
+            let low = transfer_blocks
+                .iter()
+                .find(|(layout, _)| *layout == baseline)
+                .expect("every ladder layout is evaluated above");
+
+            let block_increments = per_block_rank_correlations(&high.1)
+                .into_iter()
+                .zip(per_block_rank_correlations(&low.1))
+                .map(|(high, low)| match (high, low) {
+                    (Some(high), Some(low)) => Some(high - low),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+
+            let (interval, undefined) = outcome.increment(challenger, baseline);
+
+            ladder.push(LadderComparison {
+                challenger,
+                baseline,
+                horizon,
+                comparison: classify_rank_increment(
+                    block_increments,
+                    interval,
+                    undefined,
+                    outcome.replicates,
+                ),
+            });
+        }
     }
 
     Ok(TransferPairReport {
         source: source.family,
         target: target.family,
         cells,
-        applied_shifts,
         observable_shift: shift,
         observable_shift_u1,
-        true_level_shifts,
-        rank_comparisons,
+        rank_cells,
+        ladder,
     })
+}
+
+/// The three per-block Spearman ρ of an arm evaluation, in frozen block order.
+fn per_block_rank_correlations(blocks: &[ArmBlockEvaluation]) -> [Option<f64>; SEED_BLOCK_COUNT] {
+    std::array::from_fn(|index| {
+        blocks.get(index).and_then(|block| {
+            rank_correlation(
+                &block.standardized_targets,
+                &block.evaluation.predictions.standardized,
+            )
+        })
+    })
+}
+
+/// `ρ̄` — the mean of the three per-block values, or `None` if any is undefined.
+///
+/// Section 6 forbids filling an undefined block with anything: a mean over two
+/// of three blocks is a different statistic, and reporting it as `ρ̄` would
+/// silently change the estimand.
+fn mean_of_defined(values: &[Option<f64>; SEED_BLOCK_COUNT]) -> Option<f64> {
+    let mut total = 0.0_f64;
+
+    for value in values {
+        total += (*value)?;
+    }
+
+    Some(total / SEED_BLOCK_COUNT as f64)
 }
 
 /// Runs the full TDI-6.6 pipeline: the inherited per-generator sub-pipeline
@@ -5677,101 +4927,101 @@ fn run_tdi68_pipeline(
 
     let focal_horizons = FOCAL_HORIZONS;
 
-    // TDI-6.7A — A1 versus A0 on the confirmatory pair (Section 12).
-    let mut per_cell = Vec::with_capacity(TRANSFER_LAYOUTS.len() * FOCAL_HORIZON_COUNT);
+    // TDI-6.8A — GKT against GK on the confirmatory pair (Section 10).
+    let rung = |pair: &TransferPairReport, challenger, baseline, horizon| {
+        pair.ladder
+            .iter()
+            .find(|entry| {
+                entry.challenger == challenger
+                    && entry.baseline == baseline
+                    && entry.horizon == horizon
+            })
+            .map(|entry| entry.comparison.clone())
+            .ok_or_else(|| {
+                format!(
+                    "missing ladder rung {} vs {} at U{horizon}",
+                    challenger.label(),
+                    baseline.label()
+                )
+            })
+    };
 
-    for layout in TRANSFER_LAYOUTS {
-        for horizon in focal_horizons {
-            let cell = confirmatory.cell(layout, horizon);
+    let mut per_horizon = Vec::with_capacity(FOCAL_HORIZON_COUNT);
 
-            per_cell.push((
-                layout,
-                horizon,
-                cell.a1_vs_a0.result.classification,
-                cell.a1_vs_a0.aggregate_relative_reduction,
-            ));
+    for horizon in focal_horizons {
+        per_horizon.push((
+            horizon,
+            rung(confirmatory, FeatureLayout::Gkt, FeatureLayout::Gk, horizon)?,
+        ));
+    }
+
+    let criterion_a = Tdi68CriterionA {
+        per_horizon,
+        ladder: confirmatory
+            .ladder
+            .iter()
+            .filter(|entry| entry.challenger != FeatureLayout::Gkt)
+            .cloned()
+            .collect(),
+    };
+
+    // TDI-6.8B — does the ordering transfer at all (Section 11)? The verdict is
+    // the GKT conjunction; every layout is scanned so the failure can be located.
+    let mut located_failures = Vec::new();
+
+    for cell in &confirmatory.rank_cells {
+        if !cell.rank_transfers {
+            located_failures.push((cell.layout, cell.horizon));
         }
     }
 
-    let criterion_a = Tdi68CriterionA { per_cell };
-
-    // TDI-6.7B — is calibration repaired under A1? The preregistered conjunction
-    // is over the GKT layout at both focal horizons; other cells are reported as
-    // located non-repairs but do not gate the verdict.
-    let mut non_repairs = Vec::new();
-
-    for layout in TRANSFER_LAYOUTS {
-        for horizon in focal_horizons {
-            let repaired = confirmatory
-                .cell(layout, horizon)
-                .arm(TransferArm::ObservableOffset)
-                .calibration_repaired;
-
-            if !repaired {
-                non_repairs.push((layout, horizon));
-            }
-        }
-    }
-
-    let repaired = focal_horizons.iter().all(|&horizon| {
-        confirmatory
-            .cell(FeatureLayout::Gkt, horizon)
-            .arm(TransferArm::ObservableOffset)
-            .calibration_repaired
+    let transfers = focal_horizons.iter().all(|&horizon| {
+        confirmatory.rank_cells.iter().any(|cell| {
+            cell.layout == FeatureLayout::Gkt && cell.horizon == horizon && cell.rank_transfers
+        })
     });
 
     let criterion_b = Tdi68CriterionB {
-        repaired,
-        non_repairs,
+        transfers,
+        located_failures,
     };
 
-    // TDI-6.7C — how much of the oracle's advantage the observable offset
-    // recovers (Section 12). Descriptive: no threshold, no success.
-    let mut recovery_cells = Vec::with_capacity(TRANSFER_LAYOUTS.len() * FOCAL_HORIZON_COUNT);
-
-    for layout in TRANSFER_LAYOUTS {
-        for horizon in focal_horizons {
-            let cell = confirmatory.cell(layout, horizon);
-            let b0 = cell
-                .arm(TransferArm::SourceStandardized)
-                .standardized
-                .r_squared;
-            let b1 = cell
-                .arm(TransferArm::ObservableOffset)
-                .standardized
-                .r_squared;
-            let b2 = cell
-                .arm(TransferArm::OracleTargetScaler)
-                .standardized
-                .r_squared;
-
-            recovery_cells.push((layout, horizon, b0, b1, b2, recovered_fraction(b0, b1, b2)));
-        }
-    }
-
+    // TDI-6.8C — retention against the within-domain reference (Section 12).
     let criterion_c = Tdi68CriterionC {
-        per_cell: recovery_cells,
+        per_cell: confirmatory
+            .rank_cells
+            .iter()
+            .map(|cell| {
+                (
+                    cell.layout,
+                    cell.horizon,
+                    cell.mean_rho,
+                    cell.within_rho,
+                    cell.retention,
+                )
+            })
+            .collect(),
     };
 
-    // TDI-6.7D — every ordered pair, direction consistency, descriptor drift.
-    let reference = confirmatory
-        .cell(FeatureLayout::Gkt, focal_horizons[0])
-        .a1_vs_a0
-        .result
-        .classification;
+    // TDI-6.8D — every ordered pair, and whether the GKT-vs-GK direction is
+    // identical across all of them at both focal horizons (Section 13).
+    let reference = rung(
+        confirmatory,
+        FeatureLayout::Gkt,
+        FeatureLayout::Gk,
+        focal_horizons[0],
+    )?
+    .classification;
 
     let mut divergent_pairs = Vec::new();
 
     for pair in &pairs {
         for horizon in focal_horizons {
-            let classification = pair
-                .cell(FeatureLayout::Gkt, horizon)
-                .a1_vs_a0
-                .result
-                .classification;
+            let classification =
+                rung(pair, FeatureLayout::Gkt, FeatureLayout::Gk, horizon)?.classification;
 
             if classification != reference {
-                divergent_pairs.push((pair.source, pair.target, FeatureLayout::Gkt, horizon));
+                divergent_pairs.push((pair.source, pair.target, horizon));
             }
         }
     }
@@ -5809,55 +5059,6 @@ fn run_tdi68_pipeline(
     })
 }
 
-fn tdi52_print_bootstrap_intervals(
-    label: &str,
-    horizon: usize,
-    intervals: Tdi52BootstrapIntervals,
-) {
-    println!();
-    println!("{label}");
-
-    print_interval(
-        &format!("  IC 95 % amélioration MSE U{horizon} standardisée"),
-        intervals.standardized_mse,
-    );
-
-    print_interval(
-        &format!("  IC 95 % amélioration MSE O{horizon} reconstruite"),
-        intervals.reconstructed_mse,
-    );
-
-    print_interval(
-        &format!("  IC 95 % amélioration MAE O{horizon} reconstruite"),
-        intervals.reconstructed_mae,
-    );
-
-    print_interval(
-        &format!("  IC 95 % réduction relative MSE U{horizon} standardisée"),
-        intervals.relative_standardized_mse,
-    );
-}
-
-fn tdi52_print_metrics(label: &str, metrics: Metrics) {
-    println!("{label}");
-    println!("  MSE                    : {:.12}", metrics.mse);
-    println!("  MAE                    : {:.12}", metrics.mae);
-    println!("  R²                     : {:.12}", metrics.r_squared);
-    println!("  Spearman               : {:.12}", metrics.spearman);
-    println!("  biais                  : {:.12}", metrics.bias);
-    println!("  moyenne observée       : {:.12}", metrics.observed_mean);
-    println!("  moyenne prédite        : {:.12}", metrics.predicted_mean);
-    println!(
-        "  calibration intercept  : {:.12}",
-        metrics.calibration_intercept
-    );
-    println!(
-        "  calibration pente      : {:.12}",
-        metrics.calibration_slope
-    );
-    println!("  fraction borne basse   : {:.12}", metrics.zero_fraction);
-    println!("  fraction borne haute   : {:.12}", metrics.one_fraction);
-}
 fn tdi52_print_models(models: &HorizonModels, scalers: &[TargetScaler; TARGET_HORIZON_COUNT]) {
     println!();
     println!("=== NORMALISATIONS ET MODÈLES ===");
@@ -6223,76 +5424,6 @@ fn print_tdi52_population_accounting(blocks: &[BlockPopulations]) {
     }
 }
 
-/// Section 17, items 14-15: every metric and every bootstrap interval
-/// (per block and pooled aggregate) underlying one criterion's verdict.
-fn print_tdi52_aggregate_comparison(label: &str, horizon: usize, comparison: &AggregateComparison) {
-    println!();
-    println!("=== {label} — métriques et intervalles bootstrap (Section 17, items 14-15) ===");
-
-    for seed_block in frozen_block_order(comparison.family()) {
-        let block = comparison.block(seed_block);
-
-        tdi52_print_metrics(
-            &format!(
-                "  bloc {} — référence — espace U standardisé",
-                seed_block.label()
-            ),
-            block.baseline.standardized,
-        );
-        tdi52_print_metrics(
-            &format!(
-                "  bloc {} — challenger — espace U standardisé",
-                seed_block.label()
-            ),
-            block.challenger.standardized,
-        );
-        tdi52_print_metrics(
-            &format!(
-                "  bloc {} — référence — espace O reconstruit",
-                seed_block.label()
-            ),
-            block.baseline.reconstructed,
-        );
-        tdi52_print_metrics(
-            &format!(
-                "  bloc {} — challenger — espace O reconstruit",
-                seed_block.label()
-            ),
-            block.challenger.reconstructed,
-        );
-        tdi52_print_bootstrap_intervals(
-            &format!(
-                "  bloc {} — intervalles bootstrap appariés",
-                seed_block.label()
-            ),
-            horizon,
-            block.bootstrap,
-        );
-    }
-
-    tdi52_print_metrics(
-        "  agrégat — référence — espace U standardisé",
-        comparison.aggregate_baseline_standardized,
-    );
-    tdi52_print_metrics(
-        "  agrégat — challenger — espace U standardisé",
-        comparison.aggregate_challenger_standardized,
-    );
-    tdi52_print_metrics(
-        "  agrégat — référence — espace O reconstruit",
-        comparison.aggregate_baseline_reconstructed,
-    );
-    tdi52_print_metrics(
-        "  agrégat — challenger — espace O reconstruit",
-        comparison.aggregate_challenger_reconstructed,
-    );
-    tdi52_print_bootstrap_intervals(
-        "  agrégat — intervalles bootstrap stratifiés",
-        horizon,
-        comparison.aggregate_bootstrap,
-    );
-}
-
 /// TDI-6.8 Sections 6, 10 and 15: per-seed-block rank statistics and the
 /// GKT-against-GK increment.
 ///
@@ -6342,47 +5473,154 @@ fn print_tdi68_rank_statistics(report: &Tdi68ExperimentReport) {
             }
         }
 
-        for (horizon, comparison) in &pair.rank_comparisons {
+        // Section 16: every rank_transfers line prints the three per-block ρ and
+        // the interval, never the boolean alone; every retention line prints
+        // ρ̄_transfer and ρ̄_within separately.
+        for cell in &pair.rank_cells {
             println!(
-                "  {} → {} — GKT contre GK à U{horizon} : incréments par bloc = [{}] | \
-                 moyenne = {} | marge = ±{RANK_EQUIVALENCE_MARGIN} | réplicats indéfinis = {}/{} \
-                 | classification = {}",
+                "  {} → {} — {} — U{} : ρ par bloc = [{}] | ρ̄ = {} | IC95 = {} | \
+                 réplicats indéfinis = {}/{BOOTSTRAP_REPLICATES} | rank_transfers = {}",
                 pair.source.label(),
                 pair.target.label(),
-                comparison
+                cell.layout.label(),
+                cell.horizon,
+                cell.block_rho
+                    .iter()
+                    .map(|value| render(*value))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                render(cell.mean_rho),
+                render_interval(cell.interval),
+                cell.undefined_replicates,
+                if cell.rank_transfers { "oui" } else { "non" }
+            );
+            println!(
+                "      Section 12 — ρ̄_transfert = {} | ρ̄_intra-domaine = {} | rétention = {}",
+                render(cell.mean_rho),
+                render(cell.within_rho),
+                render(cell.retention)
+            );
+        }
+
+        // Section 14: transferred ordering against the label-free domain distance.
+        for cell in pair
+            .rank_cells
+            .iter()
+            .filter(|cell| cell.layout == FeatureLayout::Gkt)
+        {
+            println!(
+                "  {} → {} — Section 14 — U{} : ρ̄(GKT) = {} | distance entre domaines \
+                 |ū₂ᵀ − ū₂ˢ| = {:.12}",
+                pair.source.label(),
+                pair.target.label(),
+                cell.horizon,
+                render(cell.mean_rho),
+                pair.observable_shift.abs()
+            );
+        }
+
+        for rung in &pair.ladder {
+            println!(
+                "  {} → {} — {} contre {} à U{} : incréments par bloc = [{}] | \
+                 moyenne = {} | marge = ±{RANK_EQUIVALENCE_MARGIN} | IC95 = {} | \
+                 réplicats indéfinis = {}/{} | classification = {}{}",
+                pair.source.label(),
+                pair.target.label(),
+                rung.challenger.label(),
+                rung.baseline.label(),
+                rung.horizon,
+                rung.comparison
                     .block_increments
                     .iter()
                     .map(|value| render(*value))
                     .collect::<Vec<_>>()
                     .join(", "),
-                render(comparison.aggregate_increment),
-                comparison.undefined_replicates,
-                comparison.total_replicates,
-                comparison.classification.label()
+                render(rung.comparison.aggregate_increment),
+                render_interval(rung.comparison.interval),
+                rung.comparison.undefined_replicates,
+                rung.comparison.total_replicates,
+                rung.comparison.classification.label(),
+                reading_rule_note(pair, rung)
             );
         }
     }
 }
 
-/// Per-criterion block-level and aggregate conditions (Section 19).
+/// Section 13's preregistered reading rule, attached to the same line as the
+/// classification it qualifies.
+///
+/// A *Beneficial* increment whose challenger orders nothing is better-ordered
+/// noise, not transfer; a *Harmful* one whose baseline ordered nothing says
+/// as little. The preregistration requires the qualification inline, so it
+/// cannot be separated from the verdict by a reader skimming the output.
+fn reading_rule_note(pair: &TransferPairReport, rung: &LadderComparison) -> &'static str {
+    let mean_of = |layout: FeatureLayout| {
+        pair.rank_cells
+            .iter()
+            .find(|cell| cell.layout == layout && cell.horizon == rung.horizon)
+            .and_then(|cell| cell.mean_rho)
+    };
+
+    match rung.comparison.classification {
+        RankClassification::Beneficial
+            if mean_of(rung.challenger).is_none_or(|mean| mean <= 0.0) =>
+        {
+            "  [BRUIT MIEUX ORDONNÉ, PAS DU TRANSFERT — Section 13]"
+        }
+        RankClassification::Harmful if mean_of(rung.baseline).is_none_or(|mean| mean <= 0.0) => {
+            "  [LA RÉFÉRENCE N'ORDONNAIT RIEN NON PLUS — Section 13]"
+        }
+        _ => "",
+    }
+}
+
+/// A bootstrap interval, or `indéfini` when every replicate was undefined.
+fn render_interval(interval: Option<ConfidenceInterval>) -> String {
+    match interval {
+        Some(interval) => format!(
+            "[{:.12}, {:.12}] médiane {:.12}",
+            interval.lower, interval.upper, interval.median
+        ),
+        None => "indéfini".to_owned(),
+    }
+}
+
+/// Per-criterion block-level and aggregate conditions (Section 16).
 fn print_tdi68_criteria_conditions(report: &Tdi68ExperimentReport) {
     println!();
-    println!("=== CONDITIONS PAR CRITÈRE — niveau bloc et agrégat (Section 19) ===");
+    println!("=== CONDITIONS PAR CRITÈRE — niveau bloc et agrégat (Section 16) ===");
 
     let (source, target) = CONFIRMATORY_TRANSFER_PAIR;
     println!();
     println!(
-        "paire confirmatoire : {} → {} (Sections 12-14)",
+        "paire confirmatoire : {} → {} (Sections 10-13)",
         source.label(),
         target.label()
     );
 
-    for (layout, horizon, classification, reduction) in &report.criterion_a.per_cell {
+    for (horizon, comparison) in &report.criterion_a.per_horizon {
         println!();
+        println!("TDI-6.8A — GKT contre GK à U{horizon} — les trois conditions du §10 :");
         println!(
-            "TDI-6.7A — {} — A1 contre A0 à U_{horizon} : réduction relative MSE = {reduction:.6} \
-             | {classification:#?}",
-            layout.label()
+            "  1. ρ(GKT) > ρ(GK) dans les trois blocs        : {}",
+            comparison.all_blocks_favour_challenger
+        );
+        println!(
+            "  2. Δρ ≥ +{RANK_EQUIVALENCE_MARGIN}                                : {}",
+            comparison.aggregate_increment_at_least_margin
+        );
+        println!(
+            "  3. borne inférieure IC95 strictement positive  : {}",
+            comparison.interval_lower_bound_positive
+        );
+        println!(
+            "  équivalence — incréments par bloc dans ±{RANK_EQUIVALENCE_MARGIN} : {} | \
+             IC95 entièrement dans ±{RANK_EQUIVALENCE_MARGIN} : {}",
+            comparison.all_block_increments_within_margin, comparison.interval_within_margin
+        );
+        println!(
+            "  réplicats indéfinis : {}/{} (garde du §8 : au-delà de 1 %, Indeterminate)",
+            comparison.undefined_replicates, comparison.total_replicates
         );
     }
 
@@ -6398,14 +5636,7 @@ fn print_tdi68_criteria_conditions(report: &Tdi68ExperimentReport) {
             );
 
             for arm in &cell.arms {
-                let oracle = if arm.arm.uses_target_labels() {
-                    "  [oracle — utilise les étiquettes du domaine cible, PAS une méthode de \
-                     prédiction]"
-                } else {
-                    ""
-                };
-
-                println!("  bras {}{oracle}", arm.arm.label());
+                println!("  bras {}", arm.arm.label());
                 println!(
                     "    R² (U standardisé)     : {:.12}  IC 95 % [{:.9}, {:.9}] (médiane {:.9})",
                     arm.standardized.r_squared,
@@ -6414,156 +5645,178 @@ fn print_tdi68_criteria_conditions(report: &Tdi68ExperimentReport) {
                     arm.r_squared_interval.upper
                 );
                 println!(
-                    "    calibration_repaired   : {} (R² > 0)",
-                    arm.calibration_repaired
-                );
-                println!(
-                    "    Spearman               : {:.12}",
+                    "    Spearman (mis en commun) : {:.12}  [MIS EN COMMUN sur les trois blocs \
+                     — n'est PAS le ρ̄ du critère, Section 6]",
                     arm.standardized.spearman
                 );
                 println!(
                     "    pente de calibration   : {:.12}",
                     arm.standardized.calibration_slope
                 );
+                // Section 15: the reconstructed-O ρ is never printed without its
+                // two bound fractions on the SAME line, so a saturated zero can
+                // not be read as a measured collapse of the ordering.
                 println!(
-                    "    R² (O reconstruit)     : {:.12}",
+                    "    ρ (O reconstruit)      : {:.12}  [fraction à la borne basse = {:.6}, \
+                     à la borne haute = {:.6}]  R² = {:.12}",
+                    arm.reconstructed.spearman,
+                    arm.reconstructed.zero_fraction,
+                    arm.reconstructed.one_fraction,
                     arm.reconstructed.r_squared
                 );
                 println!(
-                    "    MSE / MAE              : {:.12} / {:.12}  [NON comparables entre bras — \
-                     Section 6]",
+                    "    MSE / MAE              : {:.12} / {:.12}",
                     arm.standardized.mse, arm.standardized.mae
                 );
             }
-
-            println!(
-                "  B1 contre B0 (seule comparaison MSE bien posée) : réduction relative = \
-                 {:.6} | {:#?}",
-                cell.a1_vs_a0.aggregate_relative_reduction, cell.a1_vs_a0.result
-            );
         }
     }
 }
 
-/// Final verdict lines for TDI-6.6A, 6.6B, 6.6C and 6.6D (Section 19).
+/// Final verdict lines for TDI-6.8A, 6.8B, 6.8C and 6.8D (Section 16).
 fn print_tdi68_final_verdicts(report: &Tdi68ExperimentReport) {
     println!();
-    println!("=== VERDICTS FINAUX (Section 19) ===");
+    println!("=== VERDICTS FINAUX (Section 16) ===");
 
     let (source, target) = CONFIRMATORY_TRANSFER_PAIR;
     let pair_label = format!("{} → {}", source.label(), target.label());
+    let confirmatory = report
+        .criterion_d
+        .pairs
+        .iter()
+        .find(|pair| pair.source == source && pair.target == target)
+        .expect("the confirmatory pair is always evaluated");
 
-    for (layout, horizon, classification, reduction) in &report.criterion_a.per_cell {
+    let render = |value: Option<f64>| match value {
+        Some(number) => format!("{number:.12}"),
+        None => "indéfini".to_owned(),
+    };
+
+    for (horizon, comparison) in &report.criterion_a.per_horizon {
+        let rung = LadderComparison {
+            challenger: FeatureLayout::Gkt,
+            baseline: FeatureLayout::Gk,
+            horizon: *horizon,
+            comparison: comparison.clone(),
+        };
+
         println!(
-            "TDI-6.7A — {pair_label} — {} à U{horizon} — A1 contre A0 : réduction relative MSE = \
-             {reduction:.6}, classification = {}",
-            layout.label(),
-            classification.label()
+            "TDI-6.8A — {pair_label} — GKT contre GK à U{horizon} : Δρ = {}, IC95 = {}, \
+             classification = {}{}",
+            render(comparison.aggregate_increment),
+            render_interval(comparison.interval),
+            comparison.classification.label(),
+            reading_rule_note(confirmatory, &rung)
+        );
+    }
+
+    for rung in &report.criterion_a.ladder {
+        println!(
+            "TDI-6.8A — {pair_label} — {} contre {} à U{} (échelle, aucun critère) : Δρ = {}, \
+             IC95 = {}, classification = {}{}",
+            rung.challenger.label(),
+            rung.baseline.label(),
+            rung.horizon,
+            render(rung.comparison.aggregate_increment),
+            render_interval(rung.comparison.interval),
+            rung.comparison.classification.label(),
+            reading_rule_note(confirmatory, rung)
         );
     }
 
     println!(
-        "TDI-6.7B — calibration réparée (A1, GKT, aux deux horizons focaux) : {}",
-        if report.criterion_b.repaired {
+        "TDI-6.8B — l'ordonnancement se transfère (GKT, aux deux horizons focaux) : {}",
+        if report.criterion_b.transfers {
             "oui"
         } else {
             "non"
         }
     );
 
-    if report.criterion_b.non_repairs.is_empty() {
-        println!("TDI-6.7B — non-réparations localisées : aucune");
+    if report.criterion_b.located_failures.is_empty() {
+        println!("TDI-6.8B — échecs localisés : aucun");
     } else {
-        for (layout, horizon) in &report.criterion_b.non_repairs {
+        // Section 16: a rank_transfers line never prints the boolean alone.
+        for (layout, horizon) in &report.criterion_b.located_failures {
+            let cell = confirmatory
+                .rank_cells
+                .iter()
+                .find(|cell| cell.layout == *layout && cell.horizon == *horizon)
+                .expect("every located failure names an evaluated cell");
+
             println!(
-                "TDI-6.7B — non-réparation localisée : {} à U{horizon} (R² ≤ 0 sous A1)",
-                layout.label()
+                "TDI-6.8B — échec localisé : {} à U{horizon} — ρ par bloc = [{}], ρ̄ = {}, \
+                 IC95 = {}",
+                layout.label(),
+                cell.block_rho
+                    .iter()
+                    .map(|value| render(*value))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                render(cell.mean_rho),
+                render_interval(cell.interval)
             );
         }
     }
 
-    for (layout, horizon, b0, b1, b2, recovered) in &report.criterion_c.per_cell {
-        let fraction = recovered.map_or_else(
-            || "not-applicable".to_owned(),
-            |value| format!("{value:.6}"),
-        );
-
+    // Section 16: every retention line prints ρ̄_transfer and ρ̄_within separately.
+    for (layout, horizon, transfer, within, retention) in &report.criterion_c.per_cell {
         println!(
-            "TDI-6.7C — oracle — {} à U{horizon} : R² B0 = {b0:.6}, B1 = {b1:.6}, \
-             B2 = {b2:.6}, recovered_fraction = {fraction}",
-            layout.label()
+            "TDI-6.8C — {} à U{horizon} : ρ̄_transfert = {}, ρ̄_intra-domaine = {}, \
+             rétention = {}",
+            layout.label(),
+            render(*transfer),
+            render(*within),
+            retention.map_or_else(
+                || "not-applicable".to_owned(),
+                |value| format!("{value:.6}")
+            )
         );
     }
 
     for pair in &report.criterion_d.pairs {
-        println!(
-            "TDI-6.7C — {} → {} : Δ observable (U2) = {:.9}, compagnon U1 = {:.9}",
-            pair.source.label(),
-            pair.target.label(),
-            pair.observable_shift,
-            pair.observable_shift_u1
-        );
+        for cell in pair
+            .rank_cells
+            .iter()
+            .filter(|cell| cell.layout == FeatureLayout::Gkt)
+        {
+            let rung = pair.ladder.iter().find(|entry| {
+                entry.challenger == FeatureLayout::Gkt
+                    && entry.baseline == FeatureLayout::Gk
+                    && entry.horizon == cell.horizon
+            });
 
-        // Section 16: the three components of the applied correction are
-        // printed separately, so `Δ̂_std` can be audited against `Δ` and `sˢ_h`
-        // rather than inferred from the predictions it produced.
-        for (horizon, scales, applied) in &pair.applied_shifts {
-            for (index, (scale, shift)) in scales.iter().zip(applied).enumerate() {
-                println!(
-                    "TDI-6.7C — {} → {} — bloc b{index} à U{horizon} : Δ = {:.9}, \
-                     sˢ_h = {scale:.9}, Δ̂_std = {shift:.9}",
-                    pair.source.label(),
-                    pair.target.label(),
-                    pair.observable_shift
-                );
-            }
-        }
-
-        for (horizon, true_shift, ratio) in &pair.true_level_shifts {
-            println!(
-                "TDI-6.7C — oracle — {} → {} à U{horizon} : vrai décalage de niveau = \
-                 {true_shift:.9}, Δ / vrai = {ratio:.6}",
-                pair.source.label(),
-                pair.target.label()
-            );
-        }
-    }
-
-    for pair in &report.criterion_d.pairs {
-        for horizon in FOCAL_HORIZONS {
-            let cell = pair.cell(FeatureLayout::Gkt, horizon);
-            let a1 = cell.arm(TransferArm::ObservableOffset);
-
-            // Preregistration Section 13, reading rule: a Beneficial cell whose
-            // R² is still at or below zero means the arm is LESS BAD, not good.
-            // The qualification is emitted on the same line so the label can
-            // never be quoted without it — the trap TDI-5.8B and TDI-6.6D both
-            // had to disarm after the fact.
-            let qualification = if cell.a1_vs_a0.result.classification
-                == CriterionCClassification::Beneficial
-                && !a1.calibration_repaired
-            {
-                "  [MOINS MAUVAIS, PAS BON — R² reste ≤ 0 sous B1]"
-            } else {
-                ""
+            let Some(rung) = rung else {
+                continue;
             };
 
             println!(
-                "TDI-6.7D — {} → {} — GKT à U{horizon} : B1 contre B0 = {}, réduction = {:.6}, \
-                 R² sous B1 = {:.6}, calibration_repaired = {}{qualification}",
+                "TDI-6.8D — {} → {} — GKT à U{} : GKT contre GK = {}, Δρ = {}, ρ̄(GKT) = {}, \
+                 rank_transfers = {}{}",
                 pair.source.label(),
                 pair.target.label(),
-                cell.a1_vs_a0.result.classification.label(),
-                cell.a1_vs_a0.aggregate_relative_reduction,
-                a1.standardized.r_squared,
-                a1.calibration_repaired
+                cell.horizon,
+                rung.comparison.classification.label(),
+                render(rung.comparison.aggregate_increment),
+                render(cell.mean_rho),
+                if cell.rank_transfers { "oui" } else { "non" },
+                reading_rule_note(pair, rung)
             );
         }
+
+        println!(
+            "TDI-6.8D — {} → {} : distance entre domaines |ū₂ᵀ − ū₂ˢ| = {:.9}, \
+             compagnon U1 = {:.9} (Sections 14-15)",
+            pair.source.label(),
+            pair.target.label(),
+            pair.observable_shift.abs(),
+            pair.observable_shift_u1
+        );
     }
 
     println!(
-        "TDI-6.7D — direction cohérente sur les 12 paires ordonnées (GKT, deux horizons focaux) : \
-         {}",
+        "TDI-6.8D — direction cohérente sur les 12 paires ordonnées (GKT contre GK, deux \
+         horizons focaux) : {}",
         if report.criterion_d.direction_consistent {
             "oui"
         } else {
@@ -6571,18 +5824,17 @@ fn print_tdi68_final_verdicts(report: &Tdi68ExperimentReport) {
         }
     );
 
-    for (source, target, layout, horizon) in &report.criterion_d.divergent_pairs {
+    for (source, target, horizon) in &report.criterion_d.divergent_pairs {
         println!(
-            "TDI-6.7D — paire divergente : {} → {} — {} à U{horizon}",
+            "TDI-6.8D — paire divergente : {} → {} à U{horizon}",
             source.label(),
-            target.label(),
-            layout.label()
+            target.label()
         );
     }
 
     for family_report in &report.families {
         println!(
-            "TDI-6.7D — famille {} : moyenne u1 = {:.9}, moyenne u2 = {:.9} \
+            "TDI-6.8D — famille {} : moyenne u1 = {:.9}, moyenne u2 = {:.9} \
              (Section 15, contexte)",
             family_report.family.label(),
             family_report.observed_deficit_means[0],
@@ -6592,7 +5844,7 @@ fn print_tdi68_final_verdicts(report: &Tdi68ExperimentReport) {
 
     for (family, means) in &report.criterion_d.per_family_means {
         println!(
-            "TDI-6.7D — famille {} : δ={:.6}, δ̄={:.6}, s2={:.6}, s3={:.6}, g={:.6}, τ_ε={:.6}",
+            "TDI-6.8D — famille {} : δ={:.6}, δ̄={:.6}, s2={:.6}, s3={:.6}, g={:.6}, τ_ε={:.6}",
             family.label(),
             means[0],
             means[1],
@@ -6605,7 +5857,7 @@ fn print_tdi68_final_verdicts(report: &Tdi68ExperimentReport) {
 
     let ranges = report.criterion_d.ranges;
     println!(
-        "TDI-6.7D — étendues inter-familles : δ={:.6}, δ̄={:.6}, s2={:.6}, s3={:.6}, g={:.6}, \
+        "TDI-6.8D — étendues inter-familles : δ={:.6}, δ̄={:.6}, s2={:.6}, s3={:.6}, g={:.6}, \
          τ_ε={:.6}",
         ranges[0], ranges[1], ranges[2], ranges[3], ranges[4], ranges[5]
     );
@@ -6764,21 +6016,6 @@ fn print_tdi68_required_raw_output(report: &Tdi68ExperimentReport) {
     // the only relative-MSE comparison the design admits (Section 6). The
     // per-arm scale-free quantities are printed by the criteria-conditions
     // section, which walks the same cells.
-    for pair in &report.criterion_d.pairs {
-        for cell in &pair.cells {
-            print_tdi52_aggregate_comparison(
-                &format!(
-                    "TDI-6.6 — {} → {} — {} — A1 contre A0 à U_{}",
-                    pair.source.label(),
-                    pair.target.label(),
-                    cell.layout.label(),
-                    cell.horizon()
-                ),
-                cell.horizon(),
-                &cell.a1_vs_a0.comparison,
-            );
-        }
-    }
 
     print_tdi68_criteria_conditions(report);
     print_tdi68_rank_statistics(report);
@@ -6962,49 +6199,45 @@ fn run_termination_smoke() -> Result<(), String> {
         combined_holdout.as_slice(),
     ];
 
-    // Exercise the confirmatory GKT-vs-GK comparison and the four-way
-    // classifier (criterion TDI-6.5A) at the primary horizon.
-    let spectral_focal = evaluate_horizon_comparison(
-        primary_horizon_index(),
-        &aggregate_fit,
-        holdout_refs,
-        FeatureLayout::Gk,
-        FeatureLayout::Gkt,
-    )?;
+    // Exercise the confirmatory GKT-vs-GK rank comparison and the four-way
+    // classifier (criterion TDI-6.8A) at the primary horizon, through the same
+    // shared-resample bootstrap the real pipeline uses.
+    let mut smoke_blocks = Vec::new();
 
+    for layout in TRANSFER_LAYOUTS {
+        smoke_blocks.push((
+            layout,
+            evaluate_arm_blocks(
+                &aggregate_fit,
+                holdout_refs,
+                primary_horizon_index(),
+                layout,
+            )?,
+        ));
+    }
+
+    let smoke_input = smoke_blocks
+        .iter()
+        .map(|(layout, blocks)| (*layout, blocks.as_slice()))
+        .collect::<Vec<_>>();
+    let smoke_outcome = rank_bootstrap(&smoke_input, &LADDER_COMPARISONS, 0x5444_4936_3800_4801)?;
+
+    let (gkt_interval, gkt_undefined) = smoke_outcome.layout(FeatureLayout::Gkt);
     println!(
-        "identity smoke GKT vs GK CI  : [{:.6}, {:.6}]",
-        spectral_focal
-            .comparison
-            .aggregate_bootstrap
-            .standardized_mse
-            .lower,
-        spectral_focal
-            .comparison
-            .aggregate_bootstrap
-            .standardized_mse
-            .upper
-    );
-    println!(
-        "identity smoke GKT vs GK     : classification={}",
-        spectral_focal.result.classification.label()
+        "identity smoke ρ̄(GKT) IC     : {} (réplicats indéfinis {gkt_undefined}/{})",
+        render_interval(gkt_interval),
+        smoke_outcome.replicates
     );
 
-    // Exercise the four-way classifier on the GK-vs-SK diagnostic comparison
-    // (the literal spectral descriptors' marginal value beyond the exact
-    // moments) — a smoke sanity check exercising the descriptive TDI-6.5D path.
-    let marginal_spectral_focal = evaluate_horizon_comparison(
-        primary_horizon_index(),
-        &aggregate_fit,
-        holdout_refs,
-        FeatureLayout::Sk,
-        FeatureLayout::Gk,
-    )?;
-
-    println!(
-        "identity smoke GK vs SK      : classification={}",
-        marginal_spectral_focal.result.classification.label()
-    );
+    for (challenger, baseline) in LADDER_COMPARISONS {
+        let (interval, undefined) = smoke_outcome.increment(challenger, baseline);
+        println!(
+            "identity smoke {} vs {} : IC95 = {} (indéfinis {undefined})",
+            challenger.label(),
+            baseline.label(),
+            render_interval(interval)
+        );
+    }
 
     // The critical wiring smoke: the real pipeline entrypoint, run at tiny
     // scale by requesting exactly one accepted record per population.
@@ -7017,11 +6250,15 @@ fn run_termination_smoke() -> Result<(), String> {
         run_tdi68_pipeline(&tiny_population_specs).map_err(|error| error.to_string())?;
 
     println!(
-        "identity smoke pipeline      : familles={}, paires={}, 6.6A[GK,U3]={}, 6.6B réparée={}",
+        "identity smoke pipeline      : familles={}, paires={}, 6.8A[GKT vs GK, U3]={}, \
+         6.8B transfère={}",
         pipeline_report.families.len(),
         pipeline_report.criterion_d.pairs.len(),
-        pipeline_report.criterion_a.per_cell[0].2.label(),
-        pipeline_report.criterion_b.repaired
+        pipeline_report.criterion_a.per_horizon[0]
+            .1
+            .classification
+            .label(),
+        pipeline_report.criterion_b.transfers
     );
     println!(
         "identity smoke pipeline fit  : famille {} bloc {} model count={}",
@@ -7222,13 +6459,12 @@ fn run_preflight() -> Result<(), String> {
 mod tests {
     use super::{
         BASELINE_FEATURE_COUNT, BOOTSTRAP_REPLICATES, CK_FEATURE_COUNT, CONTRACTION_FEATURE_COUNT,
-        Cardinality, Complex64, CriterionCClassification, CriterionCResult, FOCAL_HORIZONS,
-        FeatureLayout, GENERATOR_FAMILY_COUNT, GK_FEATURE_COUNT, GKT_FEATURE_COUNT,
-        GeneratorFamily, LITERAL_SPECTRAL_FEATURE_COUNT, MIXING_EPSILON, MIXING_TIME_CAP,
-        MODEL_LAYOUT_COUNT, PRIMARY_HORIZON, Record, SEED_BLOCK_COUNT, SK_FEATURE_COUNT,
-        SPECTRAL_CROSS_METHOD_TOLERANCE, SPECTRAL_FEATURE_COUNT, TARGET_HORIZONS,
-        TDI68_FULL_RUN_CONFIRMATION_VALUE, TDI68_FULL_RUN_CONFIRMATION_VAR,
-        TOTAL_SEED_RESERVATIONS,
+        Cardinality, Complex64, FOCAL_HORIZONS, FeatureLayout, GENERATOR_FAMILY_COUNT,
+        GK_FEATURE_COUNT, GKT_FEATURE_COUNT, GeneratorFamily, LITERAL_SPECTRAL_FEATURE_COUNT,
+        MIXING_EPSILON, MIXING_TIME_CAP, MODEL_LAYOUT_COUNT, PRIMARY_HORIZON, Record,
+        SEED_BLOCK_COUNT, SK_FEATURE_COUNT, SPECTRAL_CROSS_METHOD_TOLERANCE,
+        SPECTRAL_FEATURE_COUNT, TARGET_HORIZONS, TDI68_FULL_RUN_CONFIRMATION_VALUE,
+        TDI68_FULL_RUN_CONFIRMATION_VAR, TOTAL_SEED_RESERVATIONS,
     };
     use tdi_core::{Action, State, TableSystem};
 
@@ -7491,74 +6727,6 @@ mod tests {
     }
 
     // --- Four-way classifier precedence (inherited, TDI-5.2 Section 13) ---
-
-    fn base_result() -> CriterionCResult {
-        CriterionCResult {
-            classification: CriterionCClassification::Inconclusive,
-            blocks_confirming_benefit: 0,
-            aggregate_relative_improvement_at_least_2_percent: false,
-            aggregate_bootstrap_lower_bound_positive: false,
-            all_block_point_estimates_within_equivalence_margin: false,
-            block_intervals_within_equivalence_margin: 0,
-            aggregate_interval_within_equivalence_margin: false,
-            blocks_confirming_harm: 0,
-            aggregate_relative_worsening_at_least_2_percent: false,
-            aggregate_bootstrap_upper_bound_negative: false,
-        }
-    }
-
-    #[test]
-    fn classify_returns_inconclusive_by_default() {
-        assert_eq!(
-            base_result().classify(),
-            CriterionCClassification::Inconclusive
-        );
-    }
-
-    #[test]
-    fn classify_returns_beneficial_only_with_all_three_beneficial_conditions() {
-        let mut result = base_result();
-        result.blocks_confirming_benefit = 2;
-        result.aggregate_relative_improvement_at_least_2_percent = true;
-        result.aggregate_bootstrap_lower_bound_positive = true;
-        assert_eq!(result.classify(), CriterionCClassification::Beneficial);
-
-        result.blocks_confirming_benefit = 1;
-        assert_ne!(result.classify(), CriterionCClassification::Beneficial);
-    }
-
-    #[test]
-    fn classify_returns_equivalent_when_all_three_equivalence_conditions_hold() {
-        let mut result = base_result();
-        result.all_block_point_estimates_within_equivalence_margin = true;
-        result.block_intervals_within_equivalence_margin = 2;
-        result.aggregate_interval_within_equivalence_margin = true;
-        assert_eq!(result.classify(), CriterionCClassification::Equivalent);
-
-        result.block_intervals_within_equivalence_margin = 1;
-        assert_eq!(result.classify(), CriterionCClassification::Inconclusive);
-    }
-
-    #[test]
-    fn classify_beneficial_takes_precedence_over_equivalent() {
-        let mut result = base_result();
-        result.blocks_confirming_benefit = 2;
-        result.aggregate_relative_improvement_at_least_2_percent = true;
-        result.aggregate_bootstrap_lower_bound_positive = true;
-        result.all_block_point_estimates_within_equivalence_margin = true;
-        result.block_intervals_within_equivalence_margin = 3;
-        result.aggregate_interval_within_equivalence_margin = true;
-        assert_eq!(result.classify(), CriterionCClassification::Beneficial);
-    }
-
-    #[test]
-    fn classify_returns_harmful_only_with_all_three_harmful_conditions() {
-        let mut result = base_result();
-        result.blocks_confirming_harm = 2;
-        result.aggregate_relative_worsening_at_least_2_percent = true;
-        result.aggregate_bootstrap_upper_bound_negative = true;
-        assert_eq!(result.classify(), CriterionCClassification::Harmful);
-    }
 
     // --- Full-run confirmation guard (Section 16) ---
 
@@ -8382,233 +7550,19 @@ mod tests {
 
     // ---- TDI-6.7 observable offset --------------------------------------
 
-    /// Distinct-looking records so the two domains have genuinely different
-    /// observed deficits.
-    fn offset_records(scale: f64, overlap_shift: f64, target_offset: f64) -> Vec<super::Record> {
-        (0..12)
-            .map(|index| {
-                let step = f64::from(index) / 12.0;
-                let o2 = (0.55 + overlap_shift + 0.2 * step).clamp(0.05, 0.95);
-                let mut record = record_with_overlap(0.2 + scale * step, o2);
-
-                record.contraction = [0.3 + scale * step, 0.9 - scale * step];
-                record.spectral = [1.0 + scale * step, 1.2 + scale * step * 0.5];
-                record.literal_spectral = [0.4 + scale * step, 0.1 + scale * step];
-                record.targets_u = std::array::from_fn(|horizon| {
-                    1.0 + target_offset + step * (1.0 + horizon as f64)
-                });
-
-                record
-            })
-            .collect()
-    }
-
-    fn offset_fit() -> super::AggregateModelFit {
-        let training = offset_records(1.0, 0.0, 0.0);
-        let blocks = super::frozen_block_order(super::GeneratorFamily::F0Base)
-            .map(|seed_block| super::fit_block_models(seed_block, &training, &training).unwrap());
-
-        super::AggregateModelFit::assemble(blocks).unwrap()
-    }
-
     /// **Preregistration Section 3.3, required proof.**
     ///
     /// B1 claims to read no target label. A code-reading argument is not
     /// sufficient evidence, so this asserts it behaviourally: arbitrarily
     /// perturbing every target value in both domains' records must leave B1's
     /// derived model **bit-identical**, intercepts included.
-    #[test]
-    fn b1_is_bit_identical_when_target_labels_are_perturbed() {
-        let source_fit = offset_fit();
-        let clean = offset_records(2.5, 0.2, 0.0);
-
-        let mut perturbed = clean.clone();
-        for (index, record) in perturbed.iter_mut().enumerate() {
-            record.targets_u = std::array::from_fn(|horizon| {
-                -1_000.0 * (index as f64 + 1.0) * (horizon as f64 + 1.0)
-            });
-        }
-
-        let clean_refs: [&[super::Record]; super::SEED_BLOCK_COUNT] = [&clean, &clean, &clean];
-        let perturbed_refs: [&[super::Record]; super::SEED_BLOCK_COUNT] =
-            [&perturbed, &perturbed, &perturbed];
-
-        // The shift itself must also be label-free.
-        let source_training = offset_records(1.0, 0.0, 0.0);
-        let source_slices: Vec<&[super::Record]> = vec![&source_training; 3];
-        let shift_clean =
-            super::observable_shift(&source_slices, &[&clean, &clean, &clean]).unwrap();
-        let shift_perturbed =
-            super::observable_shift(&source_slices, &[&perturbed, &perturbed, &perturbed]).unwrap();
-        assert_eq!(
-            shift_clean, shift_perturbed,
-            "the observable shift leaked a target label"
-        );
-
-        let from_clean = super::derive_transfer_fit(
-            &source_fit,
-            clean_refs,
-            shift_clean,
-            super::TransferArm::ObservableOffset,
-        )
-        .unwrap();
-        let from_perturbed = super::derive_transfer_fit(
-            &source_fit,
-            perturbed_refs,
-            shift_perturbed,
-            super::TransferArm::ObservableOffset,
-        )
-        .unwrap();
-
-        for seed_block in super::frozen_block_order(super::GeneratorFamily::F0Base) {
-            let a = from_clean.block(seed_block);
-            let b = from_perturbed.block(seed_block);
-
-            assert_eq!(
-                a.target_scalers, b.target_scalers,
-                "B1 must keep the SOURCE target scaler, untouched by target labels"
-            );
-
-            for horizon_index in 0..super::TARGET_HORIZON_COUNT {
-                for layout in super::FeatureLayout::ALL {
-                    let left = a.models.get(horizon_index, layout);
-                    let right = b.models.get(horizon_index, layout);
-
-                    assert_eq!(left.means, right.means);
-                    assert_eq!(left.scales, right.scales);
-                    assert_eq!(
-                        left.coefficients, right.coefficients,
-                        "B1's shifted intercept leaked a target label"
-                    );
-                }
-            }
-        }
-    }
-
     /// The mirror: B2 *does* move under the same perturbation. Without this the
     /// test above would be satisfied by an evaluator that never read a label
     /// anywhere, and the `oracle` labelling would be a lie.
-    #[test]
-    fn b2_target_scaler_moves_when_target_labels_are_perturbed() {
-        let source_fit = offset_fit();
-        let clean = offset_records(2.5, 0.2, 0.0);
-        let mut perturbed = clean.clone();
-        for record in &mut perturbed {
-            record.targets_u = std::array::from_fn(|horizon| 500.0 + 17.0 * horizon as f64);
-        }
-
-        let clean_refs: [&[super::Record]; super::SEED_BLOCK_COUNT] = [&clean, &clean, &clean];
-        let perturbed_refs: [&[super::Record]; super::SEED_BLOCK_COUNT] =
-            [&perturbed, &perturbed, &perturbed];
-        let block = super::frozen_block_order(super::GeneratorFamily::F0Base)[0];
-
-        let a = super::derive_transfer_fit(
-            &source_fit,
-            clean_refs,
-            0.0,
-            super::TransferArm::OracleTargetScaler,
-        )
-        .unwrap();
-        let b = super::derive_transfer_fit(
-            &source_fit,
-            perturbed_refs,
-            0.0,
-            super::TransferArm::OracleTargetScaler,
-        )
-        .unwrap();
-
-        assert_ne!(
-            a.block(block).target_scalers,
-            b.block(block).target_scalers,
-            "B2 reads target labels by construction"
-        );
-    }
-
     /// B1 shifts the intercept by exactly `Δ / sˢ_h` and touches nothing else
     /// (Section 3.1, step 4).
-    #[test]
-    fn b1_shifts_the_intercept_by_exactly_delta_over_the_source_scale() {
-        let source_fit = offset_fit();
-        let target = offset_records(4.0, 0.25, 3.0);
-        let refs: [&[super::Record]; super::SEED_BLOCK_COUNT] = [&target, &target, &target];
-        let block = super::frozen_block_order(super::GeneratorFamily::F0Base)[0];
-        let shift = 0.75_f64;
-
-        let derived = super::derive_transfer_fit(
-            &source_fit,
-            refs,
-            shift,
-            super::TransferArm::ObservableOffset,
-        )
-        .unwrap();
-
-        for horizon_index in 0..super::TARGET_HORIZON_COUNT {
-            let expected = shift / source_fit.block(block).target_scalers[horizon_index].scale;
-
-            for layout in super::FeatureLayout::ALL {
-                let original = source_fit.block(block).models.get(horizon_index, layout);
-                let shifted = derived.block(block).models.get(horizon_index, layout);
-
-                assert_eq!(shifted.coefficients[0], original.coefficients[0] + expected);
-                assert_eq!(&shifted.coefficients[1..], &original.coefficients[1..]);
-                assert_eq!(
-                    shifted.means, original.means,
-                    "B1 must not touch feature means"
-                );
-                assert_eq!(
-                    shifted.scales, original.scales,
-                    "B1 must not touch feature scales"
-                );
-            }
-        }
-    }
-
     /// B0 is the identity, and B2 keeps the SOURCE feature statistics — the
     /// difference from TDI-6.6's A2, which also re-standardized them.
-    #[test]
-    fn b0_is_the_identity_and_b2_keeps_source_feature_statistics() {
-        let source_fit = offset_fit();
-        let target = offset_records(4.0, 0.25, 3.0);
-        let refs: [&[super::Record]; super::SEED_BLOCK_COUNT] = [&target, &target, &target];
-        let block = super::frozen_block_order(super::GeneratorFamily::F0Base)[0];
-
-        let b0 = super::derive_transfer_fit(
-            &source_fit,
-            refs,
-            9.0,
-            super::TransferArm::SourceStandardized,
-        )
-        .unwrap();
-        let b2 = super::derive_transfer_fit(
-            &source_fit,
-            refs,
-            9.0,
-            super::TransferArm::OracleTargetScaler,
-        )
-        .unwrap();
-
-        let original = source_fit
-            .block(block)
-            .models
-            .get(0, super::FeatureLayout::Gkt);
-
-        assert_eq!(
-            b0.block(block)
-                .models
-                .get(0, super::FeatureLayout::Gkt)
-                .coefficients,
-            original.coefficients,
-            "B0 ignores the shift entirely"
-        );
-        let oracle = b2.block(block).models.get(0, super::FeatureLayout::Gkt);
-        assert_eq!(oracle.means, original.means);
-        assert_eq!(oracle.scales, original.scales);
-        assert_eq!(
-            oracle.coefficients, original.coefficients,
-            "B2 shifts nothing; it only replaces the target scaler"
-        );
-    }
-
     /// `u₂` is derived from a feature and refuses a fully-recovered observation
     /// rather than propagating a non-finite value (Section 3.1).
     #[test]
@@ -8630,77 +7584,9 @@ mod tests {
 
     /// Exactly one arm declares that it reads target labels, and exactly one
     /// applies the offset.
-    #[test]
-    fn exactly_one_arm_reads_labels_and_one_applies_the_offset() {
-        let labels = super::TransferArm::ALL
-            .iter()
-            .filter(|arm| arm.uses_target_labels())
-            .count();
-        let offsets = super::TransferArm::ALL
-            .iter()
-            .filter(|arm| arm.applies_observable_offset())
-            .count();
-
-        assert_eq!(labels, 1);
-        assert_eq!(offsets, 1);
-        assert!(super::TransferArm::OracleTargetScaler.uses_target_labels());
-        assert!(super::TransferArm::ObservableOffset.applies_observable_offset());
-        assert!(!super::TransferArm::SourceStandardized.applies_observable_offset());
-    }
-
     /// **Preregistration Section 6 made executable.** B0 and B1 share the source
     /// scaler and are comparable by relative MSE; any comparison involving B2 is
     /// refused rather than silently computed.
-    #[test]
-    fn cross_arm_comparison_refuses_arms_with_different_target_scalers() {
-        let source_fit = offset_fit();
-        let target = offset_records(3.0, 0.25, 9.0);
-        let refs: [&[super::Record]; super::SEED_BLOCK_COUNT] = [&target, &target, &target];
-
-        let b0 = super::derive_transfer_fit(
-            &source_fit,
-            refs,
-            0.5,
-            super::TransferArm::SourceStandardized,
-        )
-        .unwrap();
-        let b1 = super::derive_transfer_fit(
-            &source_fit,
-            refs,
-            0.5,
-            super::TransferArm::ObservableOffset,
-        )
-        .unwrap();
-        let b2 = super::derive_transfer_fit(
-            &source_fit,
-            refs,
-            0.5,
-            super::TransferArm::OracleTargetScaler,
-        )
-        .unwrap();
-
-        let error = super::evaluate_cross_arm_comparison(
-            0,
-            super::FeatureLayout::Gkt,
-            &b0,
-            &b2,
-            refs,
-            0x5444_4936_3800_4800,
-        )
-        .expect_err("B0-vs-B2 must be refused, not silently computed");
-        assert!(error.contains("different target scalers"), "{error}");
-
-        super::evaluate_cross_arm_comparison(
-            0,
-            super::FeatureLayout::Gkt,
-            &b0,
-            &b1,
-            refs,
-            0x5444_4936_3800_4800,
-        )
-        .expect("B1-vs-B0 shares the source scaler and must be well posed");
-    }
-
     /// The 12 ordered pairs of Section 13, and their distinct bootstrap streams.
     #[test]
     fn ordered_transfer_pairs_and_seeds_are_complete_and_distinct() {
@@ -9000,24 +7886,6 @@ mod tests {
         }
     }
 
-    /// Placeholder metrics for bootstrap fixtures: `rank_increment_bootstrap`
-    /// reads only the truths and predictions, never these.
-    fn flat_metrics() -> super::Metrics {
-        super::Metrics {
-            mse: 0.0,
-            mae: 0.0,
-            r_squared: 0.0,
-            spearman: 0.0,
-            bias: 0.0,
-            observed_mean: 0.0,
-            predicted_mean: 0.0,
-            calibration_intercept: 0.0,
-            calibration_slope: 0.0,
-            zero_fraction: 0.0,
-            one_fraction: 0.0,
-        }
-    }
-
     fn rank_block(
         seed_block: super::SeedBlockId,
         targets: Vec<f64>,
@@ -9027,16 +7895,10 @@ mod tests {
 
         super::ArmBlockEvaluation {
             seed_block,
-            scaler: super::TargetScaler {
-                mean: 0.0,
-                scale: 1.0,
-            },
             records_len,
             standardized_targets: targets,
             overlap_targets: vec![0.0; records_len],
             evaluation: super::PredictorEvaluation {
-                standardized: flat_metrics(),
-                reconstructed: flat_metrics(),
                 predictions: super::Tdi52PredictionSet {
                     standardized: predictions,
                     reconstructed_overlap: vec![0.0; records_len],
@@ -9063,10 +7925,19 @@ mod tests {
             .collect::<Vec<_>>();
         let challenger = baseline.clone();
 
-        let (interval, undefined, total) =
-            super::rank_increment_bootstrap(&baseline, &challenger, 0x5444_4936_3800_4811)
-                .expect("well-formed");
+        let outcome = super::rank_bootstrap(
+            &[
+                (super::FeatureLayout::Gk, baseline.as_slice()),
+                (super::FeatureLayout::Gkt, challenger.as_slice()),
+            ],
+            &[(super::FeatureLayout::Gkt, super::FeatureLayout::Gk)],
+            0x5444_4936_3800_4811,
+        )
+        .expect("well-formed");
 
+        let (interval, undefined) =
+            outcome.increment(super::FeatureLayout::Gkt, super::FeatureLayout::Gk);
+        let total = outcome.replicates;
         let interval = interval.expect("defined");
         assert_eq!(undefined, 0);
         assert_eq!(total, super::BOOTSTRAP_REPLICATES);
@@ -9091,9 +7962,19 @@ mod tests {
             .map(|&id| rank_block(id, targets.clone(), vec![0.5; targets.len()]))
             .collect::<Vec<_>>();
 
-        let (interval, undefined, total) =
-            super::rank_increment_bootstrap(&baseline, &challenger, 0x5444_4936_3800_4812)
-                .expect("well-formed");
+        let outcome = super::rank_bootstrap(
+            &[
+                (super::FeatureLayout::Gk, baseline.as_slice()),
+                (super::FeatureLayout::Gkt, challenger.as_slice()),
+            ],
+            &[(super::FeatureLayout::Gkt, super::FeatureLayout::Gk)],
+            0x5444_4936_3800_4812,
+        )
+        .expect("well-formed");
+
+        let (interval, undefined) =
+            outcome.increment(super::FeatureLayout::Gkt, super::FeatureLayout::Gk);
+        let total = outcome.replicates;
 
         assert!(interval.is_none());
         assert_eq!(undefined, super::BOOTSTRAP_REPLICATES);
@@ -9125,6 +8006,224 @@ mod tests {
             .map(|&id| rank_block(id, shifted.clone(), shifted.clone()))
             .collect::<Vec<_>>();
 
-        assert!(super::rank_increment_bootstrap(&baseline, &challenger, 1).is_err());
+        assert!(
+            super::rank_bootstrap(
+                &[
+                    (super::FeatureLayout::Gk, baseline.as_slice()),
+                    (super::FeatureLayout::Gkt, challenger.as_slice()),
+                ],
+                &[(super::FeatureLayout::Gkt, super::FeatureLayout::Gk)],
+                1,
+            )
+            .is_err()
+        );
+    }
+
+    // ---- TDI-6.8 : un seul bras, quatre dispositions (Sections 3, 11-13) ----
+
+    /// Section 3 admits exactly one arm, and Section 12 states flatly that no
+    /// target label is read anywhere in TDI-6.8, in any arm, for any criterion.
+    /// TDI-6.7's B1 (observable offset) and B2 (oracle target scaler) are gone;
+    /// B2 in particular fitted the target scaler, which reads target `U_h`.
+    #[test]
+    fn the_experiment_has_exactly_one_arm_and_no_oracle() {
+        assert_eq!(super::TransferArm::ALL.len(), 1);
+        assert_eq!(
+            super::TransferArm::ALL[0],
+            super::TransferArm::SourceStandardized
+        );
+        assert_eq!(super::TransferArm::ALL[0].label(), "plain-transfer");
+    }
+
+    /// Section 3's ladder, in nesting order with the frozen feature counts. The
+    /// inherited evaluator carried only [GK, GKT]; CK and SK must be present or
+    /// the ladder the preregistration asks to be visible simply is not reported.
+    #[test]
+    fn transfer_layouts_are_the_four_rung_ladder() {
+        assert_eq!(
+            super::TRANSFER_LAYOUTS,
+            [
+                super::FeatureLayout::Ck,
+                super::FeatureLayout::Sk,
+                super::FeatureLayout::Gk,
+                super::FeatureLayout::Gkt,
+            ]
+        );
+
+        let counts = super::TRANSFER_LAYOUTS.map(super::FeatureLayout::feature_count);
+        assert_eq!(counts, [15, 17, 19, 21]);
+
+        // Strict nesting CK ⊂ SK ⊂ GK ⊂ GKT.
+        assert!(counts.windows(2).all(|pair| pair[0] < pair[1]));
+    }
+
+    /// The three rungs of Section 10, challenger first. Only the first carries a
+    /// criterion; the preregistration reports the other two.
+    #[test]
+    fn ladder_comparisons_are_the_three_adjacent_rungs() {
+        assert_eq!(
+            super::LADDER_COMPARISONS,
+            [
+                (super::FeatureLayout::Gkt, super::FeatureLayout::Gk),
+                (super::FeatureLayout::Gk, super::FeatureLayout::Sk),
+                (super::FeatureLayout::Sk, super::FeatureLayout::Ck),
+            ]
+        );
+    }
+
+    /// Section 6 forbids filling an undefined block: a mean over two of three is
+    /// a different statistic, and calling it `ρ̄` would silently change the
+    /// estimand the criterion is written about.
+    #[test]
+    fn rho_bar_is_undefined_when_any_block_is() {
+        assert_eq!(
+            super::mean_of_defined(&[Some(0.3), Some(0.6), Some(0.9)]),
+            Some(0.6)
+        );
+        assert_eq!(super::mean_of_defined(&[Some(0.3), None, Some(0.9)]), None);
+        assert_eq!(super::mean_of_defined(&[None, None, None]), None);
+    }
+
+    fn beneficial_comparison() -> super::RankComparison {
+        super::classify_rank_increment(
+            vec![Some(0.05), Some(0.05), Some(0.05)],
+            Some(super::ConfidenceInterval {
+                lower: 0.01,
+                median: 0.05,
+                upper: 0.09,
+            }),
+            0,
+            super::BOOTSTRAP_REPLICATES,
+        )
+    }
+
+    fn pair_with(
+        mean_rho: Option<f64>,
+        comparison: super::RankComparison,
+    ) -> super::TransferPairReport {
+        super::TransferPairReport {
+            source: super::GeneratorFamily::F0Base,
+            target: super::GeneratorFamily::F1Sparse,
+            cells: Vec::new(),
+            observable_shift: 0.0,
+            observable_shift_u1: 0.0,
+            rank_cells: vec![super::RankCell {
+                layout: super::FeatureLayout::Gkt,
+                horizon: 3,
+                block_rho: [mean_rho, mean_rho, mean_rho],
+                mean_rho,
+                interval: None,
+                undefined_replicates: 0,
+                rank_transfers: false,
+                within_rho: None,
+                retention: None,
+            }],
+            ladder: vec![super::LadderComparison {
+                challenger: super::FeatureLayout::Gkt,
+                baseline: super::FeatureLayout::Gk,
+                horizon: 3,
+                comparison,
+            }],
+        }
+    }
+
+    /// Section 13's reading rule. A *Beneficial* increment whose challenger
+    /// orders nothing is better-ordered noise, not transfer, and the
+    /// qualification must ride on the same line as the classification — the trap
+    /// TDI-5.8B and TDI-6.6D both had to disarm after the fact.
+    ///
+    #[test]
+    fn a_beneficial_increment_over_unordered_noise_is_qualified_inline() {
+        let comparison = beneficial_comparison();
+        assert_eq!(
+            comparison.classification,
+            super::RankClassification::Beneficial
+        );
+
+        let ordering = pair_with(Some(0.4), comparison.clone());
+        assert_eq!(super::reading_rule_note(&ordering, &ordering.ladder[0]), "");
+
+        for unordered in [Some(0.0), Some(-0.2), None] {
+            let pair = pair_with(unordered, comparison.clone());
+            assert!(
+                super::reading_rule_note(&pair, &pair.ladder[0]).contains("BRUIT MIEUX ORDONNÉ"),
+                "ρ̄(GKT) = {unordered:?} must be qualified as better-ordered noise"
+            );
+        }
+    }
+
+    /// Section 11 is a conjunction, and the two halves must both bite: a layout
+    /// positive in every block but whose interval reaches zero does not transfer,
+    /// and neither does one with a positive bound but a negative block.
+    #[test]
+    fn rank_transfers_needs_both_conjuncts() {
+        let blocks = super::frozen_block_order(super::GeneratorFamily::F0Base);
+        let targets = (0..48).map(f64::from).collect::<Vec<_>>();
+
+        // Perfectly ordered: every block ρ = 1, so the bound is positive too.
+        let ordered = blocks
+            .iter()
+            .map(|&id| rank_block(id, targets.clone(), targets.clone()))
+            .collect::<Vec<_>>();
+        // Reversed: every block ρ = −1.
+        let reversed = blocks
+            .iter()
+            .map(|&id| {
+                let mut backwards = targets.clone();
+                backwards.reverse();
+                rank_block(id, targets.clone(), backwards)
+            })
+            .collect::<Vec<_>>();
+
+        let outcome = super::rank_bootstrap(
+            &[
+                (super::FeatureLayout::Gk, reversed.as_slice()),
+                (super::FeatureLayout::Gkt, ordered.as_slice()),
+            ],
+            &[(super::FeatureLayout::Gkt, super::FeatureLayout::Gk)],
+            0x5444_4936_3800_4813,
+        )
+        .expect("well-formed");
+
+        let (positive, _) = outcome.layout(super::FeatureLayout::Gkt);
+        let (negative, _) = outcome.layout(super::FeatureLayout::Gk);
+
+        assert!(positive.expect("defined").lower > 0.0);
+        assert!(negative.expect("defined").upper < 0.0);
+    }
+
+    /// The shared draw must serve every layout from the same indices, not just
+    /// the two named in a comparison: with four identical layouts every pairwise
+    /// increment is exactly zero, bound included.
+    #[test]
+    fn one_draw_serves_all_four_layouts() {
+        let blocks = super::frozen_block_order(super::GeneratorFamily::F0Base);
+        let targets = (0..48).map(f64::from).collect::<Vec<_>>();
+        let predictions = targets.iter().map(|value| value * 2.0).collect::<Vec<_>>();
+
+        let identical = blocks
+            .iter()
+            .map(|&id| rank_block(id, targets.clone(), predictions.clone()))
+            .collect::<Vec<_>>();
+
+        let inputs = super::TRANSFER_LAYOUTS
+            .iter()
+            .map(|layout| (*layout, identical.as_slice()))
+            .collect::<Vec<_>>();
+
+        let outcome =
+            super::rank_bootstrap(&inputs, &super::LADDER_COMPARISONS, 0x5444_4936_3800_4814)
+                .expect("well-formed");
+
+        assert_eq!(outcome.per_layout.len(), 4);
+
+        for (challenger, baseline) in super::LADDER_COMPARISONS {
+            let (interval, undefined) = outcome.increment(challenger, baseline);
+            let interval = interval.expect("defined");
+
+            assert_eq!(undefined, 0);
+            assert_eq!(interval.lower, 0.0);
+            assert_eq!(interval.upper, 0.0);
+        }
     }
 }
