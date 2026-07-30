@@ -122,6 +122,31 @@ zero and slightly the wrong way. The overlaps transfer **substantial ordering
 information**: 0.695 at U₃, still 0.351 at U₆. In reconstructed-O space the
 baseline collapses entirely (R² −35031, Spearman exactly 0.000000000).
 
+> **Correction, added while preparing TDI-6.8.** The last clause above is
+> misleading and is corrected here rather than removed. That `Spearman exactly
+> 0.000000000` is **not a measurement of lost ordering**: the same block's log
+> line reports `fraction borne basse = 1.0`, meaning **every** prediction was
+> clamped to the floor of the representable O range. The predictions are
+> therefore a constant, and a constant has no ranks — `ρ = 0` follows by
+> definition, whatever the underlying ordering was. The reconstruction
+> `O_h = 1 − 2^(−U_h)` is strictly increasing and so *would* preserve rank
+> exactly, but the saturation applied on top of it is monotone without being
+> strictly increasing, and it manufactures ties. The correct reading of the
+> zero is that the baseline's predicted levels fall entirely outside the
+> representable range — which is a genuine and severe failure, but a failure of
+> *level*, already reported by the `R²` beside it, not an independent failure
+> of ordering.
+>
+> The Spearman values quoted elsewhere in this section (−0.040, −0.063, 0.695,
+> 0.351) are standardized-U values and are unaffected by the saturation. They
+> are, however, **aggregate** values, and TDI-6.7 §9.1 later showed that pooled
+> rank statistics in this design are not trustworthy as criterion inputs. They
+> were never criterion inputs here — TDI-5.8B classifies on relative MSE — and
+> they are left as reported. TDI-6.8 is the experiment that puts a
+> **per-block** rank statistic under a preregistered criterion; it forbids both
+> the pooled and the reconstructed-O rank statistic from entering one, so
+> neither reading can recur.
+
 So the honest statement is three-part: cross-width **calibration** fails for
 everything; cross-width **ranking** survives via the overlaps and not via the
 exact descriptors; and the surviving ordering **degrades with horizon**
