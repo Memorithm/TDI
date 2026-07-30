@@ -1,55 +1,57 @@
-//! TDI-6.6 re-standardized cross-generator transfer (does aligning the feature
-//! standardization to the target domain repair the transfer failure that
-//! TDI-5.8B and TDI-6.5C both measured?).
+//! TDI-6.7 observable-offset cross-generator transfer (can a level shift
+//! estimated from *observed* deficits repair what feature alignment could not?).
 //!
-//! This file derives from the frozen TDI-6.5 evaluator
-//! (`tdi-independent-overlap-ablation-v65.rs`) by changing exactly one factor —
-//! **the feature standardization applied at transfer time**. TDI-5.1 … TDI-5.9
-//! and TDI-6.1 … TDI-6.5 remain frozen and untouched.
+//! This file derives from the frozen TDI-6.6 evaluator
+//! (`tdi-independent-overlap-ablation-v66.rs`) by changing exactly one factor —
+//! **what the label-free transfer correction is**. TDI-5.1 … TDI-5.9 and
+//! TDI-6.1 … TDI-6.6 remain frozen and untouched.
 //!
-//! A fitted model is a triple: feature means `μ`, feature scales `σ` and
-//! coefficients `β`, plus a `TargetScaler` `(m, s)` mapping `U_h` to and from
-//! standardized space. Prediction is
+//! TDI-6.6 aligned the feature *scale* and made transfer dramatically worse. Its
+//! §5 showed why: re-standardizing on the target domain's own mean centres the
+//! features at zero **by construction**, annihilating the domain displacement
+//! that was carrying the level. Its 6.6C then localized the residual failure in
+//! the target scale — the deficit *level*, which is the quantity being predicted.
 //!
-//!   `ŷ_std = β₀ + Σⱼ βⱼ · (xⱼ − μⱼ) / σⱼ`,   `ŷ = m + s · ŷ_std`
+//! TDI-6.7 tests whether that pessimism is complete, because a proxy for the
+//! level is **observable without any label**. The series geometry is
+//! `U_h = −log₂(1 − O_h)` and the observation horizon is 2, so `O₁` and `O₂` —
+//! which are *features* on every record — give `U₁` and `U₂` directly. `U₂` is
+//! the last fully observed deficit, and the between-domain shift of its mean is
+//! a statistic of an unlabelled sample.
 //!
-//! TDI-6.5C transferred a model by applying the **source** domain's `μ, σ, m, s`
-//! to the target domain's records. TDI-6.6 evaluates the **same, never-refitted**
-//! `β` under three arms that differ only in whose statistics standardize it
-//! (preregistration Section 4.1):
+//! Three arms, coefficients **never refitted** (preregistration Section 3):
 //!
-//!   * **A0 `SourceStandardized`** — the TDI-6.5C behaviour, unchanged;
-//!   * **A1 `FeatureRestandardized`** — target-domain `μ, σ`, source `(m, s)`.
-//!     Ordinary unsupervised domain adaptation: it needs target *inputs* only,
-//!     never a target label. This is the experiment;
-//!   * **A2 `OracleRestandardized`** — also replaces `(m, s)`, which requires
-//!     the target domain's `U_h` values. **Not a prediction method**; an upper
-//!     bound that localizes whether a residual failure lives in the feature
-//!     scale or the target scale. Every A2 output line is labelled `oracle`.
+//!   * **B0 `SourceStandardized`** — source feature statistics and source target
+//!     scaler: byte-for-byte TDI-6.6's A0, carried forward so the B1-vs-B0
+//!     comparison is paired on identical populations;
+//!   * **B1 `ObservableOffset`** — B0 plus an additive `Δ̂_std = Δ / sˢ_h`, where
+//!     `Δ = μ₂ᵀ − μ₂ˢ` over both domains' **training** populations. Applied to
+//!     each model's intercept, so every feature statistic is left intact and the
+//!     mechanism that destroyed A1 cannot arise. This is the experiment;
+//!   * **B2 `OracleTargetScaler`** — source feature statistics, **target**
+//!     scaler. Unlike TDI-6.6's A2 it does not re-standardize features, so it
+//!     isolates the target-scale contribution alone — exactly what B1
+//!     approximates. It reads target labels and is **not a prediction method**;
+//!     every line naming it is labelled `oracle`.
 //!
-//! Target statistics come from the target family's combined **training**
-//! population, never from the holdout being scored (Section 4.2), so no record
-//! contributes both to the standardization and to the evaluation and the design
-//! is not transductive.
+//! Criteria: 6.7A (B1 vs B0 on the confirmatory pair), 6.7B
+//! (`calibration_repaired ≡ R² > 0`), 6.7C (`recovered_fraction`, placing B1 on
+//! the segment between doing nothing and knowing the answer), 6.7D (all 12
+//! ordered pairs, with the preregistered reading rule that a *Beneficial* cell
+//! whose `R²` is still ≤ 0 is less bad, not good). Section 14's `oracle`
+//! diagnostic reports the observable `Δ` against the **true** level shift, which
+//! never feeds B1 and exists to explain the verdict either way.
 //!
-//! Everything else is inherited verbatim from TDI-6.5: the four generator
-//! families F0–F3, the population contract, the CK/SK/GK/GKT layouts, the linear
-//! ridge (λ = 1), the six horizons and two focal horizons, the deterministic
-//! bootstrap, the four-way classifier and its symmetric 2 % margin, and the
-//! non-exact determinism discipline in which `g = 1 - |λ2|` and `τ_ε` are the
-//! only non-exact quantities. Re-standardization introduces no new
-//! non-exactness: it reuses the frozen ridge fit's own accumulation order on a
-//! different record set (Section 4.4).
-//!
-//! New in TDI-6.6: 48 fresh pairwise-disjoint seed reservations with fresh
-//! `TDI6`/`36` bootstrap seeds; criteria 6.6A (A1-vs-A0 on F0→F1 at the focal
-//! horizons), 6.6B (`calibration_repaired` ≡ aggregate standardized-U R² > 0),
-//! 6.6C (the oracle arm) and 6.6D (all 12 ordered family pairs).
+//! Everything else is inherited verbatim from TDI-6.6: the four generator
+//! families, the population contract, the CK/SK/GK/GKT layouts, the linear ridge
+//! (λ = 1), the horizons, the deterministic bootstrap, the four-way classifier,
+//! and the non-exact determinism discipline in which `g` and `τ_ε` are the only
+//! non-exact quantities. The offset adds none — it is a mean of `log₂` values in
+//! the same regime.
 //!
 //! The full run is gated behind an explicit, exact human confirmation
 //! environment variable (see `run_full_experiment` and
-//! `tdi67_full_run_confirmed`). No commit, test or CI run supplies that
-//! token.
+//! `tdi67_full_run_confirmed`). No commit, test or CI run supplies that token.
 
 use tdi_core::{
     Action, ExactRatio, State, TableSystem, analyze_branching_recovery, distribution_overlap,
@@ -65,7 +67,7 @@ const TARGET_HORIZON_COUNT: usize = TARGET_HORIZONS.len();
 const PRIMARY_HORIZON: usize = 6;
 const PRIMARY_HORIZON_INDEX: usize = 3;
 
-// The two focal horizons at which TDI-6.6A/6.6B classify: U3 (near, where
+// The two focal horizons at which TDI-6.7A/6.7B classify: U3 (near, where
 // TDI-5.4B found a short-horizon benefit) and the primary U6.
 const FOCAL_HORIZONS: [usize; 2] = [3, 6];
 const FOCAL_HORIZON_COUNT: usize = FOCAL_HORIZONS.len();
@@ -73,7 +75,7 @@ const FOCAL_HORIZON_COUNT: usize = FOCAL_HORIZONS.len();
 const TRAIN_WIDTH_3: u8 = 3;
 const TRAIN_WIDTH_4: u8 = 4;
 // Widths 5 and 6 remain supported by the inherited frozen generator and its
-// exact cardinality/budget machinery, but TDI-6.6 generates no populations
+// exact cardinality/budget machinery, but TDI-6.7 generates no populations
 // at those widths (Section 8): there are no OOD populations.
 const WIDTH_5: u8 = 5;
 const WIDTH_6: u8 = 6;
@@ -83,7 +85,7 @@ const TRAIN_WIDTH_4_SYSTEMS: usize = 15_000;
 const HOLDOUT_WIDTH_3_SYSTEMS: usize = 5_000;
 const HOLDOUT_WIDTH_4_SYSTEMS: usize = 5_000;
 
-// TDI-6.6 runs the inherited 3-block per-generator machinery once per
+// TDI-6.7 runs the inherited 3-block per-generator machinery once per
 // generator family (Section 7). SEED_BLOCK_COUNT is the number of blocks
 // *within a family*; the four families give 12 blocks and 48 reservations.
 const GENERATOR_FAMILY_COUNT: usize = 4;
@@ -111,7 +113,7 @@ const SPECTRAL_CROSS_METHOD_TOLERANCE: f64 = 1e-9;
 const MIXING_EPSILON: f64 = 0.25;
 const MIXING_TIME_CAP: usize = 4096;
 
-// Linear layouts, inherited from TDI-5.2/5.3/5.4/5.5. In TDI-6.6 they are
+// Linear layouts, inherited from TDI-5.2/5.3/5.4/5.5. In TDI-6.7 they are
 // exploratory only (Section 6) and determine no confirmatory criterion.
 const B0_FEATURE_COUNT: usize = BASELINE_FEATURE_COUNT;
 const B1_FEATURE_COUNT: usize = BASELINE_FEATURE_COUNT + 1;
@@ -131,7 +133,7 @@ const LITERAL_SPECTRAL_FEATURE_COUNT: usize = 2;
 // two exact spectral moments; GK additionally adds the two literal spectral
 // descriptors g and τ_ε (the TDI-6.1 baseline); GKT additionally adds the two
 // early overlaps. GK minus SK isolates the literal spectral descriptors'
-// marginal value in each family (TDI-6.5D, not a TDI-6.6 criterion); GKT minus GK
+// marginal value in each family (TDI-6.5D, not a TDI-6.7 criterion); GKT minus GK
 // isolates the overlaps' marginal value *after* the contraction descriptors, the
 // exact spectral moments AND the literal spectral gap + mixing time are already
 // present (the confirmatory comparison, criteria 6.6A, 6.6B, 6.6C, 6.6D).
@@ -152,7 +154,7 @@ const MODEL_LAYOUT_COUNT: usize = 9;
 
 const RIDGE_LAMBDA: f64 = 1.0;
 const BOOTSTRAP_REPLICATES: usize = 4_000;
-// Fresh per-family stratified-aggregate bootstrap seeds (TDI-6.6 Section 9),
+// Fresh per-family stratified-aggregate bootstrap seeds (TDI-6.7 Section 7),
 // disjoint from every TDI-5.2 … 6.2 bootstrap seed. Each family aggregates its
 // own three blocks with seed base + family index.
 const AGGREGATE_BOOTSTRAP_SEED_BASE: u64 = 0x5444_4936_3700_4700;
@@ -187,7 +189,7 @@ impl SeedBlockId {
 
     /// `base(f, b) = 6.2e9 + f·300e6 + b·100e6` (Section 9). The four
     /// populations start at this base + `{0, 10, 20, 30}·1e6`. The 6.2e9 origin
-    /// clears TDI-6.5's last reservation (6.13e9 + 5030), so every TDI-6.6 seed
+    /// clears TDI-6.6's last reservation (7.33e9 + 5030), so every TDI-6.7 seed
     /// is disjoint from every prior experiment's.
     fn population_base_seed(self) -> u64 {
         7_400_000_000 + self.family.index() * 300_000_000 + u64::from(self.block) * 100_000_000
@@ -318,7 +320,7 @@ fn population_specs() -> [PopulationSpec; TOTAL_SEED_RESERVATIONS] {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(usize)]
 enum FeatureLayout {
-    // Linear layouts B0..BD are exploratory in TDI-6.6. Their discriminants
+    // Linear layouts B0..BD are exploratory in TDI-6.7. Their discriminants
     // (0..4) are preserved so `layout as usize` indexing is unchanged from
     // TDI-5.2/5.3/5.4/5.5. The confirmatory layouts CK/SK/GK/GKT follow, with
     // strict nesting CK ⊂ SK ⊂ GK ⊂ GKT.
@@ -2071,7 +2073,7 @@ fn feature_layout(record: &Record, layout: FeatureLayout) -> Vec<f64> {
         FeatureLayout::BD => {
             features.push(second_overlap - first_overlap);
         }
-        // Confirmatory layouts (TDI-6.6 Section 6). Terms are the two exact
+        // Confirmatory layouts (TDI-6.7 Section 4). Terms are the two exact
         // contraction descriptors (delta, delta_bar); for SK/GK/GKT the two exact
         // spectral moments (s2, s3); for GK/GKT the two literal spectral
         // descriptors (g, τ_ε); and for GKT the two early overlaps (O1, O2) — all
@@ -2458,7 +2460,7 @@ fn preregistered_generation_limits(
             return Err(EvaluationError::new(
                 context,
                 FailureCategory::UnsupportedWidth,
-                format!("width {width} is not part of the TDI-6.6 preregistered populations"),
+                format!("width {width} is not part of the TDI-6.7 preregistered populations"),
             ));
         }
     };
@@ -2770,7 +2772,7 @@ impl BlockPopulations {
         )
     }
 
-    /// The combined training populations, used by TDI-6.6 as the source of the
+    /// The combined training populations, used by TDI-6.7 as the source of the
     /// **target** domain's re-standardization statistics (Section 4.2).
     ///
     /// Deliberately the training populations and not `combined_holdout`: the
@@ -2785,7 +2787,7 @@ impl BlockPopulations {
 
     /// Every population's full generation report, in `PopulationKind::ALL`
     /// order. Required-raw-output printing walks this instead of the four
-    /// named fields directly. TDI-6.6 has no OOD populations (Section 8).
+    /// named fields directly. TDI-6.7 has no OOD populations (Section 5).
     fn reports(&self) -> [&PopulationGenerationReport; POPULATIONS_PER_SEED_BLOCK] {
         [
             &self.training_width_3,
@@ -2846,7 +2848,7 @@ const DEGENERATE_SCALE_FLOOR: f64 = 1.0e-12;
 /// accumulation order.
 ///
 /// This is the **single** implementation of the standardization statistics.
-/// `fit_ridge` uses it to build a model, and TDI-6.6's re-standardization
+/// `fit_ridge` uses it to build a model, and the transfer derivation
 /// (Section 4.1) uses it to recompute those statistics on a different record
 /// set. Sharing one implementation is deliberate: two copies could drift, and a
 /// drift between the fitted standardization and the transfer-time
@@ -2964,13 +2966,16 @@ impl TransferArm {
 /// Derived from `Record::early_overlap` alone — a **feature**. This function has
 /// no access to a target value, which is what makes the B1 arm structurally
 /// label-free (preregistration Section 3.3).
-fn observed_deficit_u2(record: &Record) -> Result<f64, String> {
-    let overlap = record.early_overlap[1];
+fn observed_deficit(record: &Record, horizon: ObservedHorizon) -> Result<f64, String> {
+    let overlap = match horizon {
+        ObservedHorizon::First => record.early_overlap[0],
+        ObservedHorizon::Last => record.early_overlap[1],
+    };
     let remainder = 1.0 - overlap;
 
     if remainder <= 0.0 {
         return Err(format!(
-            "observed overlap O2 = {overlap} leaves no deficit; the frozen population \
+            "observed overlap {overlap} leaves no deficit; the frozen population \
              contract excludes fully-recovered observations, so this must not occur"
         ));
     }
@@ -2991,9 +2996,25 @@ fn observed_deficit_u2(record: &Record) -> Result<f64, String> {
 ///
 /// Both means are taken over **training** populations, never the scored holdout,
 /// so the design is not transductive.
+/// Which observed horizon the deficit proxy is read at. `Last` (`U₂`) is the
+/// criterion path; `First` (`U₁`) is the Section 15 companion.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ObservedHorizon {
+    First,
+    Last,
+}
+
 fn observable_shift(
     source_training: &[&[Record]],
     target_training: &[&[Record]],
+) -> Result<f64, String> {
+    observable_shift_at(source_training, target_training, ObservedHorizon::Last)
+}
+
+fn observable_shift_at(
+    source_training: &[&[Record]],
+    target_training: &[&[Record]],
+    horizon: ObservedHorizon,
 ) -> Result<f64, String> {
     let pooled = |blocks: &[&[Record]]| -> Result<f64, String> {
         let mut total = 0.0_f64;
@@ -3001,7 +3022,7 @@ fn observable_shift(
 
         for block in blocks {
             for record in *block {
-                total += observed_deficit_u2(record)?;
+                total += observed_deficit(record, horizon)?;
                 count += 1;
             }
         }
@@ -4073,7 +4094,7 @@ fn transfer_pair_bootstrap_seed(source: GeneratorFamily, target: GeneratorFamily
 /// set of standardized ground-truth values from one scaler and shares it between
 /// its two predictors. That is correct for A0-vs-A1 (both carry the source
 /// scaler) but cannot represent A2, whose ground truth is standardized by the
-/// target scaler (preregistration Section 14.1).
+/// target scaler (preregistration Section 6).
 #[derive(Clone, Debug)]
 struct ArmBlockEvaluation {
     seed_block: SeedBlockId,
@@ -4163,7 +4184,7 @@ fn pooled_arm_metrics(blocks: &[ArmBlockEvaluation]) -> (Metrics, Metrics) {
 /// population whose mean the model is being asked to beat. Both sums scale
 /// identically under an affine rescaling of the target, which is what makes this
 /// interval comparable across arms that carry different target scalers
-/// (preregistration Section 14.1).
+/// (preregistration Section 6).
 ///
 /// Resampling mirrors the inherited paired bootstrap exactly: `count` draws per
 /// block, in frozen block order, from one deterministic stream.
@@ -4553,7 +4574,7 @@ fn evaluate_horizon_comparison(
 /// # Well-posedness
 ///
 /// Refuses unless both fits carry **identical** target scalers on every block.
-/// That is the precondition of preregistration Section 14.1: a relative-MSE
+/// That is the precondition of preregistration Section 6: a relative-MSE
 /// comparison between arms whose ground truth is standardized differently would
 /// measure the ratio of two scaler variances rather than any property of the
 /// models. A0 and A1 both keep the source scaler and pass; any comparison
@@ -4578,7 +4599,7 @@ fn evaluate_cross_arm_comparison(
             return Err(format!(
                 "cross-arm comparison on block {} would compare errors standardized by \
                  different target scalers, which measures scaler variance rather than model \
-                 quality (Section 14.1)",
+                 quality (Section 6)",
                 baseline.seed_block.label()
             ));
         }
@@ -4657,7 +4678,7 @@ const DESCRIPTOR_MEAN_COUNT: usize =
 /// holdout means.
 ///
 /// TDI-6.6 carries **no** within-family comparison: every criterion is about
-/// transfer between families (Sections 12-15), so TDI-6.5's per-family
+/// transfer between families (Sections 10-13), so TDI-6.5's per-family
 /// GKT-vs-GK grid and GK-vs-SK focal diagnostic are not computed here. A family
 /// exists in this experiment to be a transfer source (`aggregate_fit`), a
 /// transfer target (`blocks`, supplying both the re-standardization statistics
@@ -4683,14 +4704,14 @@ const TRANSFER_LAYOUTS: [FeatureLayout; 2] = [FeatureLayout::Gk, FeatureLayout::
 /// Only the scale-free members — `r_squared_interval`, `calibration_repaired`,
 /// and the Spearman and calibration slope inside `standardized` — may be
 /// compared across arms; `mse` and `mae` may not, because A2 standardizes its
-/// ground truth with a different scaler (Section 14.1).
+/// ground truth with a different scaler (Section 6).
 #[derive(Clone, Debug)]
 struct ArmEvaluation {
     arm: TransferArm,
     standardized: Metrics,
     reconstructed: Metrics,
     r_squared_interval: ConfidenceInterval,
-    /// Criterion TDI-6.6B (Section 13): the transferred model beats predicting
+    /// Criterion TDI-6.7B (Section 11): the transferred model beats predicting
     /// the target's mean.
     calibration_repaired: bool,
 }
@@ -4702,7 +4723,7 @@ struct TransferCell {
     /// One entry per `TransferArm::ALL`, in that order.
     arms: Vec<ArmEvaluation>,
     /// A1 against A0 — the **only** relative-MSE comparison the design admits,
-    /// because those two arms share the source target scaler (Section 14.1).
+    /// because those two arms share the source target scaler (Section 6).
     a1_vs_a0: HorizonComparison,
 }
 
@@ -4727,6 +4748,16 @@ struct TransferPairReport {
     source: GeneratorFamily,
     target: GeneratorFamily,
     cells: Vec<TransferCell>,
+    /// The raw observable shift `Δ = μ₂ᵀ − μ₂ˢ` (Section 3.1). One scalar per
+    /// pair, computed from features only.
+    observable_shift: f64,
+    /// Section 15 companion: the same shift computed at `U₁` instead of `U₂`.
+    /// Context only; no criterion consumes it.
+    observable_shift_u1: f64,
+    /// Section 14, `oracle`: the **true** level shift `μ_hᵀ − μ_hˢ` per focal
+    /// horizon, read from holdout labels. Never feeds B1; it answers *why* B1
+    /// succeeded or failed. `(horizon, true shift, Δ / true shift)`.
+    true_level_shifts: Vec<(usize, f64, f64)>,
 }
 
 impl TransferPairReport {
@@ -4738,16 +4769,16 @@ impl TransferPairReport {
     }
 }
 
-/// Criterion TDI-6.6A (Section 12, primary): on the F0→F1 pair, the A1-vs-A0
+/// Criterion TDI-6.7A (Section 10, primary): on the F0→F1 pair, the B1-vs-B0
 /// classification per layout and focal horizon.
 #[derive(Clone, Debug)]
 struct Tdi67CriterionA {
     per_cell: Vec<(FeatureLayout, usize, CriterionCClassification, f64)>,
 }
 
-/// Criterion TDI-6.6B (Section 13, primary): `calibration_repaired` on the
+/// Criterion TDI-6.7B (Section 11, primary): `calibration_repaired` on the
 /// F0→F1 pair. `repaired` is the preregistered conjunction — true iff the
-/// **A1/GKT** cell has `R² > 0` at **both** focal horizons; `non_repairs` names
+/// **B1/GKT** cell has `R² > 0` at **both** focal horizons; `non_repairs` names
 /// each (layout, horizon) still at or below zero under A1 (the located
 /// non-repair).
 #[derive(Clone, Debug)]
@@ -4756,24 +4787,40 @@ struct Tdi67CriterionB {
     non_repairs: Vec<(FeatureLayout, usize)>,
 }
 
-/// Criterion TDI-6.6C (Section 14, descriptive): the oracle arm's scale-free
+/// Criterion TDI-6.7C (Section 12, descriptive): the oracle arm's scale-free
 /// summary on the F0→F1 pair, and the localization it supports.
 #[derive(Clone, Debug)]
 struct Tdi67CriterionC {
-    /// `(layout, horizon, A1 repaired, A2 repaired)`.
-    per_cell: Vec<(FeatureLayout, usize, bool, bool)>,
-    /// True iff some cell has A2 repaired while A1 is not — the residual failure
-    /// is then in the target scale, which no label-free procedure can reach.
-    residual_failure_in_target_scale: bool,
+    /// `(layout, horizon, R² B0, R² B1, R² B2, recovered_fraction)`.
+    ///
+    /// `recovered_fraction = (R²_B1 − R²_B0) / (R²_B2 − R²_B0)` places B1 on the
+    /// segment between doing nothing and knowing the answer. It is `None` —
+    /// printed `not-applicable` — when `R²_B2 ≤ R²_B0`, i.e. when the oracle
+    /// itself buys nothing and the segment is degenerate. Descriptive: no
+    /// threshold is preregistered and no value is a success (Section 12).
+    per_cell: Vec<(FeatureLayout, usize, f64, f64, f64, Option<f64>)>,
 }
 
-/// Criterion TDI-6.6D (Section 15, descriptive): all 12 ordered pairs, the
-/// consistency of the A1-vs-A0 direction across them, and the per-family
+/// `(R²_B1 − R²_B0) / (R²_B2 − R²_B0)`, or `None` when the oracle buys nothing.
+fn recovered_fraction(baseline: f64, offset: f64, oracle: f64) -> Option<f64> {
+    let span = oracle - baseline;
+
+    if span <= 0.0 || !span.is_finite() {
+        return None;
+    }
+
+    let recovered = (offset - baseline) / span;
+
+    recovered.is_finite().then_some(recovered)
+}
+
+/// Criterion TDI-6.7D (Section 13, descriptive): all 12 ordered pairs, the
+/// consistency of the B1-vs-B0 direction across them, and the per-family
 /// descriptor drift table of Section 17.
 #[derive(Clone, Debug)]
 struct Tdi67CriterionD {
     pairs: Vec<TransferPairReport>,
-    /// True iff the A1-vs-A0 classification is identical in every pair at the
+    /// True iff the B1-vs-B0 classification is identical in every pair at the
     /// GKT layout and both focal horizons.
     direction_consistent: bool,
     divergent_pairs: Vec<(GeneratorFamily, GeneratorFamily, FeatureLayout, usize)>,
@@ -4989,17 +5036,62 @@ fn evaluate_transfer_pair(
         }
     }
 
+    // Section 15 companion: the same shift measured at the first observed
+    // horizon instead of the last. Context only.
+    let observable_shift_u1 = observable_shift_at(
+        &source_training_refs,
+        &target_training_slices,
+        ObservedHorizon::First,
+    )?;
+
+    // Section 14, `oracle`: the TRUE level shift, read from holdout labels. It
+    // never feeds B1 — it exists to explain the verdict.
+    let source_holdouts = source.combined_holdouts();
+    let mut true_level_shifts = Vec::with_capacity(FOCAL_HORIZON_COUNT);
+
+    for &horizon_index in &focal_indices {
+        let mean_of = |blocks: &[Vec<Record>]| -> f64 {
+            let mut total = 0.0_f64;
+            let mut count = 0_usize;
+
+            for block in blocks {
+                for record in block {
+                    total += record.targets_u[horizon_index];
+                    count += 1;
+                }
+            }
+
+            if count == 0 {
+                0.0
+            } else {
+                total / count as f64
+            }
+        };
+
+        let true_shift = mean_of(&target_holdouts) - mean_of(&source_holdouts);
+        let ratio = if true_shift == 0.0 {
+            f64::NAN
+        } else {
+            shift / true_shift
+        };
+
+        true_level_shifts.push((TARGET_HORIZONS[horizon_index], true_shift, ratio));
+    }
+
     Ok(TransferPairReport {
         source: source.family,
         target: target.family,
         cells,
+        observable_shift: shift,
+        observable_shift_u1,
+        true_level_shifts,
     })
 }
 
 /// Runs the full TDI-6.6 pipeline: the inherited per-generator sub-pipeline
 /// (generate 3 blocks, fit, aggregate) once per family F0..F3, then every
 /// ordered transfer pair under the three arms, then the four criteria
-/// (Sections 12-15). Callers control scale entirely through `population_specs`;
+/// (Sections 10-13). Callers control scale entirely through `population_specs`;
 /// the real 480,000-record run is reached only from `run_full_experiment`'s
 /// confirmed `--full` path.
 fn run_tdi67_pipeline(
@@ -5035,7 +5127,7 @@ fn run_tdi67_pipeline(
 
     let focal_horizons = FOCAL_HORIZONS;
 
-    // TDI-6.6A — A1 versus A0 on the confirmatory pair (Section 12).
+    // TDI-6.7A — A1 versus A0 on the confirmatory pair (Section 12).
     let mut per_cell = Vec::with_capacity(TRANSFER_LAYOUTS.len() * FOCAL_HORIZON_COUNT);
 
     for layout in TRANSFER_LAYOUTS {
@@ -5053,7 +5145,7 @@ fn run_tdi67_pipeline(
 
     let criterion_a = Tdi67CriterionA { per_cell };
 
-    // TDI-6.6B — is calibration repaired under A1? The preregistered conjunction
+    // TDI-6.7B — is calibration repaired under A1? The preregistered conjunction
     // is over the GKT layout at both focal horizons; other cells are reported as
     // located non-repairs but do not gate the verdict.
     let mut non_repairs = Vec::new();
@@ -5083,32 +5175,35 @@ fn run_tdi67_pipeline(
         non_repairs,
     };
 
-    // TDI-6.6C — the oracle arm, and the localization it supports (Section 14).
-    let mut oracle_cells = Vec::with_capacity(TRANSFER_LAYOUTS.len() * FOCAL_HORIZON_COUNT);
-    let mut residual_failure_in_target_scale = false;
+    // TDI-6.7C — how much of the oracle's advantage the observable offset
+    // recovers (Section 12). Descriptive: no threshold, no success.
+    let mut recovery_cells = Vec::with_capacity(TRANSFER_LAYOUTS.len() * FOCAL_HORIZON_COUNT);
 
     for layout in TRANSFER_LAYOUTS {
         for horizon in focal_horizons {
             let cell = confirmatory.cell(layout, horizon);
-            let a1 = cell.arm(TransferArm::ObservableOffset).calibration_repaired;
-            let a2 = cell
+            let b0 = cell
+                .arm(TransferArm::SourceStandardized)
+                .standardized
+                .r_squared;
+            let b1 = cell
+                .arm(TransferArm::ObservableOffset)
+                .standardized
+                .r_squared;
+            let b2 = cell
                 .arm(TransferArm::OracleTargetScaler)
-                .calibration_repaired;
+                .standardized
+                .r_squared;
 
-            if a2 && !a1 {
-                residual_failure_in_target_scale = true;
-            }
-
-            oracle_cells.push((layout, horizon, a1, a2));
+            recovery_cells.push((layout, horizon, b0, b1, b2, recovered_fraction(b0, b1, b2)));
         }
     }
 
     let criterion_c = Tdi67CriterionC {
-        per_cell: oracle_cells,
-        residual_failure_in_target_scale,
+        per_cell: recovery_cells,
     };
 
-    // TDI-6.6D — every ordered pair, direction consistency, descriptor drift.
+    // TDI-6.7D — every ordered pair, direction consistency, descriptor drift.
     let reference = confirmatory
         .cell(FeatureLayout::Gkt, focal_horizons[0])
         .a1_vs_a0
@@ -5664,7 +5759,7 @@ fn print_tdi67_criteria_conditions(report: &Tdi67ExperimentReport) {
     for (layout, horizon, classification, reduction) in &report.criterion_a.per_cell {
         println!();
         println!(
-            "TDI-6.6A — {} — A1 contre A0 à U_{horizon} : réduction relative MSE = {reduction:.6} \
+            "TDI-6.7A — {} — A1 contre A0 à U_{horizon} : réduction relative MSE = {reduction:.6} \
              | {classification:#?}",
             layout.label()
         );
@@ -5715,13 +5810,13 @@ fn print_tdi67_criteria_conditions(report: &Tdi67ExperimentReport) {
                 );
                 println!(
                     "    MSE / MAE              : {:.12} / {:.12}  [NON comparables entre bras — \
-                     Section 14.1]",
+                     Section 6]",
                     arm.standardized.mse, arm.standardized.mae
                 );
             }
 
             println!(
-                "  A1 contre A0 (seule comparaison MSE bien posée) : réduction relative = \
+                "  B1 contre B0 (seule comparaison MSE bien posée) : réduction relative = \
                  {:.6} | {:#?}",
                 cell.a1_vs_a0.aggregate_relative_reduction, cell.a1_vs_a0.result
             );
@@ -5739,7 +5834,7 @@ fn print_tdi67_final_verdicts(report: &Tdi67ExperimentReport) {
 
     for (layout, horizon, classification, reduction) in &report.criterion_a.per_cell {
         println!(
-            "TDI-6.6A — {pair_label} — {} à U{horizon} — A1 contre A0 : réduction relative MSE = \
+            "TDI-6.7A — {pair_label} — {} à U{horizon} — A1 contre A0 : réduction relative MSE = \
              {reduction:.6}, classification = {}",
             layout.label(),
             classification.label()
@@ -5747,7 +5842,7 @@ fn print_tdi67_final_verdicts(report: &Tdi67ExperimentReport) {
     }
 
     println!(
-        "TDI-6.6B — calibration réparée (A1, GKT, aux deux horizons focaux) : {}",
+        "TDI-6.7B — calibration réparée (A1, GKT, aux deux horizons focaux) : {}",
         if report.criterion_b.repaired {
             "oui"
         } else {
@@ -5756,41 +5851,70 @@ fn print_tdi67_final_verdicts(report: &Tdi67ExperimentReport) {
     );
 
     if report.criterion_b.non_repairs.is_empty() {
-        println!("TDI-6.6B — non-réparations localisées : aucune");
+        println!("TDI-6.7B — non-réparations localisées : aucune");
     } else {
         for (layout, horizon) in &report.criterion_b.non_repairs {
             println!(
-                "TDI-6.6B — non-réparation localisée : {} à U{horizon} (R² ≤ 0 sous A1)",
+                "TDI-6.7B — non-réparation localisée : {} à U{horizon} (R² ≤ 0 sous A1)",
                 layout.label()
             );
         }
     }
 
-    for (layout, horizon, a1, a2) in &report.criterion_c.per_cell {
+    for (layout, horizon, b0, b1, b2, recovered) in &report.criterion_c.per_cell {
+        let fraction = recovered.map_or_else(
+            || "not-applicable".to_owned(),
+            |value| format!("{value:.6}"),
+        );
+
         println!(
-            "TDI-6.6C — oracle — {} à U{horizon} : A1 réparée = {a1}, A2 réparée = {a2}",
+            "TDI-6.7C — oracle — {} à U{horizon} : R² B0 = {b0:.6}, B1 = {b1:.6}, \
+             B2 = {b2:.6}, recovered_fraction = {fraction}",
             layout.label()
         );
     }
 
-    println!(
-        "TDI-6.6C — échec résiduel situé dans l'échelle de la cible (A2 répare là où A1 échoue) : \
-         {}",
-        if report.criterion_c.residual_failure_in_target_scale {
-            "oui — aucune procédure sans étiquette ne peut l'atteindre"
-        } else {
-            "non"
+    for pair in &report.criterion_d.pairs {
+        println!(
+            "TDI-6.7C — {} → {} : Δ observable (U2) = {:.9}, compagnon U1 = {:.9}",
+            pair.source.label(),
+            pair.target.label(),
+            pair.observable_shift,
+            pair.observable_shift_u1
+        );
+
+        for (horizon, true_shift, ratio) in &pair.true_level_shifts {
+            println!(
+                "TDI-6.7C — oracle — {} → {} à U{horizon} : vrai décalage de niveau = \
+                 {true_shift:.9}, Δ / vrai = {ratio:.6}",
+                pair.source.label(),
+                pair.target.label()
+            );
         }
-    );
+    }
 
     for pair in &report.criterion_d.pairs {
         for horizon in FOCAL_HORIZONS {
             let cell = pair.cell(FeatureLayout::Gkt, horizon);
             let a1 = cell.arm(TransferArm::ObservableOffset);
 
+            // Preregistration Section 13, reading rule: a Beneficial cell whose
+            // R² is still at or below zero means the arm is LESS BAD, not good.
+            // The qualification is emitted on the same line so the label can
+            // never be quoted without it — the trap TDI-5.8B and TDI-6.6D both
+            // had to disarm after the fact.
+            let qualification = if cell.a1_vs_a0.result.classification
+                == CriterionCClassification::Beneficial
+                && !a1.calibration_repaired
+            {
+                "  [MOINS MAUVAIS, PAS BON — R² reste ≤ 0 sous B1]"
+            } else {
+                ""
+            };
+
             println!(
-                "TDI-6.6D — {} → {} — GKT à U{horizon} : A1 contre A0 = {}, réduction = {:.6}, \
-                 R² sous A1 = {:.6}, calibration_repaired = {}",
+                "TDI-6.7D — {} → {} — GKT à U{horizon} : B1 contre B0 = {}, réduction = {:.6}, \
+                 R² sous B1 = {:.6}, calibration_repaired = {}{qualification}",
                 pair.source.label(),
                 pair.target.label(),
                 cell.a1_vs_a0.result.classification.label(),
@@ -5802,7 +5926,7 @@ fn print_tdi67_final_verdicts(report: &Tdi67ExperimentReport) {
     }
 
     println!(
-        "TDI-6.6D — direction cohérente sur les 12 paires ordonnées (GKT, deux horizons focaux) : \
+        "TDI-6.7D — direction cohérente sur les 12 paires ordonnées (GKT, deux horizons focaux) : \
          {}",
         if report.criterion_d.direction_consistent {
             "oui"
@@ -5813,7 +5937,7 @@ fn print_tdi67_final_verdicts(report: &Tdi67ExperimentReport) {
 
     for (source, target, layout, horizon) in &report.criterion_d.divergent_pairs {
         println!(
-            "TDI-6.6D — paire divergente : {} → {} — {} à U{horizon}",
+            "TDI-6.7D — paire divergente : {} → {} — {} à U{horizon}",
             source.label(),
             target.label(),
             layout.label()
@@ -5822,7 +5946,7 @@ fn print_tdi67_final_verdicts(report: &Tdi67ExperimentReport) {
 
     for (family, means) in &report.criterion_d.per_family_means {
         println!(
-            "TDI-6.6D — famille {} : δ={:.6}, δ̄={:.6}, s2={:.6}, s3={:.6}, g={:.6}, τ_ε={:.6}",
+            "TDI-6.7D — famille {} : δ={:.6}, δ̄={:.6}, s2={:.6}, s3={:.6}, g={:.6}, τ_ε={:.6}",
             family.label(),
             means[0],
             means[1],
@@ -5835,7 +5959,7 @@ fn print_tdi67_final_verdicts(report: &Tdi67ExperimentReport) {
 
     let ranges = report.criterion_d.ranges;
     println!(
-        "TDI-6.6D — étendues inter-familles : δ={:.6}, δ̄={:.6}, s2={:.6}, s3={:.6}, g={:.6}, \
+        "TDI-6.7D — étendues inter-familles : δ={:.6}, δ̄={:.6}, s2={:.6}, s3={:.6}, g={:.6}, \
          τ_ε={:.6}",
         ranges[0], ranges[1], ranges[2], ranges[3], ranges[4], ranges[5]
     );
@@ -5990,8 +6114,8 @@ fn print_tdi67_required_raw_output(report: &Tdi67ExperimentReport) {
         }
     }
 
-    // The A1-vs-A0 comparison for every ordered pair, layout and focal horizon:
-    // the only relative-MSE comparison the design admits (Section 14.1). The
+    // The B1-vs-B0 comparison for every ordered pair, layout and focal horizon:
+    // the only relative-MSE comparison the design admits (Section 6). The
     // per-arm scale-free quantities are printed by the criteria-conditions
     // section, which walks the same cells.
     for pair in &report.criterion_d.pairs {
@@ -7844,11 +7968,14 @@ mod tests {
     fn observed_deficit_refuses_a_fully_recovered_observation() {
         let mut record = record_with_overlap(0.3, 0.5);
         let expected = -(1.0_f64 - 0.5).log2();
-        assert_eq!(super::observed_deficit_u2(&record).unwrap(), expected);
+        assert_eq!(
+            super::observed_deficit(&record, super::ObservedHorizon::Last).unwrap(),
+            expected
+        );
 
         record.early_overlap[1] = 1.0;
         assert!(
-            super::observed_deficit_u2(&record)
+            super::observed_deficit(&record, super::ObservedHorizon::Last)
                 .unwrap_err()
                 .contains("fully-recovered")
         );
