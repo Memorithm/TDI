@@ -193,7 +193,7 @@ impl ReferenceDynamics for FixedAttentionMixer {
             let value = row
                 .iter()
                 .zip(state.values())
-                .map(|(weight, state_value)| weight * state_value)
+                .map(|(weight, state_value)| *weight * *state_value)
                 .sum::<f64>();
 
             if !value.is_finite() {
@@ -288,7 +288,7 @@ impl Intervention<ToyAttentionState> for BalancedTokenShift {
 pub struct FullStateObservable;
 
 impl FutureObservable<ToyAttentionState> for FullStateObservable {
-    type Output = Vec<f64>;
+    type Output = ToyAttentionState;
     type Error = Infallible;
 
     fn observe(
@@ -296,7 +296,7 @@ impl FutureObservable<ToyAttentionState> for FullStateObservable {
         state: &ToyAttentionState,
         _depth: usize,
     ) -> Result<Self::Output, Self::Error> {
-        Ok(state.values().to_vec())
+        Ok(state.clone())
     }
 }
 
@@ -312,14 +312,14 @@ impl FutureObservable<ToyAttentionState> for FullStateObservable {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ReciprocalLInfRecovery;
 
-impl FutureOverlap<Vec<f64>> for ReciprocalLInfRecovery {
+impl FutureOverlap<ToyAttentionState> for ReciprocalLInfRecovery {
     type Score = f64;
     type Error = ToyRecoveryMetricError;
 
     fn overlap(
         &self,
-        reference: &Vec<f64>,
-        perturbed: &Vec<f64>,
+        reference: &ToyAttentionState,
+        perturbed: &ToyAttentionState,
     ) -> Result<Self::Score, Self::Error> {
         if reference.len() != perturbed.len() {
             return Err(ToyRecoveryMetricError::LengthMismatch {
@@ -330,7 +330,7 @@ impl FutureOverlap<Vec<f64>> for ReciprocalLInfRecovery {
 
         let mut max_distance = 0.0_f64;
         for (index, (reference_value, perturbed_value)) in
-            reference.iter().zip(perturbed).enumerate()
+            reference.values().iter().zip(perturbed.values()).enumerate()
         {
             if !reference_value.is_finite() {
                 return Err(ToyRecoveryMetricError::NonFiniteReference { index });
@@ -352,7 +352,7 @@ mod tests {
         BalancedTokenShift, FixedAttentionMixer, FullStateObservable, ReciprocalLInfRecovery,
         ToyAttentionError, ToyAttentionState,
     };
-    use crate::{Intervention, ReferenceDynamics, analyze_intervention_recovery};
+    use crate::{FutureOverlap, Intervention, ReferenceDynamics, analyze_intervention_recovery};
 
     fn averaging_mixer() -> FixedAttentionMixer {
         FixedAttentionMixer::new(vec![
@@ -369,6 +369,13 @@ mod tests {
             error <= 1.0e-14,
             "expected {expected:.17e}, got {actual:.17e}, absolute error {error:.3e}"
         );
+    }
+
+    fn assert_values_close(actual: &[f64], expected: &[f64]) {
+        assert_eq!(actual.len(), expected.len());
+        for (actual_value, expected_value) in actual.iter().zip(expected) {
+            assert_close(*actual_value, *expected_value);
+        }
     }
 
     #[test]
@@ -401,7 +408,7 @@ mod tests {
 
         assert_eq!(reference, original);
         assert_close(reference.sum(), perturbed.sum());
-        assert_eq!(perturbed.values(), &[3.5, -1.0, 1.5]);
+        assert_values_close(perturbed.values(), &[3.5, -1.0, 1.5]);
     }
 
     #[test]
@@ -411,15 +418,15 @@ mod tests {
         let shift = BalancedTokenShift::new(0, 2, 1.0).expect("valid intervention");
 
         let perturbed = shift.apply(&initial).expect("intervention succeeds");
-        assert_eq!(perturbed.values(), &[1.0, 0.0, -1.0]);
+        assert_values_close(perturbed.values(), &[1.0, 0.0, -1.0]);
 
         let first = mixer.advance(&perturbed).expect("mixer succeeds");
         let second = mixer.advance(&first).expect("mixer succeeds");
         let third = mixer.advance(&second).expect("mixer succeeds");
 
-        assert_eq!(first.values(), &[0.5, 0.0, -0.5]);
-        assert_eq!(second.values(), &[0.25, 0.0, -0.25]);
-        assert_eq!(third.values(), &[0.125, 0.0, -0.125]);
+        assert_values_close(first.values(), &[0.5, 0.0, -0.5]);
+        assert_values_close(second.values(), &[0.25, 0.0, -0.25]);
+        assert_values_close(third.values(), &[0.125, 0.0, -0.125]);
     }
 
     #[test]
@@ -448,11 +455,12 @@ mod tests {
 
     #[test]
     fn identical_observables_have_unit_recovery() {
-        use crate::FutureOverlap;
+        let reference = ToyAttentionState::new(vec![1.0, -2.0]).expect("finite state");
+        let perturbed = reference.clone();
 
         let score = ReciprocalLInfRecovery
-            .overlap(&vec![1.0, -2.0], &vec![1.0, -2.0])
-            .expect("finite equal vectors");
-        assert_eq!(score, 1.0);
+            .overlap(&reference, &perturbed)
+            .expect("finite equal states");
+        assert_close(score, 1.0);
     }
 }
