@@ -37,6 +37,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "tdi-ai"
+version = "0.1.0"
+dependencies = [
+ "tdi-core",
+]
+
+[[package]]
 name = "tdi-bench"
 version = "0.1.0"
 dependencies = [
