@@ -1,0 +1,11 @@
+[package]
+name = "tdi-ai"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+tdi-core = { path = "../tdi-core" }
+
+[lints]
+workspace = true
