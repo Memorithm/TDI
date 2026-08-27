@@ -20,19 +20,19 @@ pub struct RecoveryPoint<S> {
 impl<S> RecoveryPoint<S> {
     /// Create a recovery point.
     #[must_use]
-    pub const fn new(depth: usize, overlap: S) -> Self {
+    pub fn new(depth: usize, overlap: S) -> Self {
         Self { depth, overlap }
     }
 
     /// Downstream depth at which the measurement was taken.
     #[must_use]
-    pub const fn depth(&self) -> usize {
+    pub fn depth(&self) -> usize {
         self.depth
     }
 
     /// Overlap/recovery score produced by the selected metric.
     #[must_use]
-    pub const fn overlap(&self) -> &S {
+    pub fn overlap(&self) -> &S {
         &self.overlap
     }
 }
@@ -46,7 +46,7 @@ pub struct RecoveryProfile<S> {
 impl<S> RecoveryProfile<S> {
     /// Build a profile from already ordered points.
     #[must_use]
-    pub const fn new(points: Vec<RecoveryPoint<S>>) -> Self {
+    pub fn new(points: Vec<RecoveryPoint<S>>) -> Self {
         Self { points }
     }
 
