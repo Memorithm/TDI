@@ -8,10 +8,14 @@
 //! generic contracts that can be instantiated by toy mechanisms, model probes,
 //! FLAT-ATTENTION reference semantics, or future adapters.
 
+mod static_diagnostics;
 mod toy_attention;
 
 use tdi_core::{BranchingRecoveryAnalysis, ExactRatio};
 
+pub use static_diagnostics::{
+    StaticAttentionDiagnostics, StaticAttentionError, analyze_static_attention,
+};
 pub use toy_attention::{
     BalancedTokenShift, FixedAttentionMixer, FullStateObservable, ReciprocalLInfRecovery,
     ToyAttentionError, ToyAttentionState, ToyRecoveryMetricError,
