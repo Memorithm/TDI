@@ -156,23 +156,38 @@ before the holdout experiment is executed.
 
 ## 5. Relationship to FLAT-ATTENTION
 
-FLAT-ATTENTION already treats the deterministic Rust oracle as the correctness
-reference for optimized kernels. A future research adapter can expose an
-attention probability/operator snapshot from that oracle and feed it to this
-static baseline layer independently from TDI recovery measurement.
+FLAT-ATTENTION already treats deterministic scalar/reference implementations as
+correctness oracles for optimized kernels. Its current EPG reference path uses
+an online softmax and deliberately does **not** materialize an `N x N`
+score/probability matrix.
 
-The intended research comparison is therefore:
+Therefore the production/reference FLAT path must not be changed merely to
+satisfy this matrix-based research helper. A later TDI/FLAT bridge has two
+legitimate implementation choices, which must be fixed by the Gate C protocol:
+
+1. accumulate diagnostics equivalent to this module from streaming softmax
+   sufficient statistics, without constructing a dense attention matrix; or
+2. use a separate bounded research oracle that materializes the operator only
+   when a preregistered experiment requires full operator-level diagnostics.
+
+The intended research comparison remains:
 
 ```text
 FLAT deterministic semantic
-  -> static operator snapshot -> static baseline features
-  -> controlled intervention  -> TDI recovery features
-  -> task outcome              -> preregistered incremental comparison
+  -> static operator diagnostics -> static baseline features
+  -> controlled intervention     -> TDI recovery features
+  -> task outcome                -> preregistered incremental comparison
 ```
 
 No optimized FLAT kernel should be selected because a TDI descriptor looks
 promising. A candidate semantic should first survive the deterministic,
 mechanistic experiment and only then become an optimization target.
+
+The exact spectral controls from historical finite-state TDI experiments must
+also not be transferred by name alone. There, exactness follows from rational
+transition kernels. Neural attention uses floating-point scores and softmax, so
+any spectral control used by H-AI-1 needs its own numerical definition,
+precision and tolerance policy.
 
 ## 6. Next gate
 
