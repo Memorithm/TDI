@@ -8,6 +8,8 @@ if [[ -n "${TDI7_CONFIRM_FINAL_HOLDOUT:-}" ]]; then
     exit 2
 fi
 
+TDI_COMMIT_SHA="$(git rev-parse HEAD)"
+
 printf '\n===== TDI-7.1 PROTOCOL GUARDS =====\n'
 cargo run --quiet -p tdi-bench --bin tdi-attention-v71
 
@@ -26,12 +28,17 @@ cargo run --quiet -p tdi-bench --bin tdi-attention-v71-model
 printf '\n===== TDI-7.1 PAIRED BOOTSTRAP =====\n'
 cargo run --quiet -p tdi-bench --bin tdi-attention-v71-bootstrap
 
+printf '\n===== TDI-7.1 PROVENANCE =====\n'
+cargo run --quiet -p tdi-bench --bin tdi-attention-v71-provenance -- \
+    --tdi-commit "$TDI_COMMIT_SHA"
+
 printf '\n===== TDI-7.1 TARGETED TESTS =====\n'
 cargo test --quiet -p tdi-bench --bin tdi-attention-v71
 cargo test --quiet -p tdi-bench --bin tdi-attention-v71-tasks
 cargo test --quiet -p tdi-bench --bin tdi-attention-v71-interventions
 cargo test --quiet -p tdi-bench --bin tdi-attention-v71-model
 cargo test --quiet -p tdi-bench --bin tdi-attention-v71-bootstrap
+cargo test --quiet -p tdi-bench --bin tdi-attention-v71-provenance
 cargo test --quiet -p tdi-ai --example tdi7_features
 
 printf '\nTDI-7.1 bounded preflight: PASS\n'
