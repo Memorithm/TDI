@@ -102,7 +102,12 @@ mod tests {
             provenance.tdi_commit,
             "abcdef0123456789abcdef0123456789abcdef01"
         );
-        assert!(provenance.lines().iter().any(|line| line.starts_with("semantic_id=")));
+        assert!(
+            provenance
+                .lines()
+                .iter()
+                .any(|line| line.starts_with("semantic_id="))
+        );
     }
 
     #[test]
