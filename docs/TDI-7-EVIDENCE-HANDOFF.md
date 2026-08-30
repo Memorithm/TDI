@@ -6,6 +6,8 @@ It does not authorize TDI-7.2 and does not promote any FLAT semantic.
 
 ## Required packet fields
 
+The packet declares an evidence scope: bounded preflight or final holdout. The scope must agree exactly with the provenance final-holdout access status.
+
 The packet contains exactly the two confirmatory task families frozen by TDI-7.0:
 
 - `associative_recall`;
@@ -50,9 +52,10 @@ The packet-level provenance contains:
 
 A consumer must reject a packet when:
 
+- the declared evidence scope disagrees with the provenance final-holdout access status;
 - the confirmatory task set is not exactly associative recall plus copy;
 - either frozen intervention site is missing, duplicated or not balanced one-record-per-generator;
-- rejection-reason counts do not reconcile exactly with the rejected count or a reason code is duplicated;
+- rejection-reason counts do not reconcile exactly with the rejected count, a reason is empty/zero-count, or a reason code is duplicated;
 - any required floating-point value is non-finite;
 - `B0 MSE <= 0` for a claimed primary comparison;
 - `B1 MSE < 0`;
@@ -60,8 +63,7 @@ A consumer must reject a packet when:
 - the supplied relative reduction disagrees with `(B0-B1)/B0` beyond the declared tolerance;
 - a task verdict is inconsistent with the frozen TDI-7.0 decision rule and its explicit implementation precedence;
 - the supplied aggregate verdict disagrees with the frozen two-task gate;
-- provenance is incomplete;
-- the packet claims a final-holdout result while its provenance says the holdout was not accessed.
+- provenance is incomplete.
 
 At the exact ±2% relevance boundaries, the implementation precedence is frozen as: Beneficial, then Harmful, then Equivalent, then Inconclusive. This records the behavior already implemented by the TDI-7.1 classifier and removes ambiguity at overlapping textual boundaries without changing the classifier outputs.
 
