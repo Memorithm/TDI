@@ -1,6 +1,9 @@
 name: TDI-7.1 bounded preflight
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
   workflow_dispatch:
 
