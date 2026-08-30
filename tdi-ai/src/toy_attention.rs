@@ -329,8 +329,11 @@ impl FutureOverlap<ToyAttentionState> for ReciprocalLInfRecovery {
         }
 
         let mut max_distance = 0.0_f64;
-        for (index, (reference_value, perturbed_value)) in
-            reference.values().iter().zip(perturbed.values()).enumerate()
+        for (index, (reference_value, perturbed_value)) in reference
+            .values()
+            .iter()
+            .zip(perturbed.values())
+            .enumerate()
         {
             if !reference_value.is_finite() {
                 return Err(ToyRecoveryMetricError::NonFiniteReference { index });

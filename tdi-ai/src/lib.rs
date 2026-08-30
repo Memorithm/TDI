@@ -166,6 +166,13 @@ pub enum RecoveryError<DynamicsError, InterventionError, ObservableError, Overla
     Overlap(OverlapError),
 }
 
+/// Result type for a generic intervention/recovery analysis.
+pub type RecoveryResult<Score, DynamicsError, InterventionError, ObservableError, OverlapError> =
+    Result<
+        RecoveryProfile<Score>,
+        RecoveryError<DynamicsError, InterventionError, ObservableError, OverlapError>,
+    >;
+
 /// Run the generic TDI-AI recovery protocol.
 ///
 /// The intervention is applied exactly once at depth zero. The reference and
@@ -181,10 +188,7 @@ pub fn analyze_intervention_recovery<D, I, O, M>(
     overlap: &M,
     initial_state: &D::State,
     horizon: usize,
-) -> Result<
-    RecoveryProfile<M::Score>,
-    RecoveryError<D::Error, I::Error, O::Error, M::Error>,
->
+) -> RecoveryResult<M::Score, D::Error, I::Error, O::Error, M::Error>
 where
     D: ReferenceDynamics,
     I: Intervention<D::State>,
@@ -335,14 +339,9 @@ mod tests {
             .insert(one, Action::Noop, vec![three])
             .expect("valid transition");
 
-        let exact = analyze_branching_recovery(
-            &system,
-            zero,
-            Action::Flip { node: 0 },
-            Action::Noop,
-            1,
-        )
-        .expect("exact analysis succeeds");
+        let exact =
+            analyze_branching_recovery(&system, zero, Action::Flip { node: 0 }, Action::Noop, 1)
+                .expect("exact analysis succeeds");
         let generic = from_exact_branching_analysis(&exact);
 
         assert_eq!(generic.horizon(), 1);

@@ -1,0 +1,104 @@
+name: Public Rust validation
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tdi-public-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TDI_CI_RUST: "1.97.1"
+
+jobs:
+  formatting:
+    name: Public formatting
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TDI_CI_RUST }}
+          components: rustfmt
+      - name: Check bounded TDI-7.1 formatting
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(tdi-bench/src/bin/tdi-attention-v71*.rs)
+          if test -f tdi-ai/examples/tdi7_features.rs; then
+            files+=(tdi-ai/examples/tdi7_features.rs)
+          fi
+          test ${#files[@]} -gt 0
+          rustfmt --edition 2024 --check "${files[@]}"
+
+  tests:
+    name: Public tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TDI_CI_RUST }}
+      - name: Run tests
+        run: cargo test --workspace --locked
+
+  clippy:
+    name: Public clippy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TDI_CI_RUST }}
+          components: clippy
+      - name: Run Clippy on bounded TDI-7.1 surfaces
+        shell: bash
+        run: |
+          shopt -s nullglob
+          bins=()
+          for file in tdi-bench/src/bin/tdi-attention-v71*.rs; do
+            bins+=(--bin "$(basename "$file" .rs)")
+          done
+          test ${#bins[@]} -gt 0
+          cargo clippy -p tdi-bench "${bins[@]}" --locked -- -D warnings
+          if test -f tdi-ai/examples/tdi7_features.rs; then
+            cargo clippy -p tdi-ai --example tdi7_features --locked -- -D warnings
+          fi
+
+  integrity:
+    name: Public preregistration integrity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Verify immutable preregistration hashes
+        run: |
+          sha256sum -c docs/TDI-2-CONTINUOUS-PREREGISTRATION.sha256
+          sha256sum -c docs/TDI-3-INTERWIDTH-PREREGISTRATION.sha256
+          sha256sum -c docs/TDI-3-INTERWIDTH-EVALUATOR.sha256
+          sha256sum -c docs/TDI-4-TARGET-GEOMETRY-PREREGISTRATION.sha256
+          sha256sum -c docs/TDI-4-TARGET-GEOMETRY-EVALUATOR.sha256
+          bash -n scripts/reproduce-tdi4.sh
+      - name: Preserve historical scientific manifests as frozen evidence
+        run: |
+          test -s docs/TDI-3-SCIENTIFIC-CODE.sha256
+          test -s docs/TDI-4-SCIENTIFIC-CODE.sha256
+      - name: Verify TDI-7.0 preregistration when present
+        run: |
+          if test -f docs/TDI-7.0-ATTENTION-RECOVERY-PREREGISTRATION.sha256; then
+            sha256sum -c docs/TDI-7.0-ATTENTION-RECOVERY-PREREGISTRATION.sha256
+          fi
