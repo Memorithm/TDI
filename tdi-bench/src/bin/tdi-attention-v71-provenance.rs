@@ -15,6 +15,7 @@ const VALIDATION_GENERATOR_COUNT: usize = 48;
 const FINAL_HOLDOUT_GENERATOR_COUNT_STATUS: &str = "UNFROZEN";
 const INTERVENTION_SITES: &str = "early-token,late-token";
 const INTERVENTION_POLICY: &str = "single-site-one-shot-task-label-preserving";
+const INTERVENTION_AGGREGATION: &str = "two_sites_per_generator_equal_record_weighting";
 const INTERVENTION_AMPLITUDE: f64 = 0.25;
 const EARLY_OBSERVATION_DEPTHS: &str = "1,2";
 const TARGET_DEPTH: usize = 5;
@@ -28,6 +29,7 @@ const BOOTSTRAP_SEED: &str = "0x5444493745324501";
 const BOOTSTRAP_REPLICATES: usize = 2_000;
 const NUMERICAL_POLICY: &str = "rust-f64-scalar;pivot_tolerance=1e-12";
 const RELEVANCE_MARGIN: f64 = 0.02;
+const CLASSIFIER_POLICY: &str = "beneficial_then_harmful_then_equivalent_then_inconclusive";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Provenance {
@@ -70,6 +72,7 @@ impl Provenance {
             ),
             format!("intervention_sites={INTERVENTION_SITES}"),
             format!("intervention_policy={INTERVENTION_POLICY}"),
+            format!("intervention_aggregation={INTERVENTION_AGGREGATION}"),
             format!("intervention_amplitude={INTERVENTION_AMPLITUDE}"),
             format!("early_observation_depths={EARLY_OBSERVATION_DEPTHS}"),
             format!("target_depth={TARGET_DEPTH}"),
@@ -83,6 +86,7 @@ impl Provenance {
             format!("bootstrap_replicates={BOOTSTRAP_REPLICATES}"),
             format!("numerical_policy={NUMERICAL_POLICY}"),
             format!("relevance_margin={RELEVANCE_MARGIN}"),
+            format!("classifier_policy={CLASSIFIER_POLICY}"),
             "final_holdout_status=NOT_ACCESSED".to_string(),
         ]
     }
@@ -180,6 +184,17 @@ mod tests {
         assert!(output.contains("intervention_amplitude=0.25"));
         assert!(output.contains("intervention_site_indicator"));
         assert!(output.contains("recovery_feature_schema=recovery_depth_1,recovery_depth_2"));
+    }
+
+    #[test]
+    fn intervention_aggregation_and_classifier_precedence_are_explicit() {
+        let output = lines();
+        assert!(output.contains(
+            "intervention_aggregation=two_sites_per_generator_equal_record_weighting"
+        ));
+        assert!(output.contains(
+            "classifier_policy=beneficial_then_harmful_then_equivalent_then_inconclusive"
+        ));
     }
 
     #[test]
