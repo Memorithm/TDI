@@ -214,9 +214,8 @@ pub fn analyze_static_attention(
         }
 
         entropy_sum += row_entropy;
-        normalized_entropy_sum += entropy_normalizer.map_or(0.0, |normalizer| {
-            row_entropy / normalizer
-        });
+        normalized_entropy_sum +=
+            entropy_normalizer.map_or(0.0, |normalizer| row_entropy / normalizer);
         max_weight_sum += row_max;
         l2_concentration_sum += row_l2;
         effective_support_sum += row_entropy.exp();
