@@ -66,27 +66,58 @@ grep -Fxq 'TDI-7.2 final-population decision: VALID' <<<"$DECISION_OUTPUT" \
 grep -Fxq 'authorization_state=NOT_AUTHORIZED' <<<"$DECISION_OUTPUT" \
     || fail "final population decision record is not explicitly unauthorized"
 grep -Fxq 'final_holdout_accessed=false' <<<"$DECISION_OUTPUT" \
-    || fail "decision validator did not preserve no-access status"
+    || fail "population decision validator did not preserve no-access status"
 grep -Fxq 'arming_allowed=false' <<<"$DECISION_OUTPUT" \
-    || fail "decision validator unexpectedly allows arming"
+    || fail "population decision validator unexpectedly allows arming"
+
+printf '\n===== TDI-7.2 FINAL SEED-SELECTION DECISION =====\n'
+cargo test --quiet -p tdi-ai --example tdi7_seed_selection_decision
+SELECTION_OUTPUT="$(cargo run --quiet -p tdi-ai --example tdi7_seed_selection_decision)"
+printf '%s\n' "$SELECTION_OUTPUT"
+grep -Fxq 'TDI-7.2 seed-selection decision: VALID' <<<"$SELECTION_OUTPUT" \
+    || fail "final seed-selection decision record did not validate"
+grep -Fxq 'selection_status=UNRESOLVED' <<<"$SELECTION_OUTPUT" \
+    || fail "seed-selection decision is not explicitly unresolved"
+grep -Fxq 'authorization_state=NOT_AUTHORIZED' <<<"$SELECTION_OUTPUT" \
+    || fail "seed-selection decision record is not explicitly unauthorized"
+grep -Fxq 'final_holdout_accessed=false' <<<"$SELECTION_OUTPUT" \
+    || fail "seed-selection validator did not preserve no-access status"
+grep -Fxq 'arming_allowed=false' <<<"$SELECTION_OUTPUT" \
+    || fail "seed-selection validator unexpectedly allows arming"
 
 set +e
 cargo run --quiet -p tdi-ai --example tdi7_arming_decision -- --require-frozen \
     >/tmp/tdi7-final-population-decision.log 2>&1
-status=$?
+population_status=$?
+cargo run --quiet -p tdi-ai --example tdi7_seed_selection_decision -- --require-frozen \
+    >/tmp/tdi7-final-seed-selection.log 2>&1
+selection_status=$?
 set -e
 cat /tmp/tdi7-final-population-decision.log
+cat /tmp/tdi7-final-seed-selection.log
 
-if [[ "$status" -eq 3 ]]; then
+blocked=0
+if [[ "$population_status" -eq 3 ]]; then
     grep -Fq 'BLOCKED: final holdout generator count decision is UNRESOLVED' \
         /tmp/tdi7-final-population-decision.log \
         || fail "unresolved population decision did not fail closed with the frozen diagnostic"
-    echo "TDI-7.2 must remain unarmed; do not infer a count from train/dev/validation." >&2
+    blocked=1
+elif [[ "$population_status" -ne 0 ]]; then
+    fail "final population decision validator failed unexpectedly with status $population_status"
+fi
+
+if [[ "$selection_status" -eq 3 ]]; then
+    grep -Fq 'BLOCKED: final holdout seed-selection rule is UNRESOLVED' \
+        /tmp/tdi7-final-seed-selection.log \
+        || fail "unresolved seed-selection decision did not fail closed with the frozen diagnostic"
+    blocked=1
+elif [[ "$selection_status" -ne 0 ]]; then
+    fail "final seed-selection decision validator failed unexpectedly with status $selection_status"
+fi
+
+if [[ "$blocked" -eq 1 ]]; then
+    echo "TDI-7.2 must remain unarmed; population size and seed selection are separate reviewed decisions." >&2
     exit 3
 fi
 
-if [[ "$status" -eq 0 ]]; then
-    fail "final population decision is FROZEN, but the separately reviewed arming transition has not been implemented"
-fi
-
-fail "final population decision validator failed unexpectedly with status $status"
+fail "population and seed-selection decisions are frozen, but the separately reviewed arming transition has not been implemented"

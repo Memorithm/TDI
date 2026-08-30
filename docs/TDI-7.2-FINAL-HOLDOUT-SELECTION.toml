@@ -1,0 +1,16 @@
+# TDI-7.2 final-holdout seed-selection decision record.
+#
+# TDI-7.0 freezes the final seed range but does not define how a future
+# population count selects concrete seeds from that range. This record keeps
+# that missing rule explicit without inventing a convention.
+#
+# A frozen selection rule requires a separately reviewed validator/code change.
+# Merely editing this file to FROZEN is intentionally insufficient.
+
+schema_version = 1
+selection_status = "UNRESOLVED"
+prearm_main_commit = "c98e73d52e1f23f315ca75b9303b89580b14fc45"
+final_seed_start = 7100030000
+final_seed_end = 7100039999
+authorization_state = "NOT_AUTHORIZED"
+selection_reference = "UNRESOLVED"
