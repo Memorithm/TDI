@@ -235,7 +235,10 @@ fn record(seed: u64, kind: TaskKind, site: Site) -> Record {
         static_diag.mean_row_l2_concentration(),
         static_diag.mean_row_effective_support(),
         static_diag.frobenius_norm(),
-        match site { Site::Early => 0.0, Site::Late => 1.0 },
+        match site {
+            Site::Early => 0.0,
+            Site::Late => 1.0,
+        },
     ];
 
     Record {
@@ -274,22 +277,35 @@ fn design(record: &Record, augmented: bool) -> Vec<f64> {
 }
 
 fn solve(mut a: Vec<Vec<f64>>, mut b: Vec<f64>) -> Option<Vec<f64>> {
-    for pivot in 0..b.len() {
+    let n = b.len();
+    for pivot in 0..n {
         let mut best = pivot;
-        for row in (pivot + 1)..b.len() {
-            if a[row][pivot].abs() > a[best][pivot].abs() { best = row; }
+        for row in (pivot + 1)..n {
+            if a[row][pivot].abs() > a[best][pivot].abs() {
+                best = row;
+            }
         }
-        if a[best][pivot].abs() <= PIVOT_TOLERANCE { return None; }
+        if a[best][pivot].abs() <= PIVOT_TOLERANCE {
+            return None;
+        }
         a.swap(pivot, best);
         b.swap(pivot, best);
         let scale = a[pivot][pivot];
-        for column in pivot..b.len() { a[pivot][column] /= scale; }
+        for value in &mut a[pivot][pivot..] {
+            *value /= scale;
+        }
         b[pivot] /= scale;
-        for row in 0..b.len() {
-            if row == pivot { continue; }
-            let factor = a[row][pivot];
-            for column in pivot..b.len() { a[row][column] -= factor * a[pivot][column]; }
-            b[row] -= factor * b[pivot];
+        let pivot_row = a[pivot].clone();
+        let pivot_rhs = b[pivot];
+        for (row_index, row_values) in a.iter_mut().enumerate() {
+            if row_index == pivot {
+                continue;
+            }
+            let factor = row_values[pivot];
+            for (value, pivot_value) in row_values[pivot..].iter_mut().zip(&pivot_row[pivot..]) {
+                *value -= factor * pivot_value;
+            }
+            b[row_index] -= factor * pivot_rhs;
         }
     }
     Some(b)
@@ -303,11 +319,18 @@ fn fit(records: &[Record], augmented: bool, lambda: f64) -> Option<RidgeModel> {
         let row = design(record, augmented);
         for i in 0..width {
             rhs[i] += row[i] * record.target;
-            for j in 0..width { gram[i][j] += row[i] * row[j]; }
+            for j in 0..width {
+                gram[i][j] += row[i] * row[j];
+            }
         }
     }
-    for index in 1..width { gram[index][index] += lambda; }
-    Some(RidgeModel { weights: solve(gram, rhs)?, lambda })
+    for (index, diagonal) in gram.iter_mut().enumerate().skip(1) {
+        diagonal[index] += lambda;
+    }
+    Some(RidgeModel {
+        weights: solve(gram, rhs)?,
+        lambda,
+    })
 }
 
 fn predict(model: &RidgeModel, record: &Record, augmented: bool) -> f64 {
@@ -336,7 +359,9 @@ fn mse(model: &RidgeModel, records: &[Record], augmented: bool) -> f64 {
 fn select(training: &[Record], development: &[Record], augmented: bool) -> RidgeModel {
     LAMBDA_GRID
         .into_iter()
-        .filter_map(|lambda| fit(training, augmented, lambda).map(|model| (mse(&model, development, augmented), model)))
+        .filter_map(|lambda| {
+            fit(training, augmented, lambda).map(|model| (mse(&model, development, augmented), model))
+        })
         .min_by(|left, right| left.0.total_cmp(&right.0))
         .expect("at least one ridge system must be solvable")
         .1
@@ -355,7 +380,9 @@ fn percentile(sorted: &[f64], probability: f64) -> f64 {
     let position = probability * (sorted.len() - 1) as f64;
     let lo = position.floor() as usize;
     let hi = position.ceil() as usize;
-    if lo == hi { sorted[lo] } else {
+    if lo == hi {
+        sorted[lo]
+    } else {
         let weight = position - lo as f64;
         sorted[lo] * (1.0 - weight) + sorted[hi] * weight
     }
@@ -375,7 +402,10 @@ fn evaluate(training: &[Record], development: &[Record], validation: &[Record]) 
     // resampled together, preserving the generator-example unit.
     let mut groups = Vec::<(u64, Vec<usize>)>::new();
     for (index, record) in validation.iter().enumerate() {
-        if let Some((_, indices)) = groups.iter_mut().find(|(id, _)| *id == record.generator_id) {
+        if let Some((_, indices)) = groups
+            .iter_mut()
+            .find(|(id, _)| *id == record.generator_id)
+        {
             indices.push(index);
         } else {
             groups.push((record.generator_id, vec![index]));
@@ -461,7 +491,10 @@ mod tests {
     fn static_and_recovery_blocks_are_nested_only_in_b1() {
         let sample = record(TRAIN_START, TaskKind::AssociativeRecall, Site::Early);
         assert_eq!(design(&sample, false).len(), 1 + sample.baseline.len());
-        assert_eq!(design(&sample, true).len(), 1 + sample.baseline.len() + sample.recovery.len());
+        assert_eq!(
+            design(&sample, true).len(),
+            1 + sample.baseline.len() + sample.recovery.len()
+        );
     }
 
     #[test]
@@ -489,8 +522,11 @@ mod tests {
     #[test]
     fn source_has_no_final_holdout_authorization_surface() {
         let source = include_str!("tdi7_end_to_end.rs");
-        assert!(!source.contains("I_ACCEPT_THE_TDI7_HOLDOUT_FREEZE"));
-        assert!(!source.contains("TDI7_CONFIRM_FINAL_HOLDOUT"));
-        assert!(!source.contains("7_100_030_000"));
+        let confirmation = ["I_ACCEPT_THE_TDI7_", "HOLDOUT_FREEZE"].concat();
+        let environment = ["TDI7_CONFIRM_FINAL_", "HOLDOUT"].concat();
+        let final_seed = ["7_100_03", "0_000"].concat();
+        assert!(!source.contains(&confirmation));
+        assert!(!source.contains(&environment));
+        assert!(!source.contains(&final_seed));
     }
 }
