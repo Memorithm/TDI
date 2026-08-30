@@ -122,6 +122,13 @@ fn preflight() -> Result<(), ProtocolError> {
         final_holdout: SeedRange::new(7_100_030_000, 7_100_039_999)?,
     };
     plan.validate()?;
+    validate_retrieval_deficit(0.0)?;
+
+    let neutral = classify_relative_mse_reduction(0.0, -0.01, 0.01);
+    assert_eq!(
+        combine_task_verdicts(neutral, neutral),
+        Tdi7Verdict::Equivalent
+    );
 
     if final_holdout_is_authorized(None) {
         unreachable!("final holdout must remain locked during preflight");
