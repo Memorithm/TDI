@@ -16,6 +16,12 @@ enum Verdict {
     Inconclusive,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EvidenceScope {
+    BoundedPreflight,
+    FinalHoldout,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RejectionReason {
     code: &'static str,
@@ -66,6 +72,7 @@ struct Provenance {
 
 #[derive(Clone, Debug, PartialEq)]
 struct EvidencePacket {
+    scope: EvidenceScope,
     tasks: Vec<TaskEvidence>,
     aggregate_verdict: Verdict,
     provenance: Provenance,
@@ -80,12 +87,14 @@ enum EvidenceError {
     InterventionCountMismatch,
     InvalidInterventionSites,
     RejectionLedgerMismatch,
+    InvalidRejectionReason,
     DuplicateRejectionReason,
     InvalidMse,
     InvalidInterval,
     RelativeReductionMismatch,
     VerdictMismatch,
     AggregateVerdictMismatch,
+    HoldoutAccessMismatch,
     InvalidCommitSha,
     IncompleteProvenance,
 }
@@ -124,13 +133,23 @@ fn valid_sha(value: &str) -> bool {
     value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
+fn validate_scope(packet: &EvidencePacket) -> Result<(), EvidenceError> {
+    let expected_access = packet.scope == EvidenceScope::FinalHoldout;
+    if packet.provenance.final_holdout_accessed != expected_access {
+        return Err(EvidenceError::HoldoutAccessMismatch);
+    }
+    Ok(())
+}
+
 fn validate_rejection_ledger(task: &TaskEvidence) -> Result<(), EvidenceError> {
     let mut sum = 0usize;
     for (index, reason) in task.rejection_reasons.iter().enumerate() {
-        if reason.code.is_empty()
-            || task.rejection_reasons[(index + 1)..]
-                .iter()
-                .any(|other| other.code == reason.code)
+        if reason.code.is_empty() || reason.count == 0 {
+            return Err(EvidenceError::InvalidRejectionReason);
+        }
+        if task.rejection_reasons[(index + 1)..]
+            .iter()
+            .any(|other| other.code == reason.code)
         {
             return Err(EvidenceError::DuplicateRejectionReason);
         }
@@ -240,6 +259,7 @@ fn validate(packet: &EvidencePacket) -> Result<(), EvidenceError> {
     if packet.tasks.is_empty() {
         return Err(EvidenceError::MissingTask);
     }
+    validate_scope(packet)?;
     validate_task_set(&packet.tasks)?;
     validate_provenance(&packet.provenance)?;
     for task in &packet.tasks {
@@ -295,6 +315,7 @@ fn task_fixture(task_id: &'static str, verdict: Verdict) -> TaskEvidence {
 
 fn fixture() -> EvidencePacket {
     EvidencePacket {
+        scope: EvidenceScope::BoundedPreflight,
         tasks: vec![
             task_fixture("associative_recall", Verdict::Beneficial),
             task_fixture("copy", Verdict::Equivalent),
@@ -325,6 +346,7 @@ fn main() {
     let packet = fixture();
     validate(&packet).expect("bounded evidence fixture must validate");
     println!("TDI-7 evidence-schema preflight: PASS");
+    println!("scope={:?}", packet.scope);
     println!("task_count={}", packet.tasks.len());
     println!("aggregate_verdict={:?}", packet.aggregate_verdict);
     println!("public_api_status=NOT_PROMOTED");
@@ -338,6 +360,17 @@ mod tests {
     #[test]
     fn valid_packet_passes() {
         assert_eq!(validate(&fixture()), Ok(()));
+    }
+
+    #[test]
+    fn final_scope_requires_matching_holdout_access_provenance() {
+        let mut packet = fixture();
+        packet.scope = EvidenceScope::FinalHoldout;
+        assert_eq!(validate(&packet), Err(EvidenceError::HoldoutAccessMismatch));
+
+        let mut packet = fixture();
+        packet.provenance.final_holdout_accessed = true;
+        assert_eq!(validate(&packet), Err(EvidenceError::HoldoutAccessMismatch));
     }
 
     #[test]
@@ -429,7 +462,20 @@ mod tests {
     }
 
     #[test]
-    fn rejection_reason_codes_must_be_unique() {
+    fn rejection_reason_codes_must_be_nonempty_positive_and_unique() {
+        let mut packet = fixture();
+        packet.tasks[0].rejected_count = 1;
+        packet.tasks[0].rejection_reasons = vec![RejectionReason { code: "", count: 1 }];
+        assert_eq!(validate(&packet), Err(EvidenceError::InvalidRejectionReason));
+
+        let mut packet = fixture();
+        packet.tasks[0].rejected_count = 1;
+        packet.tasks[0].rejection_reasons = vec![RejectionReason {
+            code: "invalid_generated_record",
+            count: 0,
+        }];
+        assert_eq!(validate(&packet), Err(EvidenceError::InvalidRejectionReason));
+
         let mut packet = fixture();
         packet.tasks[0].rejected_count = 2;
         packet.tasks[0].rejection_reasons = vec![
