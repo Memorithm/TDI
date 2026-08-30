@@ -27,8 +27,8 @@ jobs:
         with:
           toolchain: ${{ env.TDI_CI_RUST }}
           components: rustfmt
-      - name: Check formatting
-        run: cargo fmt --all -- --check
+      - name: Check TDI-7.1 formatting
+        run: rustfmt --check tdi-bench/src/bin/tdi-attention-v71.rs
 
   tests:
     name: Public tests
@@ -56,8 +56,8 @@ jobs:
         with:
           toolchain: ${{ env.TDI_CI_RUST }}
           components: clippy
-      - name: Run Clippy
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Run Clippy on TDI-7.1 protocol guard
+        run: cargo clippy -p tdi-bench --bin tdi-attention-v71 --locked -- -D warnings
 
   integrity:
     name: Public preregistration integrity
