@@ -14,9 +14,23 @@ Before any final-holdout process exists, all of the following must be true:
 4. Rust validation and the dedicated TDI-7.1 bounded-preflight workflow are green on that commit.
 5. The worktree used for the final run is clean and points at that exact merged commit.
 6. No evaluator, feature, model, intervention, seed, target, bootstrap, numerical-policy or decision-rule change is pending.
-7. The final run is explicitly authorized by a human-supplied confirmation value that CI, tests and examples never provide.
+7. The exact final-holdout generator count is frozen in `docs/TDI-7.2-FINAL-HOLDOUT-DECISION.toml` by a separately reviewed decision, and the machine validator accepts that record as `FROZEN`.
+8. The final run is explicitly authorized by a human-supplied confirmation value that CI, tests and examples never provide.
 
 If any precondition fails, TDI-7.2 remains blocked.
+
+## Final population decision record
+
+The final seed range was frozen by TDI-7.0, but the exact number of generators selected from that range was not. TDI-7.2 therefore carries a separate machine-readable decision record rather than inferring a population size from training, development or validation splits.
+
+The record has two valid decision states:
+
+- `UNRESOLVED`: no `final_holdout_generator_count` field may exist and `decision_reference` must remain `UNRESOLVED`;
+- `FROZEN`: an exact positive `final_holdout_generator_count` must exist, must fit within the frozen final seed range, and `decision_reference` must identify the reviewed decision that froze it.
+
+In both states `authorization_state` must remain `NOT_AUTHORIZED`. Freezing the population size is not authorization to access the holdout. The record is validated by `tdi-ai/examples/tdi7_arming_decision.rs`, which contains no final-run confirmation value and cannot generate or consume holdout data.
+
+The initial record is anchored to the exact post-#76 `main` commit on which the dedicated TDI-7.1 bounded preflight and TDI-7 pre-arm integrity gates succeeded. A later population-size decision changes only the decision record and its reviewed reference; it does not retroactively rewrite TDI-7.1 provenance.
 
 ## Single-use scientific boundary
 
@@ -48,9 +62,9 @@ The result artifact must also include full provenance: repository commit, evalua
 
 ## What may be implemented before arming
 
-Before TDI-7.1 is fully merged and CI-valid, development may add only **fail-closed arming checks** and reporting schemas that cannot generate or consume the final holdout.
+Before all preconditions are satisfied, development may add only **fail-closed arming checks**, population-decision validation and reporting schemas that cannot generate or consume the final holdout.
 
-A real final-holdout generator/runner must not be added to the stacked pre-merge branches.
+A real final-holdout generator/runner must not be added until the population decision is separately frozen and the arming transition is reviewed.
 
 ## Non-claims
 
