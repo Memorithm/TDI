@@ -1,6 +1,9 @@
 name: Public Rust validation
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
   workflow_dispatch:
 
@@ -27,13 +30,16 @@ jobs:
         with:
           toolchain: ${{ env.TDI_CI_RUST }}
           components: rustfmt
-      - name: Check bounded TDI-7.1 formatting
+      - name: Check bounded TDI-7 formatting
         shell: bash
         run: |
           shopt -s nullglob
           files=(tdi-bench/src/bin/tdi-attention-v71*.rs)
           if test -f tdi-ai/examples/tdi7_features.rs; then
             files+=(tdi-ai/examples/tdi7_features.rs)
+          fi
+          if test -f tdi-ai/examples/tdi7_evidence_schema.rs; then
+            files+=(tdi-ai/examples/tdi7_evidence_schema.rs)
           fi
           test ${#files[@]} -gt 0
           rustfmt --edition 2024 --check "${files[@]}"
@@ -64,7 +70,7 @@ jobs:
         with:
           toolchain: ${{ env.TDI_CI_RUST }}
           components: clippy
-      - name: Run Clippy on bounded TDI-7.1 surfaces
+      - name: Run Clippy on bounded TDI-7 surfaces
         shell: bash
         run: |
           shopt -s nullglob
@@ -76,6 +82,9 @@ jobs:
           cargo clippy -p tdi-bench "${bins[@]}" --locked -- -D warnings
           if test -f tdi-ai/examples/tdi7_features.rs; then
             cargo clippy -p tdi-ai --example tdi7_features --locked -- -D warnings
+          fi
+          if test -f tdi-ai/examples/tdi7_evidence_schema.rs; then
+            cargo clippy -p tdi-ai --example tdi7_evidence_schema --locked -- -D warnings
           fi
 
   integrity:

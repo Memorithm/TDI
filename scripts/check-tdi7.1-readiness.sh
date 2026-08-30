@@ -8,11 +8,69 @@ fail() {
     exit 1
 }
 
+manifest_hash_for() {
+    local path="$1"
+    awk -v wanted="$path" '$2 == wanted { print $1 }' docs/TDI-6.8-SCIENTIFIC-CODE.sha256
+}
+
+verify_tdi68_historical_integrity() {
+    local manifest="docs/TDI-6.8-SCIENTIFIC-CODE.sha256"
+    local expected path actual
+
+    while read -r expected path; do
+        case "$path" in
+            Cargo.toml|Cargo.lock)
+                continue
+                ;;
+        esac
+        [[ -f "$path" ]] || fail "historical TDI-6.8 path missing: $path"
+        actual="$(sha256sum "$path" | awk '{print $1}')"
+        [[ "$actual" == "$expected" ]] \
+            || fail "historical TDI-6.8 path changed: $path"
+    done <"$manifest"
+
+    local tmpdir
+    tmpdir="$(mktemp -d)"
+    trap 'rm -rf "$tmpdir"' RETURN
+
+    python3 - "$tmpdir" <<'PY'
+from pathlib import Path
+import sys
+
+out = Path(sys.argv[1])
+
+cargo_toml = Path("Cargo.toml").read_text()
+member = '    "tdi-ai",\n'
+if cargo_toml.count(member) != 1:
+    raise SystemExit("Cargo.toml does not contain exactly one additive tdi-ai workspace member")
+(out / "Cargo.toml").write_text(cargo_toml.replace(member, "", 1))
+
+cargo_lock = Path("Cargo.lock").read_text()
+package = '''\n[[package]]\nname = "tdi-ai"\nversion = "0.1.0"\ndependencies = [\n "tdi-core",\n]\n'''
+if cargo_lock.count(package) != 1:
+    raise SystemExit("Cargo.lock does not contain exactly one additive tdi-ai package block")
+(out / "Cargo.lock").write_text(cargo_lock.replace(package, "", 1))
+PY
+
+    for path in Cargo.toml Cargo.lock; do
+        expected="$(manifest_hash_for "$path")"
+        [[ -n "$expected" ]] || fail "missing TDI-6.8 manifest entry for $path"
+        actual="$(sha256sum "$tmpdir/$path" | awk '{print $1}')"
+        [[ "$actual" == "$expected" ]] \
+            || fail "workspace metadata drift exceeds the reviewed additive tdi-ai change: $path"
+    done
+
+    rm -rf "$tmpdir"
+    trap - RETURN
+}
+
 printf '\n===== TDI-7.0 PREREGISTRATION INTEGRITY =====\n'
 sha256sum -c docs/TDI-7.0-ATTENTION-RECOVERY-PREREGISTRATION.sha256
 
-printf '\n===== HISTORICAL TDI-6.8 MANIFEST =====\n'
-sha256sum -c docs/TDI-6.8-SCIENTIFIC-CODE.sha256
+printf '\n===== HISTORICAL TDI-6.8 INTEGRITY =====\n'
+verify_tdi68_historical_integrity
+printf 'TDI-6.8 frozen paths: OK\n'
+printf 'TDI-6.8 workspace metadata projection: OK (additive tdi-ai only)\n'
 
 printf '\n===== TDI-7.1 SPECIFICATION SURFACES =====\n'
 test -f docs/TDI-7.1-EVALUATOR-SPEC.md || fail "missing TDI-7.1 evaluator specification"
@@ -48,7 +106,7 @@ for path in "${BOUNDED_FILES[@]}"; do
     fi
 done
 
-printf '\n===== TDI-7.1 PRELIGHT HOLDOUT REFUSAL =====\n'
+printf '\n===== TDI-7.1 PREFLIGHT HOLDOUT REFUSAL =====\n'
 if TDI7_CONFIRM_FINAL_HOLDOUT=sentinel bash scripts/reproduce-tdi7.1-preflight.sh >/tmp/tdi71-refusal.out 2>&1; then
     cat /tmp/tdi71-refusal.out >&2
     fail "preflight accepted a final-holdout authorization environment"

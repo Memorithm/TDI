@@ -1,0 +1,61 @@
+name: TDI-7 pre-arm integrity
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tdi7-prearm-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TDI_CI_RUST: "1.97.1"
+
+jobs:
+  prearm-integrity:
+    name: TDI-7 pre-arm fail-closed audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TDI_CI_RUST }}
+
+      - name: Validate pre-arm script syntax
+        run: bash -n scripts/check-tdi7-prearm-integrity.sh
+
+      - name: Prove pre-arm audit refuses authorization environment
+        run: |
+          if TDI7_CONFIRM_FINAL_HOLDOUT=ci-refusal-probe \
+            bash scripts/check-tdi7-prearm-integrity.sh >/tmp/tdi7-prearm-auth.log 2>&1; then
+            cat /tmp/tdi7-prearm-auth.log
+            echo "ERROR: pre-arm audit accepted a holdout authorization environment" >&2
+            exit 1
+          fi
+          grep -F "refuses any final-holdout authorization variable" /tmp/tdi7-prearm-auth.log
+
+      - name: Prove unresolved final population blocks arming
+        run: |
+          set +e
+          env -u TDI7_CONFIRM_FINAL_HOLDOUT \
+            bash scripts/check-tdi7-prearm-integrity.sh >/tmp/tdi7-prearm.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/tdi7-prearm.log
+          if [[ "$status" -ne 3 ]]; then
+            echo "ERROR: expected fail-closed pre-arm status 3, got $status" >&2
+            exit 1
+          fi
+          grep -F "BLOCKED: final holdout generator count was not frozen" /tmp/tdi7-prearm.log
+          grep -F "TDI-7.2 must remain unarmed" /tmp/tdi7-prearm.log
