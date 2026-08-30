@@ -18,7 +18,10 @@ struct MechanisticState {
 
 impl MechanisticState {
     fn new(tokens: Vec<u16>, target: Vec<u16>) -> Self {
-        let activations = tokens.iter().map(|token| f64::from(*token) / 256.0).collect();
+        let activations = tokens
+            .iter()
+            .map(|token| f64::from(*token) / 256.0)
+            .collect();
         Self {
             tokens,
             target,
@@ -197,7 +200,10 @@ mod tests {
             site: InterventionSite::EarlyToken,
             amplitude: 0.25,
         };
-        assert_eq!(intervention.apply(&reference), intervention.apply(&reference));
+        assert_eq!(
+            intervention.apply(&reference),
+            intervention.apply(&reference)
+        );
     }
 
     #[test]
