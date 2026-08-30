@@ -3,21 +3,30 @@
 //! This binary records frozen/preflight configuration only. It does not execute
 //! a final holdout or infer a scientific verdict.
 
-const SEMANTIC_ID: &str = "tdi-ai/fixed-row-stochastic-mixer-v1";
+const SEMANTIC_ID: &str = "deterministic_local_row_stochastic_v1";
 const TASK_GENERATOR_VERSION: &str = "tdi7-hai1-generators-v1";
 const TRAINING_RANGE: &str = "7100000000..=7100009999";
 const DEVELOPMENT_RANGE: &str = "7100010000..=7100019999";
 const VALIDATION_RANGE: &str = "7100020000..=7100029999";
 const FINAL_HOLDOUT_RANGE: &str = "7100030000..=7100039999";
+const TRAINING_GENERATOR_COUNT: usize = 96;
+const DEVELOPMENT_GENERATOR_COUNT: usize = 48;
+const VALIDATION_GENERATOR_COUNT: usize = 48;
+const FINAL_HOLDOUT_GENERATOR_COUNT_STATUS: &str = "UNFROZEN";
 const INTERVENTION_SITES: &str = "early-token,late-token";
 const INTERVENTION_POLICY: &str = "single-site-one-shot-task-label-preserving";
-const STATIC_FEATURE_SCHEMA: &str = "rows,columns,mean_entropy,mean_normalized_entropy,mean_max_weight,mean_l2_concentration,mean_effective_support,frobenius_norm";
-const RECOVERY_FEATURE_SCHEMA: &str = "raw_recovery_at_frozen_early_depths";
+const INTERVENTION_AMPLITUDE: f64 = 0.25;
+const EARLY_OBSERVATION_DEPTHS: &str = "1,2";
+const TARGET_DEPTH: usize = 5;
+const TARGET_DEFINITION: &str = "bounded_retrieval_deficit:d/(1+d)";
+const STATIC_FEATURE_SCHEMA: &str = "sequence_length,distractor_count,retrieval_distance,mean_row_entropy_nats,mean_normalized_row_entropy,mean_row_max_weight,mean_row_l2_concentration,mean_row_effective_support,frobenius_norm,intervention_site_indicator";
+const RECOVERY_FEATURE_SCHEMA: &str = "recovery_depth_1,recovery_depth_2";
 const MODEL_CLASS: &str = "ridge-linear-with-intercept";
 const LAMBDA_GRID: &str = "0,1e-6,1e-3,1e-1";
 const PRIMARY_LOSS: &str = "mse";
-const BOOTSTRAP_SEED: &str = "0x5444493742530001";
+const BOOTSTRAP_SEED: &str = "0x5444493745324501";
 const BOOTSTRAP_REPLICATES: usize = 2_000;
+const NUMERICAL_POLICY: &str = "rust-f64-scalar;pivot_tolerance=1e-12";
 const RELEVANCE_MARGIN: f64 = 0.02;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -53,8 +62,18 @@ impl Provenance {
             format!("development_seed_range={DEVELOPMENT_RANGE}"),
             format!("validation_seed_range={VALIDATION_RANGE}"),
             format!("final_holdout_seed_range={FINAL_HOLDOUT_RANGE}"),
+            format!("training_generator_count={TRAINING_GENERATOR_COUNT}"),
+            format!("development_generator_count={DEVELOPMENT_GENERATOR_COUNT}"),
+            format!("validation_generator_count={VALIDATION_GENERATOR_COUNT}"),
+            format!(
+                "final_holdout_generator_count={FINAL_HOLDOUT_GENERATOR_COUNT_STATUS}"
+            ),
             format!("intervention_sites={INTERVENTION_SITES}"),
             format!("intervention_policy={INTERVENTION_POLICY}"),
+            format!("intervention_amplitude={INTERVENTION_AMPLITUDE}"),
+            format!("early_observation_depths={EARLY_OBSERVATION_DEPTHS}"),
+            format!("target_depth={TARGET_DEPTH}"),
+            format!("target_definition={TARGET_DEFINITION}"),
             format!("static_feature_schema={STATIC_FEATURE_SCHEMA}"),
             format!("recovery_feature_schema={RECOVERY_FEATURE_SCHEMA}"),
             format!("model_class={MODEL_CLASS}"),
@@ -62,6 +81,7 @@ impl Provenance {
             format!("primary_loss={PRIMARY_LOSS}"),
             format!("bootstrap_seed={BOOTSTRAP_SEED}"),
             format!("bootstrap_replicates={BOOTSTRAP_REPLICATES}"),
+            format!("numerical_policy={NUMERICAL_POLICY}"),
             format!("relevance_margin={RELEVANCE_MARGIN}"),
             "final_holdout_status=NOT_ACCESSED".to_string(),
         ]
@@ -95,6 +115,13 @@ fn main() {
 mod tests {
     use super::*;
 
+    fn lines() -> String {
+        Provenance::new("0123456789abcdef0123456789abcdef01234567")
+            .unwrap()
+            .lines()
+            .join("\n")
+    }
+
     #[test]
     fn valid_sha_is_normalized_and_emitted() {
         let provenance = Provenance::new("ABCDEF0123456789ABCDEF0123456789ABCDEF01").unwrap();
@@ -122,12 +149,43 @@ mod tests {
 
     #[test]
     fn all_frozen_split_ranges_are_reported() {
-        let provenance = Provenance::new("0123456789abcdef0123456789abcdef01234567").unwrap();
-        let lines = provenance.lines().join("\n");
-        assert!(lines.contains(TRAINING_RANGE));
-        assert!(lines.contains(DEVELOPMENT_RANGE));
-        assert!(lines.contains(VALIDATION_RANGE));
-        assert!(lines.contains(FINAL_HOLDOUT_RANGE));
+        let output = lines();
+        assert!(output.contains(TRAINING_RANGE));
+        assert!(output.contains(DEVELOPMENT_RANGE));
+        assert!(output.contains(VALIDATION_RANGE));
+        assert!(output.contains(FINAL_HOLDOUT_RANGE));
+    }
+
+    #[test]
+    fn bounded_population_counts_match_end_to_end_evaluator() {
+        let output = lines();
+        assert!(output.contains("training_generator_count=96"));
+        assert!(output.contains("development_generator_count=48"));
+        assert!(output.contains("validation_generator_count=48"));
+    }
+
+    #[test]
+    fn primary_bootstrap_seed_matches_end_to_end_specification() {
+        assert_eq!(BOOTSTRAP_SEED, "0x5444493745324501");
+        assert!(lines().contains("bootstrap_seed=0x5444493745324501"));
+    }
+
+    #[test]
+    fn semantic_and_feature_schema_match_primary_evaluator() {
+        let output = lines();
+        assert!(output.contains("semantic_id=deterministic_local_row_stochastic_v1"));
+        assert!(output.contains("early_observation_depths=1,2"));
+        assert!(output.contains("target_depth=5"));
+        assert!(output.contains("target_definition=bounded_retrieval_deficit:d/(1+d)"));
+        assert!(output.contains("intervention_amplitude=0.25"));
+        assert!(output.contains("intervention_site_indicator"));
+        assert!(output.contains("recovery_feature_schema=recovery_depth_1,recovery_depth_2"));
+    }
+
+    #[test]
+    fn unresolved_final_population_is_explicit_and_fail_closed() {
+        assert_eq!(FINAL_HOLDOUT_GENERATOR_COUNT_STATUS, "UNFROZEN");
+        assert!(lines().contains("final_holdout_generator_count=UNFROZEN"));
     }
 
     #[test]
