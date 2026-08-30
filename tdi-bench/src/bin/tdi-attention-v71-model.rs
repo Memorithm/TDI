@@ -148,10 +148,7 @@ fn select_lambda(
         if !loss.is_finite() {
             return Err(ModelError::NonFiniteValue);
         }
-        if best
-            .as_ref()
-            .is_none_or(|(best_loss, _)| loss < *best_loss)
-        {
+        if best.as_ref().is_none_or(|(best_loss, _)| loss < *best_loss) {
             best = Some((loss, model));
         }
     }
@@ -218,10 +215,7 @@ mod tests {
         let development = synthetic_split(32, 48);
         let untouched = synthetic_split(48, 64);
         let model = select_lambda(&training, &development, true).unwrap();
-        assert_eq!(
-            mse(&model, &untouched, true),
-            mse(&model, &untouched, true)
-        );
+        assert_eq!(mse(&model, &untouched, true), mse(&model, &untouched, true));
     }
     #[test]
     fn augmented_arm_can_recover_signal_present_only_in_recovery_block() {
