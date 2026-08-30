@@ -67,9 +67,7 @@ impl Provenance {
             format!("training_generator_count={TRAINING_GENERATOR_COUNT}"),
             format!("development_generator_count={DEVELOPMENT_GENERATOR_COUNT}"),
             format!("validation_generator_count={VALIDATION_GENERATOR_COUNT}"),
-            format!(
-                "final_holdout_generator_count={FINAL_HOLDOUT_GENERATOR_COUNT_STATUS}"
-            ),
+            format!("final_holdout_generator_count={FINAL_HOLDOUT_GENERATOR_COUNT_STATUS}"),
             format!("intervention_sites={INTERVENTION_SITES}"),
             format!("intervention_policy={INTERVENTION_POLICY}"),
             format!("intervention_aggregation={INTERVENTION_AGGREGATION}"),
@@ -189,9 +187,11 @@ mod tests {
     #[test]
     fn intervention_aggregation_and_classifier_precedence_are_explicit() {
         let output = lines();
-        assert!(output.contains(
-            "intervention_aggregation=two_sites_per_generator_equal_record_weighting"
-        ));
+        assert!(
+            output.contains(
+                "intervention_aggregation=two_sites_per_generator_equal_record_weighting"
+            )
+        );
         assert!(output.contains(
             "classifier_policy=beneficial_then_harmful_then_equivalent_then_inconclusive"
         ));
