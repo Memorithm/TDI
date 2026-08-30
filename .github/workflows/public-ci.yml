@@ -28,7 +28,7 @@ jobs:
           toolchain: ${{ env.TDI_CI_RUST }}
           components: rustfmt
       - name: Check TDI-7.1 formatting
-        run: rustfmt --check tdi-bench/src/bin/tdi-attention-v71.rs
+        run: rustfmt --edition 2024 --check tdi-bench/src/bin/tdi-attention-v71.rs
 
   tests:
     name: Public tests
