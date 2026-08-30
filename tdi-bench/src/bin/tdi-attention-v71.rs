@@ -154,10 +154,7 @@ mod tests {
             final_holdout: SeedRange::new(300, 399).unwrap(),
         };
 
-        assert_eq!(
-            plan.validate(),
-            Err(ProtocolError::OverlappingSeedRanges)
-        );
+        assert_eq!(plan.validate(), Err(ProtocolError::OverlappingSeedRanges));
     }
 
     #[test]
