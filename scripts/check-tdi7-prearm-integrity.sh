@@ -85,6 +85,21 @@ grep -Fxq 'final_holdout_accessed=false' <<<"$SELECTION_OUTPUT" \
 grep -Fxq 'arming_allowed=false' <<<"$SELECTION_OUTPUT" \
     || fail "seed-selection validator unexpectedly allows arming"
 
+printf '\n===== TDI-7.2 FINAL REJECTION-POLICY DECISION =====\n'
+cargo test --quiet -p tdi-ai --example tdi7_rejection_policy_decision
+POLICY_OUTPUT="$(cargo run --quiet -p tdi-ai --example tdi7_rejection_policy_decision)"
+printf '%s\n' "$POLICY_OUTPUT"
+grep -Fxq 'TDI-7.2 rejection-policy decision: VALID' <<<"$POLICY_OUTPUT" \
+    || fail "final rejection-policy decision record did not validate"
+grep -Fxq 'policy_status=UNRESOLVED' <<<"$POLICY_OUTPUT" \
+    || fail "rejection policy is not explicitly unresolved"
+grep -Fxq 'authorization_state=NOT_AUTHORIZED' <<<"$POLICY_OUTPUT" \
+    || fail "rejection-policy decision record is not explicitly unauthorized"
+grep -Fxq 'final_holdout_accessed=false' <<<"$POLICY_OUTPUT" \
+    || fail "rejection-policy validator did not preserve no-access status"
+grep -Fxq 'arming_allowed=false' <<<"$POLICY_OUTPUT" \
+    || fail "rejection-policy validator unexpectedly allows arming"
+
 set +e
 cargo run --quiet -p tdi-ai --example tdi7_arming_decision -- --require-frozen \
     >/tmp/tdi7-final-population-decision.log 2>&1
@@ -92,9 +107,13 @@ population_status=$?
 cargo run --quiet -p tdi-ai --example tdi7_seed_selection_decision -- --require-frozen \
     >/tmp/tdi7-final-seed-selection.log 2>&1
 selection_status=$?
+cargo run --quiet -p tdi-ai --example tdi7_rejection_policy_decision -- --require-frozen \
+    >/tmp/tdi7-final-rejection-policy.log 2>&1
+policy_status=$?
 set -e
 cat /tmp/tdi7-final-population-decision.log
 cat /tmp/tdi7-final-seed-selection.log
+cat /tmp/tdi7-final-rejection-policy.log
 
 blocked=0
 if [[ "$population_status" -eq 3 ]]; then
@@ -115,9 +134,18 @@ elif [[ "$selection_status" -ne 0 ]]; then
     fail "final seed-selection decision validator failed unexpectedly with status $selection_status"
 fi
 
+if [[ "$policy_status" -eq 3 ]]; then
+    grep -Fq 'BLOCKED: final holdout rejection policy is UNRESOLVED' \
+        /tmp/tdi7-final-rejection-policy.log \
+        || fail "unresolved rejection policy did not fail closed with the frozen diagnostic"
+    blocked=1
+elif [[ "$policy_status" -ne 0 ]]; then
+    fail "final rejection-policy validator failed unexpectedly with status $policy_status"
+fi
+
 if [[ "$blocked" -eq 1 ]]; then
-    echo "TDI-7.2 must remain unarmed; population size and seed selection are separate reviewed decisions." >&2
+    echo "TDI-7.2 must remain unarmed; population size, seed selection, and rejection policy are separate reviewed decisions." >&2
     exit 3
 fi
 
-fail "population and seed-selection decisions are frozen, but the separately reviewed arming transition has not been implemented"
+fail "all pre-holdout decisions are frozen, but the separately reviewed arming transition has not been implemented"
