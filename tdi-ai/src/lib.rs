@@ -181,6 +181,10 @@ pub type RecoveryResult<Score, DynamicsError, InterventionError, ObservableError
 ///
 /// No claim is made that a score is probabilistic or bounded unless the selected
 /// `FutureOverlap` implementation defines and validates those properties.
+#[allow(
+    clippy::type_complexity,
+    reason = "the public protocol intentionally preserves stage-specific error types"
+)]
 pub fn analyze_intervention_recovery<D, I, O, M>(
     dynamics: &D,
     intervention: &I,
