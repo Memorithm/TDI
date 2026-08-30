@@ -32,6 +32,15 @@ enum DecisionStatus {
     Frozen,
 }
 
+impl DecisionStatus {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Unresolved => "UNRESOLVED",
+            Self::Frozen => "FROZEN",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Decision {
     schema_version: u64,
@@ -71,9 +80,7 @@ fn parse_map(input: &str) -> Result<BTreeMap<String, String>, DecisionError> {
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        let (key, value) = line
-            .split_once('=')
-            .ok_or(DecisionError::MalformedLine)?;
+        let (key, value) = line.split_once('=').ok_or(DecisionError::MalformedLine)?;
         let key = key.trim();
         let value = value.trim();
         if key.is_empty() || value.is_empty() {
@@ -89,10 +96,7 @@ fn parse_map(input: &str) -> Result<BTreeMap<String, String>, DecisionError> {
     Ok(values)
 }
 
-fn required<'a>(
-    values: &'a BTreeMap<String, String>,
-    key: &str,
-) -> Result<&'a str, DecisionError> {
+fn required<'a>(values: &'a BTreeMap<String, String>, key: &str) -> Result<&'a str, DecisionError> {
     values
         .get(key)
         .map(String::as_str)
@@ -100,7 +104,8 @@ fn required<'a>(
 }
 
 fn parse_integer(raw: &str) -> Result<u64, DecisionError> {
-    raw.parse::<u64>().map_err(|_| DecisionError::InvalidInteger)
+    raw.parse::<u64>()
+        .map_err(|_| DecisionError::InvalidInteger)
 }
 
 fn parse_string(raw: &str) -> Result<String, DecisionError> {
@@ -225,7 +230,7 @@ fn main() {
     };
 
     println!("TDI-7.2 final-population decision: VALID");
-    println!("decision_status={:?}", decision.status);
+    println!("decision_status={}", decision.status.as_str());
     println!("prearm_main_commit={}", decision.prearm_main_commit);
     println!("authorization_state={}", decision.authorization_state);
     println!("final_holdout_accessed=false");
@@ -277,6 +282,7 @@ mod tests {
         assert_eq!(decision.status, DecisionStatus::Unresolved);
         assert_eq!(decision.final_holdout_generator_count, None);
         assert_eq!(decision.authorization_state, NOT_AUTHORIZED);
+        assert_eq!(decision.status.as_str(), "UNRESOLVED");
     }
 
     #[test]
@@ -296,7 +302,10 @@ mod tests {
             .filter(|line| !line.starts_with("final_holdout_generator_count"))
             .collect::<Vec<_>>()
             .join("\n");
-        assert_eq!(Decision::parse(&missing_count), Err(DecisionError::MissingCount));
+        assert_eq!(
+            Decision::parse(&missing_count),
+            Err(DecisionError::MissingCount)
+        );
         assert_eq!(
             Decision::parse(&frozen(48, UNRESOLVED_REFERENCE)),
             Err(DecisionError::InvalidDecisionReference)
@@ -336,7 +345,10 @@ mod tests {
             &format!("final_seed_start = {FINAL_SEED_START}"),
             "final_seed_start = 1",
         );
-        assert_eq!(Decision::parse(&input), Err(DecisionError::InvalidSeedRange));
+        assert_eq!(
+            Decision::parse(&input),
+            Err(DecisionError::InvalidSeedRange)
+        );
     }
 
     #[test]
