@@ -1,0 +1,76 @@
+name: Public Rust validation
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tdi-public-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  formatting:
+    name: Public formatting
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  tests:
+    name: Public tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Run tests
+        run: cargo test --workspace --locked
+
+  clippy:
+    name: Public clippy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Run Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  integrity:
+    name: Public preregistration integrity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Verify historical preregistration hashes
+        run: |
+          sha256sum -c docs/TDI-2-CONTINUOUS-PREREGISTRATION.sha256
+          sha256sum -c docs/TDI-3-INTERWIDTH-PREREGISTRATION.sha256
+          sha256sum -c docs/TDI-3-INTERWIDTH-EVALUATOR.sha256
+          sha256sum -c docs/TDI-3-SCIENTIFIC-CODE.sha256
+          sha256sum -c docs/TDI-4-TARGET-GEOMETRY-PREREGISTRATION.sha256
+          sha256sum -c docs/TDI-4-TARGET-GEOMETRY-EVALUATOR.sha256
+          sha256sum -c docs/TDI-4-SCIENTIFIC-CODE.sha256
+          bash -n scripts/reproduce-tdi4.sh
+      - name: Verify TDI-7.0 preregistration when present
+        run: |
+          if test -f docs/TDI-7.0-ATTENTION-RECOVERY-PREREGISTRATION.sha256; then
+            sha256sum -c docs/TDI-7.0-ATTENTION-RECOVERY-PREREGISTRATION.sha256
+          fi
