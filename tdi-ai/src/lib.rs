@@ -9,7 +9,6 @@
 //! FLAT-ATTENTION reference semantics, or future adapters.
 
 mod static_diagnostics;
-pub mod tdi7;
 mod toy_attention;
 
 use tdi_core::{BranchingRecoveryAnalysis, ExactRatio};
@@ -99,44 +98,82 @@ impl<S> RecoveryProfile<S> {
 }
 
 /// Deterministic or explicitly reproducible dynamics under study.
+///
+/// A model adapter may interpret one `advance` call as a layer, recurrent step,
+/// token-generation step, mixer application, or another preregistered unit.
 pub trait ReferenceDynamics {
+    /// Complete state required to advance the mechanism.
     type State: Clone;
+
+    /// Failure while advancing the reference or perturbed computation.
     type Error;
+
+    /// Advance one declared unit of dynamics.
     fn advance(&self, state: &Self::State) -> Result<Self::State, Self::Error>;
 }
 
 /// Controlled perturbation applied once to the initial state.
 pub trait Intervention<S> {
+    /// Failure while constructing the perturbed state.
     type Error;
+
+    /// Apply the intervention without mutating the reference state.
     fn apply(&self, reference: &S) -> Result<S, Self::Error>;
 }
 
 /// Observable extracted from a downstream state before comparison.
 pub trait FutureObservable<S> {
+    /// Representation compared between reference and perturbed futures.
     type Output;
+
+    /// Failure while extracting the observable.
     type Error;
+
+    /// Observe a state at the declared downstream depth.
     fn observe(&self, state: &S, depth: usize) -> Result<Self::Output, Self::Error>;
 }
 
 /// Comparison between two future observables.
+///
+/// `Score` is intentionally generic. Exact finite-state TDI uses `ExactRatio`;
+/// AI adapters may use a bounded similarity, distributional overlap, calibrated
+/// divergence transform, task-specific recovery score, or another frozen metric.
 pub trait FutureOverlap<O> {
+    /// Output score type.
     type Score;
+
+    /// Failure while comparing the two observables.
     type Error;
+
+    /// Compare the reference future with the perturbed future.
     fn overlap(&self, reference: &O, perturbed: &O) -> Result<Self::Score, Self::Error>;
 }
 
 /// Failure stage for a generic intervention/recovery run.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RecoveryError<DynamicsError, InterventionError, ObservableError, OverlapError> {
+    /// Initial intervention failed.
     Intervention(InterventionError),
+    /// Reference trajectory failed to advance.
     ReferenceDynamics(DynamicsError),
+    /// Perturbed trajectory failed to advance.
     PerturbedDynamics(DynamicsError),
+    /// Reference observable could not be extracted.
     ReferenceObservable(ObservableError),
+    /// Perturbed observable could not be extracted.
     PerturbedObservable(ObservableError),
+    /// Recovery/overlap comparison failed.
     Overlap(OverlapError),
 }
 
 /// Run the generic TDI-AI recovery protocol.
+///
+/// The intervention is applied exactly once at depth zero. The reference and
+/// perturbed states then follow the same declared dynamics. At every downstream
+/// depth, the same observable and overlap rule are applied to both trajectories.
+///
+/// No claim is made that a score is probabilistic or bounded unless the selected
+/// `FutureOverlap` implementation defines and validates those properties.
 pub fn analyze_intervention_recovery<D, I, O, M>(
     dynamics: &D,
     intervention: &I,
@@ -144,7 +181,10 @@ pub fn analyze_intervention_recovery<D, I, O, M>(
     overlap: &M,
     initial_state: &D::State,
     horizon: usize,
-) -> Result<RecoveryProfile<M::Score>, RecoveryError<D::Error, I::Error, O::Error, M::Error>>
+) -> Result<
+    RecoveryProfile<M::Score>,
+    RecoveryError<D::Error, I::Error, O::Error, M::Error>,
+>
 where
     D: ReferenceDynamics,
     I: Intervention<D::State>,
@@ -152,42 +192,163 @@ where
     M: FutureOverlap<O::Output>,
 {
     let mut reference_state = initial_state.clone();
-    let mut perturbed_state = intervention.apply(initial_state).map_err(RecoveryError::Intervention)?;
+    let mut perturbed_state = intervention
+        .apply(initial_state)
+        .map_err(RecoveryError::Intervention)?;
     let mut points = Vec::with_capacity(horizon);
 
     for depth in 1..=horizon {
-        reference_state = dynamics.advance(&reference_state).map_err(RecoveryError::ReferenceDynamics)?;
-        perturbed_state = dynamics.advance(&perturbed_state).map_err(RecoveryError::PerturbedDynamics)?;
-        let reference_observable = observable.observe(&reference_state, depth).map_err(RecoveryError::ReferenceObservable)?;
-        let perturbed_observable = observable.observe(&perturbed_state, depth).map_err(RecoveryError::PerturbedObservable)?;
-        let score = overlap.overlap(&reference_observable, &perturbed_observable).map_err(RecoveryError::Overlap)?;
+        reference_state = dynamics
+            .advance(&reference_state)
+            .map_err(RecoveryError::ReferenceDynamics)?;
+        perturbed_state = dynamics
+            .advance(&perturbed_state)
+            .map_err(RecoveryError::PerturbedDynamics)?;
+
+        let reference_observable = observable
+            .observe(&reference_state, depth)
+            .map_err(RecoveryError::ReferenceObservable)?;
+        let perturbed_observable = observable
+            .observe(&perturbed_state, depth)
+            .map_err(RecoveryError::PerturbedObservable)?;
+
+        let score = overlap
+            .overlap(&reference_observable, &perturbed_observable)
+            .map_err(RecoveryError::Overlap)?;
         points.push(RecoveryPoint::new(depth, score));
     }
 
     Ok(RecoveryProfile::new(points))
 }
 
-/// Convert the exact finite-state branching oracle without numerical conversion.
+/// Convert the existing exact finite-state branching oracle into the generic
+/// TDI-AI recovery schema without changing any historical TDI semantics.
 #[must_use]
-pub fn from_exact_branching_analysis(analysis: &BranchingRecoveryAnalysis) -> RecoveryProfile<ExactRatio> {
+pub fn from_exact_branching_analysis(
+    analysis: &BranchingRecoveryAnalysis,
+) -> RecoveryProfile<ExactRatio> {
     RecoveryProfile::from_overlaps(analysis.overlap_profile().iter().cloned())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{FutureObservable, FutureOverlap, Intervention, RecoveryPoint, ReferenceDynamics, analyze_intervention_recovery, from_exact_branching_analysis};
+    use super::{
+        FutureObservable, FutureOverlap, Intervention, RecoveryPoint, ReferenceDynamics,
+        analyze_intervention_recovery, from_exact_branching_analysis,
+    };
     use tdi_core::{Action, ExactRatio, State, TableSystem, analyze_branching_recovery};
 
-    #[derive(Clone, Copy)] struct Increment;
-    impl ReferenceDynamics for Increment { type State=i32; type Error=core::convert::Infallible; fn advance(&self,state:&i32)->Result<i32,Self::Error>{Ok(*state+1)} }
-    #[derive(Clone, Copy)] struct Shift(i32);
-    impl Intervention<i32> for Shift { type Error=core::convert::Infallible; fn apply(&self,reference:&i32)->Result<i32,Self::Error>{Ok(*reference+self.0)} }
-    #[derive(Clone, Copy)] struct IdentityObservable;
-    impl FutureObservable<i32> for IdentityObservable { type Output=i32; type Error=core::convert::Infallible; fn observe(&self,state:&i32,_:usize)->Result<i32,Self::Error>{Ok(*state)} }
-    #[derive(Clone, Copy)] struct ReciprocalDistance;
-    impl FutureOverlap<i32> for ReciprocalDistance { type Score=f64; type Error=core::convert::Infallible; fn overlap(&self,reference:&i32,perturbed:&i32)->Result<f64,Self::Error>{Ok(1.0/(1.0+f64::from((*reference-*perturbed).abs())))} }
+    #[derive(Clone, Copy)]
+    struct Increment;
 
-    #[test] fn generic_protocol_applies_intervention_once_and_preserves_depth_order(){let p=analyze_intervention_recovery(&Increment,&Shift(2),&IdentityObservable,&ReciprocalDistance,&0,3).unwrap();assert_eq!(p.horizon(),3);assert_eq!(p.points()[0],RecoveryPoint::new(1,1.0/3.0));}
-    #[test] fn zero_horizon_does_not_require_future_observations(){let p=analyze_intervention_recovery(&Increment,&Shift(2),&IdentityObservable,&ReciprocalDistance,&0,0).unwrap();assert!(p.is_empty());}
-    #[test] fn exact_branching_oracle_maps_without_numerical_conversion(){let zero=State::new(0,2).unwrap();let one=State::new(1,2).unwrap();let two=State::new(2,2).unwrap();let three=State::new(3,2).unwrap();let mut s=TableSystem::new(2).unwrap();s.insert(zero,Action::Noop,vec![two,three]).unwrap();s.insert(one,Action::Noop,vec![three]).unwrap();let e=analyze_branching_recovery(&s,zero,Action::Flip{node:0},Action::Noop,1).unwrap();let g=from_exact_branching_analysis(&e);assert_eq!(g.final_overlap(),Some(&ExactRatio::new(1,2).unwrap()));}
+    impl ReferenceDynamics for Increment {
+        type State = i32;
+        type Error = core::convert::Infallible;
+
+        fn advance(&self, state: &Self::State) -> Result<Self::State, Self::Error> {
+            Ok(*state + 1)
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    struct Shift(i32);
+
+    impl Intervention<i32> for Shift {
+        type Error = core::convert::Infallible;
+
+        fn apply(&self, reference: &i32) -> Result<i32, Self::Error> {
+            Ok(*reference + self.0)
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    struct IdentityObservable;
+
+    impl FutureObservable<i32> for IdentityObservable {
+        type Output = i32;
+        type Error = core::convert::Infallible;
+
+        fn observe(&self, state: &i32, _depth: usize) -> Result<Self::Output, Self::Error> {
+            Ok(*state)
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    struct ReciprocalDistance;
+
+    impl FutureOverlap<i32> for ReciprocalDistance {
+        type Score = f64;
+        type Error = core::convert::Infallible;
+
+        fn overlap(&self, reference: &i32, perturbed: &i32) -> Result<Self::Score, Self::Error> {
+            let distance = f64::from((*reference - *perturbed).abs());
+            Ok(1.0 / (1.0 + distance))
+        }
+    }
+
+    #[test]
+    fn generic_protocol_applies_intervention_once_and_preserves_depth_order() {
+        let profile = analyze_intervention_recovery(
+            &Increment,
+            &Shift(2),
+            &IdentityObservable,
+            &ReciprocalDistance,
+            &0,
+            3,
+        )
+        .expect("infallible fixture");
+
+        assert_eq!(profile.horizon(), 3);
+        assert_eq!(profile.points()[0], RecoveryPoint::new(1, 1.0 / 3.0));
+        assert_eq!(profile.points()[1], RecoveryPoint::new(2, 1.0 / 3.0));
+        assert_eq!(profile.points()[2], RecoveryPoint::new(3, 1.0 / 3.0));
+    }
+
+    #[test]
+    fn zero_horizon_does_not_require_future_observations() {
+        let profile = analyze_intervention_recovery(
+            &Increment,
+            &Shift(2),
+            &IdentityObservable,
+            &ReciprocalDistance,
+            &0,
+            0,
+        )
+        .expect("infallible fixture");
+
+        assert!(profile.is_empty());
+        assert_eq!(profile.final_overlap(), None);
+    }
+
+    #[test]
+    fn exact_branching_oracle_maps_without_numerical_conversion() {
+        let zero = State::new(0b00, 2).expect("valid state");
+        let one = State::new(0b01, 2).expect("valid state");
+        let two = State::new(0b10, 2).expect("valid state");
+        let three = State::new(0b11, 2).expect("valid state");
+
+        let mut system = TableSystem::new(2).expect("valid system");
+        system
+            .insert(zero, Action::Noop, vec![two, three])
+            .expect("valid transition");
+        system
+            .insert(one, Action::Noop, vec![three])
+            .expect("valid transition");
+
+        let exact = analyze_branching_recovery(
+            &system,
+            zero,
+            Action::Flip { node: 0 },
+            Action::Noop,
+            1,
+        )
+        .expect("exact analysis succeeds");
+        let generic = from_exact_branching_analysis(&exact);
+
+        assert_eq!(generic.horizon(), 1);
+        assert_eq!(
+            generic.final_overlap(),
+            Some(&ExactRatio::new(1, 2).expect("valid ratio"))
+        );
+    }
 }
