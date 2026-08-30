@@ -45,7 +45,7 @@ jobs:
           fi
           grep -F "refuses any final-holdout authorization variable" /tmp/tdi7-prearm-auth.log
 
-      - name: Prove unresolved final population decision blocks arming
+      - name: Prove unresolved final decisions block arming
         run: |
           set +e
           env -u TDI7_CONFIRM_FINAL_HOLDOUT \
@@ -58,4 +58,5 @@ jobs:
             exit 1
           fi
           grep -F "BLOCKED: final holdout generator count decision is UNRESOLVED" /tmp/tdi7-prearm.log
-          grep -F "TDI-7.2 must remain unarmed" /tmp/tdi7-prearm.log
+          grep -F "BLOCKED: final holdout seed-selection rule is UNRESOLVED" /tmp/tdi7-prearm.log
+          grep -F "population size and seed selection are separate reviewed decisions" /tmp/tdi7-prearm.log
