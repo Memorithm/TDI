@@ -94,19 +94,22 @@ fn linf_distance(left: &MechanisticState, right: &MechanisticState) -> f64 {
 
 fn main() {
     let reference = MechanisticState::new(vec![10, 20, 30, 40, 50, 60], vec![30]);
-    let intervention = SingleSiteIntervention {
-        site: InterventionSite::EarlyToken,
-        amplitude: 0.25,
-    };
-    let perturbed = intervention.apply(&reference).expect("valid fixture");
-    let reference_next = advance(&reference);
-    let perturbed_next = advance(&perturbed);
+    for site in [InterventionSite::EarlyToken, InterventionSite::LateToken] {
+        let intervention = SingleSiteIntervention {
+            site,
+            amplitude: 0.25,
+        };
+        let perturbed = intervention.apply(&reference).expect("valid fixture");
+        let reference_next = advance(&reference);
+        let perturbed_next = advance(&perturbed);
+        println!(
+            "site={site:?} distance_after_one_step={:.12}",
+            linf_distance(&reference_next, &perturbed_next)
+        );
+        assert_eq!(reference.tokens, perturbed.tokens);
+        assert_eq!(reference.target, perturbed.target);
+    }
     println!("TDI-7.1 intervention preflight: PASS");
-    println!(
-        "distance_after_one_step={:.12}",
-        linf_distance(&reference_next, &perturbed_next)
-    );
-    println!("task target preserved={}", reference.target == perturbed.target);
     println!("TDI-7.2 final holdout: NOT ACCESSED");
 }
 
