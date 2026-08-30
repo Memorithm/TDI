@@ -41,6 +41,7 @@ require_line "semantic_id=deterministic_local_row_stochastic_v1"
 require_line "training_generator_count=96"
 require_line "development_generator_count=48"
 require_line "validation_generator_count=48"
+require_line "final_holdout_generator_count=UNFROZEN"
 require_line "intervention_aggregation=two_sites_per_generator_equal_record_weighting"
 require_line "intervention_amplitude=0.25"
 require_line "early_observation_depths=1,2"
@@ -56,11 +57,36 @@ printf '\n===== TDI-7 EVIDENCE HANDOFF =====\n'
 cargo test --quiet -p tdi-ai --example tdi7_evidence_schema
 cargo run --quiet -p tdi-ai --example tdi7_evidence_schema
 
-printf '\n===== TDI-7.2 PRE-ARM BLOCKERS =====\n'
-if grep -Fxq 'final_holdout_generator_count=UNFROZEN' <<<"$PROVENANCE"; then
-    echo "BLOCKED: final holdout generator count was not frozen by TDI-7.0/TDI-7.1" >&2
+printf '\n===== TDI-7.2 FINAL POPULATION DECISION =====\n'
+cargo test --quiet -p tdi-ai --example tdi7_arming_decision
+DECISION_OUTPUT="$(cargo run --quiet -p tdi-ai --example tdi7_arming_decision)"
+printf '%s\n' "$DECISION_OUTPUT"
+grep -Fxq 'TDI-7.2 final-population decision: VALID' <<<"$DECISION_OUTPUT" \
+    || fail "final population decision record did not validate"
+grep -Fxq 'authorization_state=NOT_AUTHORIZED' <<<"$DECISION_OUTPUT" \
+    || fail "final population decision record is not explicitly unauthorized"
+grep -Fxq 'final_holdout_accessed=false' <<<"$DECISION_OUTPUT" \
+    || fail "decision validator did not preserve no-access status"
+grep -Fxq 'arming_allowed=false' <<<"$DECISION_OUTPUT" \
+    || fail "decision validator unexpectedly allows arming"
+
+set +e
+cargo run --quiet -p tdi-ai --example tdi7_arming_decision -- --require-frozen \
+    >/tmp/tdi7-final-population-decision.log 2>&1
+status=$?
+set -e
+cat /tmp/tdi7-final-population-decision.log
+
+if [[ "$status" -eq 3 ]]; then
+    grep -Fq 'BLOCKED: final holdout generator count decision is UNRESOLVED' \
+        /tmp/tdi7-final-population-decision.log \
+        || fail "unresolved population decision did not fail closed with the frozen diagnostic"
     echo "TDI-7.2 must remain unarmed; do not infer a count from train/dev/validation." >&2
     exit 3
 fi
 
-fail "final holdout generator-count state is neither explicitly UNFROZEN nor a reviewed frozen value"
+if [[ "$status" -eq 0 ]]; then
+    fail "final population decision is FROZEN, but the separately reviewed arming transition has not been implemented"
+fi
+
+fail "final population decision validator failed unexpectedly with status $status"
