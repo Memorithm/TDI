@@ -199,10 +199,7 @@ fn validate_task(task: &TaskEvidence) -> Result<(), EvidenceError> {
     {
         return Err(EvidenceError::InvalidMse);
     }
-    if !task.lower_95.is_finite()
-        || !task.upper_95.is_finite()
-        || task.lower_95 > task.upper_95
-    {
+    if !task.lower_95.is_finite() || !task.upper_95.is_finite() || task.lower_95 > task.upper_95 {
         return Err(EvidenceError::InvalidInterval);
     }
     let expected = (task.b0_mse - task.b1_mse) / task.b0_mse;
@@ -350,7 +347,10 @@ fn main() {
     println!("task_count={}", packet.tasks.len());
     println!("aggregate_verdict={:?}", packet.aggregate_verdict);
     println!("public_api_status=NOT_PROMOTED");
-    println!("final_holdout_accessed={}", packet.provenance.final_holdout_accessed);
+    println!(
+        "final_holdout_accessed={}",
+        packet.provenance.final_holdout_accessed
+    );
 }
 
 #[cfg(test)]
@@ -388,14 +388,20 @@ mod tests {
     fn aggregate_verdict_is_recomputed_not_trusted() {
         let mut packet = fixture();
         packet.aggregate_verdict = Verdict::Equivalent;
-        assert_eq!(validate(&packet), Err(EvidenceError::AggregateVerdictMismatch));
+        assert_eq!(
+            validate(&packet),
+            Err(EvidenceError::AggregateVerdictMismatch)
+        );
     }
 
     #[test]
     fn relative_reduction_is_recomputed_not_trusted() {
         let mut packet = fixture();
         packet.tasks[0].relative_mse_reduction = 0.2;
-        assert_eq!(validate(&packet), Err(EvidenceError::RelativeReductionMismatch));
+        assert_eq!(
+            validate(&packet),
+            Err(EvidenceError::RelativeReductionMismatch)
+        );
     }
 
     #[test]
@@ -436,18 +442,27 @@ mod tests {
     fn unbalanced_intervention_counts_fail_closed() {
         let mut packet = fixture();
         packet.tasks[0].intervention_pair_count = 127;
-        assert_eq!(validate(&packet), Err(EvidenceError::InterventionCountMismatch));
+        assert_eq!(
+            validate(&packet),
+            Err(EvidenceError::InterventionCountMismatch)
+        );
     }
 
     #[test]
     fn both_frozen_intervention_sites_are_required_and_balanced() {
         let mut packet = fixture();
         packet.tasks[0].intervention_sites[0].record_count = 63;
-        assert_eq!(validate(&packet), Err(EvidenceError::InvalidInterventionSites));
+        assert_eq!(
+            validate(&packet),
+            Err(EvidenceError::InvalidInterventionSites)
+        );
 
         let mut packet = fixture();
         packet.tasks[0].intervention_sites[1].site_id = "other";
-        assert_eq!(validate(&packet), Err(EvidenceError::InvalidInterventionSites));
+        assert_eq!(
+            validate(&packet),
+            Err(EvidenceError::InvalidInterventionSites)
+        );
     }
 
     #[test]
@@ -458,7 +473,10 @@ mod tests {
             code: "invalid_generated_record",
             count: 1,
         }];
-        assert_eq!(validate(&packet), Err(EvidenceError::RejectionLedgerMismatch));
+        assert_eq!(
+            validate(&packet),
+            Err(EvidenceError::RejectionLedgerMismatch)
+        );
     }
 
     #[test]
@@ -466,7 +484,10 @@ mod tests {
         let mut packet = fixture();
         packet.tasks[0].rejected_count = 1;
         packet.tasks[0].rejection_reasons = vec![RejectionReason { code: "", count: 1 }];
-        assert_eq!(validate(&packet), Err(EvidenceError::InvalidRejectionReason));
+        assert_eq!(
+            validate(&packet),
+            Err(EvidenceError::InvalidRejectionReason)
+        );
 
         let mut packet = fixture();
         packet.tasks[0].rejected_count = 1;
@@ -474,7 +495,10 @@ mod tests {
             code: "invalid_generated_record",
             count: 0,
         }];
-        assert_eq!(validate(&packet), Err(EvidenceError::InvalidRejectionReason));
+        assert_eq!(
+            validate(&packet),
+            Err(EvidenceError::InvalidRejectionReason)
+        );
 
         let mut packet = fixture();
         packet.tasks[0].rejected_count = 2;
@@ -488,7 +512,10 @@ mod tests {
                 count: 1,
             },
         ];
-        assert_eq!(validate(&packet), Err(EvidenceError::DuplicateRejectionReason));
+        assert_eq!(
+            validate(&packet),
+            Err(EvidenceError::DuplicateRejectionReason)
+        );
     }
 
     #[test]
