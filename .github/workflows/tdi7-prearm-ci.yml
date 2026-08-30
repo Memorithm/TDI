@@ -59,4 +59,5 @@ jobs:
           fi
           grep -F "BLOCKED: final holdout generator count decision is UNRESOLVED" /tmp/tdi7-prearm.log
           grep -F "BLOCKED: final holdout seed-selection rule is UNRESOLVED" /tmp/tdi7-prearm.log
-          grep -F "population size and seed selection are separate reviewed decisions" /tmp/tdi7-prearm.log
+          grep -F "BLOCKED: final holdout rejection policy is UNRESOLVED" /tmp/tdi7-prearm.log
+          grep -F "population size, seed selection, and rejection policy are separate reviewed decisions" /tmp/tdi7-prearm.log
