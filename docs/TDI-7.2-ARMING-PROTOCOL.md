@@ -11,13 +11,15 @@ Before any final-holdout process exists, all of the following must be true:
 1. TDI-7.0 preregistration integrity verifies.
 2. TDI-7.1 evaluator specification is merged and unchanged.
 3. TDI-7.1 completion/readiness gate passes on the exact merged `main` commit.
-4. Rust validation and the dedicated TDI-7.1 bounded-preflight workflow are green on that commit.
+4. The historical `Rust validation`, the additive `TDI-7 hosted software validation`, and the dedicated TDI-7.1 bounded-preflight workflow are green on that commit.
 5. The worktree used for the final run is clean and points at that exact merged commit.
 6. No evaluator, feature, model, intervention, seed, target, bootstrap, numerical-policy or decision-rule change is pending.
 7. The exact final-holdout generator count is frozen in `docs/TDI-7.2-FINAL-HOLDOUT-DECISION.toml` by a separately reviewed decision, and the machine validator accepts that record as `FROZEN`.
 8. The final run is explicitly authorized by a human-supplied confirmation value that CI, tests and examples never provide.
 
 If any precondition fails, TDI-7.2 remains blocked.
+
+The hosted software gate is additive evidence only. Its success must never be used to relabel a queued, failed or cancelled historical self-hosted `Rust validation` run as green. Its exact scope and non-claims are defined in `docs/TDI-7-HOSTED-SOFTWARE-GATE.md`.
 
 ## Final population decision record
 
@@ -62,7 +64,7 @@ The result artifact must also include full provenance: repository commit, evalua
 
 ## What may be implemented before arming
 
-Before all preconditions are satisfied, development may add only **fail-closed arming checks**, population-decision validation and reporting schemas that cannot generate or consume the final holdout.
+Before all preconditions are satisfied, development may add only **fail-closed arming checks**, population-decision validation, additive software validation and reporting schemas that cannot generate or consume the final holdout.
 
 A real final-holdout generator/runner must not be added until the population decision is separately frozen and the arming transition is reviewed.
 
