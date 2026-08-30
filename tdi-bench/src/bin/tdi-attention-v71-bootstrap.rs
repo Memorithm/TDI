@@ -64,15 +64,24 @@ fn mean_errors(records: &[PairedError]) -> Result<(f64, f64), BootstrapError> {
     if records.is_empty() {
         return Err(BootstrapError::EmptyInput);
     }
-    if records.iter().any(|record| {
-        !record.b0_squared_error.is_finite() || !record.b1_squared_error.is_finite()
-    }) {
+    if records
+        .iter()
+        .any(|record| !record.b0_squared_error.is_finite() || !record.b1_squared_error.is_finite())
+    {
         return Err(BootstrapError::NonFiniteError);
     }
     let count = records.len() as f64;
     Ok((
-        records.iter().map(|record| record.b0_squared_error).sum::<f64>() / count,
-        records.iter().map(|record| record.b1_squared_error).sum::<f64>() / count,
+        records
+            .iter()
+            .map(|record| record.b0_squared_error)
+            .sum::<f64>()
+            / count,
+        records
+            .iter()
+            .map(|record| record.b1_squared_error)
+            .sum::<f64>()
+            / count,
     ))
 }
 
@@ -132,7 +141,10 @@ fn main() {
     let summary = paired_bootstrap(&preflight_fixture()).expect("valid bounded fixture");
     println!("TDI-7.1 paired-bootstrap preflight: PASS");
     println!("relative_reduction={:.12}", summary.relative_mse_reduction);
-    println!("interval=[{:.12}, {:.12}]", summary.lower_95, summary.upper_95);
+    println!(
+        "interval=[{:.12}, {:.12}]",
+        summary.lower_95, summary.upper_95
+    );
     println!("TDI-7.2 final holdout: NOT ACCESSED");
 }
 
@@ -199,7 +211,10 @@ mod tests {
             b0_squared_error: f64::NAN,
             b1_squared_error: 1.0,
         }];
-        assert_eq!(paired_bootstrap(&records), Err(BootstrapError::NonFiniteError));
+        assert_eq!(
+            paired_bootstrap(&records),
+            Err(BootstrapError::NonFiniteError)
+        );
     }
 
     #[test]
