@@ -1,0 +1,49 @@
+name: TDI-7.1 bounded preflight
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tdi71-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TDI_CI_RUST: "1.97.1"
+
+jobs:
+  bounded-preflight:
+    name: TDI-7.1 preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TDI_CI_RUST }}
+
+      - name: Verify TDI-7.0 preregistration freeze
+        run: sha256sum -c docs/TDI-7.0-ATTENTION-RECOVERY-PREREGISTRATION.sha256
+
+      - name: Validate preflight script syntax
+        run: bash -n scripts/reproduce-tdi7.1-preflight.sh
+
+      - name: Prove preflight refuses holdout authorization environment
+        run: |
+          if TDI7_CONFIRM_FINAL_HOLDOUT=ci-refusal-probe \
+            bash scripts/reproduce-tdi7.1-preflight.sh >/tmp/tdi71-refusal.log 2>&1; then
+            cat /tmp/tdi71-refusal.log
+            echo "ERROR: TDI-7.1 preflight accepted a holdout authorization environment" >&2
+            exit 1
+          fi
+          grep -F "refuses any final-holdout authorization variable" /tmp/tdi71-refusal.log
+
+      - name: Run bounded TDI-7.1 preflight
+        run: env -u TDI7_CONFIRM_FINAL_HOLDOUT bash scripts/reproduce-tdi7.1-preflight.sh
