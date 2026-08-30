@@ -16,7 +16,8 @@ Before any final-holdout process exists, all of the following must be true:
 6. No evaluator, feature, model, intervention, seed, target, bootstrap, numerical-policy or decision-rule change is pending.
 7. The exact final-holdout generator count is frozen in `docs/TDI-7.2-FINAL-HOLDOUT-DECISION.toml` by a separately reviewed decision, and the machine validator accepts that record as `FROZEN`.
 8. The deterministic rule selecting concrete seeds from the frozen final range is separately reviewed and frozen. `docs/TDI-7.2-FINAL-HOLDOUT-SELECTION.toml` must no longer be `UNRESOLVED`, and its validator must contain an explicit machine-recognized implementation of that reviewed rule.
-9. The final run is explicitly authorized by a human-supplied confirmation value that CI, tests and examples never provide.
+9. The exact final-record rejection/invalidity policy is separately reviewed and frozen. `docs/TDI-7.2-FINAL-HOLDOUT-REJECTION-POLICY.toml` must no longer be `UNRESOLVED`, and its validator must encode the allowed reason codes and their applicability conditions rather than accepting free-form post-hoc reasons.
+10. The final run is explicitly authorized by a human-supplied confirmation value that CI, tests and examples never provide.
 
 If any precondition fails, TDI-7.2 remains blocked.
 
@@ -41,7 +42,17 @@ TDI-7.0 requires exact split ranges and population sizes, but it does not state 
 
 The seed-selection record also remains `NOT_AUTHORIZED` and cannot itself enable a final run.
 
-The initial decision records are anchored to the exact post-#76 `main` commit on which the dedicated TDI-7.1 bounded preflight and TDI-7 pre-arm integrity gates succeeded. Later population-size and seed-selection decisions do not retroactively rewrite TDI-7.1 provenance.
+## Final rejection-policy decision record
+
+TDI-7.0 requires the final report to contain invalid/rejected counts and reasons, and requires any rejected record to be excluded only for reasons frozen before final-holdout access. TDI-7.1 freezes the deterministic evaluator but does not define an exhaustive final-record invalidity taxonomy.
+
+That omission matters scientifically: a free-form reason supplied after observing a difficult or unfavorable record would make the final population mutable. `docs/TDI-7.2-FINAL-HOLDOUT-REJECTION-POLICY.toml` therefore records a third independent pre-holdout decision.
+
+Its initial state is `UNRESOLVED`. The current validator, `tdi-ai/examples/tdi7_rejection_policy_decision.rs`, intentionally rejects `FROZEN` and rejects arbitrary reason-code fields. A future freeze must update code and record together, defining a closed set of reason codes and deterministic applicability conditions before any final record is generated. The evidence handoff may count frozen reasons, but it must not invent them.
+
+The rejection-policy record remains `NOT_AUTHORIZED` and cannot enable final execution.
+
+The initial decision records are anchored to the exact post-#76 `main` commit on which the dedicated TDI-7.1 bounded preflight and TDI-7 pre-arm integrity gates succeeded. Later population-size, seed-selection and rejection-policy decisions do not retroactively rewrite TDI-7.1 provenance.
 
 ## Single-use scientific boundary
 
@@ -51,7 +62,7 @@ The final holdout is not a development split. Once accessed under an armed TDI-7
 - no feature may be added or removed;
 - no task/intervention record may be selectively dropped because of its result;
 - no margin, bootstrap rule, model class or regularization grid may change;
-- invalid records may only be rejected for reasons frozen before access and every rejection reason must be reported;
+- invalid records may only be rejected for the closed reason set frozen before access, with the applicability condition and every rejection reported;
 - a code or protocol change requires a new preregistration and a fresh disjoint holdout.
 
 ## Required final output
@@ -59,7 +70,7 @@ The final holdout is not a development split. Once accessed under an armed TDI-7
 For each confirmatory task family, the run must emit at minimum:
 
 - final-holdout record count;
-- invalid/rejected count and reasons;
+- invalid/rejected count and frozen reason-code counts;
 - B0 MSE;
 - B1 MSE;
 - relative MSE reduction;
@@ -69,13 +80,13 @@ For each confirmatory task family, the run must emit at minimum:
 
 The aggregate TDI-7 verdict must follow the frozen TDI-7.0 multi-task gate exactly.
 
-The result artifact must also include full provenance: repository commit, evaluator specification identity, semantic identifier, task-generator version, final seed range, frozen population count, frozen seed-selection rule, intervention definition, observation depths, feature schema, model configuration, bootstrap configuration, numerical policy and classifier margins.
+The result artifact must also include full provenance: repository commit, evaluator specification identity, semantic identifier, task-generator version, final seed range, frozen population count, frozen seed-selection rule, frozen rejection policy, intervention definition, observation depths, feature schema, model configuration, bootstrap configuration, numerical policy and classifier margins.
 
 ## What may be implemented before arming
 
-Before all preconditions are satisfied, development may add only **fail-closed arming checks**, population/seed-selection decision validation, additive software validation and reporting schemas that cannot generate or consume the final holdout.
+Before all preconditions are satisfied, development may add only **fail-closed arming checks**, population/seed-selection/rejection-policy decision validation, additive software validation and reporting schemas that cannot generate or consume the final holdout.
 
-A real final-holdout generator/runner must not be added until the population count and seed-selection rule are separately frozen and the arming transition is reviewed.
+A real final-holdout generator/runner must not be added until the population count, seed-selection rule and rejection policy are separately frozen and the arming transition is reviewed.
 
 ## Non-claims
 
