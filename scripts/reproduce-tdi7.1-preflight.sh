@@ -28,6 +28,9 @@ cargo run --quiet -p tdi-bench --bin tdi-attention-v71-model
 printf '\n===== TDI-7.1 PAIRED BOOTSTRAP =====\n'
 cargo run --quiet -p tdi-bench --bin tdi-attention-v71-bootstrap
 
+printf '\n===== TDI-7.1 END-TO-END EVALUATOR =====\n'
+cargo run --quiet -p tdi-ai --example tdi7_end_to_end
+
 printf '\n===== TDI-7.1 PROVENANCE =====\n'
 cargo run --quiet -p tdi-bench --bin tdi-attention-v71-provenance -- \
     --tdi-commit "$TDI_COMMIT_SHA"
@@ -40,6 +43,7 @@ cargo test --quiet -p tdi-bench --bin tdi-attention-v71-model
 cargo test --quiet -p tdi-bench --bin tdi-attention-v71-bootstrap
 cargo test --quiet -p tdi-bench --bin tdi-attention-v71-provenance
 cargo test --quiet -p tdi-ai --example tdi7_features
+cargo test --quiet -p tdi-ai --example tdi7_end_to_end
 
 printf '\nTDI-7.1 bounded preflight: PASS\n'
 printf 'TDI-7.2 final holdout: NOT ACCESSED\n'
