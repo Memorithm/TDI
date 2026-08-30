@@ -37,12 +37,14 @@ struct Provenance {
     generator_version: &'static str,
     seed_range_id: &'static str,
     intervention_id: &'static str,
+    intervention_aggregation: &'static str,
     observation_depths: &'static str,
     feature_schema: &'static str,
     model_id: &'static str,
     bootstrap_id: &'static str,
     numerical_policy: &'static str,
     classifier_margin: &'static str,
+    classifier_policy: &'static str,
     final_holdout_accessed: bool,
 }
 
@@ -57,6 +59,7 @@ enum EvidenceError {
     MissingTask,
     EmptyTaskId,
     EmptyPopulation,
+    InterventionCountMismatch,
     InvalidMse,
     InvalidInterval,
     RelativeReductionMismatch,
@@ -69,6 +72,9 @@ fn classify(r: f64, lower: f64, upper: f64) -> Verdict {
     if !r.is_finite() || !lower.is_finite() || !upper.is_finite() || lower > upper {
         return Verdict::Inconclusive;
     }
+    // Precedence is part of the frozen implementation behavior: at an exact
+    // relevance-margin boundary, Beneficial/Harmful is evaluated before the
+    // complete-interval Equivalent rule.
     if r >= RELEVANCE_MARGIN && lower > 0.0 {
         Verdict::Beneficial
     } else if r <= -RELEVANCE_MARGIN && upper < 0.0 {
@@ -90,6 +96,9 @@ fn validate_task(task: &TaskEvidence) -> Result<(), EvidenceError> {
     }
     if task.generator_count == 0 || task.intervention_pair_count == 0 {
         return Err(EvidenceError::EmptyPopulation);
+    }
+    if task.generator_count.checked_mul(2) != Some(task.intervention_pair_count) {
+        return Err(EvidenceError::InterventionCountMismatch);
     }
     if !task.b0_mse.is_finite()
         || !task.b1_mse.is_finite()
@@ -127,12 +136,14 @@ fn validate_provenance(provenance: &Provenance) -> Result<(), EvidenceError> {
         provenance.generator_version,
         provenance.seed_range_id,
         provenance.intervention_id,
+        provenance.intervention_aggregation,
         provenance.observation_depths,
         provenance.feature_schema,
         provenance.model_id,
         provenance.bootstrap_id,
         provenance.numerical_policy,
         provenance.classifier_margin,
+        provenance.classifier_policy,
     ];
     if required.iter().any(|value| value.is_empty()) {
         return Err(EvidenceError::IncompleteProvenance);
@@ -173,12 +184,14 @@ fn fixture() -> EvidencePacket {
             generator_version: "tdi7_generator_v1",
             seed_range_id: "non_holdout_fixture",
             intervention_id: "balanced_single_site_amp_0.25",
+            intervention_aggregation: "two_sites_per_generator_equal_record_weighting",
             observation_depths: "1,2",
             feature_schema: "static_task_plus_raw_recovery",
             model_id: "ridge_linear_shared_grid",
             bootstrap_id: "paired_generator_2000",
             numerical_policy: "rust_f64_scalar_reference",
             classifier_margin: "+/-0.02",
+            classifier_policy: "beneficial_then_harmful_then_equivalent_then_inconclusive",
             final_holdout_accessed: false,
         },
     }
@@ -213,6 +226,20 @@ mod tests {
         let mut packet = fixture();
         packet.tasks[0].verdict = Verdict::Equivalent;
         assert_eq!(validate(&packet), Err(EvidenceError::VerdictMismatch));
+    }
+
+    #[test]
+    fn classifier_precedence_is_explicit_at_exact_relevance_boundaries() {
+        assert_eq!(classify(0.02, 0.01, 0.02), Verdict::Beneficial);
+        assert_eq!(classify(-0.02, -0.02, -0.01), Verdict::Harmful);
+        assert_eq!(classify(0.0, -0.02, 0.02), Verdict::Equivalent);
+    }
+
+    #[test]
+    fn unbalanced_intervention_counts_fail_closed() {
+        let mut packet = fixture();
+        packet.tasks[0].intervention_pair_count = 127;
+        assert_eq!(validate(&packet), Err(EvidenceError::InterventionCountMismatch));
     }
 
     #[test]
