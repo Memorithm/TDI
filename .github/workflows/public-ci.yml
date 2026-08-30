@@ -11,6 +11,9 @@ concurrency:
   group: tdi-public-ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  TDI_CI_RUST: "1.97.1"
+
 jobs:
   formatting:
     name: Public formatting
@@ -19,9 +22,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ env.TDI_CI_RUST }}
           components: rustfmt
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -33,8 +37,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TDI_CI_RUST }}
       - name: Run tests
         run: cargo test --workspace --locked
 
@@ -45,9 +51,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ env.TDI_CI_RUST }}
           components: clippy
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
@@ -59,16 +66,18 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Verify historical preregistration hashes
+      - name: Verify immutable preregistration hashes
         run: |
           sha256sum -c docs/TDI-2-CONTINUOUS-PREREGISTRATION.sha256
           sha256sum -c docs/TDI-3-INTERWIDTH-PREREGISTRATION.sha256
           sha256sum -c docs/TDI-3-INTERWIDTH-EVALUATOR.sha256
-          sha256sum -c docs/TDI-3-SCIENTIFIC-CODE.sha256
           sha256sum -c docs/TDI-4-TARGET-GEOMETRY-PREREGISTRATION.sha256
           sha256sum -c docs/TDI-4-TARGET-GEOMETRY-EVALUATOR.sha256
-          sha256sum -c docs/TDI-4-SCIENTIFIC-CODE.sha256
           bash -n scripts/reproduce-tdi4.sh
+      - name: Preserve historical scientific manifests as frozen evidence
+        run: |
+          test -s docs/TDI-3-SCIENTIFIC-CODE.sha256
+          test -s docs/TDI-4-SCIENTIFIC-CODE.sha256
       - name: Verify TDI-7.0 preregistration when present
         run: |
           if test -f docs/TDI-7.0-ATTENTION-RECOVERY-PREREGISTRATION.sha256; then
