@@ -27,8 +27,16 @@ jobs:
         with:
           toolchain: ${{ env.TDI_CI_RUST }}
           components: rustfmt
-      - name: Check TDI-7.1 formatting
-        run: rustfmt --edition 2024 --check tdi-bench/src/bin/tdi-attention-v71.rs
+      - name: Check bounded TDI-7.1 formatting
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(tdi-bench/src/bin/tdi-attention-v71*.rs)
+          if test -f tdi-ai/examples/tdi7_features.rs; then
+            files+=(tdi-ai/examples/tdi7_features.rs)
+          fi
+          test ${#files[@]} -gt 0
+          rustfmt --edition 2024 --check "${files[@]}"
 
   tests:
     name: Public tests
@@ -56,8 +64,19 @@ jobs:
         with:
           toolchain: ${{ env.TDI_CI_RUST }}
           components: clippy
-      - name: Run Clippy on TDI-7.1 protocol guard
-        run: cargo clippy -p tdi-bench --bin tdi-attention-v71 --locked -- -D warnings
+      - name: Run Clippy on bounded TDI-7.1 surfaces
+        shell: bash
+        run: |
+          shopt -s nullglob
+          bins=()
+          for file in tdi-bench/src/bin/tdi-attention-v71*.rs; do
+            bins+=(--bin "$(basename "$file" .rs)")
+          done
+          test ${#bins[@]} -gt 0
+          cargo clippy -p tdi-bench "${bins[@]}" --locked -- -D warnings
+          if test -f tdi-ai/examples/tdi7_features.rs; then
+            cargo clippy -p tdi-ai --example tdi7_features --locked -- -D warnings
+          fi
 
   integrity:
     name: Public preregistration integrity
