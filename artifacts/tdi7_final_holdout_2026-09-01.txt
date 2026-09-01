@@ -1,0 +1,18 @@
+TDI-7.2 final-holdout runner: AUTHORIZED (human confirmation)
+provenance_commit=local-unreported
+semantic=deterministic_local_row_stochastic_v1
+selection_rule=contiguous_ascending_v1
+final_seed_range=7100030000-7100039999
+rejection_policy=frozen_tdi71_typed_errors_v1
+rejection_reasons=invalid_mixer,invalid_intervention,recovery_extraction_failed,non_finite_target
+decision_reference=TDI-7.2-HUMAN-DECISION-2026-09-01-CHECKUPAUTO
+final_holdout_status=ACCESSED_ONCE
+task=associative_recall
+accepted=20000 b0_lambda=0.000001 b1_lambda=0.000001 b0_mse=0.00007125407956291675 b1_mse=0.00007125389901912826 relative_reduction=0.0000025338028307202707 lower_95=0.000002475247506659697 upper_95=0.000002594225204199733
+task_verdict=Equivalent
+rejected_count=0
+task=copy
+accepted=20000 b0_lambda=0.000001 b1_lambda=0.000001 b0_mse=0.0000010483691664358395 b1_mse=0.0000010483689377334182 relative_reduction=0.00000021815065593646726 lower_95=0.00000021159186194792474 upper_95=0.0000002249912568356495
+task_verdict=Equivalent
+rejected_count=0
+aggregate_verdict=Equivalent
