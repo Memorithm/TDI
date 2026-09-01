@@ -1,18 +1,17 @@
 # TDI-7.2 final-holdout population decision record.
 #
-# This file is machine-validated. It records the missing population-size
+# This file is machine-validated. It records the population-size
 # decision without authorizing or accessing the final holdout.
 #
-# While decision_status is UNRESOLVED, final_holdout_generator_count MUST be
-# absent. A later human-reviewed freeze may set decision_status = "FROZEN",
-# add a positive final_holdout_generator_count within the frozen seed range,
-# and replace decision_reference with the reviewed decision reference.
-# Authorization remains a separate deliberate action.
+# FROZEN (2026-09-01): the final-holdout population is the entire frozen
+# TDI-7.0 final seed range. Authorization remains a separate deliberate
+# action and requires a human-supplied confirmation value at execution time.
 
 schema_version = 1
-decision_status = "UNRESOLVED"
+decision_status = "FROZEN"
 prearm_main_commit = "c98e73d52e1f23f315ca75b9303b89580b14fc45"
 final_seed_start = 7100030000
 final_seed_end = 7100039999
+final_holdout_generator_count = 10000
 authorization_state = "NOT_AUTHORIZED"
-decision_reference = "UNRESOLVED"
+decision_reference = "TDI-7.2-HUMAN-DECISION-2026-09-01-CHECKUPAUTO"

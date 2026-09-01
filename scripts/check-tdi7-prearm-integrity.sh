@@ -63,6 +63,10 @@ DECISION_OUTPUT="$(cargo run --quiet -p tdi-ai --example tdi7_arming_decision)"
 printf '%s\n' "$DECISION_OUTPUT"
 grep -Fxq 'TDI-7.2 final-population decision: VALID' <<<"$DECISION_OUTPUT" \
     || fail "final population decision record did not validate"
+grep -Fxq 'decision_status=FROZEN' <<<"$DECISION_OUTPUT" \
+    || fail "final population decision is not frozen"
+grep -Fxq 'final_holdout_generator_count=10000' <<<"$DECISION_OUTPUT" \
+    || fail "final population decision does not freeze 10000 generators"
 grep -Fxq 'authorization_state=NOT_AUTHORIZED' <<<"$DECISION_OUTPUT" \
     || fail "final population decision record is not explicitly unauthorized"
 grep -Fxq 'final_holdout_accessed=false' <<<"$DECISION_OUTPUT" \
@@ -76,8 +80,10 @@ SELECTION_OUTPUT="$(cargo run --quiet -p tdi-ai --example tdi7_seed_selection_de
 printf '%s\n' "$SELECTION_OUTPUT"
 grep -Fxq 'TDI-7.2 seed-selection decision: VALID' <<<"$SELECTION_OUTPUT" \
     || fail "final seed-selection decision record did not validate"
-grep -Fxq 'selection_status=UNRESOLVED' <<<"$SELECTION_OUTPUT" \
-    || fail "seed-selection decision is not explicitly unresolved"
+grep -Fxq 'selection_status=FROZEN' <<<"$SELECTION_OUTPUT" \
+    || fail "seed-selection decision is not frozen"
+grep -Fxq 'selection_rule=contiguous_ascending_v1;selection_count=10000' <<<"$SELECTION_OUTPUT" \
+    || fail "seed-selection decision does not freeze the contiguous ascending rule"
 grep -Fxq 'authorization_state=NOT_AUTHORIZED' <<<"$SELECTION_OUTPUT" \
     || fail "seed-selection decision record is not explicitly unauthorized"
 grep -Fxq 'final_holdout_accessed=false' <<<"$SELECTION_OUTPUT" \
@@ -91,8 +97,10 @@ POLICY_OUTPUT="$(cargo run --quiet -p tdi-ai --example tdi7_rejection_policy_dec
 printf '%s\n' "$POLICY_OUTPUT"
 grep -Fxq 'TDI-7.2 rejection-policy decision: VALID' <<<"$POLICY_OUTPUT" \
     || fail "final rejection-policy decision record did not validate"
-grep -Fxq 'policy_status=UNRESOLVED' <<<"$POLICY_OUTPUT" \
-    || fail "rejection policy is not explicitly unresolved"
+grep -Fxq 'policy_status=FROZEN' <<<"$POLICY_OUTPUT" \
+    || fail "rejection policy is not frozen"
+grep -Fxq 'rejection_policy=frozen_tdi71_typed_errors_v1;rejection_reasons=invalid_mixer,invalid_intervention,recovery_extraction_failed,non_finite_target' <<<"$POLICY_OUTPUT" \
+    || fail "rejection policy does not freeze the frozen TDI-7.1 typed-error taxonomy"
 grep -Fxq 'authorization_state=NOT_AUTHORIZED' <<<"$POLICY_OUTPUT" \
     || fail "rejection-policy decision record is not explicitly unauthorized"
 grep -Fxq 'final_holdout_accessed=false' <<<"$POLICY_OUTPUT" \
@@ -148,4 +156,7 @@ if [[ "$blocked" -eq 1 ]]; then
     exit 3
 fi
 
-fail "all pre-holdout decisions are frozen, but the separately reviewed arming transition has not been implemented"
+printf '\nTDI-7.2 pre-holdout decisions: FROZEN (population, seed-selection, rejection policy)\n'
+printf 'TDI-7.2 arming transition: final-holdout runner still ABSENT; authorization NOT_AUTHORIZED\n'
+printf 'TDI-7.2 final holdout: NOT ACCESSED\n'
+printf 'TDI-7 pre-arm integrity gate: PASS (decisions frozen, unarmed runner pending reviewed transition)\n'

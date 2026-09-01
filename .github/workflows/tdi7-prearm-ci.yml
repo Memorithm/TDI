@@ -45,19 +45,76 @@ jobs:
           fi
           grep -F "refuses any final-holdout authorization variable" /tmp/tdi7-prearm-auth.log
 
-      - name: Prove unresolved final decisions block arming
+      - name: Prove frozen decisions pass while the runner stays absent
         run: |
-          set +e
           env -u TDI7_CONFIRM_FINAL_HOLDOUT \
             bash scripts/check-tdi7-prearm-integrity.sh >/tmp/tdi7-prearm.log 2>&1
-          status=$?
-          set -e
-          cat /tmp/tdi7-prearm.log
-          if [[ "$status" -ne 3 ]]; then
-            echo "ERROR: expected fail-closed pre-arm status 3, got $status" >&2
-            exit 1
-          fi
-          grep -F "BLOCKED: final holdout generator count decision is UNRESOLVED" /tmp/tdi7-prearm.log
-          grep -F "BLOCKED: final holdout seed-selection rule is UNRESOLVED" /tmp/tdi7-prearm.log
-          grep -F "BLOCKED: final holdout rejection policy is UNRESOLVED" /tmp/tdi7-prearm.log
-          grep -F "population size, seed selection, and rejection policy are separate reviewed decisions" /tmp/tdi7-prearm.log
+          grep -F "TDI-7.2 pre-holdout decisions: FROZEN (population, seed-selection, rejection policy)" /tmp/tdi7-prearm.log
+          grep -F "TDI-7.2 arming transition: final-holdout runner still ABSENT; authorization NOT_AUTHORIZED" /tmp/tdi7-prearm.log
+          grep -F "TDI-7.2 final holdout: NOT ACCESSED" /tmp/tdi7-prearm.log
+
+      - name: Prove unresolved final decisions still fail closed
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def reset(path, status_key, frozen_fields, ref_key):
+              out = []
+              for line in Path(path).read_text().splitlines(keepends=True):
+                  stripped = line.strip()
+                  if any(stripped.startswith(f"{field} =") for field in frozen_fields):
+                      continue
+                  if stripped.startswith(f"{status_key} ="):
+                      out.append(f'{status_key} = "UNRESOLVED"\n')
+                      continue
+                  if stripped.startswith(f"{ref_key} ="):
+                      out.append(f'{ref_key} = "UNRESOLVED"\n')
+                      continue
+                  out.append(line)
+              Path(path).write_text("".join(out))
+
+          reset(
+              "docs/TDI-7.2-FINAL-HOLDOUT-DECISION.toml",
+              "decision_status",
+              ["final_holdout_generator_count"],
+              "decision_reference",
+          )
+          reset(
+              "docs/TDI-7.2-FINAL-HOLDOUT-SELECTION.toml",
+              "selection_status",
+              ["selection_rule", "selection_start", "selection_count"],
+              "selection_reference",
+          )
+          reset(
+              "docs/TDI-7.2-FINAL-HOLDOUT-REJECTION-POLICY.toml",
+              "policy_status",
+              ["rejection_policy", "rejection_reasons"],
+              "policy_reference",
+          )
+          PY
+
+          prove_blocked() {
+            local example="$1" expected="$2"
+            set +e
+            cargo run --quiet -p tdi-ai --example "$example" -- --require-frozen \
+              >/tmp/tdi7-probe.log 2>&1
+            status=$?
+            set -e
+            cat /tmp/tdi7-probe.log
+            if [[ "$status" -ne 3 ]]; then
+              echo "ERROR: $example expected fail-closed status 3 for UNRESOLVED, got $status" >&2
+              exit 1
+            fi
+            grep -F "$expected" /tmp/tdi7-probe.log
+          }
+
+          prove_blocked tdi7_arming_decision \
+            "BLOCKED: final holdout generator count decision is UNRESOLVED"
+          prove_blocked tdi7_seed_selection_decision \
+            "BLOCKED: final holdout seed-selection rule is UNRESOLVED"
+          prove_blocked tdi7_rejection_policy_decision \
+            "BLOCKED: final holdout rejection policy is UNRESOLVED"
+
+          git checkout -- docs/TDI-7.2-FINAL-HOLDOUT-DECISION.toml \
+            docs/TDI-7.2-FINAL-HOLDOUT-SELECTION.toml \
+            docs/TDI-7.2-FINAL-HOLDOUT-REJECTION-POLICY.toml
