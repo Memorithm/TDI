@@ -383,8 +383,9 @@ pub fn from_exact_branching_analysis(
 #[cfg(test)]
 mod tests {
     use super::{
-        FutureObservable, FutureOverlap, Intervention, RecoveryPoint, ReferenceDynamics,
-        analyze_intervention_recovery, from_exact_branching_analysis,
+        analyze_intervention_recovery, extract_early_recovery_features,
+        from_exact_branching_analysis, EarlyRecoveryFeatureError, FutureObservable,
+        FutureOverlap, Intervention, RecoveryPoint, RecoveryProfile, ReferenceDynamics,
     };
     use tdi_core::{Action, ExactRatio, State, TableSystem, analyze_branching_recovery};
 
