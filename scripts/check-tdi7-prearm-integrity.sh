@@ -123,16 +123,37 @@ cat /tmp/tdi7-final-population-decision.log
 cat /tmp/tdi7-final-seed-selection.log
 cat /tmp/tdi7-final-rejection-policy.log
 
-if [[ "$population_status" -ne 0 ]]; then
+blocked=0
+if [[ "$population_status" -eq 3 ]]; then
+    grep -Fq 'BLOCKED: final holdout generator count decision is UNRESOLVED' \
+        /tmp/tdi7-final-population-decision.log \
+        || fail "unresolved population decision did not fail closed with the frozen diagnostic"
+    blocked=1
+elif [[ "$population_status" -ne 0 ]]; then
     fail "final population decision validator failed unexpectedly with status $population_status"
 fi
 
-if [[ "$selection_status" -ne 0 ]]; then
+if [[ "$selection_status" -eq 3 ]]; then
+    grep -Fq 'BLOCKED: final holdout seed-selection rule is UNRESOLVED' \
+        /tmp/tdi7-final-seed-selection.log \
+        || fail "unresolved seed-selection decision did not fail closed with the frozen diagnostic"
+    blocked=1
+elif [[ "$selection_status" -ne 0 ]]; then
     fail "final seed-selection decision validator failed unexpectedly with status $selection_status"
 fi
 
-if [[ "$policy_status" -ne 0 ]]; then
+if [[ "$policy_status" -eq 3 ]]; then
+    grep -Fq 'BLOCKED: final holdout rejection policy is UNRESOLVED' \
+        /tmp/tdi7-final-rejection-policy.log \
+        || fail "unresolved rejection policy did not fail closed with the frozen diagnostic"
+    blocked=1
+elif [[ "$policy_status" -ne 0 ]]; then
     fail "final rejection-policy validator failed unexpectedly with status $policy_status"
+fi
+
+if [[ "$blocked" -eq 1 ]]; then
+    echo "TDI-7.2 must remain unarmed; population size, seed selection, and rejection policy are separate reviewed decisions." >&2
+    exit 3
 fi
 
 printf '\nTDI-7.2 pre-holdout decisions: FROZEN (population, seed-selection, rejection policy)\n'
