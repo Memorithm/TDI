@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Install pinned Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
@@ -54,7 +54,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Install pinned Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
@@ -68,7 +68,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Install pinned Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
@@ -101,7 +101,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Verify immutable preregistration hashes
         run: |
           sha256sum -c docs/TDI-2-CONTINUOUS-PREREGISTRATION.sha256
