@@ -97,6 +97,148 @@ impl<S> RecoveryProfile<S> {
     }
 }
 
+
+/// Early recovery features restricted to observations before a target depth.
+#[derive(Clone, Debug, PartialEq)]
+pub struct EarlyRecoveryFeatures {
+    target_depth: usize,
+    depths: Vec<usize>,
+    overlaps: Vec<f64>,
+}
+
+impl EarlyRecoveryFeatures {
+    /// Target depth whose future observation is deliberately excluded.
+    #[must_use]
+    pub fn target_depth(&self) -> usize {
+        self.target_depth
+    }
+
+    /// Early observation depths in ascending order.
+    #[must_use]
+    pub fn depths(&self) -> &[usize] {
+        &self.depths
+    }
+
+    /// Recovery values aligned with the depth list.
+    #[must_use]
+    pub fn overlaps(&self) -> &[f64] {
+        &self.overlaps
+    }
+
+    /// Stable record suitable for a provenance envelope.
+    #[must_use]
+    pub fn canonical_record(&self) -> String {
+        let depth_record = self
+            .depths
+            .iter()
+            .map(usize::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+        let overlap_record = self
+            .overlaps
+            .iter()
+            .map(|value| format!("{:016x}", value.to_bits()))
+            .collect::<Vec<_>>()
+            .join(",");
+        format!(
+            "tdi-ai-early-recovery-v1;target_depth={};depths={depth_record};overlap_bits={overlap_record}",
+            self.target_depth
+        )
+    }
+}
+
+/// Errors raised while extracting leakage-safe early recovery features.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum EarlyRecoveryFeatureError {
+    /// The target depth must be strictly positive.
+    ZeroTargetDepth,
+    /// No profile point precedes the target depth.
+    EmptyEarlyWindow {
+        /// Target depth that admitted no early observations.
+        target_depth: usize,
+    },
+    /// A profile point has an invalid depth order.
+    NonIncreasingDepth {
+        /// Previous accepted depth.
+        previous: usize,
+        /// Current depth that violated ordering.
+        current: usize,
+    },
+    /// An early recovery value is not finite.
+    NonFiniteOverlap {
+        /// Depth associated with the invalid value.
+        depth: usize,
+    },
+}
+
+impl core::fmt::Display for EarlyRecoveryFeatureError {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::ZeroTargetDepth => formatter.write_str("target depth must be positive"),
+            Self::EmptyEarlyWindow { target_depth } => {
+                write!(formatter, "no recovery point precedes target depth {target_depth}")
+            }
+            Self::NonIncreasingDepth { previous, current } => write!(
+                formatter,
+                "recovery depths must increase strictly: previous={previous}, current={current}"
+            ),
+            Self::NonFiniteOverlap { depth } => {
+                write!(formatter, "recovery overlap at depth {depth} is not finite")
+            }
+        }
+    }
+}
+
+impl std::error::Error for EarlyRecoveryFeatureError {}
+
+/// Extract only observations strictly before target_depth.
+///
+/// This function is intentionally one-way: points at the target or beyond are
+/// not inspected for feature values and therefore cannot leak target-depth
+/// information into an early feature vector. The profile prefix must still be
+/// strictly ordered, finite, and non-empty.
+pub fn extract_early_recovery_features(
+    profile: &RecoveryProfile<f64>,
+    target_depth: usize,
+) -> Result<EarlyRecoveryFeatures, EarlyRecoveryFeatureError> {
+    if target_depth == 0 {
+        return Err(EarlyRecoveryFeatureError::ZeroTargetDepth);
+    }
+
+    let mut previous = 0;
+    let mut depths = Vec::new();
+    let mut overlaps = Vec::new();
+    for point in profile.points() {
+        if point.depth() >= target_depth {
+            break;
+        }
+        if point.depth() == 0 || point.depth() <= previous {
+            return Err(EarlyRecoveryFeatureError::NonIncreasingDepth {
+                previous,
+                current: point.depth(),
+            });
+        }
+        if !point.overlap().is_finite() {
+            return Err(EarlyRecoveryFeatureError::NonFiniteOverlap {
+                depth: point.depth(),
+            });
+        }
+        previous = point.depth();
+        depths.push(point.depth());
+        overlaps.push(*point.overlap());
+    }
+
+    if depths.is_empty() {
+        return Err(EarlyRecoveryFeatureError::EmptyEarlyWindow { target_depth });
+    }
+
+    Ok(EarlyRecoveryFeatures {
+        target_depth,
+        depths,
+        overlaps,
+    })
+}
+
 /// Deterministic or explicitly reproducible dynamics under study.
 ///
 /// A model adapter may interpret one `advance` call as a layer, recurrent step,
@@ -241,8 +383,9 @@ pub fn from_exact_branching_analysis(
 #[cfg(test)]
 mod tests {
     use super::{
-        FutureObservable, FutureOverlap, Intervention, RecoveryPoint, ReferenceDynamics,
-        analyze_intervention_recovery, from_exact_branching_analysis,
+        analyze_intervention_recovery, extract_early_recovery_features,
+        from_exact_branching_analysis, EarlyRecoveryFeatureError, FutureObservable,
+        FutureOverlap, Intervention, RecoveryPoint, RecoveryProfile, ReferenceDynamics,
     };
     use tdi_core::{Action, ExactRatio, State, TableSystem, analyze_branching_recovery};
 
@@ -310,6 +453,30 @@ mod tests {
         assert_eq!(profile.points()[0], RecoveryPoint::new(1, 1.0 / 3.0));
         assert_eq!(profile.points()[1], RecoveryPoint::new(2, 1.0 / 3.0));
         assert_eq!(profile.points()[2], RecoveryPoint::new(3, 1.0 / 3.0));
+    }
+
+    #[test]
+    fn early_features_stop_strictly_before_target_depth() {
+        let profile = RecoveryProfile::from_overlaps([0.25, 0.5, 0.75]);
+        let features = extract_early_recovery_features(&profile, 3).expect("early prefix");
+
+        assert_eq!(features.target_depth(), 3);
+        assert_eq!(features.depths(), &[1, 2]);
+        assert_eq!(features.overlaps(), &[0.25, 0.5]);
+        assert!(features.canonical_record().contains("target_depth=3"));
+    }
+
+    #[test]
+    fn early_features_fail_closed_without_an_early_observation() {
+        let profile = RecoveryProfile::from_overlaps([0.5]);
+        assert_eq!(
+            extract_early_recovery_features(&profile, 1),
+            Err(EarlyRecoveryFeatureError::EmptyEarlyWindow { target_depth: 1 })
+        );
+        assert_eq!(
+            extract_early_recovery_features(&profile, 0),
+            Err(EarlyRecoveryFeatureError::ZeroTargetDepth)
+        );
     }
 
     #[test]
