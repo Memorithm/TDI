@@ -35,22 +35,36 @@ for record in \
         || fail "$record is not explicitly unauthorized"
 done
 
-mapfile -t forbidden < <(
+mapfile -t other_surfaces < <(
     find tdi-ai/examples tdi-bench/src/bin scripts -type f \
         \( -iname '*v72*' -o -iname '*tdi7.2*' -o -iname '*tdi7_2*' \) \
         ! -path 'scripts/check-tdi7.2-unarmed.sh' \
         -print
 )
-
-if ((${#forbidden[@]} != 0)); then
+if ((${#other_surfaces[@]} != 0)); then
     printf 'Unexpected TDI-7.2 executable surfaces:\n' >&2
-    printf '  %s\n' "${forbidden[@]}" >&2
-    fail "TDI-7.2 must remain unarmed until population size, seed selection, rejection policy, and arming transition are separately reviewed"
+    printf '  %s\n' "${other_surfaces[@]}" >&2
+    fail "only the reviewed final-holdout runner may exist"
 fi
 
+# The arming transition added exactly one reviewed runner; it must refuse to
+# run without the human-supplied confirmation variable.
+RUNNER="tdi-ai/examples/tdi7_final_holdout.rs"
+test -f "$RUNNER" || fail "missing armed TDI-7.2 final-holdout runner"
+if env -u TDI7_CONFIRM_FINAL_HOLDOUT \
+    cargo run --quiet -p tdi-ai --example tdi7_final_holdout \
+    >/tmp/tdi72-runner-refusal.log 2>&1; then
+    cat /tmp/tdi72-runner-refusal.log >&2
+    fail "final-holdout runner ran without human authorization"
+fi
+grep -Fq 'BLOCKED: final holdout requires the human-supplied confirmation variable' \
+    /tmp/tdi72-runner-refusal.log \
+    || fail "runner refusal reason was not explicit"
+rm -f /tmp/tdi72-runner-refusal.log
+
 printf 'TDI-7.2 arming contract: PRESENT\n'
-printf 'TDI-7.2 population decision record: PRESENT / NOT AUTHORIZED\n'
-printf 'TDI-7.2 seed-selection decision record: PRESENT / NOT AUTHORIZED\n'
-printf 'TDI-7.2 rejection-policy decision record: PRESENT / NOT AUTHORIZED\n'
-printf 'TDI-7.2 executable runner: ABSENT\n'
-printf 'TDI-7.2 final holdout: UNARMED / NOT ACCESSED\n'
+printf 'TDI-7.2 population decision record: PRESENT / FROZEN / NOT AUTHORIZED\n'
+printf 'TDI-7.2 seed-selection decision record: PRESENT / FROZEN / NOT AUTHORIZED\n'
+printf 'TDI-7.2 rejection-policy decision record: PRESENT / FROZEN / NOT AUTHORIZED\n'
+printf 'TDI-7.2 final-holdout runner: PRESENT (authorization-only)\n'
+printf 'TDI-7.2 final holdout: ARMED / STILL NOT ACCESSED (human token required)\n'

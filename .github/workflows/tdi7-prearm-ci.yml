@@ -45,13 +45,13 @@ jobs:
           fi
           grep -F "refuses any final-holdout authorization variable" /tmp/tdi7-prearm-auth.log
 
-      - name: Prove frozen decisions pass while the runner stays absent
+      - name: Prove frozen decisions pass while the runner stays fail-closed
         run: |
           env -u TDI7_CONFIRM_FINAL_HOLDOUT \
             bash scripts/check-tdi7-prearm-integrity.sh >/tmp/tdi7-prearm.log 2>&1
           grep -F "TDI-7.2 pre-holdout decisions: FROZEN (population, seed-selection, rejection policy)" /tmp/tdi7-prearm.log
-          grep -F "TDI-7.2 arming transition: final-holdout runner still ABSENT; authorization NOT_AUTHORIZED" /tmp/tdi7-prearm.log
-          grep -F "TDI-7.2 final holdout: NOT ACCESSED" /tmp/tdi7-prearm.log
+          grep -F "TDI-7.2 final-holdout runner: PRESENT (authorization-only; refuses without human token)" /tmp/tdi7-prearm.log
+          grep -F "TDI-7.2 final holdout: ARMED / STILL NOT ACCESSED (human token required)" /tmp/tdi7-prearm.log
 
       - name: Prove unresolved final decisions still fail closed
         run: |
