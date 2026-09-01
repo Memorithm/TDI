@@ -45,7 +45,7 @@ jobs:
           fi
           grep -F "refuses any final-holdout authorization variable" /tmp/tdi7-prearm-auth.log
 
-      - name: Prove unresolved final decisions block arming
+      - name: Prove frozen final decisions remain unarmed
         run: |
           set +e
           env -u TDI7_CONFIRM_FINAL_HOLDOUT \
@@ -53,11 +53,11 @@ jobs:
           status=$?
           set -e
           cat /tmp/tdi7-prearm.log
-          if [[ "$status" -ne 3 ]]; then
-            echo "ERROR: expected fail-closed pre-arm status 3, got $status" >&2
+          if [[ "$status" -ne 0 ]]; then
+            echo "ERROR: frozen pre-arm integrity audit failed with status $status" >&2
             exit 1
           fi
-          grep -F "BLOCKED: final holdout generator count decision is UNRESOLVED" /tmp/tdi7-prearm.log
-          grep -F "BLOCKED: final holdout seed-selection rule is UNRESOLVED" /tmp/tdi7-prearm.log
-          grep -F "BLOCKED: final holdout rejection policy is UNRESOLVED" /tmp/tdi7-prearm.log
-          grep -F "population size, seed selection, and rejection policy are separate reviewed decisions" /tmp/tdi7-prearm.log
+          grep -F "TDI-7.2 pre-holdout decisions: FROZEN" /tmp/tdi7-prearm.log
+          grep -F "TDI-7.2 arming transition: final-holdout runner still ABSENT; authorization NOT_AUTHORIZED" /tmp/tdi7-prearm.log
+          grep -F "TDI-7.2 final holdout: NOT ACCESSED" /tmp/tdi7-prearm.log
+          grep -F "TDI-7 pre-arm integrity gate: PASS" /tmp/tdi7-prearm.log
