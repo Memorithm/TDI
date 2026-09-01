@@ -1,7 +1,7 @@
 schema_version: 1
 kind: tdi_ecosystem_agent_roadmap
 status: active
-last_updated: "2026-09-01"
+last_updated: "2026-09-01T23:59+0200"
 repository: Memorithm/TDI
 intended_consumer: autonomous_coding_agent
 merge_policy: never_merge_this_file_to_default_branch_unless_user_explicitly_requests
@@ -139,6 +139,18 @@ roadmap:
     prerequisite: TDI7_1_complete_reviewed_and_CI_green
     execution_policy: explicit_human_only_confirmation_at_execution_time
     agent_policy: forbidden_to_initiate
+    decision_freeze_2026_09_01:
+      - population_frozen_10000_generators_entire_frozen_range
+      - seed_selection_frozen_contiguous_ascending_v1_over_7100030000_7100039999
+      - rejection_policy_frozen_frozen_tdi71_typed_errors_v1
+      - reference_TDI_7_2_HUMAN_DECISION_2026_09_01_CHECKUPAUTO
+      - PR_83_landed_decision_stack_PR_84_froze_decisions_reviewed_validators
+      - authorization_state_still_NOT_AUTHORIZED_runner_still_absent
+    next_step: separately_reviewed_arming_transition_final_holdout_runner
+    execution_rule: >
+      Execution requires the human-supplied confirmation value at execution time.
+      Autonomous agents must never supply the token, never execute the holdout,
+      and never infer authorization from this roadmap.
   - id: TDI7_3
     name: Intervention heterogeneity and coupling stability
     status: conditional_not_authorized
