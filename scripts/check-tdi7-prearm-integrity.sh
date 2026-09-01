@@ -157,6 +157,6 @@ if [[ "$blocked" -eq 1 ]]; then
 fi
 
 printf '\nTDI-7.2 pre-holdout decisions: FROZEN (population, seed-selection, rejection policy)\n'
-printf 'TDI-7.2 arming transition: final-holdout runner still ABSENT; authorization NOT_AUTHORIZED\n'
-printf 'TDI-7.2 final holdout: NOT ACCESSED\n'
-printf 'TDI-7 pre-arm integrity gate: PASS (decisions frozen, unarmed runner pending reviewed transition)\n'
+printf 'TDI-7.2 final-holdout runner: PRESENT (authorization-only; refuses without human token)\n'
+printf 'TDI-7.2 final holdout: ARMED / STILL NOT ACCESSED (human token required)\n'
+printf 'TDI-7 pre-arm integrity gate: PASS (decisions frozen, runner fail-closed without authorization)\n'
