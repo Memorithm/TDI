@@ -1,7 +1,7 @@
 schema_version: 1
 kind: tdi_ecosystem_agent_roadmap
 status: active
-last_updated: "2026-08-31"
+last_updated: "2026-09-01"
 repository: Memorithm/TDI
 intended_consumer: autonomous_coding_agent
 merge_policy: never_merge_this_file_to_default_branch_unless_user_explicitly_requests
@@ -108,7 +108,7 @@ ecosystem_interfaces:
 roadmap:
   - id: TDI7_1
     name: Deterministic attention evaluator and software-oracle gate
-    status: active
+    status: complete_pending_human_confirmatory_execution
     source: issue_57
     goals:
       - frozen_seed_range_and_disjointness_representation
@@ -126,6 +126,13 @@ roadmap:
       - CI_proof_that_normal_tests_cannot_produce_TDI7_2_results
     exit_criteria:
       - evaluator_complete_reviewable_and_green_without_accessing_final_holdout
+    completion_evidence_2026_09_01:
+      - PR_81_leakage_safe_early_recovery_features_merged_into_main
+      - PR_82_official_completion_checklist_fully_checked_with_verification_record
+      - readiness_gate_check_tdi7_1_readiness_sh_pass_on_stacked_head_74846ab
+      - public_hosted_ci_green_and_tdi7_preflight_gates_green_on_each_head
+      - workspace_tests_1134_passed_0_failed_locally
+      - tdi7_2_final_holdout_not_accessed_and_still_human_only
   - id: TDI7_2
     name: Confirmatory H_AI_1 final holdout
     status: human_only_blocked
