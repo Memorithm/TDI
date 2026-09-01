@@ -27,6 +27,8 @@ const BOOTSTRAP_REPLICATES: usize = 2_000;
 const BOOTSTRAP_SEED: u64 = 0x5444_4937_4532_4501;
 const PIVOT_TOLERANCE: f64 = 1.0e-12;
 
+const _: () = assert!(TARGET_DEPTH > EARLY_DEPTHS);
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TaskKind {
     AssociativeRecall,
@@ -65,7 +67,6 @@ impl SplitMix64 {
 
 #[derive(Clone, Debug)]
 struct Task {
-    kind: TaskKind,
     tokens: Vec<u16>,
     retrieval_index: usize,
     distractors: usize,
@@ -99,7 +100,6 @@ fn task(seed: u64, kind: TaskKind) -> Task {
             tokens.push(keys[query]);
             let retrieval_index = query * 2 + 1;
             Task {
-                kind,
                 retrieval_index,
                 retrieval_distance: 9 - retrieval_index,
                 distractors: 3,
@@ -115,7 +115,6 @@ fn task(seed: u64, kind: TaskKind) -> Task {
             tokens.extend(noise);
             tokens.push(251);
             Task {
-                kind,
                 tokens,
                 retrieval_index: 0,
                 distractors,
@@ -173,7 +172,6 @@ fn bounded_deficit(distance: f64) -> f64 {
 }
 
 fn late_retrieval_deficit(task: &Task, site: Site) -> f64 {
-    assert!(TARGET_DEPTH > EARLY_DEPTHS);
     let weights = mixer(task);
     let dynamics = FixedAttentionMixer::new(weights).expect("generated mixer is row stochastic");
     let initial = initial_state(task);
@@ -196,7 +194,6 @@ fn late_retrieval_deficit(task: &Task, site: Site) -> f64 {
 #[derive(Clone, Debug)]
 struct Record {
     generator_id: u64,
-    task: TaskKind,
     baseline: Vec<f64>,
     recovery: Vec<f64>,
     target: f64,
@@ -243,7 +240,6 @@ fn record(seed: u64, kind: TaskKind, site: Site) -> Record {
 
     Record {
         generator_id: seed,
-        task: kind,
         baseline,
         recovery,
         target: late_retrieval_deficit(&task, site),
@@ -360,7 +356,8 @@ fn select(training: &[Record], development: &[Record], augmented: bool) -> Ridge
     LAMBDA_GRID
         .into_iter()
         .filter_map(|lambda| {
-            fit(training, augmented, lambda).map(|model| (mse(&model, development, augmented), model))
+            fit(training, augmented, lambda)
+                .map(|model| (mse(&model, development, augmented), model))
         })
         .min_by(|left, right| left.0.total_cmp(&right.0))
         .expect("at least one ridge system must be solvable")
@@ -369,11 +366,28 @@ fn select(training: &[Record], development: &[Record], augmented: bool) -> Ridge
 
 #[derive(Clone, Copy, Debug)]
 struct Summary {
+    b0_lambda: f64,
+    b1_lambda: f64,
     b0_mse: f64,
     b1_mse: f64,
     relative_reduction: f64,
     lower_95: f64,
     upper_95: f64,
+}
+
+impl Summary {
+    fn report(&self) -> String {
+        format!(
+            "b0_lambda={} b1_lambda={} b0_mse={} b1_mse={} relative_reduction={} lower_95={} upper_95={}",
+            self.b0_lambda,
+            self.b1_lambda,
+            self.b0_mse,
+            self.b1_mse,
+            self.relative_reduction,
+            self.lower_95,
+            self.upper_95
+        )
+    }
 }
 
 fn percentile(sorted: &[f64], probability: f64) -> f64 {
@@ -402,10 +416,7 @@ fn evaluate(training: &[Record], development: &[Record], validation: &[Record]) 
     // resampled together, preserving the generator-example unit.
     let mut groups = Vec::<(u64, Vec<usize>)>::new();
     for (index, record) in validation.iter().enumerate() {
-        if let Some((_, indices)) = groups
-            .iter_mut()
-            .find(|(id, _)| *id == record.generator_id)
-        {
+        if let Some((_, indices)) = groups.iter_mut().find(|(id, _)| *id == record.generator_id) {
             indices.push(index);
         } else {
             groups.push((record.generator_id, vec![index]));
@@ -431,6 +442,8 @@ fn evaluate(training: &[Record], development: &[Record], validation: &[Record]) 
     }
     reductions.sort_by(f64::total_cmp);
     Summary {
+        b0_lambda: b0.lambda,
+        b1_lambda: b1.lambda,
         b0_mse,
         b1_mse,
         relative_reduction,
@@ -454,19 +467,14 @@ fn main() {
     println!("semantic=deterministic_local_row_stochastic_v1");
     println!("early_depths=1..={EARLY_DEPTHS} target_depth={TARGET_DEPTH}");
     println!("target=bounded_retrieval_deficit:d/(1+d)");
-    println!("associative_validation={associative:?}");
-    println!("copy_validation={copy:?}");
+    println!("associative_validation={}", associative.report());
+    println!("copy_validation={}", copy.report());
     println!("TDI-7.2 final holdout: NOT ACCESSED");
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn late_target_is_after_all_early_observations() {
-        assert!(TARGET_DEPTH > EARLY_DEPTHS);
-    }
 
     #[test]
     fn deficit_is_bounded_and_has_frozen_orientation() {
@@ -512,6 +520,8 @@ mod tests {
     fn validation_run_is_deterministic() {
         let first = run_task(TaskKind::AssociativeRecall);
         let second = run_task(TaskKind::AssociativeRecall);
+        assert_eq!(first.b0_lambda, second.b0_lambda);
+        assert_eq!(first.b1_lambda, second.b1_lambda);
         assert_eq!(first.b0_mse, second.b0_mse);
         assert_eq!(first.b1_mse, second.b1_mse);
         assert_eq!(first.relative_reduction, second.relative_reduction);

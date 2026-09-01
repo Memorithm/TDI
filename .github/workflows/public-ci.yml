@@ -38,7 +38,9 @@ jobs:
           for example in \
             tdi-ai/examples/tdi7_features.rs \
             tdi-ai/examples/tdi7_evidence_schema.rs \
-            tdi-ai/examples/tdi7_arming_decision.rs; do
+            tdi-ai/examples/tdi7_arming_decision.rs \
+            tdi-ai/examples/tdi7_seed_selection_decision.rs \
+            tdi-ai/examples/tdi7_rejection_policy_decision.rs; do
             if test -f "$example"; then
               files+=("$example")
             fi
@@ -82,7 +84,12 @@ jobs:
           done
           test ${#bins[@]} -gt 0
           cargo clippy -p tdi-bench "${bins[@]}" --locked -- -D warnings
-          for example in tdi7_features tdi7_evidence_schema tdi7_arming_decision; do
+          for example in \
+            tdi7_features \
+            tdi7_evidence_schema \
+            tdi7_arming_decision \
+            tdi7_seed_selection_decision \
+            tdi7_rejection_policy_decision; do
             if test -f "tdi-ai/examples/${example}.rs"; then
               cargo clippy -p tdi-ai --example "$example" --locked -- -D warnings
             fi

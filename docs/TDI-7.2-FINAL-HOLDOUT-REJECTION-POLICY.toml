@@ -1,0 +1,15 @@
+# TDI-7.2 final-holdout rejection-policy decision record.
+#
+# TDI-7.0 requires invalid/rejected counts and reasons and forbids result-driven
+# exclusions, but the merged TDI-7.0/TDI-7.1 surfaces do not freeze the exact
+# conditions that make a final record rejectable.
+#
+# This record keeps that missing policy explicit. A future FROZEN policy must be
+# implemented as a separately reviewed, machine-recognized validator update;
+# editing this file alone must never create a valid rejection taxonomy.
+
+schema_version = 1
+policy_status = "UNRESOLVED"
+prearm_main_commit = "c98e73d52e1f23f315ca75b9303b89580b14fc45"
+authorization_state = "NOT_AUTHORIZED"
+policy_reference = "UNRESOLVED"

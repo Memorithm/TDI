@@ -1,0 +1,63 @@
+name: TDI-7 hosted software validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tdi7-hosted-software-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TDI_CI_RUST: "1.97.1"
+
+jobs:
+  formatting:
+    name: Hosted full formatting
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TDI_CI_RUST }}
+          components: rustfmt
+      - name: Check complete workspace formatting
+        run: cargo fmt --all -- --check
+
+  tests:
+    name: Hosted full tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TDI_CI_RUST }}
+      - name: Run complete workspace tests
+        run: cargo test --workspace --locked
+
+  clippy:
+    name: Hosted full Clippy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TDI_CI_RUST }}
+          components: clippy
+      - name: Run complete workspace Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
