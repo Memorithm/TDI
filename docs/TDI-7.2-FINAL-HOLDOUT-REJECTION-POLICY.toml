@@ -4,12 +4,16 @@
 # exclusions, but the merged TDI-7.0/TDI-7.1 surfaces do not freeze the exact
 # conditions that make a final record rejectable.
 #
-# This record keeps that missing policy explicit. A future FROZEN policy must be
-# implemented as a separately reviewed, machine-recognized validator update;
-# editing this file alone must never create a valid rejection taxonomy.
+# FROZEN (2026-09-01): the reviewed policy is frozen_tdi71_typed_errors_v1.
+# A final-holdout record may be rejected only for the listed machine-recognized
+# reasons mirroring the frozen TDI-7.1 typed construction failures. Every
+# rejection must be reported with its reason; result-driven exclusions remain
+# forbidden. Authorization remains a separate deliberate action.
 
 schema_version = 1
-policy_status = "UNRESOLVED"
+policy_status = "FROZEN"
 prearm_main_commit = "c98e73d52e1f23f315ca75b9303b89580b14fc45"
+rejection_policy = "frozen_tdi71_typed_errors_v1"
+rejection_reasons = "invalid_mixer,invalid_intervention,recovery_extraction_failed,non_finite_target"
 authorization_state = "NOT_AUTHORIZED"
-policy_reference = "UNRESOLVED"
+policy_reference = "TDI-7.2-HUMAN-DECISION-2026-09-01-CHECKUPAUTO"

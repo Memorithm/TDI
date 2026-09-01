@@ -4,13 +4,18 @@
 # population count selects concrete seeds from that range. This record keeps
 # that missing rule explicit without inventing a convention.
 #
-# A frozen selection rule requires a separately reviewed validator/code change.
-# Merely editing this file to FROZEN is intentionally insufficient.
+# FROZEN (2026-09-01): the reviewed rule is a contiguous ascending
+# enumeration of the entire frozen final seed range, matching the frozen
+# population decision (10000 generators). Authorization remains a separate
+# deliberate action.
 
 schema_version = 1
-selection_status = "UNRESOLVED"
+selection_status = "FROZEN"
 prearm_main_commit = "c98e73d52e1f23f315ca75b9303b89580b14fc45"
 final_seed_start = 7100030000
 final_seed_end = 7100039999
+selection_rule = "contiguous_ascending_v1"
+selection_start = 7100030000
+selection_count = 10000
 authorization_state = "NOT_AUTHORIZED"
-selection_reference = "UNRESOLVED"
+selection_reference = "TDI-7.2-HUMAN-DECISION-2026-09-01-CHECKUPAUTO"
