@@ -97,7 +97,6 @@ impl<S> RecoveryProfile<S> {
     }
 }
 
-
 /// Early recovery features restricted to observations before a target depth.
 #[derive(Clone, Debug, PartialEq)]
 pub struct EarlyRecoveryFeatures {
@@ -176,7 +175,10 @@ impl core::fmt::Display for EarlyRecoveryFeatureError {
         match self {
             Self::ZeroTargetDepth => formatter.write_str("target depth must be positive"),
             Self::EmptyEarlyWindow { target_depth } => {
-                write!(formatter, "no recovery point precedes target depth {target_depth}")
+                write!(
+                    formatter,
+                    "no recovery point precedes target depth {target_depth}"
+                )
             }
             Self::NonIncreasingDepth { previous, current } => write!(
                 formatter,
@@ -383,9 +385,9 @@ pub fn from_exact_branching_analysis(
 #[cfg(test)]
 mod tests {
     use super::{
-        analyze_intervention_recovery, extract_early_recovery_features,
-        from_exact_branching_analysis, EarlyRecoveryFeatureError, FutureObservable,
-        FutureOverlap, Intervention, RecoveryPoint, RecoveryProfile, ReferenceDynamics,
+        EarlyRecoveryFeatureError, FutureObservable, FutureOverlap, Intervention, RecoveryPoint,
+        RecoveryProfile, ReferenceDynamics, analyze_intervention_recovery,
+        extract_early_recovery_features, from_exact_branching_analysis,
     };
     use tdi_core::{Action, ExactRatio, State, TableSystem, analyze_branching_recovery};
 
