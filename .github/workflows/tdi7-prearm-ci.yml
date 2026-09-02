@@ -40,8 +40,15 @@ jobs:
 
       - name: Prove frozen post-holdout state and closed rerun surface
         run: |
+          set +e
           env -u TDI7_CONFIRM_FINAL_HOLDOUT \
             bash scripts/check-tdi7-prearm-integrity.sh >/tmp/tdi7-integrity.log 2>&1
+          status=$?
+          set -e
+          if [[ "$status" -ne 0 ]]; then
+            cat /tmp/tdi7-integrity.log
+            exit "$status"
+          fi
           grep -F "TDI-7.2 pre-holdout decisions: FROZEN (historical inputs preserved)" /tmp/tdi7-integrity.log
           grep -F "TDI-7.2 frozen result record: PRESENT (payload not inspected)" /tmp/tdi7-integrity.log
           grep -F "TDI-7.2 final-holdout runner: RETIRED / RERUN SURFACE CLOSED" /tmp/tdi7-integrity.log
