@@ -247,13 +247,13 @@ fn validate_vector_capacity(
     elements: usize,
     element_bytes: usize,
 ) -> Result<(), AssociativeMemoryError> {
-    let bytes = elements
-        .checked_mul(element_bytes)
-        .ok_or(AssociativeMemoryError::HostVectorCapacityTooLarge {
+    let bytes = elements.checked_mul(element_bytes).ok_or(
+        AssociativeMemoryError::HostVectorCapacityTooLarge {
             component,
             elements,
             element_bytes,
-        })?;
+        },
+    )?;
     if bytes > isize::MAX as usize {
         return Err(AssociativeMemoryError::HostVectorCapacityTooLarge {
             component,
