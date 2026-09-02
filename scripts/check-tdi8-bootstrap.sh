@@ -64,8 +64,11 @@ if ((${#forbidden[@]} != 0)); then
     fail "TDI-8.2 must not exist during TDI-8.0"
 fi
 
+# Scan the bootstrap surfaces consumed by agents and CI. Do not scan this
+# checker itself: it necessarily contains the forbidden TDI-7 token name as
+# the literal pattern used to detect leakage.
 if grep -R -n -F 'TDI7_CONFIRM_FINAL_HOLDOUT' \
-    docs/TDI-8* scripts/check-tdi8-bootstrap.sh AGENTS.md .github/copilot-instructions.md \
+    docs/TDI-8* AGENTS.md .github/copilot-instructions.md .github/workflows/public-ci.yml \
     >/tmp/tdi8-bootstrap-token-scan.log; then
     cat /tmp/tdi8-bootstrap-token-scan.log >&2
     fail "TDI-8 bootstrap must not carry the TDI-7.2 confirmation surface"
