@@ -69,7 +69,12 @@ requires separate measurement.
 - stored payload values are IEEE-754 binary64;
 - a non-finite payload is rejected before mutation;
 - zero slot count and zero payload width are rejected;
-- host-index and accounting overflow conditions fail closed.
+- host-index and accounting overflow conditions fail closed;
+- every backing vector is byte-capacity checked against the host `Vec` limit
+  before any allocation is attempted;
+- backing-vector allocation uses fallible exact reservation, so an allocator
+  refusal is returned as a typed error instead of intentionally relying on an
+  infallible `vec!` capacity path.
 
 ## Deliberately not frozen by this tranche
 
@@ -93,6 +98,7 @@ does not freeze:
 
 The merged primitive must retain tests proving:
 
+- oversized vector capacities fail closed before allocation;
 - deterministic bounded address projection;
 - empty → insert → hit behavior;
 - same-key update behavior;
