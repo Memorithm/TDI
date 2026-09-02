@@ -1,7 +1,8 @@
-// TDI-7.3 intervention heterogeneity and coupling stability features.
+// TDI-7.4 joint information and synergy features.
 // These features are bounded to the TDI-7.1 evaluator and do not access
 // the final holdout range (7100030000-7100039999).
 // TDI-7.3 uses the frozen decision records from docs/TDI-7.3-*.toml
+// TDI-7.4 uses the frozen decision records from docs/TDI-7.4-*.toml
 
 //! TDI-7.1 bounded feature extraction over the merged `tdi-ai` contracts.
 //!

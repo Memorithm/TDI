@@ -1,0 +1,189 @@
+schema_version: 1
+kind: tdi_ecosystem_agent_roadmap
+status: active
+last_updated: "2026-09-01T23:59+0200"
+repository: Memorithm/TDI
+intended_consumer: autonomous_coding_agent
+merge_policy: never_merge_this_file_to_default_branch_unless_user_explicitly_requests
+
+mission:
+  primary: >-
+    Preserve TDI as a preregistered, deterministic research programme for dynamic
+    information and intervention-conditioned recovery, including the active TDI-7.x
+    attention/memory line, without retroactively reinterpreting frozen finite-state
+    results or allowing software automation to bypass confirmatory holdout gates.
+  ecosystem_goal: >-
+    Supply scientifically disciplined dynamic-recovery descriptors, experiment
+    schemas, and negative results to ITD Simulator, FLAT-ATTENTION and SciRust while
+    keeping TDI's frozen experimental lineage authoritative for TDI claims.
+
+verified_current_facts:
+  - TDI_1_through_TDI_6_x_are_frozen_evidence_with_explicit_scope_and_limitations
+  - TDI_7_x_is_the_active_attention_and_memory_research_series
+  - TDI_issue_57_defines_TDI_7_0_as_merged_and_TDI_7_1_as_the_active_deterministic_evaluator_gate
+  - TDI_7_2_final_holdout_is_blocked_until_TDI_7_1_is_complete_reviewed_and_CI_valid
+  - confirmatory_full_runs_require_exact_human_confirmation_tokens
+  - normal_tests_CI_and_the_authoring_agent_must_not_produce_confirmatory_full_run_results
+  - TDI_finite_state_results_do_not_establish_transfer_to_transformers
+  - calibration_transfer_failures_and_negative_repair_results_are_preserved_as_measured_results
+
+scientific_invariants:
+  - preregistration_precedes_confirmatory_implementation_and_holdout_access
+  - final_holdout_is_untouched_until_the_frozen_evaluator_is_complete
+  - no_tuning_feature_metric_margin_or_intervention_change_after_holdout_access
+  - failed_harmful_equivalent_inconclusive_or_negative_results_are_never_renumbered_away
+  - TDI_finite_state_findings_are_not_neural_attention_findings_until_independently_demonstrated
+  - MMI_definition_specific_atoms_are_not_represented_as_universal_empirical_results
+  - calibration_transfer_failure_remains_explicit
+  - dynamic_recovery_evidence_is_not_automatically_a_new_information_theoretic_invariant
+  - software_version_and_scientific_series_numbering_are_distinct
+
+agent_safety_rules:
+  - autonomous_agents_must_never_supply_confirmatory_full_run_tokens
+  - autonomous_agents_must_never_execute_TDI_7_2_or_any_future_N_2_confirmatory_holdout_without_explicit_human_instruction_at_execution_time
+  - autonomous_agents_may_build_test_and_run_bounded_non_holdout_preflight_paths
+  - autonomous_agents_may_verify_frozen_hash_chains_and_guard_logic
+  - autonomous_agents_must_fail_closed_if_a_command_would_access_a_forbidden_holdout_or_generate_a_confirmatory_result
+
+ownership:
+  role: dynamic_information_and_recovery_research_source_of_truth
+  owns:
+    - frozen_TDI_experiment_designs_preregistrations_and_results
+    - tdi_core_finite_state_dynamics_and_exact_oracles
+    - tdi_ai_intervention_recovery_abstractions
+    - TDI_specific_dynamic_recovery_descriptors_and_scientific_interpretation
+    - confirmatory_holdout_guard_and_frozen_result_lineage
+  does_not_own:
+    - ITD_structural_descriptor_semantics
+    - FLAT_ATTENTION_execution_or_kernel_semantics
+    - SciRust_general_information_statistics_tensor_or_spectral_primitives
+    - ElasticXxx_resource_runtime_semantics
+    - Hub_orchestration_or_Verify_verdict_semantics
+
+control_loop:
+  - DEFINE_FALSIFIABLE_QUESTION
+  - PREREGISTER_AND_FREEZE_PROTOCOL
+  - IMPLEMENT_BOUNDED_EVALUATOR_WITHOUT_FINAL_HOLDOUT
+  - VERIFY_SOFTWARE_ORACLES_GUARDS_AND_SPLIT_DISJOINTNESS
+  - HUMAN_ONLY_CONFIRMATORY_EXECUTION_IF_AUTHORIZED
+  - FREEZE_RESULT_AND_PROVENANCE
+  - PRESERVE_NEGATIVE_OR_NULL_RESULTS
+  - OPEN_ONLY_EVIDENCE_JUSTIFIED_FOLLOW_UPS
+
+ecosystem_interfaces:
+  Memorithm/itd-simulator:
+    relationship: comparative_experiment_harness_and_AI_scientific_layer
+    status: active_research_direction
+    contract:
+      - ITD_and_TDI_descriptors_are_separate_candidate_information_sources
+      - every_joint_study_requires_explicit_ablation_against_each_other_and_competent_controls
+      - ITD_must_not_reinterpret_TDI_frozen_results
+  Memorithm/FLAT-ATTENTION:
+    relationship: execution_target_for_candidate_attention_semantics_not_discovery_environment
+    status: active_research_direction
+    contract:
+      - expose_reference_intermediate_state_for_controlled_interventions_in_research_mode
+      - TDI_evidence_may_reject_or_prioritize_semantic_candidates
+      - no_FLAT_GPU_optimization_is_promoted_from_mathematical_interest_or_TDI_signal_alone
+      - FLAT_correctness_and_real_device_performance_gates_remain_separate
+  Memorithm/scirust:
+    relationship: promotion_target_for_reusable_general_primitives
+    status: active_conceptual_relationship
+    contract:
+      - promote_only_general_information_statistical_spectral_or_experiment_primitives
+      - keep_TDI_frozen_experiment_semantics_and_results_in_TDI
+  Memorithm/riemann_ndim_bench:
+    relationship: structured_operator_hypothesis_source
+    status: research_partner
+    rule: RiemannBench_supplies_operator_hypotheses_not_TDI_semantics
+  Memorithm/SciRust-Verify:
+    relationship: future_evidence_ingestion_and_integrity_layer
+    status: planned
+    rule: preserve_preregistration_hash_chain_holdout_scope_and_scientific_verdict_without_claim_inflation
+  Memorithm/scirust-hub:
+    relationship: future_orchestration_of_bounded_non_confirmatory_tasks
+    status: planned_not_assumed
+    restriction: Hub_or_agents_must_not_automate_human_only_confirmatory_tokens
+
+roadmap:
+  - id: TDI7_1
+    name: Deterministic attention evaluator and software-oracle gate
+    status: complete_pending_human_confirmatory_execution
+    source: issue_57
+    goals:
+      - frozen_seed_range_and_disjointness_representation
+      - deterministic_associative_recall_and_copy_generators
+      - task_label_preserving_interventions
+      - deterministic_reference_trajectory
+      - TDI_recovery_and_static_baseline_extraction
+      - frozen_retrieval_deficit_orientation
+      - identical_B0_B1_model_class
+      - train_and_development_only_fitting_and_hyperparameter_selection
+      - paired_bootstrap_and_exact_plus_minus_2_percent_classifier_tests
+      - provenance_emission
+      - fail_closed_final_run_token_handling
+      - bounded_non_holdout_smoke_and_preflight
+      - CI_proof_that_normal_tests_cannot_produce_TDI7_2_results
+    exit_criteria:
+      - evaluator_complete_reviewable_and_green_without_accessing_final_holdout
+    completion_evidence_2026_09_01:
+      - PR_81_leakage_safe_early_recovery_features_merged_into_main
+      - PR_82_official_completion_checklist_fully_checked_with_verification_record
+      - readiness_gate_check_tdi7_1_readiness_sh_pass_on_stacked_head_74846ab
+      - public_hosted_ci_green_and_tdi7_preflight_gates_green_on_each_head
+      - workspace_tests_1134_passed_0_failed_locally
+      - tdi7_2_final_holdout_not_accessed_and_still_human_only
+  - id: TDI7_2
+    name: Confirmatory H_AI_1 final holdout
+    status: human_only_blocked
+    prerequisite: TDI7_1_complete_reviewed_and_CI_green
+    execution_policy: explicit_human_only_confirmation_at_execution_time
+    agent_policy: forbidden_to_initiate
+    decision_freeze_2026_09_01:
+      - population_frozen_10000_generators_entire_frozen_range
+      - seed_selection_frozen_contiguous_ascending_v1_over_7100030000_7100039999
+      - rejection_policy_frozen_frozen_tdi71_typed_errors_v1
+      - reference_TDI_7_2_HUMAN_DECISION_2026_09_01_CHECKUPAUTO
+      - PR_83_landed_decision_stack_PR_84_froze_decisions_reviewed_validators
+      - authorization_state_still_NOT_AUTHORIZED_runner_still_absent
+    next_step: separately_reviewed_arming_transition_final_holdout_runner
+    execution_rule: >
+      Execution requires the human-supplied confirmation value at execution time.
+      Autonomous agents must never supply the token, never execute the holdout,
+      and never infer authorization from this roadmap.
+  - id: TDI7_3
+    name: Intervention heterogeneity and coupling stability
+    status: conditional_not_authorized
+    rule: requires_new_preregistration_and_evidence_justification
+  - id: TDI7_4
+    name: Long_horizon_joint_information_and_synergy
+    status: conditional_not_authorized
+    rule: multiple_information_controls_and_no_MMI_identity_reinterpretation
+  - id: TDI7_5_plus
+    name: Static spectral insufficiency and FLAT semantic discrimination
+    status: conditional_not_authorized
+    rule: each_semantic_requires_frozen_math_scalar_reference_tests_controls_quality_and_cost_accounting
+  - id: TDIX
+    name: Ecosystem evidence and reusable primitive bridge
+    status: planned_parallel
+    goals:
+      - version_machine_readable_TDI_AI_results_and_provenance
+      - integrate_bounded_experiments_with_ITD
+      - prepare_SciRust_Verify_ingestion
+      - promote_only_general_reusable_primitives_to_SciRust
+
+agent_operating_protocol:
+  must_read_this_file:
+    - at_start_of_every_agent_session
+    - before_any_preregistration_evaluator_or_holdout_related_change
+    - before_ITD_FLAT_or_SciRust_integration
+    - before_opening_or_merging_scientific_PRs
+  must_update_this_file:
+    - when_a_TDI_stage_changes_status
+    - when_a_confirmatory_result_is_human_executed_and_frozen
+    - when_a_follow_up_is_authorized_or_rejected
+    - when_an_ecosystem_contract_changes
+  fail_closed: >-
+    If this roadmap cannot be read, do not make scientific-promotion, holdout,
+    preregistration, cross-repository, or merge decisions. Never infer permission
+    to execute a confirmatory run from roadmap availability alone.
