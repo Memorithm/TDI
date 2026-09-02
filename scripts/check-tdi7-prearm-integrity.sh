@@ -9,22 +9,22 @@ fail() {
 }
 
 if [[ -n "${TDI7_CONFIRM_FINAL_HOLDOUT:-}" ]]; then
-    fail "pre-arm integrity audit refuses any final-holdout authorization variable"
+    fail "TDI-7 integrity audit refuses any final-holdout authorization variable"
 fi
 
 if [[ -n "$(git status --porcelain)" ]]; then
-    fail "pre-arm integrity audit requires a clean worktree"
+    fail "TDI-7 integrity audit requires a clean worktree"
 fi
 
 TDI_COMMIT_SHA="$(git rev-parse HEAD)"
 
-printf '\n===== TDI-7.1 READINESS =====\n'
+printf '\n===== TDI-7.1 READINESS / HISTORICAL PRE-HOLDOUT CONTRACT =====\n'
 bash scripts/check-tdi7.1-readiness.sh
 
-printf '\n===== TDI-7.2 UNARMED SURFACE =====\n'
+printf '\n===== TDI-7.2 FROZEN POST-HOLDOUT SURFACE =====\n'
 bash scripts/check-tdi7.2-unarmed.sh
 
-printf '\n===== TDI-7.1 CANONICAL PROVENANCE =====\n'
+printf '\n===== TDI-7.1 CANONICAL HISTORICAL PROVENANCE =====\n'
 PROVENANCE="$(
     cargo run --quiet -p tdi-bench --bin tdi-attention-v71-provenance -- \
         --tdi-commit "$TDI_COMMIT_SHA"
@@ -57,7 +57,7 @@ printf '\n===== TDI-7 EVIDENCE HANDOFF =====\n'
 cargo test --quiet -p tdi-ai --example tdi7_evidence_schema
 cargo run --quiet -p tdi-ai --example tdi7_evidence_schema
 
-printf '\n===== TDI-7.2 FINAL POPULATION DECISION =====\n'
+printf '\n===== TDI-7.2 HISTORICAL FINAL POPULATION DECISION =====\n'
 cargo test --quiet -p tdi-ai --example tdi7_arming_decision
 DECISION_OUTPUT="$(cargo run --quiet -p tdi-ai --example tdi7_arming_decision)"
 printf '%s\n' "$DECISION_OUTPUT"
@@ -70,11 +70,11 @@ grep -Fxq 'final_holdout_generator_count=10000' <<<"$DECISION_OUTPUT" \
 grep -Fxq 'authorization_state=NOT_AUTHORIZED' <<<"$DECISION_OUTPUT" \
     || fail "final population decision record is not explicitly unauthorized"
 grep -Fxq 'final_holdout_accessed=false' <<<"$DECISION_OUTPUT" \
-    || fail "population decision validator did not preserve no-access status"
+    || fail "historical population decision validator no longer preserves pre-access status"
 grep -Fxq 'arming_allowed=false' <<<"$DECISION_OUTPUT" \
-    || fail "population decision validator unexpectedly allows arming"
+    || fail "historical population decision validator unexpectedly allows arming"
 
-printf '\n===== TDI-7.2 FINAL SEED-SELECTION DECISION =====\n'
+printf '\n===== TDI-7.2 HISTORICAL FINAL SEED-SELECTION DECISION =====\n'
 cargo test --quiet -p tdi-ai --example tdi7_seed_selection_decision
 SELECTION_OUTPUT="$(cargo run --quiet -p tdi-ai --example tdi7_seed_selection_decision)"
 printf '%s\n' "$SELECTION_OUTPUT"
@@ -87,11 +87,11 @@ grep -Fxq 'selection_rule=contiguous_ascending_v1;selection_count=10000' <<<"$SE
 grep -Fxq 'authorization_state=NOT_AUTHORIZED' <<<"$SELECTION_OUTPUT" \
     || fail "seed-selection decision record is not explicitly unauthorized"
 grep -Fxq 'final_holdout_accessed=false' <<<"$SELECTION_OUTPUT" \
-    || fail "seed-selection validator did not preserve no-access status"
+    || fail "historical seed-selection validator no longer preserves pre-access status"
 grep -Fxq 'arming_allowed=false' <<<"$SELECTION_OUTPUT" \
-    || fail "seed-selection validator unexpectedly allows arming"
+    || fail "historical seed-selection validator unexpectedly allows arming"
 
-printf '\n===== TDI-7.2 FINAL REJECTION-POLICY DECISION =====\n'
+printf '\n===== TDI-7.2 HISTORICAL FINAL REJECTION-POLICY DECISION =====\n'
 cargo test --quiet -p tdi-ai --example tdi7_rejection_policy_decision
 POLICY_OUTPUT="$(cargo run --quiet -p tdi-ai --example tdi7_rejection_policy_decision)"
 printf '%s\n' "$POLICY_OUTPUT"
@@ -104,9 +104,9 @@ grep -Fxq 'rejection_policy=frozen_tdi71_typed_errors_v1;rejection_reasons=inval
 grep -Fxq 'authorization_state=NOT_AUTHORIZED' <<<"$POLICY_OUTPUT" \
     || fail "rejection-policy decision record is not explicitly unauthorized"
 grep -Fxq 'final_holdout_accessed=false' <<<"$POLICY_OUTPUT" \
-    || fail "rejection-policy validator did not preserve no-access status"
+    || fail "historical rejection-policy validator no longer preserves pre-access status"
 grep -Fxq 'arming_allowed=false' <<<"$POLICY_OUTPUT" \
-    || fail "rejection-policy validator unexpectedly allows arming"
+    || fail "historical rejection-policy validator unexpectedly allows arming"
 
 set +e
 cargo run --quiet -p tdi-ai --example tdi7_arming_decision -- --require-frozen \
@@ -148,15 +148,15 @@ if [[ "$policy_status" -eq 3 ]]; then
         || fail "unresolved rejection policy did not fail closed with the frozen diagnostic"
     blocked=1
 elif [[ "$policy_status" -ne 0 ]]; then
-    fail "final rejection-policy validator failed unexpectedly with status $policy_status"
+    fail "final rejection-policy decision validator failed unexpectedly with status $policy_status"
 fi
 
 if [[ "$blocked" -eq 1 ]]; then
-    echo "TDI-7.2 must remain unarmed; population size, seed selection, and rejection policy are separate reviewed decisions." >&2
+    echo "TDI-7.2 historical pre-holdout decisions must remain frozen and independently reproducible." >&2
     exit 3
 fi
 
-printf '\nTDI-7.2 pre-holdout decisions: FROZEN (population, seed-selection, rejection policy)\n'
-printf 'TDI-7.2 final-holdout runner: PRESENT (authorization-only; refuses without human token)\n'
-printf 'TDI-7.2 final holdout: ARMED / STILL NOT ACCESSED (human token required)\n'
-printf 'TDI-7 pre-arm integrity gate: PASS (decisions frozen, runner fail-closed without authorization)\n'
+printf '\nTDI-7.2 pre-holdout decisions: FROZEN (historical inputs preserved)\n'
+printf 'TDI-7.2 frozen result record: PRESENT (payload not inspected)\n'
+printf 'TDI-7.2 final-holdout runner: RETIRED / RERUN SURFACE CLOSED\n'
+printf 'TDI-7 post-holdout integrity gate: PASS (historical decisions frozen, result record present, executable rerun absent)\n'
