@@ -76,6 +76,14 @@ if grep -R -n -E 'TDI8(_|[.]?)?2?_?CONFIRM|TDI82_CONFIRM|TDI8_CONFIRM' \
 fi
 rm -f /tmp/tdi8-foundation-token-scan.log
 
+# Later bounded TDI-8.1 primitives become additive integrity gates once their
+# source is present. They remain non-confirmatory and must not create TDI-8.2.
+if test -f tdi-ai/src/associative_memory.rs; then
+    test -s scripts/check-tdi8.1-associative-memory.sh \
+        || fail "associative-memory source exists without its oracle gate"
+    bash scripts/check-tdi8.1-associative-memory.sh
+fi
+
 printf 'TDI-8.1 reference-arm vocabulary: VERIFIED\n'
 printf 'TDI-8.1 exact memory-accounting invariants: VERIFIED\n'
 printf 'TDI-8.1 defining-component guards: VERIFIED\n'

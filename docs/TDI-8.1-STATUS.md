@@ -2,9 +2,10 @@
 
 - Scientific series: TDI-8.x
 - Stage: TDI-8.1 bounded deterministic reference evaluator
-- Status: active — reference foundation merged, evaluator incomplete
+- Status: active — foundation and bounded associative-memory reference implemented; evaluator incomplete
 - TDI-8.0 parent merge: `24d41eb7e5d72fc3b5eec9b6434930b10c1f241f`
 - TDI-8.1 foundation merge: `7cfe1b66e11f1eb5d67a5890b07e6f41fa175670` (PR #89)
+- TDI-8 post-foundation integrity merge: `9ee32002603942b9f4152cad47f7fb59331f8c7a` (PR #90)
 - Frozen TDI-8.0 preregistration blob: `fe80e7053d89824a77ef6790794f6930d1b424e2`
 - Final holdout: does not exist
 - Confirmatory runner: does not exist
@@ -30,12 +31,29 @@ It validates:
 These contracts are infrastructure only. They are not evidence that A2 is
 better than A1 or that A3 is better than A2.
 
+## Bounded associative-memory reference
+
+The current TDI-8.1 implementation adds a deterministic bounded direct-mapped
+associative-memory oracle under `tdi_ai::associative_memory`.
+
+The primitive has explicit and testable:
+
+- integer address projection;
+- empty, hit and collision-miss read states;
+- insert, same-key update and collision-replacement write states;
+- full pre-mutation validation for payload width and finite binary64 values;
+- exact declared payload, metadata and static-constant accounting;
+- deterministic clear/reset behavior.
+
+The concrete slot counts, payload widths and projection seeds used by its unit
+tests are synthetic oracle fixtures and are not frozen experimental choices.
+
 ## Next permitted implementation work
 
-The next bounded TDI-8.1 tranche may implement deterministic associative-memory
-reference semantics, including explicit address, write, read, collision and
-replacement behavior with exact metadata accounting and adversarial oracle
-tests.
+The next bounded TDI-8.1 tranche may connect the associative-memory oracle to a
+deterministic recurrent reference step for A2, with an explicit retrieval/state
+fusion rule and matched accounting against A1. A3 VSA workspace semantics remain
+a separate later oracle tranche.
 
 It must not create any TDI-8.2 runner, token, seed range or result surface.
 Concrete experimental dimensions, budgets, horizons, non-final seed ranges,
