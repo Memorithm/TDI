@@ -32,7 +32,7 @@ fn compute_coupling_diagnostic(matrix: &[Vec<f64>]) -> SitePairCoupling {
     let initial = ToyAttentionState::zeros(3).expect("non-empty");
     let intervention = BalancedTokenShift::new(0, 2, 1.0).expect("valid shift");
 
-    let early_profile = analyze_intervention_recovery(
+    let _early_profile = analyze_intervention_recovery(
         &mixer,
         &intervention,
         &FullStateObservable,
