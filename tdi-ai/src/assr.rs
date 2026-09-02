@@ -317,7 +317,11 @@ impl MemoryAccounting {
     /// Validate that non-zero components agree with the frozen arm semantics.
     pub fn validate_for_arm(self, arm: ReferenceArm) -> Result<(), MemoryAccountingError> {
         if !arm.permits_associative_memory() {
-            require_zero(arm, MemoryComponent::AssociativePayload, self.associative_payload)?;
+            require_zero(
+                arm,
+                MemoryComponent::AssociativePayload,
+                self.associative_payload,
+            )?;
             require_zero(
                 arm,
                 MemoryComponent::AssociativeMetadata,
@@ -558,8 +562,8 @@ mod tests {
         let memory = MemoryAccounting::zero()
             .with_recurrent_state(StorageBits::new(64))
             .with_vsa_workspace(StorageBits::new(64));
-        let snapshot = ReferenceSnapshot::new(ReferenceArm::A3, vec![1.0, -1.0], memory)
-            .expect("A3 snapshot");
+        let snapshot =
+            ReferenceSnapshot::new(ReferenceArm::A3, vec![1.0, -1.0], memory).expect("A3 snapshot");
         assert_eq!(snapshot.arm(), ReferenceArm::A3);
         assert_eq!(snapshot.state(), &[1.0, -1.0]);
         assert_eq!(snapshot.memory(), memory);
