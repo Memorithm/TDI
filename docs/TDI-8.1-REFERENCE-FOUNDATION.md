@@ -22,7 +22,7 @@ The implementation introduces:
 - arm-specific fail-closed validation of both forbidden storage and required
   defining storage: nonzero recurrent state for A1/A2/A3, nonzero associative
   payload for A2/A3, and nonzero VSA workspace for A3;
-- exact validation that A1/A2/A3 use the same budgeted dynamic-memory total;
+- exact validation that A1/A2/A3 use the same total dynamic-memory budget;
 - framework-independent reference snapshots carrying arm identity and memory
   accounting.
 
@@ -34,12 +34,15 @@ exact sum of:
 1. recurrent-state bits;
 2. associative-memory payload bits;
 3. associative metadata/addressing bits;
-4. VSA workspace bits.
+4. VSA workspace bits;
+5. temporary working storage required by the reference step.
 
-Temporary working storage is reported separately. A0 cumulative history is
-reported separately. Static parameters/constants are reported separately.
-This follows the component separation and A1/A2/A3 partition rule frozen by
-TDI-8.0; it does not imply a runtime, bandwidth or total-process-memory claim.
+A0 cumulative history is reported separately because A0 is the contextual
+full-history reference rather than one of the matched A1/A2/A3 bounded arms.
+Static parameters/constants are also reported separately. This follows the
+component accounting frozen by TDI-8.0 and prevents temporary workspace from
+becoming an unaccounted resource advantage. It does not imply a runtime,
+bandwidth or total-process-memory claim.
 
 A zero-bit allocation cannot be used to label a mechanism as an arm when that
 component defines the arm. In particular, A1/A2/A3 require nonzero recurrent
