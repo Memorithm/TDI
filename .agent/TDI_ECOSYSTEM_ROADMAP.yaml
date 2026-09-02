@@ -1,7 +1,7 @@
 schema_version: 1
 kind: tdi_ecosystem_agent_roadmap
 status: active
-last_updated: "2026-09-02T19:03+0200"
+last_updated: "2026-09-02T19:40+0200"
 repository: Memorithm/TDI
 intended_consumer: autonomous_coding_agent
 merge_policy: never_merge_this_file_to_default_branch_unless_user_explicitly_requests
@@ -10,7 +10,7 @@ mission:
   primary: >-
     Preserve TDI as a preregistered, deterministic research programme for dynamic
     information and intervention-conditioned recovery, including the TDI-7.x
-    attention/memory line and the newly authorized preparation of TDI-8.x for
+    attention/memory line and the now-active TDI-8.x bounded research line for
     alternative recurrent/associative memory architectures, without retroactively
     reinterpreting frozen finite-state results or allowing software automation to
     bypass confirmatory holdout gates.
@@ -27,14 +27,19 @@ verified_current_facts:
   - TDI_7_2_pre_holdout_population_seed_selection_and_rejection_policy_were_frozen_by_PR_84
   - TDI_7_2_final_holdout_runner_was_merged_by_PR_85
   - TDI_7_2_final_holdout_was_accessed_once_and_its_result_record_is_frozen_on_main
+  - TDI_7_2_current_tree_runner_was_retired_by_PR_88_and_rerun_surface_is_closed
   - TDI_7_2_must_not_be_rerun_or_reinterpreted_by_TDI_8_work
-  - confirmatory_full_runs_require_exact_human_confirmation_tokens
+  - confirmatory_full_runs_require_exact_human_confirmation_tokens_only_when_a_future_protocol_explicitly_arms_one
   - normal_tests_CI_and_the_authoring_agent_must_not_produce_confirmatory_full_run_results
   - TDI_finite_state_results_do_not_establish_transfer_to_transformers_or_other_neural_architectures
   - calibration_transfer_failures_and_negative_repair_results_are_preserved_as_measured_results
-  - TDI_8_0_preregistration_candidate_exists_in_PR_88_and_is_not_yet_merged_at_this_update
+  - TDI_8_0_preregistration_was_merged_by_PR_88_as_main_commit_24d41eb7e5d72fc3b5eec9b6434930b10c1f241f
+  - TDI_8_0_exact_PR_head_bbccb193d9a3b3f1b706b5c59bcc79890028dc01_passed_all_five_required_workflows_before_merge
+  - TDI_8_0_preregistration_blob_fe80e7053d89824a77ef6790794f6930d1b424e2_is_pinned_on_main
+  - TDI_8_1_bounded_non_holdout_implementation_is_now_authorized
+  - no_TDI_8_2_runner_token_seed_range_or_result_surface_exists
   - no_dedicated_ASSR_repository_exists_yet_in_Memorithm_at_this_update
-  - user_has_authorized_preparation_of_a_distinct_TDI_8_x_research_programme
+  - user_has_authorized_preparation_and_implementation_of_the_distinct_TDI_8_x_research_programme
 
 scientific_invariants:
   - preregistration_precedes_confirmatory_implementation_and_holdout_access
@@ -57,7 +62,7 @@ agent_safety_rules:
   - autonomous_agents_may_verify_frozen_hash_chains_and_guard_logic
   - autonomous_agents_must_fail_closed_if_a_command_would_access_a_forbidden_holdout_or_generate_a_confirmatory_result
   - TDI_8_work_must_not_read_generate_reuse_modify_or_reinterpret_TDI_7_2_final_holdout_data_seeds_results_or_authorization_surfaces
-  - a_frozen_confirmatory_holdout_is_not_authorized_for_rerun_merely_because_its_runner_or_token_guard_still_exists
+  - a_frozen_confirmatory_holdout_is_not_authorized_for_rerun_merely_because_historical_code_or_token_guards_exist_in_git_history
 
 ownership:
   role: dynamic_information_recovery_and_architecture_research_source_of_truth
@@ -159,7 +164,7 @@ roadmap:
       - completion_did_not_access_TDI_7_2_final_holdout
   - id: TDI7_2
     name: Confirmatory H_AI_1 final holdout
-    status: complete_frozen_accessed_once
+    status: complete_frozen_accessed_once_runner_retired
     prerequisite: TDI7_1_complete_reviewed_and_CI_green
     historical_execution_policy: explicit_human_only_confirmation_at_execution_time
     current_agent_policy: forbidden_to_rerun_or_reinterpret
@@ -171,19 +176,20 @@ roadmap:
       - PR_84_froze_the_three_pre_holdout_decisions
     arming_evidence_2026_09_01:
       - PR_85_merged_the_singular_final_holdout_runner
-      - runner_revalidates_frozen_decisions_before_work
-      - runner_refuses_without_human_supplied_TDI7_CONFIRM_FINAL_HOLDOUT
-      - normal_CI_never_supplies_the_token
+      - runner_revalidated_frozen_decisions_before_work
+      - runner_refused_without_human_supplied_confirmation_at_that_stage
+      - normal_CI_never_supplied_the_confirmation
       - final_holdout_was_not_accessed_at_PR_85_merge
     frozen_result_evidence:
       - artifacts_tdi7_final_holdout_2026_09_01_txt_exists_on_main
       - final_holdout_status_is_accessed_once_in_the_frozen_result_record
-    next_step: preserve_frozen_record_and_do_not_rerun
+      - PR_88_retired_the_current_tree_final_holdout_runner_without_reading_or_reinterpreting_the_result_payload
+      - PR_88_post_holdout_integrity_gate_requires_result_record_presence_and_current_runner_absence
+    next_step: preserve_frozen_record_and_closed_rerun_surface
     execution_rule: >-
       TDI-7.2 is a completed frozen confirmatory experiment. Autonomous agents
-      must never rerun it, supply its token, inspect its payload for TDI-8 work,
-      or infer new authorization from this roadmap or from the presence of the
-      historical runner.
+      must never rerun it, supply its historical token, inspect its payload for
+      TDI-8 work, or infer new authorization from this roadmap or Git history.
   - id: TDI7_3
     name: Intervention heterogeneity and coupling stability
     status: conditional_not_authorized
@@ -198,7 +204,12 @@ roadmap:
     rule: each_semantic_requires_frozen_math_scalar_reference_tests_controls_quality_and_cost_accounting
   - id: TDI8_0
     name: Alternative recurrent associative architecture preregistration
-    status: active_PR_88_reviewed_candidate_not_merged
+    status: complete_merged_frozen
+    merge_evidence_2026_09_02:
+      - PR_88_merged_as_24d41eb7e5d72fc3b5eec9b6434930b10c1f241f
+      - exact_PR_head_bbccb193d9a3b3f1b706b5c59bcc79890028dc01
+      - all_five_required_workflows_completed_success_before_merge
+      - frozen_preregistration_blob_fe80e7053d89824a77ef6790794f6930d1b424e2_matches_main_manifest
     scientific_question: >-
       Under matched bounded mechanistic tasks and declared resource budgets, does a
       recurrent state model augmented with explicit associative memory provide
@@ -231,12 +242,14 @@ roadmap:
       - do_not_create_a_new_ASSR_repository_before_TDI8_reference_evidence_justifies_product_ownership
       - do_not_send_unvalidated_architecture_candidates_to_Forge_for_search
       - do_not_promote_to_NNIS_FLAT_or_SciRust_before_reference_correctness_and_scientific_evidence
-    merge_gate:
-      - PR_88_exact_head_must_have_required_CI_green
-      - TDI8_1_must_not_start_until_PR_88_is_merged_and_preregistration_is_frozen_on_main
   - id: TDI8_1
     name: Bounded deterministic ASSR reference evaluator
-    status: blocked_until_TDI8_0_PR_88_merge
+    status: active_authorized_after_TDI8_0_merge
+    entry_gate_evidence:
+      - TDI8_0_is_merged_and_frozen_on_main
+      - pinned_preregistration_blob_matches_main
+      - no_TDI8_2_surface_exists
+      - TDI7_2_rerun_surface_is_closed_and_payload_remains_forbidden
     goals:
       - implement_A0_A1_A2_and_A3_reference_semantics
       - expose_intervention_and_recovery_state_through_tdi_ai
@@ -246,6 +259,7 @@ roadmap:
       - implement_the_frozen_nine_cell_classifier_and_hypothesis_gate_without_changing_them
       - emit_machine_readable_provenance
       - run_only_train_development_validation_or_bounded_preflight_data
+      - freeze_concrete_dimensions_budgets_horizons_seed_ranges_sample_counts_interval_implementation_and_rejection_taxonomy_before_any_TDI8_2_surface
       - prove_CI_cannot_access_TDI8_2_final_holdout
   - id: TDI8_2
     name: Confirmatory alternative architecture holdout
