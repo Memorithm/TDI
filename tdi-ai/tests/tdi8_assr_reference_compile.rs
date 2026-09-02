@@ -1,18 +1,13 @@
 #![forbid(unsafe_code)]
 
+use tdi_ai::ReferenceArm;
 use tdi_ai::associative_memory::AssociativeMemoryLayout;
 use tdi_ai::assr_reference::{A1Reference, A2Reference, RecurrentLayout, RecurrentParameters};
-use tdi_ai::ReferenceArm;
 
 fn identity_parameters() -> RecurrentParameters {
     let layout = RecurrentLayout::new(2, 2).expect("valid public layout");
-    RecurrentParameters::new(
-        layout,
-        vec![1.0, 0.0, 0.0, 1.0],
-        vec![0.0; 4],
-        vec![0.0; 2],
-    )
-    .expect("valid public parameters")
+    RecurrentParameters::new(layout, vec![1.0, 0.0, 0.0, 1.0], vec![0.0; 4], vec![0.0; 2])
+        .expect("valid public parameters")
 }
 
 #[test]
