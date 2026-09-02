@@ -175,7 +175,10 @@ impl fmt::Display for AssociativeMemoryError {
                 formatter.write_str("associative memory requires a non-zero payload width")
             }
             Self::HostDimensionTooLarge { component, value } => {
-                write!(formatter, "{component}={value} does not fit the host index type")
+                write!(
+                    formatter,
+                    "{component}={value} does not fit the host index type"
+                )
             }
             Self::HostPayloadLengthOverflow => {
                 formatter.write_str("associative payload length overflows the host index type")
@@ -188,7 +191,10 @@ impl fmt::Display for AssociativeMemoryError {
                 "associative payload width mismatch: expected {expected}, got {actual}"
             ),
             Self::NonFinitePayload { index } => {
-                write!(formatter, "associative payload element {index} is not finite")
+                write!(
+                    formatter,
+                    "associative payload element {index} is not finite"
+                )
             }
         }
     }
@@ -398,8 +404,8 @@ fn splitmix64(mut value: u64) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        AssociativeMemoryError, AssociativeMemoryLayout, AssociativeRead,
-        AssociativeWriteOutcome, DirectMappedAssociativeMemory,
+        AssociativeMemoryError, AssociativeMemoryLayout, AssociativeRead, AssociativeWriteOutcome,
+        DirectMappedAssociativeMemory,
     };
     use crate::StorageBits;
 
@@ -532,10 +538,7 @@ mod tests {
         let accounting = table.storage_accounting().expect("exact accounting");
         assert_eq!(accounting.payload_bits(), StorageBits::new(768));
         assert_eq!(accounting.metadata_bits(), StorageBits::new(416));
-        assert_eq!(
-            accounting.static_parameter_bits(),
-            StorageBits::new(256)
-        );
+        assert_eq!(accounting.static_parameter_bits(), StorageBits::new(256));
     }
 
     #[test]
