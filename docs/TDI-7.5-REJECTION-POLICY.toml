@@ -1,0 +1,15 @@
+# TDI-7.5 rejection-policy decision record
+# This record freezes the rejection policy for TDI-7.5 experiments.
+# Must be reviewed and approved before use.
+
+schema_version = 1
+policy_status = "FROZEN"
+prearm_main_commit = "c98e73d52e1f23f315ca75b9303b89580b14fc45"
+rejection_policy = "frozen_tdi71_typed_errors_v1"
+rejection_reasons = "invalid_mixer,invalid_intervention,recovery_extraction_failed,non_finite_target"
+authorization_state = "NOT_AUTHORIZED"
+rejection_policy_reference = "TDI-7.5-REJECTION-POLICY"
+
+# The rejection policy for TDI-7.5 is frozen at the predefined set of reasons
+# These are the only acceptable reasons for rejecting records in TDI-7.5 experiments
+# This prevents ad-hoc or result-driven exclusions
