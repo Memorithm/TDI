@@ -28,6 +28,10 @@ grep -Fq 'CollisionMiss' "$SOURCE" \
     || fail "collision miss read state missing"
 grep -Fq 'NonFinitePayload' "$SOURCE" \
     || fail "non-finite payload rejection missing"
+grep -Fq 'HostVectorCapacityTooLarge' "$SOURCE" \
+    || fail "oversized host vector-capacity rejection missing"
+grep -Fq 'try_reserve_exact' "$SOURCE" \
+    || fail "associative vectors are not reserved fallibly"
 grep -Fq 'OCCUPANCY_BITS_PER_SLOT: u128 = 8' "$SOURCE" \
     || fail "occupancy metadata accounting drifted"
 grep -Fq 'TAG_BITS_PER_SLOT: u128 = 64' "$SOURCE" \
@@ -38,6 +42,7 @@ grep -Fq 'PROJECTION_STATIC_BITS: u128 = 256' "$SOURCE" \
     || fail "projection static accounting drifted"
 
 for test_name in \
+    oversized_vector_capacity_fails_closed_before_allocation \
     address_projection_is_deterministic_and_bounded \
     empty_insert_and_hit_have_explicit_semantics \
     same_key_update_replaces_payload_in_place \
@@ -60,6 +65,7 @@ cargo test -p tdi-ai --locked 'associative_memory::tests'
 
 printf 'TDI-8.1 associative-memory public surface: VERIFIED\n'
 printf 'TDI-8.1 address/read/write/collision/replacement oracles: VERIFIED\n'
+printf 'TDI-8.1 fail-closed host allocation guards: VERIFIED\n'
 printf 'TDI-8.1 associative-memory accounting constants: VERIFIED\n'
 printf 'TDI-8.1 randomized hash dependency: ABSENT\n'
 printf 'TDI-8.1 associative-memory gate: PASS\n'
