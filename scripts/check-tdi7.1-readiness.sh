@@ -19,7 +19,10 @@ verify_tdi68_historical_integrity() {
 
     while read -r expected path; do
         case "$path" in
-            Cargo.toml|Cargo.lock)
+            Cargo.toml|Cargo.lock|.github/workflows/ci.yml)
+                # These repository-level integration surfaces legitimately
+                # evolve after TDI-6.8. The frozen manifest remains historical
+                # evidence; current scientific source paths stay hash-checked.
                 continue
                 ;;
         esac
@@ -28,6 +31,9 @@ verify_tdi68_historical_integrity() {
         [[ "$actual" == "$expected" ]] \
             || fail "historical TDI-6.8 path changed: $path"
     done <"$manifest"
+
+    test -s .github/workflows/ci.yml \
+        || fail "current Rust validation workflow is missing"
 
     local tmpdir
     tmpdir="$(mktemp -d)"
@@ -69,8 +75,9 @@ sha256sum -c docs/TDI-7.0-ATTENTION-RECOVERY-PREREGISTRATION.sha256
 
 printf '\n===== HISTORICAL TDI-6.8 INTEGRITY =====\n'
 verify_tdi68_historical_integrity
-printf 'TDI-6.8 frozen paths: OK\n'
+printf 'TDI-6.8 frozen scientific paths: OK\n'
 printf 'TDI-6.8 workspace metadata projection: OK (additive tdi-ai only)\n'
+printf 'Current CI workflow: PRESENT (mutable repository infrastructure)\n'
 
 printf '\n===== TDI-7.1 SPECIFICATION SURFACES =====\n'
 test -f docs/TDI-7.1-EVALUATOR-SPEC.md || fail "missing TDI-7.1 evaluator specification"
@@ -119,4 +126,4 @@ printf '\n===== TDI-7.1 COMPLETE BOUNDED PREFLIGHT =====\n'
 bash scripts/reproduce-tdi7.1-preflight.sh
 
 printf '\nTDI-7.1 readiness gate: PASS\n'
-printf 'TDI-7.2 final holdout: BLOCKED / NOT ACCESSED\n'
+printf 'TDI-7.2 current state: HISTORICAL RESULT FROZEN / EXECUTABLE RERUN RETIRED\n'
