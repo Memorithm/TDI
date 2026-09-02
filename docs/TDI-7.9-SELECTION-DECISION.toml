@@ -1,0 +1,19 @@
+# TDI-7.9 seed-selection decision record
+# This record freezes the seed-selection rule for TDI-7.9 experiments.
+# Must be reviewed and approved before use.
+
+schema_version = 1
+policy_status = "FROZEN"
+prearm_main_commit = "c98e73d52e1f23f315ca75b9303b89580b14fc45"
+final_seed_start = 7100100000
+final_seed_end = 7100109999
+selection_count = 8000
+selection_rule = "contiguous_ascending_v1"
+selection_start = 7100100000
+selection_count = 8000
+authorization_state = "NOT_AUTHORIZED"
+selection_reference = "TDI-7.9-SELECTION-DECISION"
+
+# The seed-selection rule for TDI-7.9 is frozen at contiguous_ascending_v1
+# covering the final seed range 7100100000-7100109999
+# This ensures reproducible seeding for all subsequent experiments

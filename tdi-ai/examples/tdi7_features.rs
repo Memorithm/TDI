@@ -1,3 +1,9 @@
+// TDI-7.10 programme synthesis and frozen archive features.
+// These features are bounded to the TDI-7.1 evaluator and do not access
+// the final holdout range (7100030000-7100039999).
+// TDI-7.3 through TDI-7.9 use frozen decision records from their respective docs/
+// TDI-7.10 synthesizes all prior findings into a frozen archive
+
 //! TDI-7.1 bounded feature extraction over the merged `tdi-ai` contracts.
 //!
 //! This example keeps static controls and early dynamic recovery descriptors
