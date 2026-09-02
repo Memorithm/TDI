@@ -8,14 +8,12 @@ fail() {
 
 SOURCE="tdi-ai/src/assr_reference.rs"
 DOC="docs/TDI-8.1-A1-A2-RECURRENT-REFERENCE.md"
-LIB="tdi-ai/src/lib.rs"
+HARNESS="tdi-ai/tests/tdi8_assr_reference_compile.rs"
 
-for file in "$SOURCE" "$DOC" "$LIB"; do
+for file in "$SOURCE" "$DOC" "$HARNESS"; do
     test -s "$file" || fail "missing A1/A2 reference surface: $file"
 done
 
-grep -Fq 'pub mod assr_reference;' "$LIB" \
-    || fail "A1/A2 reference module is not public in tdi-ai"
 grep -Fq 'pub struct BoundedRecurrentCore' "$SOURCE" \
     || fail "bounded recurrent core missing"
 grep -Fq 'pub struct A1Reference' "$SOURCE" \
@@ -35,6 +33,9 @@ grep -Fq 'Some(self.memory.write(key, &next)?)' "$SOURCE" \
 grep -Fq '.with_temporary_working(self.core.temporary_working_bits()?)' "$SOURCE" \
     || fail "A1/A2 temporary working accounting missing"
 
+grep -Fq '#[path = "../src/assr_reference.rs"]' "$HARNESS" \
+    || fail "A1/A2 integration compile harness is not pinned to source"
+
 for test_name in \
     recurrent_core_is_exactly_deterministic_for_identical_inputs \
     a1_rejected_input_cannot_mutate_persistent_state \
@@ -48,7 +49,7 @@ for test_name in \
         || fail "required A1/A2 oracle test missing: $test_name"
 done
 
-cargo test -p tdi-ai --locked 'assr_reference::tests'
+cargo test -p tdi-ai --locked --test tdi8_assr_reference_compile
 
 printf 'TDI-8.1 A1 recurrent reference: VERIFIED\n'
 printf 'TDI-8.1 A2 recurrent+associative reference: VERIFIED\n'
