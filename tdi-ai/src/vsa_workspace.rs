@@ -36,12 +36,11 @@ impl VsaWorkspaceLayout {
     }
 
     fn host_width(self) -> Result<usize, VsaWorkspaceError> {
-        let width = usize::try_from(self.width).map_err(|_| {
-            VsaWorkspaceError::HostDimensionTooLarge {
+        let width =
+            usize::try_from(self.width).map_err(|_| VsaWorkspaceError::HostDimensionTooLarge {
                 component: "width",
                 value: self.width,
-            }
-        })?;
+            })?;
         validate_vector_capacity(width)?;
         Ok(width)
     }
@@ -139,7 +138,10 @@ impl fmt::Display for VsaWorkspaceError {
         match self {
             Self::ZeroWidth => formatter.write_str("VSA workspace width must be non-zero"),
             Self::HostDimensionTooLarge { component, value } => {
-                write!(formatter, "{component}={value} does not fit the host index type")
+                write!(
+                    formatter,
+                    "{component}={value} does not fit the host index type"
+                )
             }
             Self::HostVectorCapacityTooLarge { elements } => write!(
                 formatter,
@@ -256,10 +258,7 @@ impl BoundedVsaWorkspace {
     /// Unbind/retrieve the current superposition with one deterministic role.
     pub fn unbind(&self, key: u64) -> Result<Vec<f64>, VsaWorkspaceError> {
         let mut retrieved = allocate_zeroed(self.components.len())?;
-        for (index, (output, value)) in retrieved
-            .iter_mut()
-            .zip(self.components.iter())
-            .enumerate()
+        for (index, (output, value)) in retrieved.iter_mut().zip(self.components.iter()).enumerate()
         {
             *output = *value * self.role_sign(key, index);
         }
@@ -271,11 +270,8 @@ impl BoundedVsaWorkspace {
     pub fn similarity(&self, key: u64, candidate: &[f64]) -> Result<f64, VsaWorkspaceError> {
         self.validate_payload(candidate)?;
         let mut score = 0.0_f64;
-        for (index, (workspace_value, candidate_value)) in self
-            .components
-            .iter()
-            .zip(candidate.iter())
-            .enumerate()
+        for (index, (workspace_value, candidate_value)) in
+            self.components.iter().zip(candidate.iter()).enumerate()
         {
             let retrieved = *workspace_value * self.role_sign(key, index);
             let product = retrieved * *candidate_value;
@@ -310,10 +306,7 @@ impl BoundedVsaWorkspace {
 
     fn role_sign(&self, key: u64, index: usize) -> f64 {
         let coordinate = u64::try_from(index).expect("validated VSA width must fit u64");
-        let mixed = splitmix64(
-            key.wrapping_add(self.role_seed)
-                .wrapping_add(coordinate),
-        );
+        let mixed = splitmix64(key.wrapping_add(self.role_seed).wrapping_add(coordinate));
         if mixed & 1 == 0 { -1.0 } else { 1.0 }
     }
 }
@@ -349,9 +342,7 @@ fn splitmix64(mut value: u64) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        BoundedVsaWorkspace, VsaWorkspaceError, VsaWorkspaceLayout,
-    };
+    use super::{BoundedVsaWorkspace, VsaWorkspaceError, VsaWorkspaceLayout};
     use crate::StorageBits;
 
     fn workspace(width: u64) -> BoundedVsaWorkspace {
@@ -401,8 +392,16 @@ mod tests {
         right.bundle(11, &first).expect("first right bundle");
         right.bundle(29, &second).expect("second right bundle");
 
-        let left_bits: Vec<_> = left.components().iter().map(|value| value.to_bits()).collect();
-        let right_bits: Vec<_> = right.components().iter().map(|value| value.to_bits()).collect();
+        let left_bits: Vec<_> = left
+            .components()
+            .iter()
+            .map(|value| value.to_bits())
+            .collect();
+        let right_bits: Vec<_> = right
+            .components()
+            .iter()
+            .map(|value| value.to_bits())
+            .collect();
         assert_eq!(left_bits, right_bits);
         assert_eq!(left.unbind(11), right.unbind(11));
     }
