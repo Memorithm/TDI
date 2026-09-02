@@ -90,6 +90,12 @@ if test -f tdi-ai/src/assr_reference.rs; then
     bash scripts/check-tdi8.1-a1-a2-reference.sh
 fi
 
+if test -f tdi-ai/src/vsa_workspace.rs; then
+    test -s scripts/check-tdi8.1-vsa-workspace.sh \
+        || fail "VSA workspace source exists without its oracle gate"
+    bash scripts/check-tdi8.1-vsa-workspace.sh
+fi
+
 printf 'TDI-8.1 reference-arm vocabulary: VERIFIED\n'
 printf 'TDI-8.1 exact memory-accounting invariants: VERIFIED\n'
 printf 'TDI-8.1 defining-component guards: VERIFIED\n'

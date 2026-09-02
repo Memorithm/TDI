@@ -13,6 +13,7 @@ mod assr;
 pub mod assr_reference;
 mod static_diagnostics;
 mod toy_attention;
+pub mod vsa_workspace;
 
 use tdi_core::{BranchingRecoveryAnalysis, ExactRatio};
 

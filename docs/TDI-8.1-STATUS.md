@@ -2,11 +2,12 @@
 
 - Scientific series: TDI-8.x
 - Stage: TDI-8.1 bounded deterministic reference evaluator
-- Status: active — foundation and associative-memory reference merged; A1/A2 recurrent reference under review
+- Status: active — A1/A2 recurrent reference merged; bounded VSA workspace oracle under review
 - TDI-8.0 parent merge: `24d41eb7e5d72fc3b5eec9b6434930b10c1f241f`
 - TDI-8.1 foundation merge: `7cfe1b66e11f1eb5d67a5890b07e6f41fa175670` (PR #89)
 - TDI-8 post-foundation integrity merge: `9ee32002603942b9f4152cad47f7fb59331f8c7a` (PR #90)
 - TDI-8.1 associative-memory merge: `96deedc454f2bdff03b7ce39565e713f1992dde1` (PR #91)
+- TDI-8.1 A1/A2 recurrent-reference merge: `ee734d16ddfc10509d827b3e2ed90769990970bd` (PR #94)
 - Frozen TDI-8.0 preregistration blob: `fe80e7053d89824a77ef6790794f6930d1b424e2`
 - Final holdout: does not exist
 - Confirmatory runner: does not exist
@@ -42,9 +43,9 @@ fallible host allocation and exact declared payload/metadata/static accounting.
 The concrete values in its tests remain synthetic oracle fixtures rather than
 experimental choices.
 
-## Current A1/A2 recurrent-reference tranche
+## Merged A1/A2 recurrent reference
 
-The current bounded tranche defines:
+PR #94 defines:
 
 - deterministic fixed-order recurrent accumulation with hard-tanh clipping;
 - A1 recurrent-only state transitions with fail-closed atomic rejection;
@@ -54,13 +55,32 @@ The current bounded tranche defines:
 - exact A1/A2 recurrent, associative, temporary and static accounting.
 
 No concrete experimental state width, table size, projection seed, recurrent
-matrix or fusion gain is frozen by this implementation tranche.
+matrix or fusion gain was frozen by that implementation tranche.
+
+## Current bounded VSA workspace tranche
+
+The current non-final-data tranche adds the standalone software oracle required
+before A3 integration. It implements only operations allowed by the frozen
+TDI-8.0 A3 contract:
+
+- deterministic bipolar binding from a seeded integer role projection;
+- fixed-order additive bundling/superposition;
+- deterministic unbinding/retrieval using the same bipolar role;
+- fixed-order dot similarity for cleanup/readout experiments;
+- atomic fail-closed rejection on invalid width/non-finite state;
+- exact persistent-workspace, temporary-working and static-projection accounting;
+- a downstream public-API integration test and additive TDI-8.1 integrity gate.
+
+The workspace width, role seed, A3 fusion rule and all experimental parameters
+remain deliberately unfrozen. This tranche is not yet the A3 mechanism and
+produces no H8-B evidence.
 
 ## Remaining TDI-8.1 work
 
-After the A1/A2 reference is merged, bounded TDI-8.1 still requires:
+After the bounded VSA workspace oracle is merged, TDI-8.1 still requires:
 
-1. A3 VSA/holographic workspace software oracles and A3 integration;
+1. A3 integration of recurrent state + associative memory + VSA workspace with
+   a fully explicit deterministic operation order and matched-budget accounting;
 2. competent deterministic A0 full-history reference semantics;
 3. T1/T2/T3 task generators and short/medium/long horizon strata;
 4. exact operation accounting and typed rejection/provenance records;
