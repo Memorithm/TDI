@@ -2,10 +2,11 @@
 
 - Scientific series: TDI-8.x
 - Stage: TDI-8.1 bounded deterministic reference evaluator
-- Status: active — foundation and bounded associative-memory reference implemented; evaluator incomplete
+- Status: active — foundation and associative-memory reference merged; A1/A2 recurrent reference under review
 - TDI-8.0 parent merge: `24d41eb7e5d72fc3b5eec9b6434930b10c1f241f`
 - TDI-8.1 foundation merge: `7cfe1b66e11f1eb5d67a5890b07e6f41fa175670` (PR #89)
 - TDI-8 post-foundation integrity merge: `9ee32002603942b9f4152cad47f7fb59331f8c7a` (PR #90)
+- TDI-8.1 associative-memory merge: `96deedc454f2bdff03b7ce39565e713f1992dde1` (PR #91)
 - Frozen TDI-8.0 preregistration blob: `fe80e7053d89824a77ef6790794f6930d1b424e2`
 - Final holdout: does not exist
 - Confirmatory runner: does not exist
@@ -31,32 +32,44 @@ It validates:
 These contracts are infrastructure only. They are not evidence that A2 is
 better than A1 or that A3 is better than A2.
 
-## Bounded associative-memory reference
+## Merged bounded associative-memory reference
 
-The current TDI-8.1 implementation adds a deterministic bounded direct-mapped
-associative-memory oracle under `tdi_ai::associative_memory`.
+PR #91 added the deterministic bounded direct-mapped associative-memory oracle.
+The primitive has explicit and tested address projection, empty/hit/collision
+reads, deterministic collision replacement, pre-mutation finite/width checks,
+fallible host allocation and exact declared payload/metadata/static accounting.
 
-The primitive has explicit and testable:
+The concrete values in its tests remain synthetic oracle fixtures rather than
+experimental choices.
 
-- integer address projection;
-- empty, hit and collision-miss read states;
-- insert, same-key update and collision-replacement write states;
-- full pre-mutation validation for payload width and finite binary64 values;
-- exact declared payload, metadata and static-constant accounting;
-- deterministic clear/reset behavior.
+## Current A1/A2 recurrent-reference tranche
 
-The concrete slot counts, payload widths and projection seeds used by its unit
-tests are synthetic oracle fixtures and are not frozen experimental choices.
+The current bounded tranche defines:
 
-## Next permitted implementation work
+- deterministic fixed-order recurrent accumulation with hard-tanh clipping;
+- A1 recurrent-only state transitions with fail-closed atomic rejection;
+- A2 lookup-before-write semantics over the PR #91 associative table;
+- coordinate-wise deterministic retrieval/state fusion;
+- complete A1/A2 persistent snapshots;
+- exact A1/A2 recurrent, associative, temporary and static accounting.
 
-The next bounded TDI-8.1 tranche may connect the associative-memory oracle to a
-deterministic recurrent reference step for A2, with an explicit retrieval/state
-fusion rule and matched accounting against A1. A3 VSA workspace semantics remain
-a separate later oracle tranche.
+No concrete experimental state width, table size, projection seed, recurrent
+matrix or fusion gain is frozen by this implementation tranche.
 
-It must not create any TDI-8.2 runner, token, seed range or result surface.
-Concrete experimental dimensions, budgets, horizons, non-final seed ranges,
-sample counts, paired interval implementation/replicate count and typed
-rejection taxonomy remain to be frozen during TDI-8.1 before any TDI-8.2 stage
-can exist.
+## Remaining TDI-8.1 work
+
+After the A1/A2 reference is merged, bounded TDI-8.1 still requires:
+
+1. A3 VSA/holographic workspace software oracles and A3 integration;
+2. competent deterministic A0 full-history reference semantics;
+3. T1/T2/T3 task generators and short/medium/long horizon strata;
+4. exact operation accounting and typed rejection/provenance records;
+5. the frozen four-way cell classifier and nine-cell hypothesis aggregator;
+6. a deterministic paired interval implementation satisfying the frozen
+   Bonferroni family-wise coverage rule;
+7. bounded train/development/validation work to freeze concrete dimensions,
+   budgets, horizons, non-final/final seed ranges, sample counts, interval
+   replicate count/seed and closed rejection taxonomy;
+8. a final TDI-8.1 readiness gate proving no TDI-8.2 execution surface exists.
+
+TDI-8.2 remains future human-only and is not authorized by this status file.
