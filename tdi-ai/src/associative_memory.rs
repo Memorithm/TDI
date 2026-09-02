@@ -5,7 +5,7 @@
 //! behavior; it does not freeze TDI-8.1 experimental dimensions or establish a
 //! scientific advantage for ASSR.
 
-use core::fmt;
+use core::{fmt, mem};
 
 use crate::StorageBits;
 
@@ -52,7 +52,7 @@ impl AssociativeMemoryLayout {
         self.payload_width
     }
 
-    fn host_dimensions(self) -> Result<(usize, usize), AssociativeMemoryError> {
+    fn host_dimensions(self) -> Result<(usize, usize, usize), AssociativeMemoryError> {
         let slots = usize::try_from(self.slot_count).map_err(|_| {
             AssociativeMemoryError::HostDimensionTooLarge {
                 component: "slot_count",
@@ -65,10 +65,18 @@ impl AssociativeMemoryLayout {
                 value: self.payload_width,
             }
         })?;
-        slots
+        let payload_len = slots
             .checked_mul(width)
             .ok_or(AssociativeMemoryError::HostPayloadLengthOverflow)?;
-        Ok((slots, width))
+
+        // Validate every vector's byte capacity before making any allocation.
+        // Vec requires a capacity no larger than isize::MAX bytes even when the
+        // element count itself fits usize.
+        validate_vector_capacity("occupied", slots, mem::size_of::<u8>())?;
+        validate_vector_capacity("tags", slots, mem::size_of::<u64>())?;
+        validate_vector_capacity("payloads", payload_len, mem::size_of::<f64>())?;
+
+        Ok((slots, width, payload_len))
     }
 
     fn storage_accounting(self) -> Result<AssociativeStorageAccounting, AssociativeMemoryError> {
@@ -151,6 +159,23 @@ pub enum AssociativeMemoryError {
     /// `slot_count * payload_width` cannot be represented as a host allocation
     /// length.
     HostPayloadLengthOverflow,
+    /// A vector's element count fits `usize`, but its byte capacity exceeds the
+    /// maximum representable `Vec` allocation on this host.
+    HostVectorCapacityTooLarge {
+        /// Vector component whose capacity is invalid.
+        component: &'static str,
+        /// Requested number of elements.
+        elements: usize,
+        /// Size of one element in bytes.
+        element_bytes: usize,
+    },
+    /// The host allocator refused a validated vector reservation.
+    HostAllocationFailed {
+        /// Vector component whose reservation failed.
+        component: &'static str,
+        /// Requested number of elements.
+        elements: usize,
+    },
     /// Exact bit accounting overflowed `u128`.
     AccountingOverflow,
     /// A write payload did not match the frozen table width.
@@ -183,6 +208,21 @@ impl fmt::Display for AssociativeMemoryError {
             Self::HostPayloadLengthOverflow => {
                 formatter.write_str("associative payload length overflows the host index type")
             }
+            Self::HostVectorCapacityTooLarge {
+                component,
+                elements,
+                element_bytes,
+            } => write!(
+                formatter,
+                "{component} vector capacity is too large: {elements} elements × {element_bytes} bytes"
+            ),
+            Self::HostAllocationFailed {
+                component,
+                elements,
+            } => write!(
+                formatter,
+                "host allocation failed for {component}: {elements} elements"
+            ),
             Self::AccountingOverflow => {
                 formatter.write_str("associative-memory storage accounting overflow")
             }
@@ -201,6 +241,44 @@ impl fmt::Display for AssociativeMemoryError {
 }
 
 impl std::error::Error for AssociativeMemoryError {}
+
+fn validate_vector_capacity(
+    component: &'static str,
+    elements: usize,
+    element_bytes: usize,
+) -> Result<(), AssociativeMemoryError> {
+    let bytes = elements
+        .checked_mul(element_bytes)
+        .ok_or(AssociativeMemoryError::HostVectorCapacityTooLarge {
+            component,
+            elements,
+            element_bytes,
+        })?;
+    if bytes > isize::MAX as usize {
+        return Err(AssociativeMemoryError::HostVectorCapacityTooLarge {
+            component,
+            elements,
+            element_bytes,
+        });
+    }
+    Ok(())
+}
+
+fn allocate_filled<T: Clone>(
+    component: &'static str,
+    elements: usize,
+    value: T,
+) -> Result<Vec<T>, AssociativeMemoryError> {
+    let mut values = Vec::new();
+    values.try_reserve_exact(elements).map_err(|_| {
+        AssociativeMemoryError::HostAllocationFailed {
+            component,
+            elements,
+        }
+    })?;
+    values.resize(elements, value);
+    Ok(values)
+}
 
 /// Deterministic result of writing one key/payload association.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -274,16 +352,16 @@ impl DirectMappedAssociativeMemory {
         layout: AssociativeMemoryLayout,
         projection_seed: u64,
     ) -> Result<Self, AssociativeMemoryError> {
-        let (slots, width) = layout.host_dimensions()?;
-        let payload_len = slots
-            .checked_mul(width)
-            .ok_or(AssociativeMemoryError::HostPayloadLengthOverflow)?;
+        let (slots, _width, payload_len) = layout.host_dimensions()?;
+        let occupied = allocate_filled("occupied", slots, 0u8)?;
+        let tags = allocate_filled("tags", slots, 0u64)?;
+        let payloads = allocate_filled("payloads", payload_len, 0.0f64)?;
         Ok(Self {
             layout,
             projection_seed,
-            occupied: vec![0; slots],
-            tags: vec![0; slots],
-            payloads: vec![0.0; payload_len],
+            occupied,
+            tags,
+            payloads,
         })
     }
 
@@ -423,6 +501,21 @@ mod tests {
         assert_eq!(
             AssociativeMemoryLayout::new(1, 0),
             Err(AssociativeMemoryError::ZeroPayloadWidth)
+        );
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn oversized_vector_capacity_fails_closed_before_allocation() {
+        let slot_count = (isize::MAX as usize / core::mem::size_of::<u64>()) + 1;
+        let layout = AssociativeMemoryLayout::new(slot_count as u64, 1).expect("logical layout");
+        assert_eq!(
+            DirectMappedAssociativeMemory::new(layout, 0),
+            Err(AssociativeMemoryError::HostVectorCapacityTooLarge {
+                component: "tags",
+                elements: slot_count,
+                element_bytes: core::mem::size_of::<u64>(),
+            })
         );
     }
 
