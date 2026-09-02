@@ -121,3 +121,9 @@ jobs:
           if test -f docs/TDI-7.0-ATTENTION-RECOVERY-PREREGISTRATION.sha256; then
             sha256sum -c docs/TDI-7.0-ATTENTION-RECOVERY-PREREGISTRATION.sha256
           fi
+      - name: Verify TDI-8.0 bootstrap when present
+        run: |
+          if test -f docs/TDI-8.0-ASSR-PREREGISTRATION.md; then
+            bash -n scripts/check-tdi8-bootstrap.sh
+            bash scripts/check-tdi8-bootstrap.sh
+          fi
