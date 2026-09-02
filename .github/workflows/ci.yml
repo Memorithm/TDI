@@ -18,166 +18,78 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CARGO_HOME: /mnt/nvme/github-runners/home/.cargo
-  RUSTUP_HOME: /mnt/nvme/github-runners/home/.rustup
+  TDI_CI_RUST: "1.97.1"
 
 jobs:
   formatting:
     name: Formatting
-    runs-on: [self-hosted, Linux, ARM64, jetson, tdi]
-    timeout-minutes: 30
-    env:
-      CARGO_TARGET_DIR: /mnt/nvme/github-runners/cache/tdi/formatting
-
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          git init .
-
-          git remote remove origin 2>/dev/null || true
-          git remote add origin             "https://github.com/${GITHUB_REPOSITORY}.git"
-
-          AUTH_HEADER="$(
-            printf 'x-access-token:%s' "$GITHUB_TOKEN" |
-              base64 -w 0
-          )"
-
-          git             -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH_HEADER}"             fetch               --no-tags               --prune               --depth=1               origin               "$GITHUB_REF"
-
-          git checkout             --force             --detach             "$GITHUB_SHA"
-
-          git clean -ffdx
-
-      - name: Configure shared Rust
-        run: |
-          echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
-          mkdir -p "$CARGO_TARGET_DIR"
-          "$CARGO_HOME/bin/rustc" --version
-          "$CARGO_HOME/bin/cargo" --version
-          "$CARGO_HOME/bin/rustfmt" --version
-
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TDI_CI_RUST }}
+          components: rustfmt
       - name: Check formatting
         run: cargo fmt --all -- --check
 
   tests:
     name: Tests
-    runs-on: [self-hosted, Linux, ARM64, jetson, tdi]
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
-    env:
-      CARGO_TARGET_DIR: /mnt/nvme/github-runners/cache/tdi/tests
-
     steps:
       - name: Checkout repository
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          git init .
-
-          git remote remove origin 2>/dev/null || true
-          git remote add origin             "https://github.com/${GITHUB_REPOSITORY}.git"
-
-          AUTH_HEADER="$(
-            printf 'x-access-token:%s' "$GITHUB_TOKEN" |
-              base64 -w 0
-          )"
-
-          git             -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH_HEADER}"             fetch               --no-tags               --prune               --depth=1               origin               "$GITHUB_REF"
-
-          git checkout             --force             --detach             "$GITHUB_SHA"
-
-          git clean -ffdx
-
-      - name: Configure shared Rust
-        run: |
-          echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
-          mkdir -p "$CARGO_TARGET_DIR"
-          "$CARGO_HOME/bin/rustc" --version
-          "$CARGO_HOME/bin/cargo" --version
-
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TDI_CI_RUST }}
       - name: Run tests
-        run: cargo test --workspace
+        run: cargo test --workspace --locked
 
   clippy:
     name: Clippy
-    runs-on: [self-hosted, Linux, ARM64, jetson, tdi]
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
-    env:
-      CARGO_TARGET_DIR: /mnt/nvme/github-runners/cache/tdi/clippy
-
     steps:
       - name: Checkout repository
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          git init .
-
-          git remote remove origin 2>/dev/null || true
-          git remote add origin             "https://github.com/${GITHUB_REPOSITORY}.git"
-
-          AUTH_HEADER="$(
-            printf 'x-access-token:%s' "$GITHUB_TOKEN" |
-              base64 -w 0
-          )"
-
-          git             -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH_HEADER}"             fetch               --no-tags               --prune               --depth=1               origin               "$GITHUB_REF"
-
-          git checkout             --force             --detach             "$GITHUB_SHA"
-
-          git clean -ffdx
-
-      - name: Configure shared Rust
-        run: |
-          echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
-          mkdir -p "$CARGO_TARGET_DIR"
-          "$CARGO_HOME/bin/rustc" --version
-          "$CARGO_HOME/bin/cargo" --version
-          "$CARGO_HOME/bin/cargo" clippy --version
-
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TDI_CI_RUST }}
+          components: clippy
       - name: Run Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
   integrity:
     name: Preregistration integrity
-    runs-on: [self-hosted, Linux, ARM64, jetson, tdi]
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
-
     steps:
       - name: Checkout repository
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+        uses: actions/checkout@v7
+      - name: Verify historical preregistration and scientific-code hashes
         run: |
-          git init .
-
-          git remote remove origin 2>/dev/null || true
-          git remote add origin             "https://github.com/${GITHUB_REPOSITORY}.git"
-
-          AUTH_HEADER="$(
-            printf 'x-access-token:%s' "$GITHUB_TOKEN" |
-              base64 -w 0
-          )"
-
-          git             -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH_HEADER}"             fetch               --no-tags               --prune               --depth=1               origin               "$GITHUB_REF"
-
-          git checkout             --force             --detach             "$GITHUB_SHA"
-
-          git clean -ffdx
-
-      - name: Verify preregistration hashes
-        run: |
-          sha256sum -c \
-            docs/TDI-2-CONTINUOUS-PREREGISTRATION.sha256
-          sha256sum -c \
-            docs/TDI-3-INTERWIDTH-PREREGISTRATION.sha256
-          sha256sum -c \
-            docs/TDI-3-INTERWIDTH-EVALUATOR.sha256
-          sha256sum -c \
-            docs/TDI-3-SCIENTIFIC-CODE.sha256
-          sha256sum -c \
-            docs/TDI-4-TARGET-GEOMETRY-PREREGISTRATION.sha256
-          sha256sum -c \
-            docs/TDI-4-TARGET-GEOMETRY-EVALUATOR.sha256
-          sha256sum -c \
-            docs/TDI-4-SCIENTIFIC-CODE.sha256
+          sha256sum -c docs/TDI-2-CONTINUOUS-PREREGISTRATION.sha256
+          sha256sum -c docs/TDI-3-INTERWIDTH-PREREGISTRATION.sha256
+          sha256sum -c docs/TDI-3-INTERWIDTH-EVALUATOR.sha256
+          sha256sum -c docs/TDI-3-SCIENTIFIC-CODE.sha256
+          sha256sum -c docs/TDI-4-TARGET-GEOMETRY-PREREGISTRATION.sha256
+          sha256sum -c docs/TDI-4-TARGET-GEOMETRY-EVALUATOR.sha256
+          sha256sum -c docs/TDI-4-SCIENTIFIC-CODE.sha256
           bash -n scripts/reproduce-tdi4.sh
+      - name: Verify TDI-7.0 preregistration when present
+        run: |
+          if test -f docs/TDI-7.0-ATTENTION-RECOVERY-PREREGISTRATION.sha256; then
+            sha256sum -c docs/TDI-7.0-ATTENTION-RECOVERY-PREREGISTRATION.sha256
+          fi
+      - name: Verify TDI-8.0 bootstrap when present
+        run: |
+          if test -f docs/TDI-8.0-ASSR-PREREGISTRATION.md; then
+            bash -n scripts/check-tdi8-bootstrap.sh
+            bash scripts/check-tdi8-bootstrap.sh
+          fi
