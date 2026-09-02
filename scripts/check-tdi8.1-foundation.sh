@@ -84,6 +84,12 @@ if test -f tdi-ai/src/associative_memory.rs; then
     bash scripts/check-tdi8.1-associative-memory.sh
 fi
 
+if test -f tdi-ai/src/assr_reference.rs; then
+    test -s scripts/check-tdi8.1-a1-a2-reference.sh \
+        || fail "A1/A2 reference source exists without its oracle gate"
+    bash scripts/check-tdi8.1-a1-a2-reference.sh
+fi
+
 printf 'TDI-8.1 reference-arm vocabulary: VERIFIED\n'
 printf 'TDI-8.1 exact memory-accounting invariants: VERIFIED\n'
 printf 'TDI-8.1 defining-component guards: VERIFIED\n'

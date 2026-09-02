@@ -10,6 +10,7 @@
 
 pub mod associative_memory;
 mod assr;
+pub mod assr_reference;
 mod static_diagnostics;
 mod toy_attention;
 
