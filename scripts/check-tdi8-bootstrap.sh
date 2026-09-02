@@ -8,13 +8,14 @@ fail() {
 
 PREREG="docs/TDI-8.0-ASSR-PREREGISTRATION.md"
 MANIFEST="docs/TDI-8.0-ASSR-PREREGISTRATION.gitblob"
+GATE="docs/TDI-8.0-IMPLEMENTATION-GATE.md"
 
 for file in \
     "$PREREG" \
     "$MANIFEST" \
     docs/TDI-8-PROGRAMME.md \
     docs/TDI-8.0-SCOPE.md \
-    docs/TDI-8.0-IMPLEMENTATION-GATE.md \
+    "$GATE" \
     docs/TDI-8.0-REVIEW-CHECKLIST.md \
     docs/TDI-8.0-STATUS.md \
     docs/TDI-8.0-README.md \
@@ -38,14 +39,32 @@ grep -Fq '`A3 recurrent + associative memory + VSA workspace` versus' "$PREREG" 
     || fail "A3 vs A2 primary contrast drifted"
 grep -Fq 'The primary A1/A2/A3 comparison uses an identical total dynamic-memory budget' "$PREREG" \
     || fail "matched dynamic-memory budget rule drifted"
+grep -Fq 'Each hypothesis has exactly nine primary cells' "$PREREG" \
+    || fail "nine-cell primary set drifted"
+grep -Fq 'The relative statistic is never evaluated with a zero denominator.' "$PREREG" \
+    || fail "zero-baseline rule missing"
+grep -Fq 'frozen at `delta = 0.02`' "$PREREG" \
+    || fail "primary decision margin drifted"
+grep -Fq 'Bonferroni allocation of `alpha = 0.05 / 9`' "$PREREG" \
+    || fail "family-wise coverage rule drifted"
+grep -Fq '1. `Beneficial` iff `L > +delta`;' "$PREREG" \
+    || fail "four-way classifier drifted"
+grep -Fq '`Beneficial` iff all nine cells are in `{Beneficial, Equivalent}`' "$PREREG" \
+    || fail "hypothesis aggregation gate drifted"
 grep -Fq 'TDI-8.2 — confirmatory holdout' "$PREREG" \
     || fail "TDI-8.2 human-only boundary missing"
 grep -Fq 'Autonomous agents must' "$PREREG" \
     || fail "autonomous holdout prohibition missing"
 
 grep -Fq 'TDI-8.1 may begin only after the TDI-8.0 preregistration is merged' \
-    docs/TDI-8.0-IMPLEMENTATION-GATE.md \
+    "$GATE" \
     || fail "TDI-8.1 merge gate missing"
+grep -Fq 'Each hypothesis retains exactly nine primary task × horizon cells.' "$GATE" \
+    || fail "implementation gate lost nine-cell rule"
+grep -Fq 'The primary relative-effect margin remains `delta = 0.02`.' "$GATE" \
+    || fail "implementation gate lost decision margin"
+grep -Fq 'using the frozen Bonferroni allocation `alpha = 0.05 / 9`.' "$GATE" \
+    || fail "implementation gate lost family-wise coverage"
 grep -Fq 'TDI-8 work must not read, generate, reuse or modify TDI-7.2 final-holdout data' \
     docs/TDI-8-PROGRAMME.md \
     || fail "TDI-7.2 isolation rule missing"
@@ -77,6 +96,7 @@ rm -f /tmp/tdi8-bootstrap-token-scan.log
 
 printf 'TDI-8.0 preregistration blob: VERIFIED (%s)\n' "$actual_blob"
 printf 'TDI-8.0 -> TDI-8.1 implementation gate: PRESENT\n'
+printf 'TDI-8 primary verdict rule: PINNED\n'
 printf 'TDI-8.2 executable surface: ABSENT\n'
 printf 'TDI-7.2 confirmation surface in TDI-8 bootstrap: ABSENT\n'
 printf 'TDI-8 bootstrap gate: PASS\n'
