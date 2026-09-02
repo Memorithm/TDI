@@ -71,16 +71,19 @@ grep -Fq 'TDI-8 work must not read, generate, reuse or modify TDI-7.2 final-hold
 grep -Fq 'TDI-8.0 must be merged and frozen before TDI-8.1 evaluator implementation' AGENTS.md \
     || fail "agent bootstrap does not enforce the TDI-8.0 -> TDI-8.1 gate"
 
+# TDI-8 now owns library code, so the absence check covers all current TDI
+# code/executable surfaces rather than only examples and binaries.
 mapfile -t forbidden < <(
-    find tdi-ai/examples tdi-bench/src/bin scripts -type f \
-        \( -iname '*tdi8.2*' -o -iname '*tdi8_2*' -o -iname '*tdi8-final*' -o -iname '*tdi8_final*' \) \
+    find tdi-ai tdi-bench scripts -type f \
+        \( -iname '*tdi8.2*' -o -iname '*tdi8_2*' -o -iname '*tdi8-final*' -o -iname '*tdi8_final*' -o -iname '*tdi82*holdout*' \) \
         ! -path 'scripts/check-tdi8-bootstrap.sh' \
+        ! -path 'scripts/check-tdi8.1-foundation.sh' \
         -print
 )
 if ((${#forbidden[@]} != 0)); then
-    printf 'Unexpected TDI-8.2 executable surfaces:\n' >&2
+    printf 'Unexpected TDI-8.2 executable/code surfaces:\n' >&2
     printf '  %s\n' "${forbidden[@]}" >&2
-    fail "TDI-8.2 must not exist during TDI-8.0"
+    fail "TDI-8.2 must not exist during TDI-8.0/TDI-8.1"
 fi
 
 # Scan the bootstrap surfaces consumed by agents and CI. Do not scan this
@@ -94,9 +97,17 @@ if grep -R -n -F 'TDI7_CONFIRM_FINAL_HOLDOUT' \
 fi
 rm -f /tmp/tdi8-bootstrap-token-scan.log
 
+# Once the TDI-8.1 foundation exists, its reviewed resource-accounting
+# invariants become part of the bootstrap gate for later TDI-8.1 work.
+if test -f tdi-ai/src/assr.rs; then
+    test -s scripts/check-tdi8.1-foundation.sh \
+        || fail "TDI-8.1 foundation exists without its integrity gate"
+    bash scripts/check-tdi8.1-foundation.sh
+fi
+
 printf 'TDI-8.0 preregistration blob: VERIFIED (%s)\n' "$actual_blob"
 printf 'TDI-8.0 -> TDI-8.1 implementation gate: PRESENT\n'
 printf 'TDI-8 primary verdict rule: PINNED\n'
-printf 'TDI-8.2 executable surface: ABSENT\n'
+printf 'TDI-8.2 executable/code surface: ABSENT\n'
 printf 'TDI-7.2 confirmation surface in TDI-8 bootstrap: ABSENT\n'
 printf 'TDI-8 bootstrap gate: PASS\n'
