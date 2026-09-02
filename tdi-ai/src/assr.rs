@@ -191,10 +191,11 @@ impl std::error::Error for MemoryAccountingError {}
 
 /// Exact, component-wise memory accounting for one reference arm.
 ///
-/// The frozen matched budget is the sum of recurrent state, associative
-/// payload, associative metadata and VSA workspace. Temporary working storage,
-/// A0 cumulative history and static parameters are reported separately rather
-/// than silently folded into that matched A1/A2/A3 budget.
+/// The frozen matched A1/A2/A3 total dynamic-memory budget is the sum of
+/// recurrent state, associative payload, associative metadata, VSA workspace
+/// and temporary working storage. A0 cumulative history and static parameters
+/// are reported separately rather than silently folded into that matched
+/// bounded-arm budget.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct MemoryAccounting {
     recurrent_state: StorageBits,
@@ -312,19 +313,19 @@ impl MemoryAccounting {
         self.static_parameters
     }
 
-    /// Matched persistent dynamic-memory budget used by A1/A2/A3.
+    /// Matched total dynamic-memory budget used by A1/A2/A3.
     pub fn budgeted_dynamic_bits(self) -> Result<StorageBits, MemoryAccountingError> {
         self.recurrent_state
             .checked_add(self.associative_payload)?
             .checked_add(self.associative_metadata)?
-            .checked_add(self.vsa_workspace)
+            .checked_add(self.vsa_workspace)?
+            .checked_add(self.temporary_working)
     }
 
     /// All live/reference storage reported for the step, excluding static
-    /// parameters but including temporary work and A0 history.
+    /// parameters but including A0 cumulative history.
     pub fn reported_dynamic_bits(self) -> Result<StorageBits, MemoryAccountingError> {
         self.budgeted_dynamic_bits()?
-            .checked_add(self.temporary_working)?
             .checked_add(self.cumulative_history)
     }
 
@@ -400,7 +401,8 @@ fn require_nonzero(
     }
 }
 
-/// Validated common dynamic-memory budget for the A1/A2/A3 primary contrast.
+/// Validated common total dynamic-memory budget for the A1/A2/A3 primary
+/// contrast.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MatchedDynamicBudget {
     bits: StorageBits,
@@ -565,6 +567,29 @@ mod tests {
     }
 
     #[test]
+    fn temporary_working_storage_participates_in_matched_budget() {
+        let a1 = MemoryAccounting::zero()
+            .with_recurrent_state(StorageBits::new(64))
+            .with_temporary_working(StorageBits::new(8));
+        let a2 = MemoryAccounting::zero()
+            .with_recurrent_state(StorageBits::new(32))
+            .with_associative_payload(StorageBits::new(32));
+        let a3 = MemoryAccounting::zero()
+            .with_recurrent_state(StorageBits::new(32))
+            .with_associative_payload(StorageBits::new(16))
+            .with_vsa_workspace(StorageBits::new(16));
+
+        assert_eq!(
+            MatchedDynamicBudget::validate(a1, a2, a3),
+            Err(MemoryAccountingError::DynamicBudgetMismatch {
+                a1: StorageBits::new(72),
+                a2: StorageBits::new(64),
+                a3: StorageBits::new(64),
+            })
+        );
+    }
+
+    #[test]
     fn matched_budget_rejects_unequal_totals() {
         let a1 = MemoryAccounting::zero().with_recurrent_state(StorageBits::new(64));
         let a2 = MemoryAccounting::zero()
@@ -586,7 +611,7 @@ mod tests {
     }
 
     #[test]
-    fn temporary_static_and_history_are_reported_outside_matched_budget() {
+    fn temporary_static_and_history_are_reported_without_double_counting() {
         let a0 = MemoryAccounting::zero()
             .with_recurrent_state(StorageBits::new(64))
             .with_temporary_working(StorageBits::new(32))
@@ -596,7 +621,7 @@ mod tests {
             .expect("A0 may retain history");
         assert_eq!(
             a0.budgeted_dynamic_bits().expect("finite sum"),
-            StorageBits::new(64)
+            StorageBits::new(96)
         );
         assert_eq!(
             a0.reported_dynamic_bits().expect("finite sum"),
