@@ -8,11 +8,16 @@
 //! generic contracts that can be instantiated by toy mechanisms, model probes,
 //! FLAT-ATTENTION reference semantics, or future adapters.
 
+mod assr;
 mod static_diagnostics;
 mod toy_attention;
 
 use tdi_core::{BranchingRecoveryAnalysis, ExactRatio};
 
+pub use assr::{
+    MatchedDynamicBudget, MemoryAccounting, MemoryAccountingError, MemoryComponent, ReferenceArm,
+    ReferenceSnapshot, StorageBits,
+};
 pub use static_diagnostics::{
     StaticAttentionDiagnostics, StaticAttentionError, analyze_static_attention,
 };
