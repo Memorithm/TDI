@@ -7,7 +7,6 @@ policy_status = "FROZEN"
 prearm_main_commit = "c98e73d52e1f23f315ca75b9303b89580b14fc45"
 final_seed_start = 7100050000
 final_seed_end = 7100059999
-selection_count = 3000
 selection_rule = "contiguous_ascending_v1"
 selection_start = 7100050000
 selection_count = 3000
