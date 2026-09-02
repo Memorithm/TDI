@@ -1,4 +1,4 @@
-// TDI-7.8 evidence-justified extension features.
+// TDI-7.9 calibration and robustness replication features.
 // These features are bounded to the TDI-7.1 evaluator and do not access
 // the final holdout range (7100030000-7100039999).
 // TDI-7.3 uses the frozen decision records from docs/TDI-7.3-*.toml
@@ -7,6 +7,7 @@
 // TDI-7.6 uses the frozen decision records from docs/TDI-7.6-*.toml
 // TDI-7.7 uses the frozen decision records from docs/TDI-7.7-*.toml
 // TDI-7.8 uses the frozen decision records from docs/TDI-7.8-*.toml
+// TDI-7.9 uses the frozen decision records from docs/TDI-7.9-*.toml
 
 //! TDI-7.1 bounded feature extraction over the merged `tdi-ai` contracts.
 //!
