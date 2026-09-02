@@ -126,6 +126,14 @@ impl MemoryComponent {
 pub enum MemoryAccountingError {
     /// Summing exact storage components exceeded the accounting representation.
     Overflow,
+    /// An architecture omitted storage required by its frozen defining
+    /// mechanism.
+    RequiredComponentMissing {
+        /// Architecture whose accounting was invalid.
+        arm: ReferenceArm,
+        /// Required component that had zero allocated bits.
+        component: MemoryComponent,
+    },
     /// An architecture reported storage that its frozen reference semantics do
     /// not permit.
     ComponentNotAllowed {
@@ -151,6 +159,12 @@ impl fmt::Display for MemoryAccountingError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Overflow => formatter.write_str("TDI-8 memory accounting overflow"),
+            Self::RequiredComponentMissing { arm, component } => write!(
+                formatter,
+                "{} requires non-zero {} storage",
+                arm.label(),
+                component.label()
+            ),
             Self::ComponentNotAllowed {
                 arm,
                 component,
@@ -314,7 +328,8 @@ impl MemoryAccounting {
             .checked_add(self.cumulative_history)
     }
 
-    /// Validate that non-zero components agree with the frozen arm semantics.
+    /// Validate both forbidden and defining non-zero components for the frozen
+    /// reference arm semantics.
     pub fn validate_for_arm(self, arm: ReferenceArm) -> Result<(), MemoryAccountingError> {
         if !arm.permits_associative_memory() {
             require_zero(
@@ -338,6 +353,21 @@ impl MemoryAccounting {
                 self.cumulative_history,
             )?;
         }
+
+        if matches!(arm, ReferenceArm::A1 | ReferenceArm::A2 | ReferenceArm::A3) {
+            require_nonzero(arm, MemoryComponent::RecurrentState, self.recurrent_state)?;
+        }
+        if arm.permits_associative_memory() {
+            require_nonzero(
+                arm,
+                MemoryComponent::AssociativePayload,
+                self.associative_payload,
+            )?;
+        }
+        if arm.permits_vsa_workspace() {
+            require_nonzero(arm, MemoryComponent::VsaWorkspace, self.vsa_workspace)?;
+        }
+
         Ok(())
     }
 }
@@ -355,6 +385,18 @@ fn require_zero(
             component,
             bits,
         })
+    }
+}
+
+fn require_nonzero(
+    arm: ReferenceArm,
+    component: MemoryComponent,
+    bits: StorageBits,
+) -> Result<(), MemoryAccountingError> {
+    if bits == StorageBits::ZERO {
+        Err(MemoryAccountingError::RequiredComponentMissing { arm, component })
+    } else {
+        Ok(())
     }
 }
 
@@ -474,6 +516,38 @@ mod tests {
     }
 
     #[test]
+    fn defining_components_must_have_nonzero_storage() {
+        let a1 = MemoryAccounting::zero();
+        assert_eq!(
+            a1.validate_for_arm(ReferenceArm::A1),
+            Err(MemoryAccountingError::RequiredComponentMissing {
+                arm: ReferenceArm::A1,
+                component: MemoryComponent::RecurrentState,
+            })
+        );
+
+        let a2 = MemoryAccounting::zero().with_recurrent_state(StorageBits::new(64));
+        assert_eq!(
+            a2.validate_for_arm(ReferenceArm::A2),
+            Err(MemoryAccountingError::RequiredComponentMissing {
+                arm: ReferenceArm::A2,
+                component: MemoryComponent::AssociativePayload,
+            })
+        );
+
+        let a3 = MemoryAccounting::zero()
+            .with_recurrent_state(StorageBits::new(32))
+            .with_associative_payload(StorageBits::new(32));
+        assert_eq!(
+            a3.validate_for_arm(ReferenceArm::A3),
+            Err(MemoryAccountingError::RequiredComponentMissing {
+                arm: ReferenceArm::A3,
+                component: MemoryComponent::VsaWorkspace,
+            })
+        );
+    }
+
+    #[test]
     fn matched_budget_accepts_different_partitions_of_the_same_bits() {
         let a1 = MemoryAccounting::zero().with_recurrent_state(StorageBits::new(1024));
         let a2 = MemoryAccounting::zero()
@@ -535,6 +609,7 @@ mod tests {
     fn bounded_arms_reject_full_history_storage() {
         let memory = MemoryAccounting::zero()
             .with_recurrent_state(StorageBits::new(64))
+            .with_associative_payload(StorageBits::new(64))
             .with_cumulative_history(StorageBits::new(64));
         assert_eq!(
             memory.validate_for_arm(ReferenceArm::A2),
@@ -561,6 +636,7 @@ mod tests {
     fn snapshot_validates_arm_accounting_before_exposing_state() {
         let memory = MemoryAccounting::zero()
             .with_recurrent_state(StorageBits::new(64))
+            .with_associative_payload(StorageBits::new(64))
             .with_vsa_workspace(StorageBits::new(64));
         let snapshot =
             ReferenceSnapshot::new(ReferenceArm::A3, vec![1.0, -1.0], memory).expect("A3 snapshot");
