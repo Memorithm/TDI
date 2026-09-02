@@ -19,8 +19,9 @@ The implementation introduces:
 - exact `u128` bit accounting through `StorageBits`;
 - separate accounting for recurrent state, associative payload, associative
   metadata, VSA workspace, temporary work, A0 history and static parameters;
-- arm-specific fail-closed validation of components that are not permitted by
-  the frozen architecture ladder;
+- arm-specific fail-closed validation of both forbidden storage and required
+  defining storage: nonzero recurrent state for A1/A2/A3, nonzero associative
+  payload for A2/A3, and nonzero VSA workspace for A3;
 - exact validation that A1/A2/A3 use the same budgeted dynamic-memory total;
 - framework-independent reference snapshots carrying arm identity and memory
   accounting.
@@ -39,6 +40,12 @@ Temporary working storage is reported separately. A0 cumulative history is
 reported separately. Static parameters/constants are reported separately.
 This follows the component separation and A1/A2/A3 partition rule frozen by
 TDI-8.0; it does not imply a runtime, bandwidth or total-process-memory claim.
+
+A zero-bit allocation cannot be used to label a mechanism as an arm when that
+component defines the arm. In particular, A1/A2/A3 require nonzero recurrent
+state, A2/A3 require nonzero associative payload, and A3 requires a nonzero VSA
+workspace. This prevents the primary A2-vs-A1 or A3-vs-A2 contrasts from
+silently degenerating into identical mechanisms.
 
 ## Deliberately not frozen by this tranche
 
