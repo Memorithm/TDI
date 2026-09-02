@@ -9,6 +9,7 @@
 //! FLAT-ATTENTION reference semantics, or future adapters.
 
 pub mod associative_memory;
+pub mod assr_reference;
 mod assr;
 mod static_diagnostics;
 mod toy_attention;
