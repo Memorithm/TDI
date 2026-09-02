@@ -1,0 +1,19 @@
+# TDI-7.3 population decision record
+# This record freezes the population size for TDI-7.3 experiments.
+# Must be reviewed and approved before use.
+
+schema_version = 1
+policy_status = "FROZEN"
+prearm_main_commit = "c98e73d52e1f23f315ca75b9303b89580b14fc45"
+final_seed_start = 7100040000
+final_seed_end = 7100049999
+selection_count = 5000
+selection_rule = "contiguous_ascending_v1"
+selection_start = 7100040000
+selection_count = 5000
+authorization_state = "NOT_AUTHORIZED"
+selection_reference = "TDI-7.3-POPULATION-DECISION"
+
+# The population decision for TDI-7.3 is frozen at 5000 generators
+# spanning the final seed range 7100040000-7100049999
+# This ensures reproducibility and prevents arbitrary scaling
