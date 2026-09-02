@@ -217,7 +217,7 @@ For each task, horizon stratum and architecture, record:
 Runtime, bandwidth, energy and GPU occupancy are **not** TDI-8.0 primary
 outcomes.
 
-## 10. Primary statistical contrasts
+## 10. Primary statistical contrasts and frozen decision rule
 
 ### H8-A
 
@@ -229,27 +229,86 @@ memory budget.
 Compare A3 against A2 using paired generator-level observations under the same
 memory budget.
 
-For continuous deficit, the primary effect is relative mean-deficit reduction:
+Each hypothesis has exactly nine primary cells: the Cartesian product of the
+three frozen task families and the three frozen horizon strata. Additional
+stress slices may be reported as secondary analyses but cannot be substituted
+for or added to these nine primary cells after validation results are observed.
 
-`R = (MSE_baseline - MSE_candidate) / MSE_baseline`.
+For a primary cell with mean baseline deficit `B > 0` and mean candidate deficit
+`C`, the primary effect is relative mean-deficit reduction:
 
-The paired uncertainty procedure must be implemented and software-validated in
-TDI-8.1 before final-holdout access. TDI-8.1 will freeze the replicate count and
-seed before TDI-8.2 exists.
+`R = (B - C) / B`.
 
-The decision margin is ±2 percentage points unless TDI-8.1 demonstrates before
-final-holdout implementation that the statistic requires a different explicitly
-preregistered scale. Any change requires a reviewed amendment before holdout
-arming.
+Deficit is non-negative by definition. A non-finite or negative deficit is an
+invalid numeric result and follows the typed fail-closed rejection policy rather
+than receiving a scientific verdict.
 
-Possible verdicts remain:
+### Zero-baseline rule
 
-- Beneficial;
-- Equivalent;
-- Harmful;
-- Inconclusive.
+The relative statistic is never evaluated with a zero denominator.
 
-No negative or null result may be discarded or renumbered away.
+If `B == 0` exactly:
+
+- if `C == 0` exactly, the cell verdict is `Equivalent` and `R` is recorded as
+  undefined because both arms have zero measured deficit;
+- if `C > 0`, the cell verdict is `Harmful`, `R` is recorded as undefined, and
+  the absolute degradation `C - B` is reported;
+- no zero-baseline cell can produce a `Beneficial` verdict.
+
+This branch is part of the primary classifier, not a post-hoc fallback.
+
+### Paired uncertainty family
+
+For cells with `B > 0`, TDI-8.1 must implement and software-validate a paired
+uncertainty procedure capable of producing a two-sided interval `[L, U]` for
+`R`. The resampling/replicate implementation, replicate count and deterministic
+resampling seed must be frozen using non-final data before TDI-8.2 exists.
+
+The inferential coverage is frozen here: within each hypothesis, the nine
+primary cell intervals must provide at least 95% family-wise coverage using a
+Bonferroni allocation of `alpha = 0.05 / 9` to each two-sided cell interval.
+TDI-8.1 may improve numerical implementation of that interval construction but
+must not weaken this family-wise coverage rule after validation results are
+seen.
+
+The equivalence/decision margin is frozen at `delta = 0.02`, i.e. two percentage
+points of relative mean-deficit reduction. Changing `delta`, the classifier, or
+the hypothesis-level aggregation rule requires a separately reviewed
+preregistration amendment before any TDI-8.2 runner, seed range, or result
+surface exists.
+
+### Four-way primary-cell classifier
+
+For a non-zero-baseline cell, classify the simultaneous interval `[L, U]` in
+this exact precedence:
+
+1. `Beneficial` iff `L > +delta`;
+2. `Harmful` iff `U < -delta`;
+3. `Equivalent` iff `L >= -delta` and `U <= +delta`;
+4. `Inconclusive` otherwise.
+
+Thus an interval that crosses zero but extends outside the equivalence band is
+`Inconclusive`; an interval touching either `-delta` or `+delta` without
+crossing outside the band remains `Equivalent`. Invalid or missing intervals do
+not get coerced into any favorable category.
+
+### Frozen hypothesis-level aggregation
+
+The nine primary-cell verdicts map to the H8-A or H8-B verdict by the following
+closed rule:
+
+- `Beneficial` iff all nine cells are in `{Beneficial, Equivalent}` and at least
+  one cell is `Beneficial`;
+- `Harmful` iff all nine cells are in `{Harmful, Equivalent}` and at least one
+  cell is `Harmful`;
+- `Equivalent` iff all nine cells are `Equivalent`;
+- `Inconclusive` in every other case, including any `Inconclusive` cell, any
+  mixture containing both `Beneficial` and `Harmful`, or any missing/rejected
+  primary cell.
+
+No task, horizon, favorable cell, or secondary analysis may override this
+hypothesis-level gate. No negative, null, harmful, rejected, or inconclusive
+result may be discarded or renumbered away.
 
 ## 11. Secondary analyses
 
@@ -323,8 +382,10 @@ metrics, memory accounting, operation accounting, paired statistics, provenance
 and fail-closed holdout guards using only non-final data.
 
 TDI-8.1 must also freeze the concrete dimensions, budgets, horizon strata, seed
-ranges, sample counts, bootstrap configuration and final rejection taxonomy
-before TDI-8.2 can be armed.
+ranges, sample counts, paired interval implementation/replicate count and final
+rejection taxonomy before TDI-8.2 can be armed. It must not alter the frozen
+`delta`, four-way classifier, nine-cell primary set, family-wise coverage rule,
+or hypothesis-level aggregation gate.
 
 ### TDI-8.2 — confirmatory holdout
 
