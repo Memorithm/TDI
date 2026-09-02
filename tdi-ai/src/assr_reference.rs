@@ -71,16 +71,16 @@ impl RecurrentLayout {
 
     fn recurrent_parameter_lengths(self) -> Result<(usize, usize, usize), RecurrentReferenceError> {
         let (input_width, state_width) = self.host_dimensions()?;
-        let input_matrix = state_width
-            .checked_mul(input_width)
-            .ok_or(RecurrentReferenceError::HostLengthOverflow {
+        let input_matrix = state_width.checked_mul(input_width).ok_or(
+            RecurrentReferenceError::HostLengthOverflow {
                 component: "input_to_state",
-            })?;
-        let recurrent_matrix = state_width
-            .checked_mul(state_width)
-            .ok_or(RecurrentReferenceError::HostLengthOverflow {
+            },
+        )?;
+        let recurrent_matrix = state_width.checked_mul(state_width).ok_or(
+            RecurrentReferenceError::HostLengthOverflow {
                 component: "recurrent_to_state",
-            })?;
+            },
+        )?;
         Ok((input_matrix, recurrent_matrix, state_width))
     }
 }
@@ -233,7 +233,10 @@ impl fmt::Display for RecurrentReferenceError {
                 "{component}={value} does not fit the host index type"
             ),
             Self::HostLengthOverflow { component } => {
-                write!(formatter, "{component} length overflows the host index type")
+                write!(
+                    formatter,
+                    "{component} length overflows the host index type"
+                )
             }
             Self::HostAllocationFailed { elements } => write!(
                 formatter,
@@ -255,7 +258,10 @@ impl fmt::Display for RecurrentReferenceError {
                 "recurrent input width mismatch: expected {expected}, got {actual}"
             ),
             Self::NonFiniteInput { index } => {
-                write!(formatter, "recurrent input coordinate {index} is not finite")
+                write!(
+                    formatter,
+                    "recurrent input coordinate {index} is not finite"
+                )
             }
             Self::NonFiniteIntermediate { state_index } => write!(
                 formatter,
@@ -306,10 +312,7 @@ fn validate_length(
     }
 }
 
-fn validate_finite(
-    component: &'static str,
-    values: &[f64],
-) -> Result<(), RecurrentReferenceError> {
+fn validate_finite(component: &'static str, values: &[f64]) -> Result<(), RecurrentReferenceError> {
     if let Some(index) = values.iter().position(|value| !value.is_finite()) {
         Err(RecurrentReferenceError::NonFiniteParameter { component, index })
     } else {
@@ -340,13 +343,7 @@ fn storage_bits_for_values(values: u64) -> Result<StorageBits, RecurrentReferenc
 }
 
 fn hard_tanh(value: f64) -> f64 {
-    if value < -1.0 {
-        -1.0
-    } else if value > 1.0 {
-        1.0
-    } else {
-        value
-    }
+    value.clamp(-1.0, 1.0)
 }
 
 /// Deterministic bounded recurrent core used by A1 and A2.
@@ -397,14 +394,14 @@ impl BoundedRecurrentCore {
         for (row, next_value) in next.iter_mut().enumerate() {
             let mut accumulator = self.parameters.bias[row];
 
-            let recurrent_row = row
-                .checked_mul(state_width)
-                .ok_or(RecurrentReferenceError::HostLengthOverflow {
+            let recurrent_row = row.checked_mul(state_width).ok_or(
+                RecurrentReferenceError::HostLengthOverflow {
                     component: "recurrent_to_state row",
-                })?;
+                },
+            )?;
             for column in 0..state_width {
-                accumulator += self.parameters.recurrent_to_state[recurrent_row + column]
-                    * self.state[column];
+                accumulator +=
+                    self.parameters.recurrent_to_state[recurrent_row + column] * self.state[column];
                 if !accumulator.is_finite() {
                     return Err(RecurrentReferenceError::NonFiniteIntermediate {
                         state_index: row,
@@ -412,13 +409,13 @@ impl BoundedRecurrentCore {
                 }
             }
 
-            let input_row = row
-                .checked_mul(input_width)
-                .ok_or(RecurrentReferenceError::HostLengthOverflow {
+            let input_row = row.checked_mul(input_width).ok_or(
+                RecurrentReferenceError::HostLengthOverflow {
                     component: "input_to_state row",
-                })?;
-            for column in 0..input_width {
-                accumulator += self.parameters.input_to_state[input_row + column] * input[column];
+                },
+            )?;
+            for (column, input_value) in input.iter().enumerate() {
+                accumulator += self.parameters.input_to_state[input_row + column] * *input_value;
                 if !accumulator.is_finite() {
                     return Err(RecurrentReferenceError::NonFiniteIntermediate {
                         state_index: row,
@@ -490,9 +487,7 @@ impl A1Reference {
     }
 
     /// Clone a validated framework-independent A1 snapshot.
-    pub fn snapshot(
-        &self,
-    ) -> Result<ReferenceSnapshot<Vec<f64>>, RecurrentReferenceError> {
+    pub fn snapshot(&self) -> Result<ReferenceSnapshot<Vec<f64>>, RecurrentReferenceError> {
         Ok(ReferenceSnapshot::new(
             ReferenceArm::A1,
             self.core.state.clone(),
@@ -685,9 +680,7 @@ impl A2Reference {
     }
 
     /// Clone a validated framework-independent A2 snapshot.
-    pub fn snapshot(
-        &self,
-    ) -> Result<ReferenceSnapshot<A2StateSnapshot>, RecurrentReferenceError> {
+    pub fn snapshot(&self) -> Result<ReferenceSnapshot<A2StateSnapshot>, RecurrentReferenceError> {
         let state = A2StateSnapshot {
             recurrent_state: self.core.state.clone(),
             associative_memory: self.memory.clone(),
@@ -706,8 +699,8 @@ mod tests {
         A1Reference, A2ReadStatus, A2Reference, RecurrentLayout, RecurrentParameters,
         RecurrentReferenceError,
     };
-    use crate::associative_memory::{AssociativeMemoryLayout, AssociativeWriteOutcome};
     use crate::ReferenceArm;
+    use crate::associative_memory::{AssociativeMemoryLayout, AssociativeWriteOutcome};
 
     fn identity_parameters() -> RecurrentParameters {
         let layout = RecurrentLayout::new(2, 2).expect("valid fixture layout");
@@ -773,8 +766,7 @@ mod tests {
     #[test]
     fn a2_write_then_read_hit_fuses_resident_state() {
         let memory_layout = AssociativeMemoryLayout::new(8, 2).expect("memory layout");
-        let mut a2 =
-            A2Reference::new(identity_parameters(), memory_layout, 11, 1.0).expect("A2");
+        let mut a2 = A2Reference::new(identity_parameters(), memory_layout, 11, 1.0).expect("A2");
 
         let first = a2
             .step(&[0.5, -0.5], 7, Some(7))
@@ -792,8 +784,7 @@ mod tests {
     #[test]
     fn a2_lookup_happens_before_optional_write() {
         let memory_layout = AssociativeMemoryLayout::new(1, 2).expect("memory layout");
-        let mut a2 =
-            A2Reference::new(identity_parameters(), memory_layout, 13, 1.0).expect("A2");
+        let mut a2 = A2Reference::new(identity_parameters(), memory_layout, 13, 1.0).expect("A2");
         a2.step(&[0.25, 0.5], 1, Some(1)).expect("seed key 1");
 
         let report = a2
@@ -808,10 +799,7 @@ mod tests {
         ));
         assert!(matches!(
             report.write(),
-            Some(AssociativeWriteOutcome::ReplacedCollision {
-                evicted_key: 1,
-                ..
-            })
+            Some(AssociativeWriteOutcome::ReplacedCollision { evicted_key: 1, .. })
         ));
     }
 
