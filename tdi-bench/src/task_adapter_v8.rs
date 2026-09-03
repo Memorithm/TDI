@@ -1,9 +1,13 @@
 //! Lossless task-adapter foundation for bounded TDI-8.1 evaluation.
 //!
 //! One already-generated symbolic task instance is mapped to one deterministic
-//! schedule shared by A0/A1/A2/A3. This layer owns evaluation semantics, not
-//! architecture primitives, and intentionally chooses no recurrent parameters,
-//! memory capacities, horizons, population ranges or TDI-8.2 surface.
+//! evaluator schedule shared by A0/A1/A2/A3. Arm-visible recurrent inputs obey
+//! the merged `SymbolicTaskAdapter` leakage boundary: query targets,
+//! generator-side collision classes and association source indices remain
+//! evaluator-owned metadata and are never encoded as recurrent features.
+//!
+//! This layer chooses no recurrent parameters, memory capacities, horizons,
+//! population ranges or TDI-8.2 surface.
 
 use core::{fmt, mem};
 
@@ -21,8 +25,12 @@ const SEARCH_STEP: u64 = 0x9e37_79b9_7f4a_7c15;
 
 /// Finite binary64 coordinates required for one exact `u64`.
 pub const EXACT_U64_BINARY64_WIDTH: usize = 2;
-/// Minimum A1/A2/A3 recurrent-input width for one lossless event frame.
-pub const MIN_TASK_EVENT_INPUT_WIDTH: u64 = 9;
+/// Minimum A1/A2/A3 recurrent-input width for one leakage-safe event frame.
+///
+/// Coordinate zero is the event tag. Coordinates 1-2 contain the first
+/// arm-visible symbolic operand and coordinates 3-4 contain the optional second
+/// operand. No target/provenance/stress annotation is encoded implicitly.
+pub const MIN_TASK_EVENT_INPUT_WIDTH: u64 = 5;
 /// A0 task key width: one namespace tag plus two exact integer limbs.
 pub const A0_TASK_KEY_WIDTH: u64 = 3;
 /// A0 task value width: two exact integer limbs.
@@ -30,7 +38,7 @@ pub const A0_TASK_VALUE_WIDTH: u64 = 2;
 
 /// Exact finite binary64 representation of one `u64`.
 ///
-/// High/low 32-bit limbs are divided by `2^32`; every coordinate is therefore
+/// High/low 32-bit limbs are divided by `2^32`; every emitted coordinate is
 /// exactly representable, finite and in `[0, 1)`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ExactU64Binary64([f64; EXACT_U64_BINARY64_WIDTH]);
@@ -50,7 +58,7 @@ impl ExactU64Binary64 {
         self.0
     }
 
-    /// Decode only a canonical exact two-limb representation.
+    /// Decode only the canonical exact two-limb representation emitted above.
     pub fn decode(coordinates: [f64; EXACT_U64_BINARY64_WIDTH]) -> Result<u64, TaskAdapterError> {
         let high = decode_limb(0, coordinates[0])?;
         let low = decode_limb(1, coordinates[1])?;
@@ -59,7 +67,10 @@ impl ExactU64Binary64 {
 }
 
 fn decode_limb(index: usize, value: f64) -> Result<u32, TaskAdapterError> {
-    if !value.is_finite() || !(0.0..1.0).contains(&value) {
+    if !value.is_finite()
+        || (value == 0.0 && value.is_sign_negative())
+        || !(0.0..1.0).contains(&value)
+    {
         return Err(TaskAdapterError::NonCanonicalEncodedLimb {
             index,
             value_bits: value.to_bits(),
@@ -77,9 +88,10 @@ fn decode_limb(index: usize, value: f64) -> Result<u32, TaskAdapterError> {
 
 /// Caller-supplied recurrent-input shape for A1/A2/A3 task frames.
 ///
-/// The first nine coordinates have fixed lossless semantics. Additional
-/// coordinates are deterministic zero padding, so later bounded development can
-/// select a concrete input/VSA width without changing symbolic task identity.
+/// The first five coordinates have fixed leakage-safe, lossless semantics.
+/// Additional coordinates are deterministic zero padding, so later bounded
+/// development can select a concrete input/VSA width without changing symbolic
+/// task identity. No experimental width default is provided.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TaskAdapterLayout {
     recurrent_input_width: u64,
@@ -130,7 +142,10 @@ impl TaskAdapterLayout {
     }
 }
 
-/// Deterministic A0 action derived from one symbolic task event.
+/// Deterministic A0 arm action derived from one symbolic task event.
+///
+/// Query targets are deliberately absent. The evaluator retains them separately
+/// in [`TaskEventPlan::expected_target`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum A0TaskAction {
     /// Append one accessible full-history item.
@@ -140,16 +155,18 @@ pub enum A0TaskAction {
         /// Exact symbolic value.
         value: [f64; A0_TASK_VALUE_WIDTH as usize],
     },
-    /// Read one exact target from full history.
+    /// Read one namespaced key from full history.
     Read {
         /// Namespaced query key.
         key: [f64; A0_TASK_KEY_WIDTH as usize],
-        /// Exact expected value.
-        target: [f64; A0_TASK_VALUE_WIDTH as usize],
     },
 }
 
-/// One symbolic event mapped to the concrete A0/A1/A2/A3 call surfaces.
+/// One symbolic event mapped to concrete evaluator call surfaces.
+///
+/// `source_event` and `expected_target` are evaluator-owned metadata. Only the
+/// arm action, recurrent input and logical memory/VSA keys are arm-visible
+/// scheduling data.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TaskEventPlan {
     source_event: TaskEvent,
@@ -162,19 +179,19 @@ pub struct TaskEventPlan {
 }
 
 impl TaskEventPlan {
-    /// Original symbolic event, unchanged.
+    /// Original symbolic event retained for evaluator provenance/audit only.
     #[must_use]
     pub const fn source_event(&self) -> TaskEvent {
         self.source_event
     }
 
-    /// Lossless event frame consumed identically by A1/A2/A3.
+    /// Leakage-safe lossless event frame consumed identically by A1/A2/A3.
     #[must_use]
     pub fn recurrent_input(&self) -> &[f64] {
         &self.recurrent_input
     }
 
-    /// Key passed to the A2/A3 read path.
+    /// Logical key passed to the A2/A3 read path.
     #[must_use]
     pub const fn memory_read_key(&self) -> u64 {
         self.memory_read_key
@@ -186,27 +203,27 @@ impl TaskEventPlan {
         self.memory_write_key
     }
 
-    /// Optional A3 VSA role key. When present, the evaluator stores the exact
-    /// recurrent-input frame after the integrated A3 step.
+    /// Optional A3 VSA role key. When present, a later evaluator may store the
+    /// leakage-safe recurrent-input frame under that role after the A3 step.
     #[must_use]
     pub const fn vsa_store_key(&self) -> Option<u64> {
         self.vsa_store_key
     }
 
-    /// A0 action for the same symbolic event.
+    /// A0 arm action for the same symbolic event. Query targets are excluded.
     #[must_use]
     pub const fn a0_action(&self) -> A0TaskAction {
         self.a0_action
     }
 
-    /// Exact symbolic target on task-query events only.
+    /// Exact symbolic target on task-query events only, evaluator-owned.
     #[must_use]
     pub const fn expected_target(&self) -> Option<TaskSymbol> {
         self.expected_target
     }
 }
 
-/// Complete deterministic schedule for one generated task instance.
+/// Complete deterministic evaluator schedule for one generated task instance.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TaskAdapterPlan {
     family: TaskFamily,
@@ -241,7 +258,7 @@ impl TaskAdapterPlan {
         self.distractor_read_key
     }
 
-    /// Ordered event schedule shared by all four arms.
+    /// Ordered evaluator event schedule shared by all four arms.
     #[must_use]
     pub fn events(&self) -> &[TaskEventPlan] {
         &self.events
@@ -340,10 +357,7 @@ impl fmt::Display for TaskAdapterError {
                 "TDI-8.1 task adapter requires input width >= {minimum}, got {actual}"
             ),
             Self::HostDimensionTooLarge { component, value } => {
-                write!(
-                    formatter,
-                    "{component}={value} does not fit the host index type"
-                )
+                write!(formatter, "{component}={value} does not fit the host index type")
             }
             Self::HostVectorCapacityTooLarge {
                 component,
@@ -465,39 +479,21 @@ fn encode_event(event: TaskEvent, width: usize) -> Result<Vec<f64>, TaskAdapterE
     let mut input = allocate_input(width)?;
     input[0] = event_tag(event);
     match event {
-        TaskEvent::Associate {
-            key,
-            value,
-            source_index,
-        } => {
+        TaskEvent::Associate { key, value, .. } => {
             fill_pair(&mut input, 1, key.code());
-            fill_pair(&mut input, 3, key.collision_class());
-            fill_pair(&mut input, 5, value.code());
-            fill_pair(&mut input, 7, source_index);
+            fill_pair(&mut input, 3, value.code());
         }
-        TaskEvent::Payload { position, value } => {
-            fill_pair(&mut input, 1, position);
-            fill_pair(&mut input, 5, value.code());
-            fill_pair(&mut input, 7, position);
+        TaskEvent::Payload { value, .. } => {
+            fill_pair(&mut input, 1, value.code());
         }
         TaskEvent::Distractor { token } => {
             fill_pair(&mut input, 1, token.code());
-            fill_pair(&mut input, 5, token.code());
         }
-        TaskEvent::QueryAssociation {
-            key,
-            target,
-            source_index,
-        } => {
+        TaskEvent::QueryAssociation { key, .. } => {
             fill_pair(&mut input, 1, key.code());
-            fill_pair(&mut input, 3, key.collision_class());
-            fill_pair(&mut input, 5, target.code());
-            fill_pair(&mut input, 7, source_index);
         }
-        TaskEvent::QueryPayload { position, target } => {
+        TaskEvent::QueryPayload { position, .. } => {
             fill_pair(&mut input, 1, position);
-            fill_pair(&mut input, 5, target.code());
-            fill_pair(&mut input, 7, position);
         }
     }
     Ok(input)
@@ -539,7 +535,7 @@ fn select_distractor_read_key(instance: &TaskInstance) -> Result<u64, TaskAdapte
     Err(TaskAdapterError::NoDistinctDistractorReadKey)
 }
 
-/// Build one deterministic architecture-adapter schedule from one symbolic task.
+/// Build one deterministic evaluator-side adapter schedule from one symbolic task.
 pub fn build_task_adapter_plan(
     instance: &TaskInstance,
     layout: TaskAdapterLayout,
@@ -582,14 +578,12 @@ pub fn build_task_adapter_plan(
             TaskEvent::QueryAssociation { key, target, .. } => (
                 A0TaskAction::Read {
                     key: a0_key(source_event, key.code()),
-                    target: encoded_symbol(target),
                 },
                 Some(target),
             ),
             TaskEvent::QueryPayload { position, target } => (
                 A0TaskAction::Read {
                     key: a0_key(source_event, position),
-                    target: encoded_symbol(target),
                 },
                 Some(target),
             ),
@@ -632,8 +626,9 @@ fn generator_class(event: TaskEvent) -> Option<u64> {
 /// Measure actual A2/A3 address collisions for one concrete associative table.
 ///
 /// Generator class reuse and physical direct-mapped collisions are reported
-/// separately. The audit does not inspect or mutate payload/recurrent state and
-/// therefore cannot manufacture a task-success result.
+/// separately. Generator classes are read only by this evaluator-side audit and
+/// are never encoded into an arm input. The audit does not inspect or mutate
+/// payload/recurrent state and therefore cannot manufacture a task-success result.
 pub fn audit_associative_projection(
     plan: &TaskAdapterPlan,
     memory: &DirectMappedAssociativeMemory,
@@ -736,6 +731,10 @@ mod tests {
         T1Config, T2Config, T3Config, TaskEvent, generate_t1, generate_t2, generate_t3,
     };
 
+    fn decode_pair(input: &[f64], offset: usize) -> u64 {
+        ExactU64Binary64::decode([input[offset], input[offset + 1]]).expect("canonical pair")
+    }
+
     #[test]
     fn exact_u64_codec_round_trips_edge_values() {
         for value in [0, 1, u32::MAX as u64, 1u64 << 32, u64::MAX] {
@@ -762,6 +761,10 @@ mod tests {
         ));
         assert!(matches!(
             ExactU64Binary64::decode([0.1, 0.0]),
+            Err(TaskAdapterError::NonCanonicalEncodedLimb { index: 0, .. })
+        ));
+        assert!(matches!(
+            ExactU64Binary64::decode([-0.0, 0.0]),
             Err(TaskAdapterError::NonCanonicalEncodedLimb { index: 0, .. })
         ));
     }
@@ -805,12 +808,43 @@ mod tests {
             .count();
         assert_eq!(query_count, 2);
         for event in plan.events() {
-            if let A0TaskAction::Read { target, .. } = event.a0_action() {
-                let target_code = ExactU64Binary64::decode(target).expect("exact target");
-                assert_eq!(
-                    Some(target_code),
-                    event.expected_target().map(|value| value.code())
-                );
+            if let A0TaskAction::Read { .. } = event.a0_action() {
+                assert!(event.expected_target().is_some());
+            }
+        }
+    }
+
+    #[test]
+    fn recurrent_frames_exclude_targets_collision_classes_and_source_indices() {
+        let instance = generate_t3(41, T3Config::new(8, 3, 4, 20, 3).expect("config")).expect("T3");
+        let plan = build_task_adapter_plan(
+            &instance,
+            TaskAdapterLayout::new(MIN_TASK_EVENT_INPUT_WIDTH).expect("layout"),
+        )
+        .expect("plan");
+
+        for event in plan.events() {
+            match event.source_event() {
+                TaskEvent::Associate { key, value, .. } => {
+                    assert_eq!(decode_pair(event.recurrent_input(), 1), key.code());
+                    assert_eq!(decode_pair(event.recurrent_input(), 3), value.code());
+                }
+                TaskEvent::Payload { value, .. } => {
+                    assert_eq!(decode_pair(event.recurrent_input(), 1), value.code());
+                    assert_eq!(decode_pair(event.recurrent_input(), 3), 0);
+                }
+                TaskEvent::Distractor { token } => {
+                    assert_eq!(decode_pair(event.recurrent_input(), 1), token.code());
+                    assert_eq!(decode_pair(event.recurrent_input(), 3), 0);
+                }
+                TaskEvent::QueryAssociation { key, .. } => {
+                    assert_eq!(decode_pair(event.recurrent_input(), 1), key.code());
+                    assert_eq!(decode_pair(event.recurrent_input(), 3), 0);
+                }
+                TaskEvent::QueryPayload { position, .. } => {
+                    assert_eq!(decode_pair(event.recurrent_input(), 1), position);
+                    assert_eq!(decode_pair(event.recurrent_input(), 3), 0);
+                }
             }
         }
     }
