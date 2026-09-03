@@ -6,8 +6,12 @@ fn downstream_crate_can_build_and_use_the_a0_full_history_reference() {
     let layout = FullHistoryLayout::new(2, 1).expect("full-history layout");
     let mut model = A0Reference::new(layout).expect("A0 reference");
 
-    model.append(&[1.0, 0.0], &[11.0]).expect("append first item");
-    model.append(&[0.0, 1.0], &[22.0]).expect("append second item");
+    model
+        .append(&[1.0, 0.0], &[11.0])
+        .expect("append first item");
+    model
+        .append(&[0.0, 1.0], &[22.0])
+        .expect("append second item");
 
     let readout = model.read(&[0.1, 0.9]).expect("content read");
     assert_eq!(readout.selected_index(), 1);
