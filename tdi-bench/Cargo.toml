@@ -10,3 +10,4 @@ workspace = true
 
 [dependencies]
 tdi-core = { path = "../tdi-core" }
+tdi-ai = { path = "../tdi-ai" }
