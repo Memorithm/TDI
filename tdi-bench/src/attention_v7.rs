@@ -249,7 +249,10 @@ impl SingleSiteIntervention {
         }
     }
 
-    pub fn apply(self, reference: &MechanisticState) -> Result<MechanisticState, InterventionError> {
+    pub fn apply(
+        self,
+        reference: &MechanisticState,
+    ) -> Result<MechanisticState, InterventionError> {
         if !self.amplitude.is_finite() {
             return Err(InterventionError::NonFiniteAmplitude);
         }
@@ -331,10 +334,7 @@ pub fn recovery_trajectory(
     for _ in 0..horizon {
         reference_state = advance(&reference_state);
         perturbed_state = advance(&perturbed_state);
-        trajectory.push(reciprocal_linf_recovery(
-            &reference_state,
-            &perturbed_state,
-        ));
+        trajectory.push(reciprocal_linf_recovery(&reference_state, &perturbed_state));
     }
     trajectory
 }
