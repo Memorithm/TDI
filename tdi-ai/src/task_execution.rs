@@ -517,7 +517,10 @@ mod tests {
         fn new(arm: ReferenceArm, predictions: Vec<TaskSymbol>) -> Self {
             Self::with_predictions(
                 arm,
-                predictions.into_iter().map(TaskPrediction::Symbol).collect(),
+                predictions
+                    .into_iter()
+                    .map(TaskPrediction::Symbol)
+                    .collect(),
             )
         }
 
