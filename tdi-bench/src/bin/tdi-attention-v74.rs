@@ -140,7 +140,7 @@ fn main() {
             println!("source_recovery=depths_1_2_3_4");
             println!("target=bounded_retrieval_deficit_depth_5");
             println!("estimator=gaussian_mmi_vector_v1");
-            println!("rank_reduction=declared_order_modified_gram_schmidt_v1");
+            println!("rank_reduction=declared_order_reorthogonalized_mgs_v2");
             println!("bootstrap=generator_grouped_percentile_95");
             println!("final_holdout=NOT_ACCESSED");
             println!("confirmatory_H_AI_3_verdict=NOT_COMPUTED");
