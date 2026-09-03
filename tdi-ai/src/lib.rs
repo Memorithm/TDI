@@ -10,8 +10,8 @@
 
 pub mod associative_memory;
 mod assr;
-pub mod assr_reference;
 pub mod assr_h_reference;
+pub mod assr_reference;
 mod static_diagnostics;
 mod toy_attention;
 pub mod vsa_workspace;
@@ -50,7 +50,7 @@ impl<S> RecoveryPoint<S> {
         self.depth
     }
 
-    /// Recovery score produced by the selected overlap metric.
+    /// Overlap/recovery score produced by the selected metric.
     #[must_use]
     pub fn overlap(&self) -> &S {
         &self.overlap
