@@ -35,7 +35,7 @@ Every `u64` is represented by two finite binary64 coordinates:
 
 Both coordinates are exact binary fractions in `[0,1)`. The mapping is injective over the complete `u64` domain and avoids lossy integer-to-`f64` conversion above `2^53`.
 
-The decoder rejects non-finite coordinates, values outside `[0,1)`, and values that are not on the exact `2^-32` limb grid.
+The decoder accepts only the canonical representation emitted by the encoder. It rejects non-finite coordinates, negative zero, values outside `[0,1)`, and values that are not on the exact `2^-32` limb grid. Rejecting `-0.0` prevents a second bitwise representation of integer zero from bypassing canonical-input validation.
 
 ## Arm-facing recurrent frame
 
