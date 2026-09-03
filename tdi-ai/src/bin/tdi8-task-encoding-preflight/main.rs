@@ -1,3 +1,4 @@
+#[path = "../../task_encoding.rs"]
 pub mod task_encoding;
 
 use std::error::Error;
@@ -18,10 +19,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let instance = generate_t3(41, T3Config::new(8, 3, 4, 20, 3)?)?;
-    let memory = DirectMappedAssociativeMemory::new(
-        AssociativeMemoryLayout::new(1, 2)?,
-        11,
-    )?;
+    let memory = DirectMappedAssociativeMemory::new(AssociativeMemoryLayout::new(1, 2)?, 11)?;
     let audit = audit_associative_projection(&instance, &memory)?;
     if audit.generator_class_reuses() == audit.physical_replacement_collisions() {
         return Err("generator metadata unexpectedly collapsed into physical collision count".into());
