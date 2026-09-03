@@ -7,7 +7,9 @@
 
 use core::{fmt, mem};
 
-use crate::{MemoryAccounting, MemoryAccountingError, ReferenceArm, ReferenceSnapshot, StorageBits};
+use crate::{
+    MemoryAccounting, MemoryAccountingError, ReferenceArm, ReferenceSnapshot, StorageBits,
+};
 
 const HISTORY_COUNT_METADATA_BITS: u128 = 64;
 const LAYOUT_STATIC_BITS: u128 = 128;
@@ -157,7 +159,9 @@ pub enum A0ReferenceError {
 impl fmt::Display for A0ReferenceError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ZeroKeyWidth => formatter.write_str("A0 full history requires a non-zero key width"),
+            Self::ZeroKeyWidth => {
+                formatter.write_str("A0 full history requires a non-zero key width")
+            }
             Self::ZeroValueWidth => {
                 formatter.write_str("A0 full history requires a non-zero value width")
             }
@@ -278,11 +282,13 @@ fn clone_f64_slice(component: &'static str, values: &[f64]) -> Result<Vec<f64>, 
 }
 
 fn checked_add(left: u128, right: u128) -> Result<u128, A0ReferenceError> {
-    left.checked_add(right).ok_or(A0ReferenceError::AccountingOverflow)
+    left.checked_add(right)
+        .ok_or(A0ReferenceError::AccountingOverflow)
 }
 
 fn checked_mul(left: u128, right: u128) -> Result<u128, A0ReferenceError> {
-    left.checked_mul(right).ok_or(A0ReferenceError::AccountingOverflow)
+    left.checked_mul(right)
+        .ok_or(A0ReferenceError::AccountingOverflow)
 }
 
 /// Complete persistent A0 state exposed through TDI snapshots.
@@ -457,18 +463,18 @@ impl A0Reference {
         validate_vector_capacity("key_history", next_key_len, mem::size_of::<f64>())?;
         validate_vector_capacity("value_history", next_value_len, mem::size_of::<f64>())?;
 
-        self.keys
-            .try_reserve_exact(key_width)
-            .map_err(|_| A0ReferenceError::HostAllocationFailed {
+        self.keys.try_reserve_exact(key_width).map_err(|_| {
+            A0ReferenceError::HostAllocationFailed {
                 component: "key_history",
                 elements: key_width,
-            })?;
-        self.values
-            .try_reserve_exact(value_width)
-            .map_err(|_| A0ReferenceError::HostAllocationFailed {
+            }
+        })?;
+        self.values.try_reserve_exact(value_width).map_err(|_| {
+            A0ReferenceError::HostAllocationFailed {
                 component: "value_history",
                 elements: value_width,
-            })?;
+            }
+        })?;
 
         let index = self.item_count;
         self.keys.extend_from_slice(key);
@@ -638,7 +644,8 @@ mod tests {
     #[test]
     fn rejected_append_cannot_partially_mutate_history() {
         let mut a0 = model();
-        a0.append(&[1.0, 0.0], &[10.0, 11.0]).expect("seed history");
+        a0.append(&[1.0, 0.0], &[10.0, 11.0])
+            .expect("seed history");
         let before = a0.snapshot().expect("snapshot");
         assert_eq!(
             a0.append(&[0.0, f64::NAN], &[20.0, 21.0]),
