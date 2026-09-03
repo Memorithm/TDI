@@ -23,7 +23,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     if readout.decode_state(&[0.25, 0.1, -0.5, encoded[1], 0.0])?
         != ExactStatePrediction::InvalidEncoding
     {
-        return Err("non-canonical recurrent readout was not retained as invalid prediction".into());
+        return Err(
+            "non-canonical recurrent readout was not retained as invalid prediction".into(),
+        );
     }
 
     println!("TDI-8.1 exact readout preflight: PASS");
