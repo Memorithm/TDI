@@ -182,10 +182,7 @@ fn orthonormal_basis(columns: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, SubspaceErro
     Ok(basis)
 }
 
-fn residual_ratios(
-    columns: &[Vec<f64>],
-    basis: &[Vec<f64>],
-) -> Result<(f64, f64), SubspaceError> {
+fn residual_ratios(columns: &[Vec<f64>], basis: &[Vec<f64>]) -> Result<(f64, f64), SubspaceError> {
     let mut residual_energy = 0.0;
     let mut source_energy = 0.0;
     let mut maximum = 0.0_f64;
