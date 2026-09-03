@@ -332,6 +332,9 @@ impl MemoryAccounting {
     /// Validate both forbidden and defining non-zero components for the frozen
     /// reference arm semantics.
     pub fn validate_for_arm(self, arm: ReferenceArm) -> Result<(), MemoryAccountingError> {
+        if matches!(arm, ReferenceArm::A0) {
+            require_zero(arm, MemoryComponent::RecurrentState, self.recurrent_state)?;
+        }
         if !arm.permits_associative_memory() {
             require_zero(
                 arm,
@@ -364,9 +367,21 @@ impl MemoryAccounting {
                 MemoryComponent::AssociativePayload,
                 self.associative_payload,
             )?;
+            require_nonzero(
+                arm,
+                MemoryComponent::AssociativeMetadata,
+                self.associative_metadata,
+            )?;
         }
         if arm.permits_vsa_workspace() {
             require_nonzero(arm, MemoryComponent::VsaWorkspace, self.vsa_workspace)?;
+        }
+        if arm.permits_full_history() {
+            require_nonzero(
+                arm,
+                MemoryComponent::CumulativeHistory,
+                self.cumulative_history,
+            )?;
         }
 
         Ok(())
@@ -518,7 +533,31 @@ mod tests {
     }
 
     #[test]
+    fn a0_rejects_recurrent_state() {
+        let memory = MemoryAccounting::zero()
+            .with_recurrent_state(StorageBits::new(64))
+            .with_cumulative_history(StorageBits::new(64));
+        assert_eq!(
+            memory.validate_for_arm(ReferenceArm::A0),
+            Err(MemoryAccountingError::ComponentNotAllowed {
+                arm: ReferenceArm::A0,
+                component: MemoryComponent::RecurrentState,
+                bits: StorageBits::new(64),
+            })
+        );
+    }
+
+    #[test]
     fn defining_components_must_have_nonzero_storage() {
+        let a0 = MemoryAccounting::zero();
+        assert_eq!(
+            a0.validate_for_arm(ReferenceArm::A0),
+            Err(MemoryAccountingError::RequiredComponentMissing {
+                arm: ReferenceArm::A0,
+                component: MemoryComponent::CumulativeHistory,
+            })
+        );
+
         let a1 = MemoryAccounting::zero();
         assert_eq!(
             a1.validate_for_arm(ReferenceArm::A1),
@@ -537,9 +576,21 @@ mod tests {
             })
         );
 
-        let a3 = MemoryAccounting::zero()
+        let a2_without_metadata = MemoryAccounting::zero()
             .with_recurrent_state(StorageBits::new(32))
             .with_associative_payload(StorageBits::new(32));
+        assert_eq!(
+            a2_without_metadata.validate_for_arm(ReferenceArm::A2),
+            Err(MemoryAccountingError::RequiredComponentMissing {
+                arm: ReferenceArm::A2,
+                component: MemoryComponent::AssociativeMetadata,
+            })
+        );
+
+        let a3 = MemoryAccounting::zero()
+            .with_recurrent_state(StorageBits::new(24))
+            .with_associative_payload(StorageBits::new(32))
+            .with_associative_metadata(StorageBits::new(8));
         assert_eq!(
             a3.validate_for_arm(ReferenceArm::A3),
             Err(MemoryAccountingError::RequiredComponentMissing {
@@ -572,11 +623,13 @@ mod tests {
             .with_recurrent_state(StorageBits::new(64))
             .with_temporary_working(StorageBits::new(8));
         let a2 = MemoryAccounting::zero()
-            .with_recurrent_state(StorageBits::new(32))
-            .with_associative_payload(StorageBits::new(32));
+            .with_recurrent_state(StorageBits::new(24))
+            .with_associative_payload(StorageBits::new(32))
+            .with_associative_metadata(StorageBits::new(8));
         let a3 = MemoryAccounting::zero()
-            .with_recurrent_state(StorageBits::new(32))
+            .with_recurrent_state(StorageBits::new(24))
             .with_associative_payload(StorageBits::new(16))
+            .with_associative_metadata(StorageBits::new(8))
             .with_vsa_workspace(StorageBits::new(16));
 
         assert_eq!(
@@ -593,11 +646,13 @@ mod tests {
     fn matched_budget_rejects_unequal_totals() {
         let a1 = MemoryAccounting::zero().with_recurrent_state(StorageBits::new(64));
         let a2 = MemoryAccounting::zero()
-            .with_recurrent_state(StorageBits::new(32))
-            .with_associative_payload(StorageBits::new(32));
+            .with_recurrent_state(StorageBits::new(24))
+            .with_associative_payload(StorageBits::new(32))
+            .with_associative_metadata(StorageBits::new(8));
         let a3 = MemoryAccounting::zero()
-            .with_recurrent_state(StorageBits::new(32))
+            .with_recurrent_state(StorageBits::new(24))
             .with_associative_payload(StorageBits::new(16))
+            .with_associative_metadata(StorageBits::new(8))
             .with_vsa_workspace(StorageBits::new(8));
 
         assert_eq!(
@@ -613,7 +668,6 @@ mod tests {
     #[test]
     fn temporary_static_and_history_are_reported_without_double_counting() {
         let a0 = MemoryAccounting::zero()
-            .with_recurrent_state(StorageBits::new(64))
             .with_temporary_working(StorageBits::new(32))
             .with_cumulative_history(StorageBits::new(2048))
             .with_static_parameters(StorageBits::new(4096));
@@ -621,11 +675,11 @@ mod tests {
             .expect("A0 may retain history");
         assert_eq!(
             a0.budgeted_dynamic_bits().expect("finite sum"),
-            StorageBits::new(96)
+            StorageBits::new(32)
         );
         assert_eq!(
             a0.reported_dynamic_bits().expect("finite sum"),
-            StorageBits::new(2144)
+            StorageBits::new(2080)
         );
         assert_eq!(a0.static_parameters(), StorageBits::new(4096));
     }
@@ -635,6 +689,7 @@ mod tests {
         let memory = MemoryAccounting::zero()
             .with_recurrent_state(StorageBits::new(64))
             .with_associative_payload(StorageBits::new(64))
+            .with_associative_metadata(StorageBits::new(8))
             .with_cumulative_history(StorageBits::new(64));
         assert_eq!(
             memory.validate_for_arm(ReferenceArm::A2),
@@ -662,6 +717,7 @@ mod tests {
         let memory = MemoryAccounting::zero()
             .with_recurrent_state(StorageBits::new(64))
             .with_associative_payload(StorageBits::new(64))
+            .with_associative_metadata(StorageBits::new(32))
             .with_vsa_workspace(StorageBits::new(64));
         let snapshot =
             ReferenceSnapshot::new(ReferenceArm::A3, vec![1.0, -1.0], memory).expect("A3 snapshot");
