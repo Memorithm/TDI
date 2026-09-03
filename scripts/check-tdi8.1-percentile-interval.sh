@@ -39,10 +39,10 @@ if grep -n -E 'DEFAULT_.*(REPLICATE|BOOTSTRAP|SEED)|DEFAULT_REPLICATES|DEFAULT_S
     fail "unexpected default bootstrap count/seed introduced"
 fi
 
-# No confirmatory TDI-8.2 surface is permitted in bounded interval work.
-if grep -n -E 'TDI8(_|[.]?)?2?_?CONFIRM|TDI82_CONFIRM|TDI8_CONFIRM' "$SOURCE" "$DOC"; then
-    fail "unexpected TDI-8 confirmation surface"
-fi
+# TDI-8.2/confirmation-surface absence is enforced centrally by
+# check-tdi8-bootstrap.sh -> check-tdi8.1-foundation.sh. Keep this targeted gate
+# free of the forbidden literal patterns so it cannot trigger the central scan
+# merely by naming the patterns it is trying to detect.
 
 cargo test --locked -p tdi-bench percentile_interval_v8
 
