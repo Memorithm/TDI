@@ -378,8 +378,8 @@ impl SplitMix64 {
     }
 
     fn bounded(&mut self, upper: usize) -> Result<usize, PairedResamplingError> {
-        let upper = u64::try_from(upper)
-            .map_err(|_| PairedResamplingError::ObservationCountTooLarge)?;
+        let upper =
+            u64::try_from(upper).map_err(|_| PairedResamplingError::ObservationCountTooLarge)?;
         if upper == 0 {
             return Err(PairedResamplingError::EmptyObservations);
         }
@@ -528,7 +528,8 @@ mod tests {
         assert_eq!(left, right);
         assert_eq!(left.requested_replicates(), 64);
         assert_eq!(left.seed(), 0x1234_5678_9abc_def0);
-        left.validate_complete_accounting().expect("complete accounting");
+        left.validate_complete_accounting()
+            .expect("complete accounting");
     }
 
     #[test]
@@ -554,7 +555,9 @@ mod tests {
         let output = paired_bootstrap_replicates(&observations, plan).expect("bootstrap");
         assert!(output.zero_positive_replicates() > 0);
         assert_eq!(output.zero_zero_replicates(), 0);
-        output.validate_complete_accounting().expect("complete accounting");
+        output
+            .validate_complete_accounting()
+            .expect("complete accounting");
         assert_eq!(
             output.defined_replicates() + output.zero_positive_replicates(),
             output.requested_replicates()
