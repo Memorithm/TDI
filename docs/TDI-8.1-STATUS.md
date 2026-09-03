@@ -2,7 +2,7 @@
 
 - Scientific series: TDI-8.x
 - Stage: TDI-8.1 bounded deterministic reference evaluator
-- Status: active — A0/A1/A2/A3 reference arms merged; symbolic T1/T2/T3 generator tranche under review
+- Status: active — A0/A1/A2/A3, symbolic T1/T2/T3 generators and frozen primary decision rules merged; paired-resampling foundation under review
 - TDI-8.0 parent merge: `24d41eb7e5d72fc3b5eec9b6434930b10c1f241f`
 - TDI-8.1 foundation merge: `7cfe1b66e11f1eb5d67a5890b07e6f41fa175670` (PR #89)
 - TDI-8 post-foundation integrity merge: `9ee32002603942b9f4152cad47f7fb59331f8c7a` (PR #90)
@@ -11,6 +11,10 @@
 - TDI-8.1 VSA workspace merge: `a2b23eb6bc52cb5a6c8a5f41ef339fe4cc94b3cf` (PR #97)
 - TDI-8.1 integrated A3 merge: `c69d94ded34998353452cbd21474ce5530dbde3b` (PR #96)
 - TDI-8.1 A0 full-history-reference merge: `39112f90724bc3bec59f35685da2dd1fb83860fc` (PR #103)
+- TDI-8.1 symbolic T1/T2/T3 generator merge: PR #104
+- TDI-8.1 frozen primary-cell/nine-cell decision merge: PR #106
+- TDI-8.1 arm-accounting contract hardening merge: `f423b4f8a307f9639b83e8471f399918189fb117` (PR #108)
+- Declared Rust MSRV is executable CI evidence since PR #107
 - Frozen TDI-8.0 preregistration blob: `fe80e7053d89824a77ef6790794f6930d1b424e2`
 - Final holdout: does not exist
 - Confirmatory runner: does not exist
@@ -20,14 +24,14 @@
 
 ## Merged reference-arm foundation
 
-The merged TDI-8.1 reference stack now contains all four preregistered software-oracle arms:
+The merged TDI-8.1 reference stack contains all four preregistered software-oracle arms:
 
 - A0 competent deterministic full-history contextual reference;
 - A1 bounded recurrent-state-only reference;
 - A2 bounded recurrent state plus deterministic associative memory;
 - A3 A2 plus a bounded deterministic VSA/holographic workspace.
 
-The common accounting contracts enforce non-zero defining components, exact component-wise storage accounting, inclusion of temporary working storage, and exact matched total dynamic-memory validation for A1/A2/A3. A0 cumulative history is reported separately and is not treated as a matched-budget baseline.
+The common accounting contracts enforce non-zero defining components, exact component-wise storage accounting, inclusion of temporary working storage, and exact matched total dynamic-memory validation for A1/A2/A3. A0 cumulative history is reported separately and is not treated as a matched-budget baseline. PR #108 additionally closed fail-open generic states by rejecting recurrent-state storage for A0, requiring non-zero A0 cumulative history, and requiring associative metadata as well as payload for A2/A3.
 
 These contracts and implementations are infrastructure only. They are not H8-A/H8-B evidence.
 
@@ -59,9 +63,9 @@ PR #103 added the competent contextual A0 control required by TDI-8.0:
 
 The hard-content rule is deterministic reference semantics, not a claim that A0 reproduces Transformer softmax attention.
 
-## Current symbolic T1/T2/T3 generator tranche
+## Merged symbolic T1/T2/T3 generators
 
-PR #104 implements architecture-neutral symbolic instances for the three frozen task families before any arm-specific binary64 encoding is selected:
+PR #104 merged architecture-neutral symbolic instances for the three frozen task families before any arm-specific binary64 encoding is selected:
 
 - T1 associative recall with unqueried distractor associations, positive delay and delayed keyed targets generated before execution;
 - T2 ordered delayed copy with exact payload targets;
@@ -69,19 +73,45 @@ PR #104 implements architecture-neutral symbolic instances for the three frozen 
 - explicit `Short` / `Medium` / `Long` horizon labels plus a caller-supplied strictly increasing `HorizonPlan` with no numeric defaults;
 - deterministic domain-separated generation and fail-closed allocation/count guards.
 
-T3 generator-side collision classes are metadata only and are not allowed to stand in for measured physical A2/A3 slot collisions. A later frozen adapter/evaluator must verify actual occupancy/collision pressure under its concrete associative layout/projection.
+T3 generator-side collision classes remain metadata only and are not allowed to stand in for measured physical A2/A3 slot collisions. A later frozen adapter/evaluator must verify actual occupancy/collision pressure under its concrete associative layout/projection.
 
-This tranche freezes no dimensions, horizon values, budgets, population ranges or sample counts and creates no TDI-8.2 surface.
+## Merged frozen primary decision rules
+
+PR #106 transcribed the already-frozen TDI-8.0 evidence classifier into `tdi-bench::decision_v8` without changing scientific thresholds:
+
+- exactly nine primary cells per hypothesis;
+- `delta = 0.02`;
+- exact non-zero-baseline relative effect and zero-baseline branch;
+- Beneficial / Harmful / Equivalent / Inconclusive cell classification;
+- fail-closed invalid or missing intervals;
+- fixed nine-cell H8-A/H8-B aggregation with missing/rejected cells becoming Inconclusive.
+
+The classifier consumes an interval but does not construct one.
+
+## Current paired-resampling foundation tranche
+
+The current branch adds the software substrate required before selecting the TDI-8.1 paired interval implementation:
+
+- validated generator-level baseline/candidate deficit pairs;
+- exact relative mean-deficit point statistic and zero-baseline branch;
+- caller-supplied replicate count and deterministic seed with no defaults;
+- deterministic paired bootstrap draws using one common sampled index for both arms;
+- rejection-sampled bounded RNG draws rather than modulo-biased indexing;
+- explicit zero/zero and zero/positive resample accounting;
+- exact reconstruction of all requested replicate counts;
+- frozen Bonferroni family/per-cell/tail alpha values exposed without selecting an interval estimator.
+
+This tranche intentionally returns unsorted relative-effect replicates and does not freeze percentile, BCa, studentized, normal-approximation or another interval construction. Concrete method, replicate count, seed and degenerate-replicate policy remain later non-final TDI-8.1 decisions.
 
 ## Remaining TDI-8.1 work
 
-After the symbolic task-generator tranche is merged, bounded TDI-8.1 still requires:
+After the paired-resampling foundation is merged, bounded TDI-8.1 still requires:
 
 1. architecture adapters/evaluator execution that map one generated symbolic instance identically into A0/A1/A2/A3 and verify actual task/collision semantics;
 2. exact operation accounting and typed rejection/provenance records;
-3. the frozen four-way primary-cell classifier and nine-cell hypothesis aggregator;
-4. a deterministic paired interval implementation satisfying the frozen Bonferroni family-wise coverage rule;
-5. bounded train/development/validation work to freeze concrete dimensions, budgets, horizons, non-final/final seed ranges, sample counts, interval replicate count/seed and closed rejection taxonomy;
+3. non-final qualification and freeze of one deterministic paired interval implementation satisfying the frozen Bonferroni family-wise coverage rule, including replicate count, resampling seed and degenerate-replicate policy;
+4. bounded train/development/validation work to freeze concrete dimensions, budgets, horizons, non-final/final seed ranges, sample counts and closed rejection taxonomy;
+5. integration of paired intervals with the already-merged primary-cell classifier and exact nine-cell evidence records;
 6. a final TDI-8.1 readiness gate proving no TDI-8.2 execution surface exists.
 
 TDI-8.2 remains future human-only and is not authorized by this status file.
