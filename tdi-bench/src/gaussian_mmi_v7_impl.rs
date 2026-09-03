@@ -465,9 +465,7 @@ fn cholesky_log2_det(matrix: &[Vec<f64>]) -> Result<f64, InformationError> {
     let mut lower = vec![vec![0.0; n]; n];
     for i in 0..n {
         for j in 0..=i {
-            let sum = (0..j)
-                .map(|k| lower[i][k] * lower[j][k])
-                .sum::<f64>();
+            let sum = (0..j).map(|k| lower[i][k] * lower[j][k]).sum::<f64>();
             if i == j {
                 let pivot = matrix[i][i] - sum;
                 if !pivot.is_finite() || pivot <= PIVOT_FLOOR {
@@ -704,10 +702,7 @@ pub fn bootstrap_pid(
     }
     let mut groups = Vec::<(u64, Vec<usize>)>::new();
     for (index, record) in records.iter().enumerate() {
-        if let Some((_, indices)) = groups
-            .iter_mut()
-            .find(|(id, _)| *id == record.generator_id)
-        {
+        if let Some((_, indices)) = groups.iter_mut().find(|(id, _)| *id == record.generator_id) {
             indices.push(index);
         } else {
             groups.push((record.generator_id, vec![index]));
