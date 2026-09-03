@@ -4,7 +4,7 @@
 //! them without copying scientific code. This binary remains a bounded oracle
 //! and has no final-holdout execution path.
 
-use tdi_bench::attention_v7::{TaskKind, generate_associative_recall, generate_copy};
+use tdi_bench::attention_v7::{generate_associative_recall, generate_copy};
 
 fn main() {
     let ar = generate_associative_recall(7_100_000_000);
@@ -26,6 +26,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tdi_bench::attention_v7::TaskKind;
 
     #[test]
     fn associative_recall_is_seed_deterministic() {
