@@ -72,9 +72,7 @@ impl ExactU64Binary64 {
 }
 
 fn decode_limb(index: usize, value: f64) -> Result<u32, TaskEncodingError> {
-    if !value.is_finite()
-        || value.to_bits() == (-0.0f64).to_bits()
-        || !(0.0..1.0).contains(&value)
+    if !value.is_finite() || value.to_bits() == (-0.0f64).to_bits() || !(0.0..1.0).contains(&value)
     {
         return Err(TaskEncodingError::NonCanonicalEncodedLimb {
             index,
