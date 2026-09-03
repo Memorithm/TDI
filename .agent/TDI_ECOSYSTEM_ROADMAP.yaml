@@ -1,7 +1,7 @@
 schema_version: 2
 kind: tdi_ecosystem_agent_roadmap
 status: active
-last_updated: "2026-09-03T23:45+0200"
+last_updated: "2026-09-03T23:57+0200"
 repository: Memorithm/TDI
 intended_consumer: autonomous_coding_agent
 merge_policy: never_merge_this_file_to_default_branch_unless_user_explicitly_requests
@@ -28,7 +28,11 @@ verified_current_facts:
   - TDI_8_0_is_merged_and_frozen_with_preregistration_blob_fe80e7053d89824a77ef6790794f6930d1b424e2
   - TDI_8_1_is_active_and_has_merged_A0_A1_A2_A3_symbolic_tasks_leakage_safe_execution_binary64_encoding_decision_rules_resampling_and_accounting_foundations
   - no_TDI_8_2_runner_token_seed_range_or_result_surface_exists
-  - issue_92_has_been_reopened_as_the_active_TDI_9_x_adaptive_inference_programme
+  - issue_92_tracks_the_active_TDI_9_x_adaptive_inference_programme
+  - TDI_9_0_was_merged_by_PR_122_as_bb13c59aa91e3e5e2e6a480f4ae12adfe168221b
+  - TDI_9_0_preregistration_blob_babad0a4e309e67e57820281a0f31284ba1e5da0_is_pinned_on_main
+  - TDI_9_1_bounded_non_final_implementation_is_now_authorized
+  - no_TDI_9_2_runner_final_seed_list_final_dataset_or_result_surface_exists
   - user_has_explicitly_prioritized_AI_agent_research_without_routine_human_intervention_for_TDI_9
 
 scientific_invariants:
@@ -153,8 +157,12 @@ roadmap:
     status: conditional
   - id: TDI9_0
     name: Autonomous adaptive inference dynamics preregistration
-    status: active_authorized
+    status: complete_merged_frozen
     source: issue_92
+    merge_evidence:
+      - PR_122_merged_as_bb13c59aa91e3e5e2e6a480f4ae12adfe168221b
+      - preregistration_blob_babad0a4e309e67e57820281a0f31284ba1e5da0_pinned
+      - exact_head_c551c8b33f997cae733c106ec059799cb9b999c3_all_required_workflows_green
     scientific_question: >-
       Under a common bounded maximum-compute envelope, can an observation-conditioned
       inference policy preserve or improve solution quality while consuming less
@@ -175,7 +183,12 @@ roadmap:
       - result_conditioned_entropy_selection_retry_or_replacement_is_forbidden
   - id: TDI9_1
     name: Bounded autonomous adaptive inference evaluator
-    status: blocked_until_TDI9_0_is_merged_and_frozen
+    status: active_authorized_after_TDI9_0_merge
+    entry_gate_evidence:
+      - TDI9_0_is_merged_and_blob_pinned
+      - TDI9_bootstrap_passed_public_CI
+      - no_TDI9_2_surface_exists
+      - TDI7_2_and_TDI8_2_boundaries_remain_intact
     goals:
       - deterministic_trajectory_and_action_semantics
       - leakage_safe_policy_observation_schema
