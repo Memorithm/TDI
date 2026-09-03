@@ -1,0 +1,35 @@
+name: TDI-8.1 exact readout preflight
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  exact-readout-preflight:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run targeted Clippy
+        run: cargo clippy --locked -p tdi-ai --bin tdi8-task-readout-preflight --tests -- -D warnings
+
+      - name: Verify TDI-8 bootstrap integrity
+        run: bash scripts/check-tdi8-bootstrap.sh
+
+      - name: Verify exact recurrent-state readout
+        run: bash scripts/check-tdi8.1-exact-readout.sh
