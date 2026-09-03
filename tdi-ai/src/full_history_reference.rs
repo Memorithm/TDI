@@ -644,8 +644,7 @@ mod tests {
     #[test]
     fn rejected_append_cannot_partially_mutate_history() {
         let mut a0 = model();
-        a0.append(&[1.0, 0.0], &[10.0, 11.0])
-            .expect("seed history");
+        a0.append(&[1.0, 0.0], &[10.0, 11.0]).expect("seed history");
         let before = a0.snapshot().expect("snapshot");
         assert_eq!(
             a0.append(&[0.0, f64::NAN], &[20.0, 21.0]),
