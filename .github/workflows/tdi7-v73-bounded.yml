@@ -1,0 +1,65 @@
+name: TDI-7.3 bounded evaluator
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tdi73-bounded-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TDI_CI_RUST: "1.97.1"
+
+jobs:
+  bounded-evaluator:
+    name: TDI-7.3 bounded evaluator
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TDI_CI_RUST }}
+          components: rustfmt,clippy
+      - name: Check TDI-7.3 source formatting
+        run: |
+          rustfmt --edition 2024 --check \
+            tdi-bench/src/lib.rs \
+            tdi-bench/src/attention_v7.rs \
+            tdi-bench/src/bin/tdi-attention-v71-tasks.rs \
+            tdi-bench/src/bin/tdi-attention-v71-interventions.rs \
+            tdi-bench/src/bin/tdi-attention-v73.rs
+      - name: Check bounded evaluator with Clippy
+        run: cargo clippy -p tdi-bench --lib --bin tdi-attention-v71-tasks --bin tdi-attention-v71-interventions --bin tdi-attention-v73 --locked -- -D warnings
+      - name: Run shared mechanics and TDI-7.3 tests
+        run: cargo test -p tdi-bench --lib --bin tdi-attention-v71-tasks --bin tdi-attention-v71-interventions --bin tdi-attention-v73 --locked
+      - name: Execute bounded TDI-7.3 evaluator
+        shell: bash
+        run: |
+          output="$(cargo run -q -p tdi-bench --bin tdi-attention-v73 --locked)"
+          printf '%s\n' "$output"
+          grep -Fx 'scope=development+validation' <<<"$output"
+          grep -Fx 'final_holdout=NOT_ACCESSED' <<<"$output"
+          grep -Fx 'confirmatory_verdict=NOT_COMPUTED' <<<"$output"
+          grep -Fx 'predictive_B0_B1_layer=NOT_YET_IMPLEMENTED' <<<"$output"
+          test "$(grep -c '^tdi73-bounded-v1;' <<<"$output")" -eq 4
+      - name: Prove final-run authorization is absent
+        shell: bash
+        run: |
+          ! grep -R -F 'I_ACCEPT_THE_TDI7_HOLDOUT_FREEZE' \
+            tdi-bench/src/lib.rs \
+            tdi-bench/src/attention_v7.rs \
+            tdi-bench/src/bin/tdi-attention-v73.rs
+          ! grep -R -F 'TDI7_CONFIRM_FINAL_HOLDOUT' \
+            tdi-bench/src/lib.rs \
+            tdi-bench/src/attention_v7.rs \
+            tdi-bench/src/bin/tdi-attention-v73.rs
