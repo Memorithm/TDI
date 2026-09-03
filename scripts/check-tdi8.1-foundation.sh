@@ -16,7 +16,8 @@ for file in "$SOURCE" "$LIB" "$FOUNDATION" "$STATUS"; do
 done
 
 # Protect the reviewed reference vocabulary and accounting invariants merged by
-# PR #89. This is a structural integrity gate, not a scientific result test.
+# PR #89 and subsequently tightened by reviewed TDI-8.1 maintenance. This is a
+# structural integrity gate, not a scientific result test.
 grep -Fq 'pub enum ReferenceArm' "$SOURCE" \
     || fail "ReferenceArm ladder missing"
 for arm in A0 A1 A2 A3; do
@@ -34,8 +35,20 @@ grep -Fq '.checked_add(self.temporary_working)' "$SOURCE" \
     || fail "temporary working storage is no longer counted in matched dynamic memory"
 grep -Fq 'pub struct MatchedDynamicBudget' "$SOURCE" \
     || fail "matched dynamic-budget validator missing"
+grep -Fq 'require_zero(arm, MemoryComponent::RecurrentState, self.recurrent_state)?;' "$SOURCE" \
+    || fail "A0 no longer rejects recurrent-state storage"
 grep -Fq 'require_nonzero(arm, MemoryComponent::RecurrentState, self.recurrent_state)?;' "$SOURCE" \
     || fail "bounded recurrent arms no longer require recurrent state"
+grep -Fq 'MemoryComponent::AssociativeMetadata,' "$SOURCE" \
+    || fail "associative metadata is no longer part of arm accounting"
+grep -Fq 'require_nonzero(' "$SOURCE" \
+    || fail "defining-component non-zero validation missing"
+grep -Fq 'MemoryComponent::CumulativeHistory,' "$SOURCE" \
+    || fail "A0 cumulative-history accounting guard missing"
+grep -Fq 'fn a0_rejects_recurrent_state()' "$SOURCE" \
+    || fail "A0 recurrent-state regression test missing"
+grep -Fq 'let a2_without_metadata = MemoryAccounting::zero()' "$SOURCE" \
+    || fail "A2 metadata regression fixture missing"
 grep -Fq 'fn defining_components_must_have_nonzero_storage()' "$SOURCE" \
     || fail "defining-component regression test missing"
 grep -Fq 'fn temporary_working_storage_participates_in_matched_budget()' "$SOURCE" \
