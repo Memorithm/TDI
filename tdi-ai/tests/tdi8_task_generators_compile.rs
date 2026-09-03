@@ -17,18 +17,20 @@ fn downstream_can_build_all_three_symbolic_task_families() {
     let t1 = generate_t1(11, T1Config::new(4, 2, 1).expect("synthetic T1 config"))
         .expect("deterministic T1");
     assert_eq!(t1.family(), TaskFamily::AssociativeRecall);
-    assert!(t1
-        .events()
-        .iter()
-        .any(|event| matches!(event, TaskEvent::QueryAssociation { .. })));
+    assert!(
+        t1.events()
+            .iter()
+            .any(|event| matches!(event, TaskEvent::QueryAssociation { .. }))
+    );
 
     let t2 = generate_t2(13, T2Config::new(3, 2).expect("synthetic T2 config"))
         .expect("deterministic T2");
     assert_eq!(t2.family(), TaskFamily::DelayedCopy);
-    assert!(t2
-        .events()
-        .iter()
-        .any(|event| matches!(event, TaskEvent::QueryPayload { .. })));
+    assert!(
+        t2.events()
+            .iter()
+            .any(|event| matches!(event, TaskEvent::QueryPayload { .. }))
+    );
 
     let t3 = generate_t3(
         17,
