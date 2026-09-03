@@ -9,18 +9,69 @@ fail() {
 SOURCE="tdi-ai/src/task_encoding.rs"
 RUNNER="tdi-ai/src/bin/tdi8-task-encoding-preflight/main.rs"
 DOC="docs/TDI-8.1-TASK-ENCODING-PREFLIGHT.md"
+DECISION="docs/TDI-8.1-TASK-ENCODING-PROMOTION.toml"
 SYMBOLIC="tdi-ai/src/task_execution.rs"
 LIB="tdi-ai/src/lib.rs"
 
-for file in "$SOURCE" "$RUNNER" "$DOC" "$SYMBOLIC" "$LIB"; do
-    test -s "$file" || fail "missing task-encoding preflight surface: $file"
+for file in "$SOURCE" "$RUNNER" "$DOC" "$DECISION" "$SYMBOLIC" "$LIB"; do
+    test -s "$file" || fail "missing task-encoding preflight/promotion surface: $file"
 done
 
-# This tranche is intentionally evaluator-local. Promotion into the tdi-ai
-# public library remains a later reviewed decision after non-final qualification.
+# PR #112 qualified the candidate for continued bounded evaluator plumbing. The
+# separate software-promotion decision intentionally does not freeze a final
+# experimental encoding and does not promote the module into the public tdi-ai
+# API while recurrent-arm readout semantics remain unresolved.
 if grep -Fq 'pub mod task_encoding;' "$LIB"; then
-    fail "task_encoding was promoted into the public tdi-ai API before qualification"
+    fail "task_encoding was promoted into the public tdi-ai API without a separate public-API review"
 fi
+
+python3 - "$DECISION" <<'PY'
+from pathlib import Path
+import sys
+import tomllib
+
+path = Path(sys.argv[1])
+with path.open("rb") as handle:
+    decision = tomllib.load(handle)
+
+expected = {
+    "schema_version": 1,
+    "stage": "TDI-8.1",
+    "decision_kind": "software_promotion",
+    "decision_status": "PROMOTED_FOR_BOUNDED_EVALUATOR_USE",
+    "scientific_result": False,
+    "final_experimental_encoding_frozen": False,
+    "public_tdi_ai_api_promoted": False,
+    "confirmatory_execution_authorized": False,
+    "tdi8_2_surface_authorized": False,
+    "basis_pr": 112,
+    "basis_pr_head": "d21324f700128d4d2a3f130e2fd540aa2241affb",
+    "basis_merge_commit": "385e5f4153dd27389297a65aeacd95828c9d45ca",
+}
+for key, value in expected.items():
+    if decision.get(key) != value:
+        raise SystemExit(f"task-encoding promotion decision mismatch: {key}={decision.get(key)!r}")
+
+required_workflows = decision.get("required_workflows")
+if not isinstance(required_workflows, list) or len(required_workflows) != 10:
+    raise SystemExit("task-encoding promotion decision must preserve all ten reviewed workflow names")
+if len(set(required_workflows)) != len(required_workflows):
+    raise SystemExit("task-encoding promotion decision contains duplicate workflow provenance")
+
+promotion_scope = set(decision.get("promotion_scope", []))
+if "bounded_non_holdout_evaluator_plumbing" not in promotion_scope:
+    raise SystemExit("bounded evaluator promotion scope is missing")
+
+excluded_scope = set(decision.get("excluded_scope", []))
+for required in {
+    "public_tdi_ai_api_freeze",
+    "recurrent_arm_readout_selection",
+    "H8_A_or_H8_B_verdict",
+    "TDI_8_2_runner_token_seed_or_result_surface",
+}:
+    if required not in excluded_scope:
+        raise SystemExit(f"required excluded scope missing: {required}")
+PY
 
 grep -Fq 'pub const MIN_TASK_INPUT_WIDTH: u64 = 5;' "$SOURCE" \
     || fail "leakage-safe lossless minimum width is missing"
@@ -94,5 +145,7 @@ printf 'TDI-8.1 lossless binary64 encoding: VERIFIED\n'
 printf 'TDI-8.1 canonical negative-zero rejection: VERIFIED\n'
 printf 'TDI-8.1 symbolic target/provenance leakage exclusion: VERIFIED\n'
 printf 'TDI-8.1 physical projection diagnostics: VERIFIED SEPARATELY\n'
+printf 'TDI-8.1 bounded evaluator-use promotion: VERIFIED\n'
+printf 'TDI-8.1 final experimental encoding freeze: NOT PERFORMED\n'
 printf 'TDI-8.1 public API promotion: NOT PERFORMED\n'
 printf 'TDI-8.1 task-encoding gate: PASS\n'
