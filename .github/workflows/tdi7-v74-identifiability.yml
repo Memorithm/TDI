@@ -1,0 +1,72 @@
+name: TDI-7.4 bounded identifiability audit
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tdi74-identifiability-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TDI_CI_RUST: "1.97.1"
+
+jobs:
+  bounded-identifiability:
+    name: TDI-7.4 bounded identifiability audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TDI_CI_RUST }}
+          components: rustfmt,clippy
+      - name: Check audit source formatting
+        run: |
+          rustfmt --edition 2024 --check \
+            tdi-bench/src/lib.rs \
+            tdi-bench/src/subspace_v7.rs \
+            tdi-bench/src/bin/tdi-attention-v74-identifiability.rs
+      - name: Check audit with Clippy
+        run: >-
+          cargo clippy -p tdi-bench --lib
+          --bin tdi-attention-v74-identifiability
+          --locked -- -D warnings
+      - name: Run bounded identifiability tests
+        run: >-
+          cargo test -p tdi-bench --lib
+          --bin tdi-attention-v74-identifiability
+          --locked
+      - name: Execute bounded identifiability audit
+        shell: bash
+        run: |
+          output="$(cargo run -q -p tdi-bench --bin tdi-attention-v74-identifiability --locked)"
+          printf '%s\n' "$output"
+          grep -Fx 'scope=training+development+validation' <<<"$output"
+          grep -Fx 'source_static=exactly_six_TDI7.1_static_controls' <<<"$output"
+          grep -Fx 'source_recovery=depths_1_2_3_4' <<<"$output"
+          grep -Fx 'geometry=centered_unit_rms_reorthogonalized_mgs_v1' <<<"$output"
+          grep -Fx 'interpretation=source_geometry_only_not_H_AI_3_verdict' <<<"$output"
+          grep -Fx 'final_holdout=NOT_ACCESSED' <<<"$output"
+          grep -Fx 'confirmatory_H_AI_3_verdict=NOT_COMPUTED' <<<"$output"
+          test "$(grep -c '^tdi74-identifiability-v1;' <<<"$output")" -eq 6
+      - name: Prove final-run authorization is absent
+        shell: bash
+        run: |
+          ! grep -R -F 'I_ACCEPT_THE_TDI7_HOLDOUT_FREEZE' \
+            tdi-bench/src/lib.rs \
+            tdi-bench/src/subspace_v7.rs \
+            tdi-bench/src/bin/tdi-attention-v74-identifiability.rs
+          ! grep -R -F 'TDI7_CONFIRM_FINAL_HOLDOUT' \
+            tdi-bench/src/lib.rs \
+            tdi-bench/src/subspace_v7.rs \
+            tdi-bench/src/bin/tdi-attention-v74-identifiability.rs
