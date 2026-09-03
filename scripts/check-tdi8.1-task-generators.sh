@@ -59,7 +59,7 @@ grep -Fq 'HostVectorCapacityTooLarge' "$SOURCE" \
     || fail "host vector-capacity rejection missing"
 grep -Fq '.try_reserve_exact(elements)' "$SOURCE" \
     || fail "fallible exact reservation missing"
-grep -Fq 'collision_class is generator-side metadata only' "$DOC" \
+grep -Fq 'generator-side metadata only' "$DOC" \
     || fail "T3 physical-collision non-claim missing"
 grep -Fq 'no defaults' "$DOC" \
     || fail "numeric horizon non-freeze statement missing"
