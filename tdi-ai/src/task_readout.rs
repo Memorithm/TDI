@@ -11,6 +11,10 @@
 //! tolerance, or rounding path. Coordinate indices are caller supplied and this module
 //! deliberately provides no experimental defaults.
 //!
+//! A finite but non-canonical readout is an evaluable prediction outcome, not an
+//! adapter/runtime error. This prevents a future evaluator from improving apparent
+//! quality by rejecting outputs that fail exact decoding.
+//!
 //! This is bounded software-preflight infrastructure, not a frozen TDI-8.1 readout
 //! choice and not H8-A/H8-B evidence.
 
@@ -104,6 +108,30 @@ impl ExactStateReadoutLayout {
     }
 }
 
+/// Evaluable result of exact recurrent-state decoding.
+///
+/// `InvalidEncoding` is deliberately not an error. A future task executor must
+/// count it as an incorrect prediction rather than drop the query or generator.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ExactStatePrediction {
+    /// Two designated coordinates encode one exact canonical task symbol.
+    Symbol(TaskSymbol),
+    /// State was finite and correctly shaped but the designated coordinates were
+    /// not a canonical exact symbol encoding.
+    InvalidEncoding,
+}
+
+impl ExactStatePrediction {
+    /// Exact valid symbol when the recurrent state encodes one canonically.
+    #[must_use]
+    pub const fn symbol(self) -> Option<TaskSymbol> {
+        match self {
+            Self::Symbol(symbol) => Some(symbol),
+            Self::InvalidEncoding => None,
+        }
+    }
+}
+
 /// Stateless exact-symbol readout using only recurrent-state coordinates.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ExactStateSymbolReadout {
@@ -123,12 +151,13 @@ impl ExactStateSymbolReadout {
         self.layout
     }
 
-    /// Decode one predicted symbol from state and nothing else.
+    /// Decode one predicted outcome from state and nothing else.
     ///
-    /// The complete recurrent state must be finite. The two designated readout
-    /// coordinates must additionally be canonical exact limbs; no clipping,
-    /// rounding, tolerance or nearest-symbol fallback is permitted.
-    pub fn decode_state(self, state: &[f64]) -> Result<TaskSymbol, TaskReadoutError> {
+    /// The complete recurrent state must be finite. Shape/numeric corruption is a
+    /// typed error. A finite, correctly shaped state whose designated coordinates
+    /// are not canonical exact limbs yields [`ExactStatePrediction::InvalidEncoding`]
+    /// and therefore remains available to be counted as an incorrect prediction.
+    pub fn decode_state(self, state: &[f64]) -> Result<ExactStatePrediction, TaskReadoutError> {
         let (width, high_index, low_index) = self.layout.host_indices()?;
         if state.len() != width {
             return Err(TaskReadoutError::StateWidthMismatch {
@@ -139,12 +168,20 @@ impl ExactStateSymbolReadout {
         if let Some(index) = state.iter().position(|value| !value.is_finite()) {
             return Err(TaskReadoutError::NonFiniteState { index });
         }
-        decode_exact_symbol_coordinates([state[high_index], state[low_index]])
+        let coordinates = [state[high_index], state[low_index]];
+        Ok(match ExactU64Binary64::decode(coordinates) {
+            Ok(symbol) => ExactStatePrediction::Symbol(TaskSymbol::new(symbol)),
+            Err(TaskEncodingError::NonCanonicalEncodedLimb { .. }) => {
+                ExactStatePrediction::InvalidEncoding
+            }
+            Err(error) => return Err(TaskReadoutError::Encoding(error)),
+        })
     }
 }
 
-/// Decode the exact two-coordinate symbol representation used by A0 values or a
-/// recurrent readout. This helper never receives a query target.
+/// Decode the exact two-coordinate symbol representation used by A0 values.
+/// This helper never receives a query target. A0 values are expected to be
+/// canonical by construction, so malformed coordinates remain a typed error.
 pub fn decode_exact_symbol_coordinates(
     coordinates: [f64; EXACT_U64_BINARY64_WIDTH],
 ) -> Result<TaskSymbol, TaskReadoutError> {
@@ -168,7 +205,7 @@ pub enum TaskReadoutError {
     StateWidthMismatch { expected: usize, actual: usize },
     /// Recurrent state contains a non-finite coordinate.
     NonFiniteState { index: usize },
-    /// Designated coordinates are not the canonical lossless symbol encoding.
+    /// Unexpected task-encoding failure outside the finite noncanonical-output case.
     Encoding(TaskEncodingError),
 }
 
@@ -183,10 +220,10 @@ impl std::error::Error for TaskReadoutError {}
 #[cfg(test)]
 mod tests {
     use super::{
-        ExactStateReadoutLayout, ExactStateSymbolReadout, TaskReadoutError,
+        ExactStatePrediction, ExactStateReadoutLayout, ExactStateSymbolReadout, TaskReadoutError,
         decode_exact_symbol_coordinates,
     };
-    use crate::task_encoding::{ExactU64Binary64, TaskEncodingError};
+    use crate::task_encoding::ExactU64Binary64;
     use crate::task_generators::TaskSymbol;
 
     #[test]
@@ -196,7 +233,10 @@ mod tests {
         let state = [0.25, encoded[0], -0.5, encoded[1], 0.0];
         let layout = ExactStateReadoutLayout::new(5, 1, 3).expect("layout");
         let readout = ExactStateSymbolReadout::new(layout);
-        assert_eq!(readout.decode_state(&state), Ok(TaskSymbol::new(expected)));
+        assert_eq!(
+            readout.decode_state(&state),
+            Ok(ExactStatePrediction::Symbol(TaskSymbol::new(expected)))
+        );
     }
 
     #[test]
@@ -207,7 +247,7 @@ mod tests {
         let layout = ExactStateReadoutLayout::new(3, 2, 0).expect("layout");
         assert_eq!(
             ExactStateSymbolReadout::new(layout).decode_state(&state),
-            Ok(TaskSymbol::new(expected))
+            Ok(ExactStatePrediction::Symbol(TaskSymbol::new(expected)))
         );
     }
 
@@ -251,16 +291,13 @@ mod tests {
     }
 
     #[test]
-    fn readout_rejects_noncanonical_limb_instead_of_rounding() {
+    fn noncanonical_finite_readout_is_evaluable_invalid_prediction() {
         let readout =
             ExactStateSymbolReadout::new(ExactStateReadoutLayout::new(2, 0, 1).expect("layout"));
-        let error = readout
-            .decode_state(&[0.1, 0.0])
-            .expect_err("off-grid limb must fail");
-        assert!(matches!(
-            error,
-            TaskReadoutError::Encoding(TaskEncodingError::NonCanonicalEncodedLimb { index: 0, .. })
-        ));
+        assert_eq!(
+            readout.decode_state(&[0.1, 0.0]),
+            Ok(ExactStatePrediction::InvalidEncoding)
+        );
     }
 
     #[test]
