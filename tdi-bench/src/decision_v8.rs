@@ -256,17 +256,23 @@ pub fn aggregate_primary_hypothesis(
         PrimaryCellDisposition::MissingOrRejected => unreachable!("handled above"),
     });
 
-    let all_beneficial_or_equivalent = verdicts
-        .iter()
-        .all(|verdict| matches!(verdict, PrimaryVerdict::Beneficial | PrimaryVerdict::Equivalent));
+    let all_beneficial_or_equivalent = verdicts.iter().all(|verdict| {
+        matches!(
+            verdict,
+            PrimaryVerdict::Beneficial | PrimaryVerdict::Equivalent
+        )
+    });
     let any_beneficial = verdicts.contains(&PrimaryVerdict::Beneficial);
     if all_beneficial_or_equivalent && any_beneficial {
         return PrimaryVerdict::Beneficial;
     }
 
-    let all_harmful_or_equivalent = verdicts
-        .iter()
-        .all(|verdict| matches!(verdict, PrimaryVerdict::Harmful | PrimaryVerdict::Equivalent));
+    let all_harmful_or_equivalent = verdicts.iter().all(|verdict| {
+        matches!(
+            verdict,
+            PrimaryVerdict::Harmful | PrimaryVerdict::Equivalent
+        )
+    });
     let any_harmful = verdicts.contains(&PrimaryVerdict::Harmful);
     if all_harmful_or_equivalent && any_harmful {
         return PrimaryVerdict::Harmful;
@@ -363,10 +369,16 @@ mod tests {
         let inconclusive = PrimaryCellDisposition::Classified(PrimaryVerdict::Inconclusive);
 
         let mut cells = [equivalent; 9];
-        assert_eq!(aggregate_primary_hypothesis(cells), PrimaryVerdict::Equivalent);
+        assert_eq!(
+            aggregate_primary_hypothesis(cells),
+            PrimaryVerdict::Equivalent
+        );
 
         cells[3] = beneficial;
-        assert_eq!(aggregate_primary_hypothesis(cells), PrimaryVerdict::Beneficial);
+        assert_eq!(
+            aggregate_primary_hypothesis(cells),
+            PrimaryVerdict::Beneficial
+        );
 
         let mut cells = [equivalent; 9];
         cells[4] = harmful;
@@ -375,14 +387,23 @@ mod tests {
         let mut cells = [equivalent; 9];
         cells[0] = beneficial;
         cells[8] = harmful;
-        assert_eq!(aggregate_primary_hypothesis(cells), PrimaryVerdict::Inconclusive);
+        assert_eq!(
+            aggregate_primary_hypothesis(cells),
+            PrimaryVerdict::Inconclusive
+        );
 
         let mut cells = [equivalent; 9];
         cells[2] = inconclusive;
-        assert_eq!(aggregate_primary_hypothesis(cells), PrimaryVerdict::Inconclusive);
+        assert_eq!(
+            aggregate_primary_hypothesis(cells),
+            PrimaryVerdict::Inconclusive
+        );
 
         let mut cells = [equivalent; 9];
         cells[5] = PrimaryCellDisposition::MissingOrRejected;
-        assert_eq!(aggregate_primary_hypothesis(cells), PrimaryVerdict::Inconclusive);
+        assert_eq!(
+            aggregate_primary_hypothesis(cells),
+            PrimaryVerdict::Inconclusive
+        );
     }
 }
