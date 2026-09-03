@@ -41,10 +41,7 @@ impl ExactU64Binary64 {
     pub fn encode(value: u64) -> Self {
         let high = (value >> 32) as u32;
         let low = (value & LIMB_MASK) as u32;
-        Self([
-            f64::from(high) / LIMB_SCALE,
-            f64::from(low) / LIMB_SCALE,
-        ])
+        Self([f64::from(high) / LIMB_SCALE, f64::from(low) / LIMB_SCALE])
     }
 
     /// Exact finite coordinates.
@@ -310,15 +307,27 @@ impl ProjectionAudit {
 /// Fail-closed adaptation errors.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TaskAdapterError {
-    InputWidthTooSmall { minimum: u64, actual: u64 },
-    HostDimensionTooLarge { component: &'static str, value: u64 },
+    InputWidthTooSmall {
+        minimum: u64,
+        actual: u64,
+    },
+    HostDimensionTooLarge {
+        component: &'static str,
+        value: u64,
+    },
     HostVectorCapacityTooLarge {
         component: &'static str,
         elements: usize,
         element_bytes: usize,
     },
-    HostAllocationFailed { component: &'static str, elements: usize },
-    NonCanonicalEncodedLimb { index: usize, value_bits: u64 },
+    HostAllocationFailed {
+        component: &'static str,
+        elements: usize,
+    },
+    NonCanonicalEncodedLimb {
+        index: usize,
+        value_bits: u64,
+    },
     EventCountTooLarge,
     NoDistinctDistractorReadKey,
 }
@@ -331,7 +340,10 @@ impl fmt::Display for TaskAdapterError {
                 "TDI-8.1 task adapter requires input width >= {minimum}, got {actual}"
             ),
             Self::HostDimensionTooLarge { component, value } => {
-                write!(formatter, "{component}={value} does not fit the host index type")
+                write!(
+                    formatter,
+                    "{component}={value} does not fit the host index type"
+                )
             }
             Self::HostVectorCapacityTooLarge {
                 component,
@@ -341,7 +353,10 @@ impl fmt::Display for TaskAdapterError {
                 formatter,
                 "{component} capacity too large: {elements} elements × {element_bytes} bytes"
             ),
-            Self::HostAllocationFailed { component, elements } => write!(
+            Self::HostAllocationFailed {
+                component,
+                elements,
+            } => write!(
                 formatter,
                 "host allocation failed for {component}: {elements} elements"
             ),
@@ -712,7 +727,7 @@ pub fn audit_associative_projection(
 #[cfg(test)]
 mod tests {
     use super::{
-        A0TaskAction, A0_TASK_KEY_WIDTH, A0_TASK_VALUE_WIDTH, ExactU64Binary64,
+        A0_TASK_KEY_WIDTH, A0_TASK_VALUE_WIDTH, A0TaskAction, ExactU64Binary64,
         MIN_TASK_EVENT_INPUT_WIDTH, TaskAdapterError, TaskAdapterLayout, TaskEventPlan,
         audit_associative_projection, build_task_adapter_plan,
     };
@@ -726,9 +741,11 @@ mod tests {
         for value in [0, 1, u32::MAX as u64, 1u64 << 32, u64::MAX] {
             let encoded = ExactU64Binary64::encode(value).coordinates();
             assert!(encoded.iter().all(|coordinate| coordinate.is_finite()));
-            assert!(encoded
-                .iter()
-                .all(|coordinate| (0.0..1.0).contains(coordinate)));
+            assert!(
+                encoded
+                    .iter()
+                    .all(|coordinate| (0.0..1.0).contains(coordinate))
+            );
             assert_eq!(ExactU64Binary64::decode(encoded).expect("canonical"), value);
         }
     }
@@ -759,7 +776,10 @@ mod tests {
             })
         );
         let layout = TaskAdapterLayout::new(MIN_TASK_EVENT_INPUT_WIDTH + 4).expect("layout");
-        assert_eq!(layout.recurrent_input_width(), MIN_TASK_EVENT_INPUT_WIDTH + 4);
+        assert_eq!(
+            layout.recurrent_input_width(),
+            MIN_TASK_EVENT_INPUT_WIDTH + 4
+        );
         assert_eq!(layout.a0_layout().key_width(), A0_TASK_KEY_WIDTH);
         assert_eq!(layout.a0_layout().value_width(), A0_TASK_VALUE_WIDTH);
     }
@@ -772,7 +792,10 @@ mod tests {
         assert_eq!(plan.events().len(), instance.events().len());
         assert!(plan.events().iter().all(|event| {
             event.recurrent_input().len() == MIN_TASK_EVENT_INPUT_WIDTH as usize
-                && event.recurrent_input().iter().all(|value| value.is_finite())
+                && event
+                    .recurrent_input()
+                    .iter()
+                    .all(|value| value.is_finite())
         }));
 
         let query_count = plan
@@ -784,7 +807,10 @@ mod tests {
         for event in plan.events() {
             if let A0TaskAction::Read { target, .. } = event.a0_action() {
                 let target_code = ExactU64Binary64::decode(target).expect("exact target");
-                assert_eq!(Some(target_code), event.expected_target().map(|value| value.code()));
+                assert_eq!(
+                    Some(target_code),
+                    event.expected_target().map(|value| value.code())
+                );
             }
         }
     }
@@ -819,17 +845,17 @@ mod tests {
             TaskAdapterLayout::new(MIN_TASK_EVENT_INPUT_WIDTH).expect("layout"),
         )
         .expect("plan");
-        assert!(plan
-            .events()
-            .iter()
-            .filter_map(TaskEventPlan::memory_write_key)
-            .all(|key| key != plan.distractor_read_key()));
+        assert!(
+            plan.events()
+                .iter()
+                .filter_map(TaskEventPlan::memory_write_key)
+                .all(|key| key != plan.distractor_read_key())
+        );
     }
 
     #[test]
     fn projection_audit_separates_generator_classes_from_physical_collisions() {
-        let instance =
-            generate_t3(41, T3Config::new(8, 3, 4, 20, 3).expect("config")).expect("T3");
+        let instance = generate_t3(41, T3Config::new(8, 3, 4, 20, 3).expect("config")).expect("T3");
         let plan = build_task_adapter_plan(
             &instance,
             TaskAdapterLayout::new(MIN_TASK_EVENT_INPUT_WIDTH).expect("layout"),
