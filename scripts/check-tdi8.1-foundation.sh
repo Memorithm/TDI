@@ -133,6 +133,12 @@ if test -f tdi-ai/src/task_execution.rs; then
     bash scripts/check-tdi8.1-symbolic-execution.sh
 fi
 
+if test -f tdi-ai/src/task_encoding.rs; then
+    test -s scripts/check-tdi8.1-task-encoding.sh \
+        || fail "task encoding candidate exists without its promotion/integrity gate"
+    bash scripts/check-tdi8.1-task-encoding.sh
+fi
+
 if test -f tdi-bench/src/decision_v8.rs; then
     test -s scripts/check-tdi8.1-primary-decision.sh \
         || fail "TDI-8 primary-decision source exists without its integrity gate"
@@ -150,6 +156,7 @@ printf 'TDI-8.1 exact memory-accounting invariants: VERIFIED\n'
 printf 'TDI-8.1 defining-component guards: VERIFIED\n'
 printf 'TDI-8.1 matched dynamic-budget guard: VERIFIED\n'
 printf 'TDI-8.1 symbolic task-execution leakage boundary: VERIFIED\n'
+printf 'TDI-8.1 bounded task-encoding promotion gate: CHAINED\n'
 printf 'TDI-8.1 benchmark/evidence integrity gates: CHAINED\n'
 printf 'TDI-8.2 executable/token surface: ABSENT\n'
 printf 'TDI-8.1 foundation gate: PASS\n'
