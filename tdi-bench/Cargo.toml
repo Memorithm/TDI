@@ -9,4 +9,5 @@ description = "Reproducible benchmarks for the TDI-1 prospective information hyp
 workspace = true
 
 [dependencies]
+tdi-ai = { path = "../tdi-ai" }
 tdi-core = { path = "../tdi-core" }
