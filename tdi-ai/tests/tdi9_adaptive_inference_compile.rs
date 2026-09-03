@@ -12,7 +12,13 @@ fn downstream_fixture_exercises_the_frozen_tdi9_policy_ladder() {
     assert!(validate_action(PolicyArm::C2AdaptiveStopping, InferenceAction::Stop).is_ok());
     assert!(validate_action(PolicyArm::C2AdaptiveStopping, InferenceAction::Verify).is_err());
     assert!(validate_action(PolicyArm::C3VerificationRecovery, InferenceAction::Verify).is_ok());
-    assert!(validate_action(PolicyArm::C3VerificationRecovery, InferenceAction::Backtrack).is_ok());
+    assert!(
+        validate_action(
+            PolicyArm::C3VerificationRecovery,
+            InferenceAction::Backtrack
+        )
+        .is_ok()
+    );
     assert!(PolicyArm::C2AdaptiveStopping.is_trajectory_adaptive());
     assert!(!PolicyArm::C1StaticPreallocation.is_trajectory_adaptive());
 }
@@ -39,7 +45,10 @@ fn observation_and_accounting_contracts_are_bounded_and_c3_scoped() {
     assert_eq!(observation.residual(), 0.25);
     assert_eq!(observation.score_margin(), -0.0625);
     assert_eq!(observation.prior_action_count(), 5);
-    assert_eq!(observation.verifier_signal(), Some(VerifierSignal::Indeterminate));
+    assert_eq!(
+        observation.verifier_signal(),
+        Some(VerifierSignal::Indeterminate)
+    );
     assert_eq!(observation.available_checkpoints(), 1);
 
     let envelope = ResourceEnvelope::new(100, 128).expect("bounded synthetic envelope");
@@ -73,19 +82,13 @@ fn observation_and_accounting_contracts_are_bounded_and_c3_scoped() {
 
 #[test]
 fn verifier_metadata_cannot_leak_into_c2() {
-    let observation = PolicyObservation::new(
-        1,
-        8,
-        0.0,
-        0.0,
-        0.0,
-        1,
-        Some(VerifierSignal::Satisfied),
-        0,
-    )
-    .expect("finite synthetic observation");
+    let observation =
+        PolicyObservation::new(1, 8, 0.0, 0.0, 0.0, 1, Some(VerifierSignal::Satisfied), 0)
+            .expect("finite synthetic observation");
 
-    assert!(observation
-        .validate_for_arm(PolicyArm::C2AdaptiveStopping)
-        .is_err());
+    assert!(
+        observation
+            .validate_for_arm(PolicyArm::C2AdaptiveStopping)
+            .is_err()
+    );
 }
