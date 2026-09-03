@@ -35,7 +35,10 @@ impl PolicyArm {
     /// Whether trajectory observations may alter the compute schedule.
     #[must_use]
     pub const fn is_trajectory_adaptive(self) -> bool {
-        matches!(self, Self::C2AdaptiveStopping | Self::C3VerificationRecovery)
+        matches!(
+            self,
+            Self::C2AdaptiveStopping | Self::C3VerificationRecovery
+        )
     }
 }
 
@@ -423,7 +426,10 @@ impl ResourceMeter {
 }
 
 /// Validate that an action belongs to the frozen arm vocabulary.
-pub fn validate_action(arm: PolicyArm, action: InferenceAction) -> Result<(), AdaptiveInferenceError> {
+pub fn validate_action(
+    arm: PolicyArm,
+    action: InferenceAction,
+) -> Result<(), AdaptiveInferenceError> {
     if arm.allows(action) {
         Ok(())
     } else {
@@ -434,16 +440,33 @@ pub fn validate_action(arm: PolicyArm, action: InferenceAction) -> Result<(), Ad
 /// Typed TDI-9.1 contract/accounting failures.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum AdaptiveInferenceError {
-    NonFiniteObservation { field: ObservationField },
-    NegativeObservationMagnitude { field: ObservationField },
-    VerifierSignalForbidden { arm: PolicyArm },
-    CheckpointMetadataForbidden { arm: PolicyArm },
-    ActionForbidden { arm: PolicyArm, action: InferenceAction },
+    NonFiniteObservation {
+        field: ObservationField,
+    },
+    NegativeObservationMagnitude {
+        field: ObservationField,
+    },
+    VerifierSignalForbidden {
+        arm: PolicyArm,
+    },
+    CheckpointMetadataForbidden {
+        arm: PolicyArm,
+    },
+    ActionForbidden {
+        arm: PolicyArm,
+        action: InferenceAction,
+    },
     ZeroComputeEnvelope,
     ZeroMemoryEnvelope,
     ResourceAccountingOverflow,
-    ComputeEnvelopeExceeded { maximum: u64, requested: u64 },
-    MemoryEnvelopeExceeded { maximum: u64, requested: u64 },
+    ComputeEnvelopeExceeded {
+        maximum: u64,
+        requested: u64,
+    },
+    MemoryEnvelopeExceeded {
+        maximum: u64,
+        requested: u64,
+    },
 }
 
 impl fmt::Display for AdaptiveInferenceError {
@@ -513,16 +536,20 @@ mod tests {
             observation.validate_for_arm(PolicyArm::C2AdaptiveStopping),
             Err(AdaptiveInferenceError::VerifierSignalForbidden { .. })
         ));
-        assert!(observation
-            .validate_for_arm(PolicyArm::C3VerificationRecovery)
-            .is_ok());
+        assert!(
+            observation
+                .validate_for_arm(PolicyArm::C3VerificationRecovery)
+                .is_ok()
+        );
     }
 
     #[test]
     fn resource_meter_counts_all_compute_components_and_rejects_atomically() {
         let envelope = ResourceEnvelope::new(20, 1_000).expect("positive envelope");
         let mut meter = ResourceMeter::new(envelope);
-        meter.charge_compute(ComputeComponent::Solver, 7).expect("solver");
+        meter
+            .charge_compute(ComputeComponent::Solver, 7)
+            .expect("solver");
         meter
             .charge_compute(ComputeComponent::PolicyDecision, 2)
             .expect("policy");
@@ -532,7 +559,9 @@ mod tests {
         meter
             .charge_compute(ComputeComponent::Checkpoint, 2)
             .expect("checkpoint");
-        meter.charge_compute(ComputeComponent::Replay, 4).expect("replay");
+        meter
+            .charge_compute(ComputeComponent::Replay, 4)
+            .expect("replay");
         assert_eq!(meter.usage().total_compute_ops().expect("sum"), 18);
 
         let before = meter.usage();
