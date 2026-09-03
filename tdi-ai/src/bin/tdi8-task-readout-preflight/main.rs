@@ -7,9 +7,9 @@ pub use tdi_ai::{associative_memory, task_generators};
 
 use std::error::Error;
 
-use tdi_ai::task_generators::TaskSymbol;
 use task_encoding::ExactU64Binary64;
 use task_readout::{ExactStateReadoutLayout, ExactStateSymbolReadout};
+use tdi_ai::task_generators::TaskSymbol;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let expected = TaskSymbol::new(0x0123_4567_89ab_cdef);
