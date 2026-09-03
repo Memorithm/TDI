@@ -107,18 +107,39 @@ fn source_blocks(split: BoundedSplit, task: TaskKind) -> Result<SourceBlocks, Au
     Ok((static_rows, recovery_rows))
 }
 
+fn pooled_source_blocks(task: TaskKind) -> Result<SourceBlocks, AuditError> {
+    let total_records = (TRAIN_COUNT + DEVELOPMENT_COUNT + VALIDATION_COUNT) * 2;
+    let mut static_rows = Vec::with_capacity(total_records);
+    let mut recovery_rows = Vec::with_capacity(total_records);
+    for split in [
+        BoundedSplit::Training,
+        BoundedSplit::Development,
+        BoundedSplit::Validation,
+    ] {
+        let (mut split_static, mut split_recovery) = source_blocks(split, task)?;
+        static_rows.append(&mut split_static);
+        recovery_rows.append(&mut split_recovery);
+    }
+    Ok((static_rows, recovery_rows))
+}
+
 fn audit_cell(split: BoundedSplit, task: TaskKind) -> Result<TwoBlockSubspaceAudit, AuditError> {
     let (static_rows, recovery_rows) = source_blocks(split, task)?;
     audit_two_blocks(&static_rows, &recovery_rows).map_err(AuditError::SubspaceFailure)
 }
 
-fn canonical_cell(split: BoundedSplit, task: TaskKind, audit: TwoBlockSubspaceAudit) -> String {
+fn audit_pooled(task: TaskKind) -> Result<TwoBlockSubspaceAudit, AuditError> {
+    let (static_rows, recovery_rows) = pooled_source_blocks(task)?;
+    audit_two_blocks(&static_rows, &recovery_rows).map_err(AuditError::SubspaceFailure)
+}
+
+fn canonical_report(split_id: &str, task: TaskKind, audit: TwoBlockSubspaceAudit) -> String {
     format!(
         concat!(
             "tdi74-identifiability-v1;split={};task={};left=static;right=recovery;{};",
             "affine_linear_predictor_spaces_equivalent={}"
         ),
-        split.id(),
+        split_id,
         task.id(),
         audit.canonical_report(),
         audit.equivalent_within_tolerance(),
@@ -126,15 +147,22 @@ fn canonical_cell(split: BoundedSplit, task: TaskKind, audit: TwoBlockSubspaceAu
 }
 
 fn evaluate_all() -> Result<Vec<String>, AuditError> {
-    let mut output = Vec::with_capacity(6);
+    let mut output = Vec::with_capacity(8);
     for split in [
         BoundedSplit::Training,
         BoundedSplit::Development,
         BoundedSplit::Validation,
     ] {
         for task in [TaskKind::AssociativeRecall, TaskKind::Copy] {
-            output.push(canonical_cell(split, task, audit_cell(split, task)?));
+            output.push(canonical_report(split.id(), task, audit_cell(split, task)?));
         }
+    }
+    for task in [TaskKind::AssociativeRecall, TaskKind::Copy] {
+        output.push(canonical_report(
+            "pooled_non_holdout",
+            task,
+            audit_pooled(task)?,
+        ));
     }
     Ok(output)
 }
@@ -196,6 +224,19 @@ mod tests {
     }
 
     #[test]
+    fn pooled_non_holdout_geometry_is_deterministic() {
+        for task in [TaskKind::AssociativeRecall, TaskKind::Copy] {
+            let left = audit_pooled(task).unwrap();
+            let right = audit_pooled(task).unwrap();
+            assert_eq!(left, right);
+            assert!(left.left_rank() >= 1);
+            assert!(left.right_rank() >= 1);
+            assert!(left.joint_rank() >= left.left_rank());
+            assert!(left.joint_rank() >= left.right_rank());
+        }
+    }
+
+    #[test]
     fn adapter_uses_exact_tdi74_source_blocks() {
         let (static_rows, recovery_rows) =
             source_blocks(BoundedSplit::Development, TaskKind::AssociativeRecall).unwrap();
@@ -203,6 +244,16 @@ mod tests {
         assert_eq!(recovery_rows.len(), DEVELOPMENT_COUNT * 2);
         assert!(static_rows.iter().all(|row| row.len() == 6));
         assert!(recovery_rows.iter().all(|row| row.len() == RECOVERY_DEPTHS));
+    }
+
+    #[test]
+    fn pooled_adapter_contains_all_non_holdout_records() {
+        let expected = (TRAIN_COUNT + DEVELOPMENT_COUNT + VALIDATION_COUNT) * 2;
+        for task in [TaskKind::AssociativeRecall, TaskKind::Copy] {
+            let (static_rows, recovery_rows) = pooled_source_blocks(task).unwrap();
+            assert_eq!(static_rows.len(), expected);
+            assert_eq!(recovery_rows.len(), expected);
+        }
     }
 
     #[test]
