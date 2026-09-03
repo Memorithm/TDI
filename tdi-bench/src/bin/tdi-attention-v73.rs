@@ -128,8 +128,8 @@ fn generator_diagnostic(
     let late_state = late
         .apply(&reference)
         .map_err(|_| EvaluationError::InterventionFailure)?;
-    let joint_state = apply_joint(&reference, early, late)
-        .map_err(|_| EvaluationError::InterventionFailure)?;
+    let joint_state =
+        apply_joint(&reference, early, late).map_err(|_| EvaluationError::InterventionFailure)?;
 
     let early_recovery = recovery_trajectory(&reference, &early_state, RECOVERY_HORIZON);
     let late_recovery = recovery_trajectory(&reference, &late_state, RECOVERY_HORIZON);
@@ -149,10 +149,7 @@ fn generator_diagnostic(
         let late_overlap = checked_recovery(late_recovery[depth])?;
         let joint_overlap = checked_recovery(joint_recovery[depth])?;
         absolute_site_difference.push((early_overlap - late_overlap).abs());
-        relative_site_difference.push(symmetric_relative_difference(
-            early_overlap,
-            late_overlap,
-        )?);
+        relative_site_difference.push(symmetric_relative_difference(early_overlap, late_overlap)?);
         let early_deficit = 1.0 - early_overlap;
         let late_deficit = 1.0 - late_overlap;
         let joint_deficit = 1.0 - joint_overlap;
@@ -179,8 +176,8 @@ fn bounded_population(
     validate_bounded_split(split)?;
     (0..BOUNDED_GENERATORS_PER_TASK)
         .map(|offset| {
-            let offset = u64::try_from(offset)
-                .map_err(|_| EvaluationError::InvalidBoundedPopulation)?;
+            let offset =
+                u64::try_from(offset).map_err(|_| EvaluationError::InvalidBoundedPopulation)?;
             let seed = split
                 .start()
                 .checked_add(offset)
@@ -354,7 +351,10 @@ mod tests {
         let right = evaluate_all_bounded().unwrap();
         assert_eq!(left, right);
         assert_eq!(left.len(), 4);
-        assert!(left.iter().all(|line| line.starts_with("tdi73-bounded-v1;")));
+        assert!(
+            left.iter()
+                .all(|line| line.starts_with("tdi73-bounded-v1;"))
+        );
     }
 
     #[test]
