@@ -370,9 +370,7 @@ impl T3Config {
             });
         }
         if !(1..=63).contains(&shared_prefix_bits) {
-            return Err(TaskGeneratorError::InvalidSharedPrefixBits {
-                shared_prefix_bits,
-            });
+            return Err(TaskGeneratorError::InvalidSharedPrefixBits { shared_prefix_bits });
         }
         if collision_classes == 0 || collision_classes >= association_count {
             return Err(TaskGeneratorError::InvalidCollisionClassCount {
@@ -556,7 +554,10 @@ impl fmt::Display for TaskGeneratorError {
                 "T3 cannot fit {association_count} distinct keys into {suffix_bits} suffix bits"
             ),
             Self::HostCountTooLarge { component, value } => {
-                write!(formatter, "{component}={value} does not fit the host index type")
+                write!(
+                    formatter,
+                    "{component}={value} does not fit the host index type"
+                )
             }
             Self::HostEventCountOverflow => {
                 formatter.write_str("TDI-8 generated event count overflowed host indexing")
@@ -617,16 +618,13 @@ fn checked_event_count(parts: &[usize]) -> Result<usize, TaskGeneratorError> {
     })
 }
 
-fn reserve_vec<T>(
-    component: &'static str,
-    elements: usize,
-) -> Result<Vec<T>, TaskGeneratorError> {
-    let bytes = elements
-        .checked_mul(mem::size_of::<T>())
-        .ok_or(TaskGeneratorError::HostVectorCapacityTooLarge {
+fn reserve_vec<T>(component: &'static str, elements: usize) -> Result<Vec<T>, TaskGeneratorError> {
+    let bytes = elements.checked_mul(mem::size_of::<T>()).ok_or(
+        TaskGeneratorError::HostVectorCapacityTooLarge {
             component,
             elements,
-        })?;
+        },
+    )?;
     if bytes > isize::MAX as usize {
         return Err(TaskGeneratorError::HostVectorCapacityTooLarge {
             component,
@@ -661,8 +659,8 @@ pub fn generate_t1(seed: u64, config: T1Config) -> Result<TaskInstance, TaskGene
     let mut distractor_stream = SplitMix64::new(seed, DOMAIN_T1_DISTRACTOR);
 
     for source_index in 0..association_count {
-        let source_index_u64 = u64::try_from(source_index)
-            .map_err(|_| TaskGeneratorError::HostEventCountOverflow)?;
+        let source_index_u64 =
+            u64::try_from(source_index).map_err(|_| TaskGeneratorError::HostEventCountOverflow)?;
         let key = TaskKey::new(key_stream.next(), source_index_u64);
         let value = TaskSymbol::new(value_stream.next());
         associations.push((key, value));
@@ -770,15 +768,11 @@ pub fn generate_t3(seed: u64, config: T3Config) -> Result<TaskInstance, TaskGene
     let mut distractor_stream = SplitMix64::new(seed, DOMAIN_T3_DISTRACTOR);
 
     for source_index in 0..association_count {
-        let source_index_u64 = u64::try_from(source_index)
-            .map_err(|_| TaskGeneratorError::HostEventCountOverflow)?;
-        let suffix = suffix_offset
-            .wrapping_add(source_index_u64.wrapping_mul(suffix_stride))
-            & suffix_mask;
-        let key = TaskKey::new(
-            prefix | suffix,
-            source_index_u64 % config.collision_classes,
-        );
+        let source_index_u64 =
+            u64::try_from(source_index).map_err(|_| TaskGeneratorError::HostEventCountOverflow)?;
+        let suffix =
+            suffix_offset.wrapping_add(source_index_u64.wrapping_mul(suffix_stride)) & suffix_mask;
+        let key = TaskKey::new(prefix | suffix, source_index_u64 % config.collision_classes);
         let value = TaskSymbol::new(value_stream.next());
         associations.push((key, value));
         events.push(TaskEvent::Associate {
@@ -832,7 +826,10 @@ mod tests {
 
     #[test]
     fn horizon_plan_requires_positive_strictly_increasing_values_without_defaults() {
-        assert_eq!(HorizonPlan::new(0, 2, 3), Err(TaskGeneratorError::ZeroHorizon));
+        assert_eq!(
+            HorizonPlan::new(0, 2, 3),
+            Err(TaskGeneratorError::ZeroHorizon)
+        );
         assert!(matches!(
             HorizonPlan::new(3, 3, 9),
             Err(TaskGeneratorError::NonIncreasingHorizons { .. })
@@ -945,7 +942,11 @@ mod tests {
         let suffix_bits = 64 - u32::from(config.shared_prefix_bits());
         let prefix_mask = !((1u64 << suffix_bits) - 1);
         let prefix = associations[0].code() & prefix_mask;
-        assert!(associations.iter().all(|key| key.code() & prefix_mask == prefix));
+        assert!(
+            associations
+                .iter()
+                .all(|key| key.code() & prefix_mask == prefix)
+        );
         for (index, key) in associations.iter().enumerate() {
             assert_eq!(
                 key.collision_class(),
