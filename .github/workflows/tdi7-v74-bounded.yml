@@ -58,7 +58,7 @@ jobs:
           grep -Fx 'source_recovery=depths_1_2_3_4' <<<"$output"
           grep -Fx 'target=bounded_retrieval_deficit_depth_5' <<<"$output"
           grep -Fx 'estimator=gaussian_mmi_vector_v1' <<<"$output"
-          grep -Fx 'rank_reduction=declared_order_modified_gram_schmidt_v1' <<<"$output"
+          grep -Fx 'rank_reduction=declared_order_reorthogonalized_mgs_v2' <<<"$output"
           grep -Fx 'bootstrap=generator_grouped_percentile_95' <<<"$output"
           grep -Fx 'final_holdout=NOT_ACCESSED' <<<"$output"
           grep -Fx 'confirmatory_H_AI_3_verdict=NOT_COMPUTED' <<<"$output"
