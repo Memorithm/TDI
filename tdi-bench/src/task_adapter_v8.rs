@@ -713,7 +713,7 @@ pub fn audit_associative_projection(
 mod tests {
     use super::{
         A0TaskAction, A0_TASK_KEY_WIDTH, A0_TASK_VALUE_WIDTH, ExactU64Binary64,
-        MIN_TASK_EVENT_INPUT_WIDTH, TaskAdapterError, TaskAdapterLayout,
+        MIN_TASK_EVENT_INPUT_WIDTH, TaskAdapterError, TaskAdapterLayout, TaskEventPlan,
         audit_associative_projection, build_task_adapter_plan,
     };
     use tdi_ai::associative_memory::{AssociativeMemoryLayout, DirectMappedAssociativeMemory};
