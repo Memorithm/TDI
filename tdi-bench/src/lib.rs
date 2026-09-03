@@ -14,3 +14,4 @@ pub mod gaussian_mmi_v7;
 pub mod paired_resampling_v8;
 pub mod predictive_v7;
 pub mod subspace_v7;
+pub mod task_adapter_v8;
