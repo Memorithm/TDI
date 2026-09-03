@@ -140,11 +140,11 @@ pub fn conservative_percentile_interval_candidate(
     }
 
     let mut sorted = Vec::new();
-    sorted
-        .try_reserve_exact(effects.len())
-        .map_err(|_| PercentileIntervalError::EffectAllocationFailed {
+    sorted.try_reserve_exact(effects.len()).map_err(|_| {
+        PercentileIntervalError::EffectAllocationFailed {
             replicates: effects.len(),
-        })?;
+        }
+    })?;
     sorted.extend_from_slice(effects);
 
     let (interval, dropped_per_tail) = conservative_order_statistic_interval(&mut sorted)?;
