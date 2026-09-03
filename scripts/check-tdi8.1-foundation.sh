@@ -127,6 +127,12 @@ if test -f tdi-ai/src/task_generators.rs; then
     bash scripts/check-tdi8.1-task-generators.sh
 fi
 
+if test -f tdi-bench/src/task_adapter_v8.rs; then
+    test -s scripts/check-tdi8.1-task-adapter.sh \
+        || fail "task-adapter source exists without its evaluator gate"
+    bash scripts/check-tdi8.1-task-adapter.sh
+fi
+
 printf 'TDI-8.1 reference-arm vocabulary: VERIFIED\n'
 printf 'TDI-8.1 exact memory-accounting invariants: VERIFIED\n'
 printf 'TDI-8.1 defining-component guards: VERIFIED\n'
