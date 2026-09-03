@@ -2,7 +2,7 @@
 
 - Scientific series: TDI-8.x
 - Stage: TDI-8.1 bounded deterministic reference evaluator
-- Status: active — A0/A1/A2/A3, symbolic T1/T2/T3 generators and frozen primary decision rules merged; paired-resampling foundation under review
+- Status: active — A0/A1/A2/A3, symbolic T1/T2/T3 generators, frozen primary decision rules and paired-resampling foundation implemented; interval method not yet frozen
 - TDI-8.0 parent merge: `24d41eb7e5d72fc3b5eec9b6434930b10c1f241f`
 - TDI-8.1 foundation merge: `7cfe1b66e11f1eb5d67a5890b07e6f41fa175670` (PR #89)
 - TDI-8 post-foundation integrity merge: `9ee32002603942b9f4152cad47f7fb59331f8c7a` (PR #90)
@@ -88,9 +88,9 @@ PR #106 transcribed the already-frozen TDI-8.0 evidence classifier into `tdi-ben
 
 The classifier consumes an interval but does not construct one.
 
-## Current paired-resampling foundation tranche
+## Paired-resampling foundation
 
-The current branch adds the software substrate required before selecting the TDI-8.1 paired interval implementation:
+The paired-resampling foundation adds the software substrate required before selecting the TDI-8.1 paired interval implementation:
 
 - validated generator-level baseline/candidate deficit pairs;
 - exact relative mean-deficit point statistic and zero-baseline branch;
@@ -101,11 +101,11 @@ The current branch adds the software substrate required before selecting the TDI
 - exact reconstruction of all requested replicate counts;
 - frozen Bonferroni family/per-cell/tail alpha values exposed without selecting an interval estimator.
 
-This tranche intentionally returns unsorted relative-effect replicates and does not freeze percentile, BCa, studentized, normal-approximation or another interval construction. Concrete method, replicate count, seed and degenerate-replicate policy remain later non-final TDI-8.1 decisions.
+This foundation intentionally returns unsorted relative-effect replicates and does not freeze percentile, BCa, studentized, normal-approximation or another interval construction. Concrete method, replicate count, seed and degenerate-replicate policy remain later non-final TDI-8.1 decisions.
 
 ## Remaining TDI-8.1 work
 
-After the paired-resampling foundation is merged, bounded TDI-8.1 still requires:
+Bounded TDI-8.1 still requires:
 
 1. architecture adapters/evaluator execution that map one generated symbolic instance identically into A0/A1/A2/A3 and verify actual task/collision semantics;
 2. exact operation accounting and typed rejection/provenance records;
