@@ -17,16 +17,28 @@ done
 
 grep -Fq 'pub mod task_generators;' "$LIB" \
     || fail "task_generators is not exported by tdi-ai"
-for symbol in TaskFamily HorizonStratum HorizonPlan TaskSymbol TaskKey TaskEvent TaskInstance T1Config T2Config T3Config TaskGeneratorError; do
-    grep -Fq "pub ${symbol#TaskGeneratorError}" "$SOURCE" >/dev/null 2>&1 || true
-done
-
 grep -Fq 'pub enum TaskFamily' "$SOURCE" \
     || fail "frozen T1/T2/T3 family vocabulary missing"
 grep -Fq 'pub enum HorizonStratum' "$SOURCE" \
     || fail "short/medium/long horizon vocabulary missing"
 grep -Fq 'pub struct HorizonPlan' "$SOURCE" \
     || fail "caller-supplied horizon plan missing"
+grep -Fq 'pub struct TaskSymbol' "$SOURCE" \
+    || fail "architecture-independent symbolic value missing"
+grep -Fq 'pub struct TaskKey' "$SOURCE" \
+    || fail "architecture-independent symbolic key missing"
+grep -Fq 'pub enum TaskEvent' "$SOURCE" \
+    || fail "symbolic event vocabulary missing"
+grep -Fq 'pub struct TaskInstance' "$SOURCE" \
+    || fail "shared task-instance record missing"
+grep -Fq 'pub struct T1Config' "$SOURCE" \
+    || fail "T1 config missing"
+grep -Fq 'pub struct T2Config' "$SOURCE" \
+    || fail "T2 config missing"
+grep -Fq 'pub struct T3Config' "$SOURCE" \
+    || fail "T3 config missing"
+grep -Fq 'pub enum TaskGeneratorError' "$SOURCE" \
+    || fail "typed task-generator rejection surface missing"
 grep -Fq 'if !(short < medium && medium < long)' "$SOURCE" \
     || fail "strict horizon ordering guard missing"
 grep -Fq 'pub fn generate_t1' "$SOURCE" \
@@ -62,6 +74,9 @@ for test_name in \
     grep -Fq "fn ${test_name}()" "$SOURCE" \
         || fail "required task-generator oracle test missing: $test_name"
 done
+
+grep -Fq 'fn t1_public_schedule_does_not_duplicate_association_keys_in_a_bounded_fixture()' "$HARNESS" \
+    || fail "bounded public T1 uniqueness regression missing"
 
 cargo test -p tdi-ai --locked 'task_generators::tests'
 cargo test -p tdi-ai --locked --test tdi8_task_generators_compile
