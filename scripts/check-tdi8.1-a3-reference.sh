@@ -49,12 +49,10 @@ for test_name in \
         || fail "required A3 oracle test missing: $test_name"
 done
 
-if grep -n -E 'TDI8(_|[.]?)?2?_?CONFIRM|TDI82_CONFIRM|TDI8_CONFIRM' \
-    "$SOURCE" "$HARNESS" >/tmp/tdi8-a3-token-scan.log 2>/dev/null; then
-    cat /tmp/tdi8-a3-token-scan.log >&2
-    fail "unexpected TDI-8 confirmation-token surface in A3 implementation"
-fi
-rm -f /tmp/tdi8-a3-token-scan.log
+# The parent TDI-8.1 foundation gate owns the repository-wide confirmation-token
+# absence scan. Keeping the same forbidden literals in this child gate would
+# make the parent scanner flag its own detection pattern as a confirmation
+# surface, so this gate deliberately does not duplicate that scan.
 
 cargo test -p tdi-ai --locked 'assr_h_reference::tests'
 cargo test -p tdi-ai --locked --test tdi8_assr_h_reference_compile
@@ -64,5 +62,4 @@ printf 'TDI-8.1 VSA read/fuse/A2 operation order: VERIFIED\n'
 printf 'TDI-8.1 VSA store atomicity boundary: VERIFIED\n'
 printf 'TDI-8.1 A3 exact memory accounting: VERIFIED\n'
 printf 'TDI-8.1 exact matched-budget representability: VERIFIED\n'
-printf 'TDI-8.2 confirmation surface in A3 implementation: ABSENT\n'
 printf 'TDI-8.1 A3 reference gate: PASS\n'
