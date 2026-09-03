@@ -356,10 +356,7 @@ impl DeterministicLocalMixer {
         &self.matrix
     }
 
-    pub fn advance(
-        &self,
-        state: &MechanisticState,
-    ) -> Result<MechanisticState, DynamicsError> {
+    pub fn advance(&self, state: &MechanisticState) -> Result<MechanisticState, DynamicsError> {
         if state.activations.len() != self.matrix.len() {
             return Err(DynamicsError::StateWidthMismatch);
         }
@@ -411,10 +408,7 @@ pub fn recovery_trajectory(
     for _ in 0..horizon {
         reference_state = mixer.advance(&reference_state)?;
         perturbed_state = mixer.advance(&perturbed_state)?;
-        trajectory.push(reciprocal_linf_recovery(
-            &reference_state,
-            &perturbed_state,
-        ));
+        trajectory.push(reciprocal_linf_recovery(&reference_state, &perturbed_state));
     }
     Ok(trajectory)
 }
@@ -549,13 +543,7 @@ mod tests {
     #[test]
     fn late_target_is_after_early_horizon_and_bounded() {
         let task = generate_associative_recall(999);
-        let target = late_retrieval_deficit(
-            &task,
-            InterventionSite::EarlyToken,
-            5,
-            0.25,
-        )
-        .unwrap();
+        let target = late_retrieval_deficit(&task, InterventionSite::EarlyToken, 5, 0.25).unwrap();
         assert!((0.0..1.0).contains(&target));
     }
 
