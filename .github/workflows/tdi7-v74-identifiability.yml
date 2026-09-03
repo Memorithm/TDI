@@ -58,7 +58,8 @@ jobs:
           grep -Fx 'interpretation=source_geometry_only_not_H_AI_3_verdict' <<<"$output"
           grep -Fx 'final_holdout=NOT_ACCESSED' <<<"$output"
           grep -Fx 'confirmatory_H_AI_3_verdict=NOT_COMPUTED' <<<"$output"
-          test "$(grep -c '^tdi74-identifiability-v1;' <<<"$output")" -eq 6
+          test "$(grep -c '^tdi74-identifiability-v1;' <<<"$output")" -eq 8
+          test "$(grep -c 'split=pooled_non_holdout' <<<"$output")" -eq 2
       - name: Prove final-run authorization is absent
         shell: bash
         run: |
