@@ -24,7 +24,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let memory = DirectMappedAssociativeMemory::new(AssociativeMemoryLayout::new(1, 2)?, 11)?;
     let audit = audit_associative_projection(&instance, &memory)?;
     if audit.generator_class_reuses() == audit.physical_replacement_collisions() {
-        return Err("generator metadata unexpectedly collapsed into physical collision count".into());
+        return Err(
+            "generator metadata unexpectedly collapsed into physical collision count".into(),
+        );
     }
 
     println!("TDI-8.1 task encoding preflight: PASS");
