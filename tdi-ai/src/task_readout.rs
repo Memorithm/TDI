@@ -85,10 +85,11 @@ impl ExactStateReadoutLayout {
     }
 
     fn host_indices(self) -> Result<(usize, usize, usize), TaskReadoutError> {
-        let width = usize::try_from(self.state_width)
-            .map_err(|_| TaskReadoutError::HostDimensionTooLarge {
+        let width = usize::try_from(self.state_width).map_err(|_| {
+            TaskReadoutError::HostDimensionTooLarge {
                 value: self.state_width,
-            })?;
+            }
+        })?;
         let high = usize::try_from(self.high_limb_index).map_err(|_| {
             TaskReadoutError::HostDimensionTooLarge {
                 value: self.high_limb_index,
@@ -234,9 +235,8 @@ mod tests {
 
     #[test]
     fn runtime_width_and_non_finite_state_fail_closed() {
-        let readout = ExactStateSymbolReadout::new(
-            ExactStateReadoutLayout::new(3, 0, 1).expect("layout"),
-        );
+        let readout =
+            ExactStateSymbolReadout::new(ExactStateReadoutLayout::new(3, 0, 1).expect("layout"));
         assert_eq!(
             readout.decode_state(&[0.0, 0.0]),
             Err(TaskReadoutError::StateWidthMismatch {
@@ -252,18 +252,14 @@ mod tests {
 
     #[test]
     fn readout_rejects_noncanonical_limb_instead_of_rounding() {
-        let readout = ExactStateSymbolReadout::new(
-            ExactStateReadoutLayout::new(2, 0, 1).expect("layout"),
-        );
+        let readout =
+            ExactStateSymbolReadout::new(ExactStateReadoutLayout::new(2, 0, 1).expect("layout"));
         let error = readout
             .decode_state(&[0.1, 0.0])
             .expect_err("off-grid limb must fail");
         assert!(matches!(
             error,
-            TaskReadoutError::Encoding(TaskEncodingError::NonCanonicalEncodedLimb {
-                index: 0,
-                ..
-            })
+            TaskReadoutError::Encoding(TaskEncodingError::NonCanonicalEncodedLimb { index: 0, .. })
         ));
     }
 
