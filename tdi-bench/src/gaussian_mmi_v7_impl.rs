@@ -46,7 +46,10 @@ impl InformationRecord {
             return Err(InformationError::EmptyFeatureBlock);
         }
         if !target.is_finite()
-            || static_block.iter().chain(&recovery_block).any(|value| !value.is_finite())
+            || static_block
+                .iter()
+                .chain(&recovery_block)
+                .any(|value| !value.is_finite())
         {
             return Err(InformationError::NonFiniteValue);
         }
@@ -411,15 +414,15 @@ fn covariance(rows: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, InformationError> {
 }
 
 fn target_variance(target: &[f64]) -> Result<f64, InformationError> {
-    if target.len() < 3 || target.iter().any(|value| !value.is_finite()) {
+    if target.len() < 3 {
         return Err(InformationError::TooFewRecords);
     }
+    if target.iter().any(|value| !value.is_finite()) {
+        return Err(InformationError::NonFiniteValue);
+    }
     let mean = target.iter().sum::<f64>() / target.len() as f64;
-    let value = target
-        .iter()
-        .map(|item| (item - mean).powi(2))
-        .sum::<f64>()
-        / (target.len() - 1) as f64;
+    let value =
+        target.iter().map(|item| (item - mean).powi(2)).sum::<f64>() / (target.len() - 1) as f64;
     if !value.is_finite() {
         return Err(InformationError::NonFiniteValue);
     }
@@ -462,7 +465,9 @@ fn cholesky_log2_det(matrix: &[Vec<f64>]) -> Result<f64, InformationError> {
     let mut lower = vec![vec![0.0; n]; n];
     for i in 0..n {
         for j in 0..=i {
-            let sum = (0..j).map(|k| lower[i][k] * lower[j][k]).sum::<f64>();
+            let sum = (0..j)
+                .map(|k| lower[i][k] * lower[j][k])
+                .sum::<f64>();
             if i == j {
                 let pivot = matrix[i][i] - sum;
                 if !pivot.is_finite() || pivot <= PIVOT_FLOOR {
@@ -550,7 +555,12 @@ pub fn gaussian_mi(target: &[f64], source: &[Vec<f64>]) -> Result<MiEstimate, In
     )?;
     let c = cross_covariance(target, &reduced.rows)?;
     let beta = solve(cov_x, c.clone())?;
-    let mut r2 = c.iter().zip(&beta).map(|(left, right)| left * right).sum::<f64>() / var_t;
+    let mut r2 = c
+        .iter()
+        .zip(&beta)
+        .map(|(left, right)| left * right)
+        .sum::<f64>()
+        / var_t;
     if r2 < 0.0 && r2 >= -PID_TOLERANCE_BITS {
         r2 = 0.0;
     }
@@ -589,8 +599,14 @@ pub fn evaluate_pid(records: &[InformationRecord]) -> Result<PidEstimate, Inform
             return Err(InformationError::FeatureWidthMismatch);
         }
     }
-    let target = records.iter().map(|record| record.target).collect::<Vec<_>>();
-    let static_rows = records.iter().map(|record| record.static_block.clone()).collect::<Vec<_>>();
+    let target = records
+        .iter()
+        .map(|record| record.target)
+        .collect::<Vec<_>>();
+    let static_rows = records
+        .iter()
+        .map(|record| record.static_block.clone())
+        .collect::<Vec<_>>();
     let recovery_rows = records
         .iter()
         .map(|record| record.recovery_block.clone())
@@ -610,7 +626,8 @@ pub fn evaluate_pid(records: &[InformationRecord]) -> Result<PidEstimate, Inform
     let unique_static = nonnegative(static_mi.canonical_bits - redundancy)?;
     let unique_recovery = nonnegative(recovery_mi.canonical_bits - redundancy)?;
     let synergy = nonnegative(
-        joint_mi.canonical_bits - static_mi.canonical_bits - recovery_mi.canonical_bits + redundancy,
+        joint_mi.canonical_bits - static_mi.canonical_bits - recovery_mi.canonical_bits
+            + redundancy,
     )?;
     if (redundancy + unique_static + unique_recovery + synergy - joint_mi.canonical_bits).abs()
         > PID_TOLERANCE_BITS
@@ -687,7 +704,10 @@ pub fn bootstrap_pid(
     }
     let mut groups = Vec::<(u64, Vec<usize>)>::new();
     for (index, record) in records.iter().enumerate() {
-        if let Some((_, indices)) = groups.iter_mut().find(|(id, _)| *id == record.generator_id) {
+        if let Some((_, indices)) = groups
+            .iter_mut()
+            .find(|(id, _)| *id == record.generator_id)
+        {
             indices.push(index);
         } else {
             groups.push((record.generator_id, vec![index]));
@@ -697,7 +717,13 @@ pub fn bootstrap_pid(
         return Err(InformationError::InvalidBootstrap);
     }
     let mut rng = SplitMix64(seed);
-    let mut samples = [Vec::with_capacity(replicates), Vec::with_capacity(replicates), Vec::with_capacity(replicates), Vec::with_capacity(replicates), Vec::with_capacity(replicates)];
+    let mut samples = [
+        Vec::with_capacity(replicates),
+        Vec::with_capacity(replicates),
+        Vec::with_capacity(replicates),
+        Vec::with_capacity(replicates),
+        Vec::with_capacity(replicates),
+    ];
     let mut rejected = 0usize;
     for _ in 0..replicates {
         let mut resampled = Vec::with_capacity(records.len());
@@ -754,7 +780,12 @@ mod tests {
                     InformationRecord::new(
                         generator as u64,
                         vec![x, z, x + z, 2.0 * x, w, z - w],
-                        vec![0.2 * x + 0.03 * w, 0.15 * z - 0.02 * w, (x / 9.0).sin(), (z / 7.0).cos()],
+                        vec![
+                            0.2 * x + 0.03 * w,
+                            0.15 * z - 0.02 * w,
+                            (x / 9.0).sin(),
+                            (z / 7.0).cos(),
+                        ],
                         0.31 * x - 0.17 * z + 0.08 * w + if site == 0 { -0.35 } else { 0.55 },
                     )
                     .unwrap(),
@@ -772,7 +803,16 @@ mod tests {
     #[test]
     fn independent_scalar_source_has_zero_information() {
         let target = vec![-1.0, 1.0, -1.0, 1.0, -2.0, 2.0, -2.0, 2.0];
-        let source = vec![vec![-1.0], vec![-1.0], vec![1.0], vec![1.0], vec![-2.0], vec![-2.0], vec![2.0], vec![2.0]];
+        let source = vec![
+            vec![-1.0],
+            vec![-1.0],
+            vec![1.0],
+            vec![1.0],
+            vec![-2.0],
+            vec![-2.0],
+            vec![2.0],
+            vec![2.0],
+        ];
         let estimate = gaussian_mi(&target, &source).unwrap();
         assert_eq!(estimate.rank(), 1);
         close(estimate.canonical_bits(), 0.0, 1.0e-12);
@@ -784,7 +824,10 @@ mod tests {
         let target = vec![-2.0, -1.0, 0.5, 1.0, 2.5, 4.0, 5.0, 7.0];
         let x = vec![-3.0, -1.5, -0.5, 0.5, 1.5, 2.0, 4.0, 5.0];
         let one = x.iter().map(|value| vec![*value]).collect::<Vec<_>>();
-        let duplicates = x.iter().map(|value| vec![*value, *value, 2.0 * *value]).collect::<Vec<_>>();
+        let duplicates = x
+            .iter()
+            .map(|value| vec![*value, *value, 2.0 * *value])
+            .collect::<Vec<_>>();
         let left = gaussian_mi(&target, &one).unwrap();
         let right = gaussian_mi(&target, &duplicates).unwrap();
         assert_eq!(right.rank(), 1);
@@ -802,7 +845,11 @@ mod tests {
             estimate.joint_mi().canonical_bits(),
             PID_TOLERANCE_BITS,
         );
-        for mi in [estimate.static_mi(), estimate.recovery_mi(), estimate.joint_mi()] {
+        for mi in [
+            estimate.static_mi(),
+            estimate.recovery_mi(),
+            estimate.joint_mi(),
+        ] {
             assert!(mi.discrepancy_bits() <= PID_TOLERANCE_BITS);
         }
     }
