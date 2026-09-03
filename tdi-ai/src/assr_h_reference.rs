@@ -417,9 +417,7 @@ mod tests {
     fn vsa_readout_changes_the_integrated_a3_recurrent_input() {
         let mut model = a3();
         model.store_vsa(7, &[0.5, -0.25]).expect("VSA store");
-        model
-            .step(&[0.0, 0.0], 7, None)
-            .expect("A3 read/fuse step");
+        model.step(&[0.0, 0.0], 7, None).expect("A3 read/fuse step");
         assert_eq!(model.state(), &[0.5, -0.25]);
     }
 
@@ -440,9 +438,7 @@ mod tests {
     #[test]
     fn rejected_vsa_store_is_atomic_and_does_not_touch_a2() {
         let mut model = a3();
-        model
-            .store_vsa(3, &[0.25, 0.5])
-            .expect("seed VSA state");
+        model.store_vsa(3, &[0.25, 0.5]).expect("seed VSA state");
         let before = model.snapshot().expect("snapshot before rejection");
         assert!(model.store_vsa(9, &[f64::INFINITY, 0.0]).is_err());
         let after = model.snapshot().expect("snapshot after rejection");
@@ -511,9 +507,7 @@ mod tests {
     fn snapshot_and_reset_cover_both_a2_and_vsa_persistent_state() {
         let mut model = a3();
         model.store_vsa(5, &[0.5, 0.25]).expect("VSA store");
-        model
-            .step(&[0.25, -0.5], 3, Some(3))
-            .expect("A3 step");
+        model.step(&[0.25, -0.5], 3, Some(3)).expect("A3 step");
         let snapshot = model.snapshot().expect("A3 snapshot");
         assert_eq!(snapshot.arm(), ReferenceArm::A3);
         assert_eq!(snapshot.state().a2().recurrent_state(), model.state());
