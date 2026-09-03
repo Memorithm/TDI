@@ -2,7 +2,7 @@
 
 - Scientific series: TDI-8.x
 - Stage: TDI-8.1 bounded deterministic reference evaluator
-- Status: active — A0/A1/A2/A3, symbolic T1/T2/T3 generators, leakage-safe symbolic execution, leakage-safe binary64 encoding preflight candidate, frozen primary decision rules and paired-resampling foundation implemented; concrete arm adapters and interval method not yet frozen
+- Status: active — A0/A1/A2/A3, symbolic T1/T2/T3 generators, leakage-safe symbolic execution, qualified leakage-safe binary64 encoding candidate, frozen primary decision rules and paired-resampling foundation implemented; conservative percentile interval candidate under qualification; concrete arm adapters, recurrent readout and final interval method not yet frozen
 - TDI-8.0 parent merge: `24d41eb7e5d72fc3b5eec9b6434930b10c1f241f`
 - TDI-8.1 foundation merge: `7cfe1b66e11f1eb5d67a5890b07e6f41fa175670` (PR #89)
 - TDI-8 post-foundation integrity merge: `9ee32002603942b9f4152cad47f7fb59331f8c7a` (PR #90)
@@ -16,7 +16,8 @@
 - TDI-8.1 arm-accounting contract hardening merge: `f423b4f8a307f9639b83e8471f399918189fb117` (PR #108)
 - TDI-8.1 paired-resampling foundation merge: `85912fde2b3869e91e01058156ef2b1c895d03d4` (PR #109)
 - TDI-8.1 leakage-safe symbolic execution merge: `d11c3a6ccb34dd02cce70758a294295a6d597b31` (PR #110)
-- TDI-8.1 leakage-safe binary64 task-encoding preflight: PR #112
+- TDI-8.1 leakage-safe binary64 task-encoding qualification merge: `385e5f4153dd27389297a65aeacd95828c9d45ca` (PR #112)
+- TDI-8.1 conservative percentile interval preflight: PR #113
 - Declared Rust MSRV is executable CI evidence since PR #107
 - Frozen TDI-8.0 preregistration blob: `fe80e7053d89824a77ef6790794f6930d1b424e2`
 - Final holdout: does not exist
@@ -94,9 +95,9 @@ PR #110 merged the symbolic execution contract between the generator-owned task 
 
 A sequential arm can observe event order and maintain its own state. The leakage guarantee is specifically that evaluator annotations are not supplied as additional input features.
 
-## Leakage-safe binary64 task-encoding preflight
+## Qualified leakage-safe binary64 task encoding
 
-PR #112 adds a bounded encoding candidate behind the merged symbolic-execution contract without promoting it into the public `tdi-ai` API:
+PR #112 qualified a bounded encoding candidate behind the merged symbolic-execution contract without promoting it into the public `tdi-ai` API:
 
 - every symbolic `u64` maps losslessly to two exact finite binary64 32-bit limbs;
 - the canonical decoder rejects non-finite, out-of-range, off-grid and negative-zero alternate representations;
@@ -108,7 +109,7 @@ PR #112 adds a bounded encoding candidate behind the merged symbolic-execution c
 - A2/A3 logical association/payload keys are deterministic, and distractor read keys are selected outside the complete instance write set;
 - runner-side physical direct-mapped projection diagnostics remain separate from generator-side T3 collision-class reuse.
 
-The candidate lives in `tdi-ai/src/task_encoding.rs` but is intentionally not exported by `tdi-ai/src/lib.rs`. A bounded preflight binary and dedicated CI gate compile and exercise it. Passing this preflight is software evidence for continuing TDI-8.1 development; it is not an H8-A/H8-B result and does not by itself freeze the candidate as the final experimental encoding.
+The candidate remains evaluator-local rather than a frozen public API. Qualification means it is safe to use in further bounded TDI-8.1 work; it does not by itself freeze the final experimental input dimension or configuration.
 
 ## Merged frozen primary decision rules
 
@@ -138,13 +139,28 @@ PR #109 added the software substrate required before selecting the TDI-8.1 paire
 
 The foundation intentionally returns unsorted relative-effect replicates and does not freeze percentile, BCa, studentized, normal-approximation or another interval construction. Concrete method, replicate count, seed and degenerate-replicate policy remain later non-final TDI-8.1 decisions.
 
+## Conservative percentile interval candidate under qualification
+
+PR #113 qualifies one non-interpolated order-statistic candidate without choosing any replicate count or seed:
+
+- complete replicate accounting is mandatory;
+- complete-sample zero baseline remains on the frozen non-relative decision branch;
+- any zero-baseline bootstrap replicate rejects relative interval construction rather than being silently deleted;
+- finite relative effects are sorted with `f64::total_cmp`;
+- the exact frozen two-sided Bonferroni tail is represented as `1/360`;
+- `floor(n/360)` observations are excluded from each sorted tail;
+- fewer than 360 defined replicates therefore retain the complete observed min/max range;
+- caller-selected replicate count and seed are carried through for provenance.
+
+This is a bounded software candidate only. Passing the preflight does not freeze percentile bootstrap, the replicate count, the seed, or the degenerate policy as the final TDI-8.1 experimental choice.
+
 ## Remaining TDI-8.1 work
 
 Bounded TDI-8.1 still requires:
 
-1. bounded non-final qualification of the binary64 encoding candidate, followed by an explicit review/promotion decision and concrete A0/A1/A2/A3 adapters behind the leakage-safe executor with verification of actual A2/A3 occupancy/collision semantics;
+1. explicit review/promotion of the qualified binary64 encoding for a concrete bounded configuration, followed by concrete A0/A1/A2/A3 adapters behind the leakage-safe executor with verification of actual A2/A3 occupancy/collision semantics;
 2. explicit recurrent-arm output/readout semantics plus exact operation accounting and typed rejection/provenance records;
-3. non-final qualification and freeze of one deterministic paired interval implementation satisfying the frozen Bonferroni family-wise coverage rule, including replicate count, resampling seed and degenerate-replicate policy;
+3. complete qualification and then freeze of one deterministic paired interval implementation satisfying the frozen Bonferroni family-wise coverage rule, including replicate count, resampling seed and degenerate-replicate policy; PR #113 supplies one candidate but does not freeze it;
 4. bounded train/development/validation work to freeze concrete dimensions, budgets, horizons, non-final/final seed ranges, sample counts and closed rejection taxonomy;
 5. integration of paired intervals with the already-merged primary-cell classifier and exact nine-cell evidence records;
 6. intervention-site/recovery integration using only early observations strictly before late retrieval;
