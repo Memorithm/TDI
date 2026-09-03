@@ -9,7 +9,6 @@ use crate::attention_v7::{
     DeterministicLocalMixer, InterventionSite, MechanisticState, SingleSiteIntervention, TaskKind,
     generate_task, late_retrieval_deficit, recovery_trajectory,
 };
-use tdi_ai::analyze_static_attention;
 
 pub const TDI71_LAMBDA_GRID: [f64; 4] = [0.0, 1.0e-6, 1.0e-3, 1.0e-1];
 pub const TDI71_BOOTSTRAP_REPLICATES: usize = 2_000;
@@ -19,6 +18,7 @@ pub const TDI71_TARGET_DEPTH: usize = 5;
 pub const TDI71_INTERVENTION_AMPLITUDE: f64 = 0.25;
 
 const PIVOT_TOLERANCE: f64 = 1.0e-12;
+const ROW_SUM_TOLERANCE: f64 = 1.0e-12;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct PredictiveRecord {
@@ -200,6 +200,72 @@ impl SplitMix64 {
         }
         Ok((self.next_u64() % upper as u64) as usize)
     }
+}
+
+/// Static controls frozen by TDI-7.1, evaluated locally so the historical
+/// `tdi-bench` dependency graph remains unchanged. The six returned fields are,
+/// in order: mean entropy, normalized entropy, max weight, L2 concentration,
+/// entropy-derived support, and Frobenius norm.
+fn static_controls(weights: &[Vec<f64>]) -> Result<[f64; 6], PredictiveError> {
+    let first = weights
+        .first()
+        .ok_or(PredictiveError::StaticDiagnosticFailure)?;
+    if first.is_empty() {
+        return Err(PredictiveError::StaticDiagnosticFailure);
+    }
+    let columns = first.len();
+    let entropy_normalizer = (columns > 1).then(|| (columns as f64).ln());
+    let mut entropy_sum = 0.0;
+    let mut normalized_entropy_sum = 0.0;
+    let mut max_weight_sum = 0.0;
+    let mut l2_sum = 0.0;
+    let mut support_sum = 0.0;
+    let mut squared_weight_sum = 0.0;
+
+    for row in weights {
+        if row.len() != columns || row.is_empty() {
+            return Err(PredictiveError::StaticDiagnosticFailure);
+        }
+        let mut row_sum = 0.0;
+        let mut entropy = 0.0;
+        let mut row_max = 0.0_f64;
+        let mut row_l2 = 0.0;
+        for &weight in row {
+            if !weight.is_finite() || weight < 0.0 {
+                return Err(PredictiveError::StaticDiagnosticFailure);
+            }
+            row_sum += weight;
+            row_max = row_max.max(weight);
+            let square = weight * weight;
+            row_l2 += square;
+            squared_weight_sum += square;
+            if weight > 0.0 {
+                entropy -= weight * weight.ln();
+            }
+        }
+        if !row_sum.is_finite() || (row_sum - 1.0).abs() > ROW_SUM_TOLERANCE {
+            return Err(PredictiveError::StaticDiagnosticFailure);
+        }
+        entropy_sum += entropy;
+        normalized_entropy_sum += entropy_normalizer.map_or(0.0, |value| entropy / value);
+        max_weight_sum += row_max;
+        l2_sum += row_l2;
+        support_sum += entropy.exp();
+    }
+
+    let count = weights.len() as f64;
+    let controls = [
+        entropy_sum / count,
+        normalized_entropy_sum / count,
+        max_weight_sum / count,
+        l2_sum / count,
+        support_sum / count,
+        squared_weight_sum.sqrt(),
+    ];
+    if controls.iter().any(|value| !value.is_finite()) {
+        return Err(PredictiveError::StaticDiagnosticFailure);
+    }
+    Ok(controls)
 }
 
 fn validate_dataset(records: &[PredictiveRecord]) -> Result<(usize, usize), PredictiveError> {
@@ -498,8 +564,7 @@ pub fn attention_record(
     }
     let task = generate_task(kind, seed);
     let mixer = DeterministicLocalMixer::from_task(&task);
-    let static_diag = analyze_static_attention(mixer.matrix())
-        .map_err(|_| PredictiveError::StaticDiagnosticFailure)?;
+    let static_diag = static_controls(mixer.matrix())?;
     let reference = MechanisticState::from_task(&task);
     let perturbed = SingleSiteIntervention::new(site, amplitude)
         .apply(&reference)
@@ -513,12 +578,12 @@ pub fn attention_record(
         task.input().len() as f64,
         task.distractor_count() as f64,
         task.retrieval_distance() as f64,
-        static_diag.mean_row_entropy_nats(),
-        static_diag.mean_normalized_row_entropy(),
-        static_diag.mean_row_max_weight(),
-        static_diag.mean_row_l2_concentration(),
-        static_diag.mean_row_effective_support(),
-        static_diag.frobenius_norm(),
+        static_diag[0],
+        static_diag[1],
+        static_diag[2],
+        static_diag[3],
+        static_diag[4],
+        static_diag[5],
         match site {
             InterventionSite::EarlyToken => 0.0,
             InterventionSite::LateToken => 1.0,
@@ -572,6 +637,42 @@ mod tests {
     const TRAIN_START: u64 = 7_100_000_000;
     const DEV_START: u64 = 7_100_010_000;
     const VALIDATION_START: u64 = 7_100_020_000;
+
+    fn assert_close(actual: f64, expected: f64) {
+        assert!((actual - expected).abs() <= 1.0e-12, "{actual} != {expected}");
+    }
+
+    #[test]
+    fn local_static_controls_match_known_row_stochastic_oracles() {
+        let identity = static_controls(&[vec![1.0, 0.0], vec![0.0, 1.0]]).unwrap();
+        assert_close(identity[0], 0.0);
+        assert_close(identity[1], 0.0);
+        assert_close(identity[2], 1.0);
+        assert_close(identity[3], 1.0);
+        assert_close(identity[4], 1.0);
+        assert_close(identity[5], 2.0_f64.sqrt());
+
+        let uniform = static_controls(&[vec![0.5, 0.5], vec![0.5, 0.5]]).unwrap();
+        assert_close(uniform[0], 2.0_f64.ln());
+        assert_close(uniform[1], 1.0);
+        assert_close(uniform[2], 0.5);
+        assert_close(uniform[3], 0.5);
+        assert_close(uniform[4], 2.0);
+        assert_close(uniform[5], 1.0);
+    }
+
+    #[test]
+    fn malformed_static_controls_fail_closed() {
+        assert_eq!(static_controls(&[]), Err(PredictiveError::StaticDiagnosticFailure));
+        assert_eq!(
+            static_controls(&[vec![0.4, 0.4]]),
+            Err(PredictiveError::StaticDiagnosticFailure)
+        );
+        assert_eq!(
+            static_controls(&[vec![1.25, -0.25]]),
+            Err(PredictiveError::StaticDiagnosticFailure)
+        );
+    }
 
     #[test]
     fn protocol_record_has_frozen_static_and_recovery_widths() {
