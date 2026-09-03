@@ -623,11 +623,9 @@ mod tests {
     #[test]
     fn nested_evaluation_is_deterministic() {
         let training =
-            attention_population(TRAIN_START, 24, TaskKind::AssociativeRecall, 2, 5, 0.25)
-                .unwrap();
+            attention_population(TRAIN_START, 24, TaskKind::AssociativeRecall, 2, 5, 0.25).unwrap();
         let development =
-            attention_population(DEV_START, 16, TaskKind::AssociativeRecall, 2, 5, 0.25)
-                .unwrap();
+            attention_population(DEV_START, 16, TaskKind::AssociativeRecall, 2, 5, 0.25).unwrap();
         let validation = attention_population(
             VALIDATION_START,
             16,
