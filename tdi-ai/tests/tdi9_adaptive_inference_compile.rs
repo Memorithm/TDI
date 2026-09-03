@@ -1,3 +1,4 @@
+#[allow(dead_code, clippy::double_must_use)]
 #[path = "../src/adaptive_inference.rs"]
 mod adaptive_inference;
 
