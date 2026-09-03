@@ -827,7 +827,7 @@ mod tests {
     #[test]
     fn duplicate_columns_preserve_information_after_rank_reduction() {
         let target = vec![-2.0, -1.0, 0.5, 1.0, 2.5, 4.0, 5.0, 7.0];
-        let x = vec![-3.0, -1.5, -0.5, 0.5, 1.5, 2.0, 4.0, 5.0];
+        let x = [-3.0, -1.5, -0.5, 0.5, 1.5, 2.0, 4.0, 5.0];
         let one = x.iter().map(|value| vec![*value]).collect::<Vec<_>>();
         let duplicates = x
             .iter()
