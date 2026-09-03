@@ -4,8 +4,7 @@
 //! reuse the exact bounded semantics. Task tokens and targets remain immutable.
 
 use tdi_bench::attention_v7::{
-    InterventionError, InterventionSite, MechanisticState, SingleSiteIntervention, advance,
-    linf_distance,
+    InterventionSite, MechanisticState, SingleSiteIntervention, advance, linf_distance,
 };
 
 fn main() {
@@ -29,6 +28,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tdi_bench::attention_v7::InterventionError;
 
     fn fixture() -> MechanisticState {
         MechanisticState::new(vec![11, 22, 33, 44, 55, 66], vec![33])
