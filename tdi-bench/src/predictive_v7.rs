@@ -639,7 +639,10 @@ mod tests {
     const VALIDATION_START: u64 = 7_100_020_000;
 
     fn assert_close(actual: f64, expected: f64) {
-        assert!((actual - expected).abs() <= 1.0e-12, "{actual} != {expected}");
+        assert!(
+            (actual - expected).abs() <= 1.0e-12,
+            "{actual} != {expected}"
+        );
     }
 
     #[test]
@@ -663,7 +666,10 @@ mod tests {
 
     #[test]
     fn malformed_static_controls_fail_closed() {
-        assert_eq!(static_controls(&[]), Err(PredictiveError::StaticDiagnosticFailure));
+        assert_eq!(
+            static_controls(&[]),
+            Err(PredictiveError::StaticDiagnosticFailure)
+        );
         assert_eq!(
             static_controls(&[vec![0.4, 0.4]]),
             Err(PredictiveError::StaticDiagnosticFailure)
