@@ -12,7 +12,9 @@ use crate::assr_reference::{
     A2Reference, A2StateSnapshot, A2StepReport, RecurrentParameters, RecurrentReferenceError,
 };
 use crate::vsa_workspace::{BoundedVsaWorkspace, VsaWorkspaceError, VsaWorkspaceLayout};
-use crate::{MemoryAccounting, MemoryAccountingError, ReferenceArm, ReferenceSnapshot, StorageBits};
+use crate::{
+    MemoryAccounting, MemoryAccountingError, ReferenceArm, ReferenceSnapshot, StorageBits,
+};
 
 const VSA_FUSION_GAIN_STATIC_BITS: u128 = 64;
 
@@ -108,7 +110,10 @@ impl From<MemoryAccountingError> for A3ReferenceError {
     }
 }
 
-fn checked_add_bits(left: StorageBits, right: StorageBits) -> Result<StorageBits, A3ReferenceError> {
+fn checked_add_bits(
+    left: StorageBits,
+    right: StorageBits,
+) -> Result<StorageBits, A3ReferenceError> {
     let bits = left
         .get()
         .checked_add(right.get())
@@ -239,9 +244,7 @@ impl A3Reference {
         }
 
         let mut fused_input = self.workspace.unbind(read_key)?;
-        for (index, (fused, input_value)) in
-            fused_input.iter_mut().zip(input.iter()).enumerate()
-        {
+        for (index, (fused, input_value)) in fused_input.iter_mut().zip(input.iter()).enumerate() {
             let value = *input_value + self.vsa_fusion_gain * *fused;
             if !value.is_finite() {
                 return Err(A3ReferenceError::NonFiniteFusedInput { index });
@@ -282,7 +285,8 @@ impl A3Reference {
         let a2 = self.a2.memory_accounting()?;
         let vsa = self.workspace.storage_accounting()?;
         let temporary = checked_add_bits(a2.temporary_working(), vsa.temporary_working_bits())?;
-        let static_parameters = checked_add_bits(a2.static_parameters(), vsa.static_parameter_bits())?;
+        let static_parameters =
+            checked_add_bits(a2.static_parameters(), vsa.static_parameter_bits())?;
         let static_parameters = checked_add_bits(
             static_parameters,
             StorageBits::new(VSA_FUSION_GAIN_STATIC_BITS),
@@ -323,7 +327,8 @@ mod tests {
     use crate::{MatchedDynamicBudget, ReferenceArm};
 
     fn parameters(input_width: u64, state_width: u64) -> RecurrentParameters {
-        let layout = RecurrentLayout::new(input_width, state_width).expect("valid recurrent layout");
+        let layout =
+            RecurrentLayout::new(input_width, state_width).expect("valid recurrent layout");
         let input_width = usize::try_from(input_width).expect("fixture input width");
         let state_width = usize::try_from(state_width).expect("fixture state width");
         RecurrentParameters::new(
@@ -337,13 +342,8 @@ mod tests {
 
     fn identity_parameters() -> RecurrentParameters {
         let layout = RecurrentLayout::new(2, 2).expect("valid fixture layout");
-        RecurrentParameters::new(
-            layout,
-            vec![1.0, 0.0, 0.0, 1.0],
-            vec![0.0; 4],
-            vec![0.0; 2],
-        )
-        .expect("identity parameters")
+        RecurrentParameters::new(layout, vec![1.0, 0.0, 0.0, 1.0], vec![0.0; 4], vec![0.0; 2])
+            .expect("identity parameters")
     }
 
     fn a3() -> A3Reference {
@@ -417,7 +417,9 @@ mod tests {
     fn vsa_readout_changes_the_integrated_a3_recurrent_input() {
         let mut model = a3();
         model.store_vsa(7, &[0.5, -0.25]).expect("VSA store");
-        model.step(&[0.0, 0.0], 7, None).expect("A3 read/fuse step");
+        model
+            .step(&[0.0, 0.0], 7, None)
+            .expect("A3 read/fuse step");
         assert_eq!(model.state(), &[0.5, -0.25]);
     }
 
@@ -438,7 +440,9 @@ mod tests {
     #[test]
     fn rejected_vsa_store_is_atomic_and_does_not_touch_a2() {
         let mut model = a3();
-        model.store_vsa(3, &[0.25, 0.5]).expect("seed VSA state");
+        model
+            .store_vsa(3, &[0.25, 0.5])
+            .expect("seed VSA state");
         let before = model.snapshot().expect("snapshot before rejection");
         assert!(model.store_vsa(9, &[f64::INFINITY, 0.0]).is_err());
         let after = model.snapshot().expect("snapshot after rejection");
@@ -449,7 +453,10 @@ mod tests {
     fn a3_accounting_reports_integrated_vsa_and_peak_temporary_storage() {
         let model = a3();
         let a2 = model.a2().memory_accounting().expect("A2 accounting");
-        let vsa = model.workspace().storage_accounting().expect("VSA accounting");
+        let vsa = model
+            .workspace()
+            .storage_accounting()
+            .expect("VSA accounting");
         let a3 = model.memory_accounting().expect("A3 accounting");
 
         assert_eq!(a3.vsa_workspace(), vsa.workspace_bits());
@@ -504,11 +511,16 @@ mod tests {
     fn snapshot_and_reset_cover_both_a2_and_vsa_persistent_state() {
         let mut model = a3();
         model.store_vsa(5, &[0.5, 0.25]).expect("VSA store");
-        model.step(&[0.25, -0.5], 3, Some(3)).expect("A3 step");
+        model
+            .step(&[0.25, -0.5], 3, Some(3))
+            .expect("A3 step");
         let snapshot = model.snapshot().expect("A3 snapshot");
         assert_eq!(snapshot.arm(), ReferenceArm::A3);
         assert_eq!(snapshot.state().a2().recurrent_state(), model.state());
-        assert_eq!(snapshot.state().vsa_workspace(), model.workspace().components());
+        assert_eq!(
+            snapshot.state().vsa_workspace(),
+            model.workspace().components()
+        );
 
         let layout = model.workspace().layout();
         let role_seed = model.workspace().role_seed();
