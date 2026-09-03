@@ -9,9 +9,9 @@ use core::fmt;
 use std::error::Error;
 
 use task_encoding::{
-    LosslessTaskEncoder, MIN_TASK_INPUT_WIDTH, PayloadKeyCursor, TaskEncodingError, TaskInputLayout,
-    association_memory_key, audit_associative_projection, distractor_read_key_for_instance,
-    payload_memory_key,
+    LosslessTaskEncoder, MIN_TASK_INPUT_WIDTH, PayloadKeyCursor, TaskEncodingError,
+    TaskInputLayout, association_memory_key, audit_associative_projection,
+    distractor_read_key_for_instance, payload_memory_key,
 };
 use task_readout::{
     ExactStatePrediction, ExactStateReadoutLayout, ExactStateSymbolReadout, TaskReadoutError,
@@ -118,8 +118,12 @@ impl A2Diagnostics {
         outcome: Option<AssociativeWriteOutcome>,
     ) -> Result<(), AdapterError> {
         match outcome {
-            Some(AssociativeWriteOutcome::Inserted { .. }) => Self::increment(&mut self.inserted_writes),
-            Some(AssociativeWriteOutcome::Updated { .. }) => Self::increment(&mut self.updated_writes),
+            Some(AssociativeWriteOutcome::Inserted { .. }) => {
+                Self::increment(&mut self.inserted_writes)
+            }
+            Some(AssociativeWriteOutcome::Updated { .. }) => {
+                Self::increment(&mut self.updated_writes)
+            }
             Some(AssociativeWriteOutcome::ReplacedCollision { .. }) => {
                 Self::increment(&mut self.replacement_writes)
             }
@@ -155,12 +159,7 @@ impl A2Adapter {
             });
         }
         Ok(Self {
-            reference: A2Reference::new(
-                parameters,
-                memory_layout,
-                projection_seed,
-                fusion_gain,
-            )?,
+            reference: A2Reference::new(parameters, memory_layout, projection_seed, fusion_gain)?,
             encoder: LosslessTaskEncoder::new(TaskInputLayout::new(
                 recurrent_layout.input_width(),
             )?),
@@ -307,7 +306,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("non_query_memory_read=NEUTRAL_KEY_NO_HIT");
     println!("query_memory_read=LOGICAL_QUERY_KEY");
     println!("t1_exact_associative_recall=PASS_SOFTWARE_FIXTURE_ONLY");
-    println!("physical_replacement_collisions={}", diagnostics.replacement_writes);
+    println!(
+        "physical_replacement_collisions={}",
+        diagnostics.replacement_writes
+    );
     println!("query_hits={}", diagnostics.query_hits);
     println!("generator_collision_class_used_as_input=NO");
     println!("a3_vsa_policy=NOT_SELECTED");
