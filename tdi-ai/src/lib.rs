@@ -14,6 +14,7 @@ pub mod assr_h_reference;
 pub mod assr_reference;
 pub mod full_history_reference;
 mod static_diagnostics;
+pub mod task_execution;
 pub mod task_generators;
 mod toy_attention;
 pub mod vsa_workspace;
