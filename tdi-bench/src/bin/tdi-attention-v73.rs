@@ -289,7 +289,7 @@ fn main() {
             println!("intervention=balanced_add_subtract_v1");
             println!("final_holdout=NOT_ACCESSED");
             println!("confirmatory_verdict=NOT_COMPUTED");
-            println!("predictive_B0_B1_layer=NOT_YET_IMPLEMENTED");
+            println!("predictive_B0_B1_layer=SEPARATE_BOUNDED_EVALUATOR");
             for line in lines {
                 println!("{line}");
             }
@@ -380,8 +380,8 @@ mod tests {
 
     #[test]
     fn protocol_faithful_mechanics_do_not_collapse_to_forced_site_equality() {
-        let records = bounded_population(BoundedSplit::Development, TaskKind::AssociativeRecall)
-            .unwrap();
+        let records =
+            bounded_population(BoundedSplit::Development, TaskKind::AssociativeRecall).unwrap();
         let summary = summarize(&records).unwrap();
         assert!(summary.mean_absolute_site_difference.is_finite());
         assert!(summary.mean_relative_site_difference.is_finite());
