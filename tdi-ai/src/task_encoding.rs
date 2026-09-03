@@ -54,10 +54,7 @@ impl ExactU64Binary64 {
     pub fn encode(value: u64) -> Self {
         let high = (value >> 32) as u32;
         let low = (value & LIMB_MASK) as u32;
-        Self([
-            f64::from(high) / LIMB_SCALE,
-            f64::from(low) / LIMB_SCALE,
-        ])
+        Self([f64::from(high) / LIMB_SCALE, f64::from(low) / LIMB_SCALE])
     }
 
     /// Return the exact two-coordinate representation.
@@ -67,9 +64,7 @@ impl ExactU64Binary64 {
     }
 
     /// Decode only a canonical exact two-limb representation.
-    pub fn decode(
-        coordinates: [f64; EXACT_U64_BINARY64_WIDTH],
-    ) -> Result<u64, TaskEncodingError> {
+    pub fn decode(coordinates: [f64; EXACT_U64_BINARY64_WIDTH]) -> Result<u64, TaskEncodingError> {
         let high = decode_limb(0, coordinates[0])?;
         let low = decode_limb(1, coordinates[1])?;
         Ok((u64::from(high) << 32) | u64::from(low))
@@ -77,7 +72,10 @@ impl ExactU64Binary64 {
 }
 
 fn decode_limb(index: usize, value: f64) -> Result<u32, TaskEncodingError> {
-    if !value.is_finite() || !(0.0..1.0).contains(&value) {
+    if !value.is_finite()
+        || value.to_bits() == (-0.0f64).to_bits()
+        || !(0.0..1.0).contains(&value)
+    {
         return Err(TaskEncodingError::NonCanonicalEncodedLimb {
             index,
             value_bits: value.to_bits(),
@@ -370,9 +368,7 @@ impl PayloadKeyCursor {
 
 /// Select a deterministic read-only distractor key outside one immutable task's
 /// complete logical A2/A3 write-key set.
-pub fn distractor_read_key_for_instance(
-    instance: &TaskInstance,
-) -> Result<u64, TaskEncodingError> {
+pub fn distractor_read_key_for_instance(instance: &TaskInstance) -> Result<u64, TaskEncodingError> {
     let write_keys = logical_write_keys(instance)?;
     let mut candidate = mix64(instance.seed() ^ DISTRACTOR_READ_DOMAIN);
     for _ in 0..=write_keys.len() {
@@ -623,7 +619,10 @@ impl fmt::Display for TaskEncodingError {
                 "TDI-8.1 lossless task encoding requires input width >= {minimum}, got {actual}"
             ),
             Self::HostDimensionTooLarge { value } => {
-                write!(formatter, "task input width {value} does not fit the host index type")
+                write!(
+                    formatter,
+                    "task input width {value} does not fit the host index type"
+                )
             }
             Self::HostVectorCapacityTooLarge {
                 component,
@@ -707,8 +706,7 @@ mod tests {
     };
     use crate::associative_memory::{AssociativeMemoryLayout, DirectMappedAssociativeMemory};
     use crate::task_generators::{
-        T1Config, T2Config, T3Config, TaskEvent, TaskSymbol, generate_t1, generate_t2,
-        generate_t3,
+        T1Config, T2Config, T3Config, TaskEvent, TaskSymbol, generate_t1, generate_t2, generate_t3,
     };
 
     #[test]
@@ -737,6 +735,10 @@ mod tests {
         ));
         assert!(matches!(
             ExactU64Binary64::decode([0.1, 0.0]),
+            Err(TaskEncodingError::NonCanonicalEncodedLimb { index: 0, .. })
+        ));
+        assert!(matches!(
+            ExactU64Binary64::decode([-0.0, 0.0]),
             Err(TaskEncodingError::NonCanonicalEncodedLimb { index: 0, .. })
         ));
     }
@@ -773,9 +775,8 @@ mod tests {
 
     #[test]
     fn association_frame_contains_only_key_and_value_after_tag() {
-        let encoder = LosslessTaskEncoder::new(
-            TaskInputLayout::new(MIN_TASK_INPUT_WIDTH).expect("layout"),
-        );
+        let encoder =
+            LosslessTaskEncoder::new(TaskInputLayout::new(MIN_TASK_INPUT_WIDTH).expect("layout"));
         let key = 0xaaaa_bbbb_cccc_dddd;
         let value = TaskSymbol::new(0x1111_2222_3333_4444);
         let frame = encoder.association(key, value).expect("association");
@@ -813,7 +814,10 @@ mod tests {
         assert_eq!(association.key(), a0_association_query_key(7));
         assert_eq!(payload.key(), a0_payload_query_key(7));
         assert_ne!(association.key()[0].to_bits(), payload.key()[0].to_bits());
-        assert_ne!(association.key()[0].to_bits(), distractor.key()[0].to_bits());
+        assert_ne!(
+            association.key()[0].to_bits(),
+            distractor.key()[0].to_bits()
+        );
     }
 
     #[test]
@@ -844,8 +848,7 @@ mod tests {
 
     #[test]
     fn projection_audit_separates_generator_classes_from_physical_collisions() {
-        let instance =
-            generate_t3(41, T3Config::new(8, 3, 4, 20, 3).expect("config")).expect("T3");
+        let instance = generate_t3(41, T3Config::new(8, 3, 4, 20, 3).expect("config")).expect("T3");
         let wide = DirectMappedAssociativeMemory::new(
             AssociativeMemoryLayout::new(1_024, 2).expect("layout"),
             11,
