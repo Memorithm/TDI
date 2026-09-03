@@ -8,6 +8,6 @@
 //! logic.
 
 pub mod attention_v7;
-#[path = "gaussian_mmi_v7_impl.rs"]
+#[path = "gaussian_mmi_v7_stable.rs"]
 pub mod gaussian_mmi_v7;
 pub mod predictive_v7;
