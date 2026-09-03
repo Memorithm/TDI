@@ -127,3 +127,9 @@ jobs:
             bash -n scripts/check-tdi8-bootstrap.sh
             bash scripts/check-tdi8-bootstrap.sh
           fi
+      - name: Verify TDI-9.0 bootstrap when present
+        run: |
+          if test -f docs/TDI-9.0-ADAPTIVE-INFERENCE-PREREGISTRATION.md; then
+            bash -n scripts/check-tdi9-bootstrap.sh
+            bash scripts/check-tdi9-bootstrap.sh
+          fi
