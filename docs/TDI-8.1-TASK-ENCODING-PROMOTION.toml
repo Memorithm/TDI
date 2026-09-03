@@ -1,0 +1,51 @@
+schema_version = 1
+stage = "TDI-8.1"
+decision_kind = "software_promotion"
+decision_status = "PROMOTED_FOR_BOUNDED_EVALUATOR_USE"
+
+# This is an implementation-surface decision, not a scientific outcome or a
+# confirmatory freeze. The encoding remains revisable during authorized bounded
+# TDI-8.1 development if later non-final evidence exposes a defect.
+scientific_result = false
+final_experimental_encoding_frozen = false
+public_tdi_ai_api_promoted = false
+confirmatory_execution_authorized = false
+tdi8_2_surface_authorized = false
+
+basis_pr = 112
+basis_pr_head = "d21324f700128d4d2a3f130e2fd540aa2241affb"
+basis_merge_commit = "385e5f4153dd27389297a65aeacd95828c9d45ca"
+
+# All pull-request workflows attached to the exact reviewed head completed with
+# success before the merge. These names are provenance, not a substitute for the
+# frozen TDI-8.0 scientific decision rule.
+required_workflows = [
+  "Declared Rust MSRV",
+  "Public Rust validation",
+  "Rust validation",
+  "TDI-7 hosted software validation",
+  "TDI-7 pre-arm integrity",
+  "TDI-7.1 bounded preflight",
+  "TDI-7.3 bounded evaluator",
+  "TDI-7.4 bounded Gaussian MMI",
+  "TDI-7.4 bounded identifiability audit",
+  "TDI-8.1 task encoding preflight",
+]
+
+promotion_scope = [
+  "bounded_non_holdout_evaluator_plumbing",
+  "software_oracle_tests",
+  "physical_projection_diagnostics",
+]
+
+excluded_scope = [
+  "public_tdi_ai_api_freeze",
+  "recurrent_arm_readout_selection",
+  "experimental_dimension_selection",
+  "memory_budget_selection",
+  "horizon_selection",
+  "population_or_seed_range_selection",
+  "paired_interval_selection",
+  "H8_A_or_H8_B_verdict",
+  "TDI_8_2_runner_token_seed_or_result_surface",
+]
