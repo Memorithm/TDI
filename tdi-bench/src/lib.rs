@@ -13,3 +13,4 @@ pub mod decision_v8;
 pub mod gaussian_mmi_v7;
 pub mod predictive_v7;
 pub mod subspace_v7;
+pub mod task_adapter_v8;
