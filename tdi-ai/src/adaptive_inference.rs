@@ -247,10 +247,11 @@ pub struct ResourceUsage {
     policy_ops: u64,
     checkpoint_ops: u64,
     replay_ops: u64,
-    persistent_memory_bits: u64,
-    policy_memory_bits: u64,
-    checkpoint_memory_bits: u64,
+    persistent_memory_peak_bits: u64,
+    policy_memory_peak_bits: u64,
+    checkpoint_memory_peak_bits: u64,
     temporary_peak_bits: u64,
+    total_memory_peak_bits: u64,
 }
 
 impl ResourceUsage {
@@ -279,7 +280,6 @@ impl ResourceUsage {
         self.replay_ops
     }
 
-    #[must_use]
     pub fn total_compute_ops(self) -> Result<u64, AdaptiveInferenceError> {
         [
             self.solver_ops,
@@ -298,17 +298,17 @@ impl ResourceUsage {
 
     #[must_use]
     pub const fn persistent_memory_bits(self) -> u64 {
-        self.persistent_memory_bits
+        self.persistent_memory_peak_bits
     }
 
     #[must_use]
     pub const fn policy_memory_bits(self) -> u64 {
-        self.policy_memory_bits
+        self.policy_memory_peak_bits
     }
 
     #[must_use]
     pub const fn checkpoint_memory_bits(self) -> u64 {
-        self.checkpoint_memory_bits
+        self.checkpoint_memory_peak_bits
     }
 
     #[must_use]
@@ -316,21 +316,10 @@ impl ResourceUsage {
         self.temporary_peak_bits
     }
 
-    /// Peak declared simultaneous memory: persistent + policy + checkpoint +
-    /// temporary working storage.
-    pub fn total_memory_bits(self) -> Result<u64, AdaptiveInferenceError> {
-        [
-            self.persistent_memory_bits,
-            self.policy_memory_bits,
-            self.checkpoint_memory_bits,
-            self.temporary_peak_bits,
-        ]
-        .into_iter()
-        .try_fold(0u64, |total, value| {
-            total
-                .checked_add(value)
-                .ok_or(AdaptiveInferenceError::ResourceAccountingOverflow)
-        })
+    /// Exact high-water mark of simultaneous declared memory.
+    #[must_use]
+    pub const fn total_memory_bits(self) -> u64 {
+        self.total_memory_peak_bits
     }
 }
 
@@ -352,10 +341,11 @@ impl ResourceMeter {
                 policy_ops: 0,
                 checkpoint_ops: 0,
                 replay_ops: 0,
-                persistent_memory_bits: 0,
-                policy_memory_bits: 0,
-                checkpoint_memory_bits: 0,
+                persistent_memory_peak_bits: 0,
+                policy_memory_peak_bits: 0,
+                checkpoint_memory_peak_bits: 0,
                 temporary_peak_bits: 0,
+                total_memory_peak_bits: 0,
             },
         }
     }
@@ -398,28 +388,44 @@ impl ResourceMeter {
         Ok(())
     }
 
-    /// Replace the current simultaneous-memory accounting atomically.
+    /// Account one simultaneous-memory state atomically and retain exact
+    /// component and total high-water marks for the complete trajectory.
     pub fn set_memory(
         &mut self,
         persistent_memory_bits: u64,
         policy_memory_bits: u64,
         checkpoint_memory_bits: u64,
-        temporary_peak_bits: u64,
+        temporary_memory_bits: u64,
     ) -> Result<(), AdaptiveInferenceError> {
-        let candidate = ResourceUsage {
+        let requested = [
             persistent_memory_bits,
             policy_memory_bits,
             checkpoint_memory_bits,
-            temporary_peak_bits,
-            ..self.usage
-        };
-        let requested = candidate.total_memory_bits()?;
+            temporary_memory_bits,
+        ]
+        .into_iter()
+        .try_fold(0u64, |total, value| {
+            total
+                .checked_add(value)
+                .ok_or(AdaptiveInferenceError::ResourceAccountingOverflow)
+        })?;
         if requested > self.envelope.max_memory_bits {
             return Err(AdaptiveInferenceError::MemoryEnvelopeExceeded {
                 maximum: self.envelope.max_memory_bits,
                 requested,
             });
         }
+
+        let mut candidate = self.usage;
+        candidate.persistent_memory_peak_bits = candidate
+            .persistent_memory_peak_bits
+            .max(persistent_memory_bits);
+        candidate.policy_memory_peak_bits = candidate.policy_memory_peak_bits.max(policy_memory_bits);
+        candidate.checkpoint_memory_peak_bits = candidate
+            .checkpoint_memory_peak_bits
+            .max(checkpoint_memory_bits);
+        candidate.temporary_peak_bits = candidate.temporary_peak_bits.max(temporary_memory_bits);
+        candidate.total_memory_peak_bits = candidate.total_memory_peak_bits.max(requested);
         self.usage = candidate;
         Ok(())
     }
@@ -576,11 +582,20 @@ mod tests {
     }
 
     #[test]
-    fn simultaneous_memory_components_share_one_envelope() {
+    fn memory_meter_retains_component_and_simultaneous_high_water_marks() {
         let envelope = ResourceEnvelope::new(100, 64).expect("positive envelope");
         let mut meter = ResourceMeter::new(envelope);
         meter.set_memory(24, 8, 16, 16).expect("exact envelope");
-        assert_eq!(meter.usage().total_memory_bits().expect("sum"), 64);
+        assert_eq!(meter.usage().total_memory_bits(), 64);
+
+        meter
+            .set_memory(20, 8, 8, 4)
+            .expect("smaller later state is valid");
+        assert_eq!(meter.usage().persistent_memory_bits(), 24);
+        assert_eq!(meter.usage().policy_memory_bits(), 8);
+        assert_eq!(meter.usage().checkpoint_memory_bits(), 16);
+        assert_eq!(meter.usage().temporary_peak_bits(), 16);
+        assert_eq!(meter.usage().total_memory_bits(), 64);
 
         let before = meter.usage();
         assert!(matches!(
