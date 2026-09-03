@@ -102,6 +102,12 @@ if test -f tdi-ai/src/assr_h_reference.rs; then
     bash scripts/check-tdi8.1-a3-reference.sh
 fi
 
+if test -f tdi-ai/src/full_history_reference.rs; then
+    test -s scripts/check-tdi8.1-a0-reference.sh \
+        || fail "A0 full-history source exists without its oracle gate"
+    bash scripts/check-tdi8.1-a0-reference.sh
+fi
+
 printf 'TDI-8.1 reference-arm vocabulary: VERIFIED\n'
 printf 'TDI-8.1 exact memory-accounting invariants: VERIFIED\n'
 printf 'TDI-8.1 defining-component guards: VERIFIED\n'
