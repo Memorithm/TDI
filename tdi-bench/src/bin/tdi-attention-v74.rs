@@ -49,9 +49,9 @@ impl BoundedSplit {
 enum EvaluationError {
     SeedOverflow,
     FinalRangeOverlap,
-    PredictiveFailure,
+    PredictiveFailure(PredictiveError),
     InvalidRecordLayout,
-    InformationFailure,
+    InformationFailure(InformationError),
 }
 
 fn bounded_end(start: u64) -> Result<u64, EvaluationError> {
@@ -86,7 +86,7 @@ fn information_record(record: &PredictiveRecord) -> Result<InformationRecord, Ev
         record.evidence().to_vec(),
         record.target(),
     )
-    .map_err(|_| EvaluationError::InformationFailure)
+    .map_err(EvaluationError::InformationFailure)
 }
 
 fn bounded_records(
@@ -102,14 +102,14 @@ fn bounded_records(
         TDI71_TARGET_DEPTH,
         TDI71_INTERVENTION_AMPLITUDE,
     )
-    .map_err(|_: PredictiveError| EvaluationError::PredictiveFailure)?;
+    .map_err(EvaluationError::PredictiveFailure)?;
     predictive.iter().map(information_record).collect()
 }
 
 fn evaluate_cell(split: BoundedSplit, task: TaskKind) -> Result<BootstrapSummary, EvaluationError> {
     let records = bounded_records(split, task)?;
     bootstrap_pid(&records, TDI74_BOOTSTRAP_REPLICATES, TDI74_BOOTSTRAP_SEED)
-        .map_err(|_: InformationError| EvaluationError::InformationFailure)
+        .map_err(EvaluationError::InformationFailure)
 }
 
 fn canonical_cell(split: BoundedSplit, task: TaskKind, summary: BootstrapSummary) -> String {
@@ -207,15 +207,18 @@ mod tests {
     }
 
     #[test]
-    fn bounded_point_estimate_is_deterministic() {
-        let records =
-            bounded_records(BoundedSplit::Validation, TaskKind::AssociativeRecall).unwrap();
-        let left = tdi_bench::gaussian_mmi_v7::evaluate_pid(&records).unwrap();
-        let right = tdi_bench::gaussian_mmi_v7::evaluate_pid(&records).unwrap();
-        assert_eq!(left, right);
-        assert!(left.static_mi().rank() >= 1);
-        assert!(left.recovery_mi().rank() >= 1);
-        assert!(left.joint_mi().rank() >= left.static_mi().rank());
+    fn all_four_bounded_point_estimates_are_deterministic() {
+        for split in [BoundedSplit::Development, BoundedSplit::Validation] {
+            for task in [TaskKind::AssociativeRecall, TaskKind::Copy] {
+                let records = bounded_records(split, task).unwrap();
+                let left = tdi_bench::gaussian_mmi_v7::evaluate_pid(&records).unwrap();
+                let right = tdi_bench::gaussian_mmi_v7::evaluate_pid(&records).unwrap();
+                assert_eq!(left, right);
+                assert!(left.static_mi().rank() >= 1);
+                assert!(left.recovery_mi().rank() >= 1);
+                assert!(left.joint_mi().rank() >= left.static_mi().rank());
+            }
+        }
     }
 
     #[test]
