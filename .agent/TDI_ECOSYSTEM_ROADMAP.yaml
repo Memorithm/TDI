@@ -1,82 +1,73 @@
-schema_version: 1
+schema_version: 2
 kind: tdi_ecosystem_agent_roadmap
 status: active
-last_updated: "2026-09-02T19:40+0200"
+last_updated: "2026-09-03T23:45+0200"
 repository: Memorithm/TDI
 intended_consumer: autonomous_coding_agent
 merge_policy: never_merge_this_file_to_default_branch_unless_user_explicitly_requests
 
 mission:
   primary: >-
-    Preserve TDI as a preregistered, deterministic research programme for dynamic
-    information and intervention-conditioned recovery, including the TDI-7.x
-    attention/memory line and the now-active TDI-8.x bounded research line for
-    alternative recurrent/associative memory architectures, without retroactively
-    reinterpreting frozen finite-state results or allowing software automation to
-    bypass confirmatory holdout gates.
-  ecosystem_goal: >-
-    Supply scientifically disciplined dynamic-recovery descriptors, experiment
-    schemas, architecture comparisons, and negative results to ITD Simulator,
-    FLAT-ATTENTION, Forge and SciRust while keeping TDI's frozen experimental
-    lineage authoritative for TDI claims.
+    Preserve TDI as a preregistered deterministic research programme while
+    supporting autonomous AI-agent research. TDI-7.x remains the frozen
+    attention/recovery lineage, TDI-8.x remains the recurrent/associative
+    architecture programme, and TDI-9.x is the distinct adaptive-inference
+    dynamics programme.
+  autonomy: >-
+    Prefer autonomous hypothesis generation, bounded experimentation,
+    falsification, implementation, CI, review and evidence-gated promotion.
+    Human action is not a scientific primitive. Where a confirmatory protocol
+    is intentionally agent-autonomous, anti-leakage must be enforced by frozen
+    contracts and future-derived randomness rather than a human token.
 
 verified_current_facts:
-  - TDI_1_through_TDI_6_x_are_frozen_evidence_with_explicit_scope_and_limitations
+  - TDI_1_through_TDI_6_x_are_frozen_evidence_with_original_scope_and_limitations
   - TDI_7_x_is_the_attention_and_memory_research_series
-  - TDI_7_1_is_complete_and_merged_with_the_official_completion_checklist_verified_by_PR_82
-  - TDI_7_2_pre_holdout_population_seed_selection_and_rejection_policy_were_frozen_by_PR_84
-  - TDI_7_2_final_holdout_runner_was_merged_by_PR_85
-  - TDI_7_2_final_holdout_was_accessed_once_and_its_result_record_is_frozen_on_main
-  - TDI_7_2_current_tree_runner_was_retired_by_PR_88_and_rerun_surface_is_closed
-  - TDI_7_2_must_not_be_rerun_or_reinterpreted_by_TDI_8_work
-  - confirmatory_full_runs_require_exact_human_confirmation_tokens_only_when_a_future_protocol_explicitly_arms_one
-  - normal_tests_CI_and_the_authoring_agent_must_not_produce_confirmatory_full_run_results
-  - TDI_finite_state_results_do_not_establish_transfer_to_transformers_or_other_neural_architectures
-  - calibration_transfer_failures_and_negative_repair_results_are_preserved_as_measured_results
-  - TDI_8_0_preregistration_was_merged_by_PR_88_as_main_commit_24d41eb7e5d72fc3b5eec9b6434930b10c1f241f
-  - TDI_8_0_exact_PR_head_bbccb193d9a3b3f1b706b5c59bcc79890028dc01_passed_all_five_required_workflows_before_merge
-  - TDI_8_0_preregistration_blob_fe80e7053d89824a77ef6790794f6930d1b424e2_is_pinned_on_main
-  - TDI_8_1_bounded_non_holdout_implementation_is_now_authorized
+  - TDI_7_2_is_complete_frozen_accessed_once_and_its_rerun_surface_is_retired
+  - TDI_7_2_must_never_be_rerun_or_reinterpreted_by_later_series
+  - TDI_8_0_is_merged_and_frozen_with_preregistration_blob_fe80e7053d89824a77ef6790794f6930d1b424e2
+  - TDI_8_1_is_active_and_has_merged_A0_A1_A2_A3_symbolic_tasks_leakage_safe_execution_binary64_encoding_decision_rules_resampling_and_accounting_foundations
   - no_TDI_8_2_runner_token_seed_range_or_result_surface_exists
-  - no_dedicated_ASSR_repository_exists_yet_in_Memorithm_at_this_update
-  - user_has_authorized_preparation_and_implementation_of_the_distinct_TDI_8_x_research_programme
+  - issue_92_has_been_reopened_as_the_active_TDI_9_x_adaptive_inference_programme
+  - user_has_explicitly_prioritized_AI_agent_research_without_routine_human_intervention_for_TDI_9
 
 scientific_invariants:
-  - preregistration_precedes_confirmatory_implementation_and_holdout_access
-  - final_holdout_is_untouched_until_the_frozen_evaluator_is_complete
-  - no_tuning_feature_metric_margin_or_intervention_change_after_holdout_access
+  - preregistration_precedes_confirmatory_execution
+  - final_evaluation_derivation_rules_are_frozen_before_final_randomness_is_knowable
+  - no_tuning_feature_metric_margin_or_task_change_after_final_evaluation_entropy_is_revealed
   - failed_harmful_equivalent_inconclusive_or_negative_results_are_never_renumbered_away
   - TDI_finite_state_findings_are_not_neural_architecture_findings_until_independently_demonstrated
-  - MMI_definition_specific_atoms_are_not_represented_as_universal_empirical_results
-  - calibration_transfer_failure_remains_explicit
-  - dynamic_recovery_evidence_is_not_automatically_a_new_information_theoretic_invariant
-  - software_version_and_scientific_series_numbering_are_distinct
-  - architecture_names_are_hypotheses_not_claims_of_novelty
-  - complexity_memory_quality_and_performance_claims_require_separate_measured_evidence
-  - no_architecture_is_promoted_from_toy_task_success_alone
+  - architecture_and_policy_names_are_hypotheses_not_claims_of_novelty
+  - complexity_memory_quality_compute_and_runtime_claims_require_separate_evidence
+  - no_mechanism_is_promoted_from_toy_task_success_alone
+  - final_evaluation_material_must_not_leak_into_candidate_generation_or_policy_tuning
 
 agent_safety_rules:
-  - autonomous_agents_must_never_supply_confirmatory_full_run_tokens
-  - autonomous_agents_must_never_execute_TDI_7_2_or_any_future_N_2_confirmatory_holdout_without_explicit_human_instruction_at_execution_time
-  - autonomous_agents_may_build_test_and_run_bounded_non_holdout_preflight_paths
-  - autonomous_agents_may_verify_frozen_hash_chains_and_guard_logic
-  - autonomous_agents_must_fail_closed_if_a_command_would_access_a_forbidden_holdout_or_generate_a_confirmatory_result
-  - TDI_8_work_must_not_read_generate_reuse_modify_or_reinterpret_TDI_7_2_final_holdout_data_seeds_results_or_authorization_surfaces
-  - a_frozen_confirmatory_holdout_is_not_authorized_for_rerun_merely_because_historical_code_or_token_guards_exist_in_git_history
+  - autonomous_agents_must_never_rerun_TDI_7_2_or_access_its_protected_payload_for_later_series
+  - autonomous_agents_must_never_create_access_or_execute_a_TDI_8_2_surface_while_TDI_8_1_is_active
+  - TDI_7_2_and_TDI_8_2_retain_their_historical_or_frozen_human_only_policy
+  - TDI_9_may_use_agent_autonomous_confirmation_only_if_its_frozen_protocol_derives_final_seeds_from_future_public_randomness_or_equivalent_future_immutable_entropy
+  - the_TDI_9_future_entropy_value_must_be_unknowable_when_the_derivation_contract_is_frozen
+  - TDI_9_agents_may_not_choose_replace_skip_or_retry_a_future_entropy_value_based_on_results
+  - normal_development_CI_must_not_generate_TDI_9_2_results_before_the_frozen_future_entropy_event
+  - agents_may_build_test_and_run_bounded_non_final_development_and_validation_paths
+  - agents_may_verify_hash_chains_split_disjointness_provenance_and_guard_logic
+  - agents_must_fail_closed_on_leakage_nonfinite_results_contract_drift_or_final_entropy_provenance_failure
 
 ownership:
-  role: dynamic_information_recovery_and_architecture_research_source_of_truth
+  role: dynamic_information_recovery_architecture_and_adaptive_inference_research_source_of_truth
   owns:
     - frozen_TDI_experiment_designs_preregistrations_and_results
     - tdi_core_finite_state_dynamics_and_exact_oracles
     - tdi_ai_intervention_recovery_abstractions
-    - TDI_specific_dynamic_recovery_descriptors_and_scientific_interpretation
-    - bounded_reference_architecture_experiments_for_new_TDI_scientific_questions
-    - confirmatory_holdout_guard_and_frozen_result_lineage
+    - TDI_specific_dynamic_recovery_descriptors
+    - bounded_reference_architecture_experiments
+    - bounded_adaptive_inference_policy_experiments
+    - TDI_specific_final_evaluation_derivation_and_provenance_contracts
   does_not_own:
     - ITD_structural_descriptor_semantics
     - FLAT_ATTENTION_execution_or_kernel_semantics
-    - SciRust_general_information_statistics_tensor_spectral_or_VSA_primitives_after_promotion
+    - SciRust_general_reusable_primitives_after_promotion
     - ElasticXxx_resource_runtime_semantics
     - SLHAv2_KV_codec_or_DA_LUC_product_semantics
     - NNIS_GPU_runtime_or_kernel_semantics
@@ -86,226 +77,154 @@ ownership:
 control_loop:
   - DEFINE_FALSIFIABLE_QUESTION
   - PREREGISTER_AND_FREEZE_PROTOCOL
-  - IMPLEMENT_BOUNDED_EVALUATOR_WITHOUT_FINAL_HOLDOUT
-  - VERIFY_SOFTWARE_ORACLES_GUARDS_AND_SPLIT_DISJOINTNESS
-  - HUMAN_ONLY_CONFIRMATORY_EXECUTION_IF_AUTHORIZED
+  - IMPLEMENT_BOUNDED_EVALUATOR_WITHOUT_FINAL_EVALUATION
+  - AUTONOMOUS_DEVELOPMENT_SEARCH_AND_FALSIFICATION
+  - VERIFY_SOFTWARE_ORACLES_GUARDS_SPLITS_AND_PROVENANCE
+  - FREEZE_FINAL_DERIVATION_CONTRACT_BEFORE_FUTURE_ENTROPY
+  - AUTONOMOUS_CONFIRMATORY_EXECUTION_IF_THE_SERIES_EXPLICITLY_ALLOWS_IT
   - FREEZE_RESULT_AND_PROVENANCE
   - PRESERVE_NEGATIVE_OR_NULL_RESULTS
   - OPEN_ONLY_EVIDENCE_JUSTIFIED_FOLLOW_UPS
 
 ecosystem_interfaces:
   Memorithm/itd-simulator:
-    relationship: comparative_experiment_harness_and_AI_scientific_layer
-    status: active_research_direction
+    relationship: comparative_experiment_harness_and_structural_diagnostics
     contract:
-      - ITD_and_TDI_descriptors_are_separate_candidate_information_sources
-      - every_joint_study_requires_explicit_ablation_against_each_other_and_competent_controls
+      - ITD_and_TDI_descriptors_remain_separate_candidate_information_sources
+      - TDI_9_may_consume_versioned_trajectory_diagnostics_only_through_explicit_non_leaking_interfaces
       - ITD_must_not_reinterpret_TDI_frozen_results
-  Memorithm/FLAT-ATTENTION:
-    relationship: execution_target_for_candidate_attention_semantics_not_discovery_environment
-    status: active_research_direction
+  Memorithm/ADA:
+    relationship: semantic_mechanism_discovery_and_falsification_partner
     contract:
-      - expose_reference_intermediate_state_for_controlled_interventions_in_research_mode
-      - TDI_evidence_may_reject_or_prioritize_semantic_candidates
-      - no_FLAT_GPU_optimization_is_promoted_from_mathematical_interest_or_TDI_signal_alone
-      - FLAT_correctness_and_real_device_performance_gates_remain_separate
+      - ADA_may_propose_candidate_observables_verifiers_or_mechanisms
+      - TDI_9_owns_frozen_adaptive_inference_evaluation_and_scientific_verdicts
+      - final_evaluation_material_must_never_reach_ADA_candidate_generation
   Memorithm/Forge:
     relationship: downstream_execution_driven_candidate_search_engine
-    status: planned_for_evidence_qualified_TDI_8_domains
     contract:
-      - TDI_defines_and_freezes_scientific_oracles_tasks_and_admissible_architecture_semantics_first
-      - Forge_may_search_parameters_or_implementations_only_after_a_bounded_domain_contract_exists
-      - Forge_search_scores_are_not_TDI_scientific_results
-      - holdout_data_and_confirmatory_oracles_must_never_leak_into_candidate_generation
-  Memorithm/SLHAv2:
-    relationship: separate_KV_compression_research_partner
-    status: separate_programme
+      - Forge_search_begins_only_after_TDI_publishes_a_leak_safe_search_contract
+      - search_uses_generation_and_validation_surfaces_separate_from_final_confirmation
+      - Forge_scores_are_not_TDI_scientific_results
+  Memorithm/FLAT-ATTENTION:
+    relationship: execution_and_semantic_comparison_target
     contract:
-      - DA_LUC_or_related_encoded_domain_KV_scoring_belongs_primarily_in_SLHAv2
-      - TDI_may_later_measure_dynamic_recovery_effects_of_KV_representation_changes
-      - TDI_does_not_own_SLHAv2_codec_or_tile_semantics
+      - TDI_evidence_may_reject_or_prioritize_candidate_semantics
+      - optimized_kernel_promotion_requires_separate_correctness_and_performance_evidence
   Memorithm/NNIS:
-    relationship: downstream_real_NVIDIA_execution_and_measurement_target
-    status: planned_after_scientific_reference_validation
+    relationship: downstream_NVIDIA_execution_measurement_target
     contract:
-      - NNIS_may_implement_evidence_qualified_recurrent_associative_or_memory_kernels
-      - real_device_latency_bandwidth_memory_and_energy_claims_belong_to_measured_NNIS_evidence
-      - TDI_toy_or_reference_results_do_not_imply_Thor_performance
+      - real_device_latency_bandwidth_memory_energy_and_throughput_claims_require_NNIS_measurement
+      - TDI_reference_results_do_not_imply_hardware_speedup
+  Memorithm/ElasticXxx:
+    relationship: downstream_runtime_adaptation_target
+    contract:
+      - TDI_9_may_export_evidence_qualified_stop_verify_backtrack_or_compute_allocation_policies
+      - ElasticXxx_owns_production_resource_actuation_and_runtime_safety
   Memorithm/scirust:
     relationship: promotion_target_for_reusable_general_primitives
-    status: active_conceptual_relationship
     contract:
-      - promote_only_general_information_statistical_spectral_experiment_or_VSA_primitives
-      - keep_TDI_frozen_experiment_semantics_and_results_in_TDI
+      - promote_only_general_statistical_experiment_or_policy_primitives
+      - keep_frozen_TDI_experiment_semantics_and_results_in_TDI
   Memorithm/riemann_ndim_bench:
     relationship: structured_operator_hypothesis_source
-    status: research_partner
     rule: RiemannBench_supplies_operator_hypotheses_not_TDI_semantics
-  Memorithm/SciRust-Verify:
-    relationship: future_evidence_ingestion_and_integrity_layer
-    status: planned
-    rule: preserve_preregistration_hash_chain_holdout_scope_and_scientific_verdict_without_claim_inflation
-  Memorithm/scirust-hub:
-    relationship: future_orchestration_of_bounded_non_confirmatory_tasks
-    status: planned_not_assumed
-    restriction: Hub_or_agents_must_not_automate_human_only_confirmatory_tokens
 
 roadmap:
-  - id: TDI7_1
-    name: Deterministic attention evaluator and software-oracle gate
-    status: complete_merged
-    source: issue_57
-    completion_evidence_2026_09_01:
-      - PR_81_leakage_safe_early_recovery_features_merged_into_main
-      - PR_82_official_completion_checklist_fully_checked_with_verification_record
-      - readiness_gate_check_tdi7_1_readiness_sh_pass_on_stacked_head_74846ab
-      - public_hosted_ci_green_and_tdi7_preflight_gates_green_on_each_head
-      - workspace_tests_1134_passed_0_failed_locally
-      - completion_did_not_access_TDI_7_2_final_holdout
   - id: TDI7_2
     name: Confirmatory H_AI_1 final holdout
     status: complete_frozen_accessed_once_runner_retired
-    prerequisite: TDI7_1_complete_reviewed_and_CI_green
-    historical_execution_policy: explicit_human_only_confirmation_at_execution_time
-    current_agent_policy: forbidden_to_rerun_or_reinterpret
-    decision_freeze_2026_09_01:
-      - population_frozen_10000_generators_entire_frozen_range
-      - seed_selection_frozen_contiguous_ascending_v1_over_7100030000_7100039999
-      - rejection_policy_frozen_frozen_tdi71_typed_errors_v1
-      - reference_TDI_7_2_HUMAN_DECISION_2026_09_01_CHECKUPAUTO
-      - PR_84_froze_the_three_pre_holdout_decisions
-    arming_evidence_2026_09_01:
-      - PR_85_merged_the_singular_final_holdout_runner
-      - runner_revalidated_frozen_decisions_before_work
-      - runner_refused_without_human_supplied_confirmation_at_that_stage
-      - normal_CI_never_supplied_the_confirmation
-      - final_holdout_was_not_accessed_at_PR_85_merge
-    frozen_result_evidence:
-      - artifacts_tdi7_final_holdout_2026_09_01_txt_exists_on_main
-      - final_holdout_status_is_accessed_once_in_the_frozen_result_record
-      - PR_88_retired_the_current_tree_final_holdout_runner_without_reading_or_reinterpreting_the_result_payload
-      - PR_88_post_holdout_integrity_gate_requires_result_record_presence_and_current_runner_absence
-    next_step: preserve_frozen_record_and_closed_rerun_surface
-    execution_rule: >-
-      TDI-7.2 is a completed frozen confirmatory experiment. Autonomous agents
-      must never rerun it, supply its historical token, inspect its payload for
-      TDI-8 work, or infer new authorization from this roadmap or Git history.
-  - id: TDI7_3
-    name: Intervention heterogeneity and coupling stability
-    status: conditional_not_authorized
-    rule: requires_new_preregistration_and_evidence_justification_from_TDI7_2_or_a_separate_mechanistic_need
-  - id: TDI7_4
-    name: Long_horizon_joint_information_and_synergy
-    status: conditional_not_authorized
-    rule: multiple_information_controls_and_no_MMI_identity_reinterpretation
-  - id: TDI7_5_plus
-    name: Static spectral insufficiency and FLAT semantic discrimination
-    status: conditional_not_authorized
-    rule: each_semantic_requires_frozen_math_scalar_reference_tests_controls_quality_and_cost_accounting
+    agent_policy: forbidden_to_rerun_or_reinterpret
   - id: TDI8_0
-    name: Alternative recurrent associative architecture preregistration
+    name: Recurrent associative architecture preregistration
     status: complete_merged_frozen
-    merge_evidence_2026_09_02:
-      - PR_88_merged_as_24d41eb7e5d72fc3b5eec9b6434930b10c1f241f
-      - exact_PR_head_bbccb193d9a3b3f1b706b5c59bcc79890028dc01
-      - all_five_required_workflows_completed_success_before_merge
-      - frozen_preregistration_blob_fe80e7053d89824a77ef6790794f6930d1b424e2_matches_main_manifest
-    scientific_question: >-
-      Under matched bounded mechanistic tasks and declared resource budgets, does a
-      recurrent state model augmented with explicit associative memory provide
-      retrieval or long-horizon recovery advantages beyond competent attention-like
-      and recurrent controls, and does an additional VSA/holographic workspace add
-      incremental value beyond associative memory alone?
-    architecture_ladder:
-      - A0_competent_attention_like_reference
-      - A1_recurrent_state_only_reference
-      - A2_recurrent_state_plus_associative_memory_ASSR_candidate
-      - A3_recurrent_state_plus_associative_memory_plus_VSA_workspace_ASSR_H_candidate
-    frozen_primary_controls_in_PR_88:
-      - deterministic_reference_semantics_before_optimization
-      - three_task_families_associative_recall_delayed_copy_interference_recall
-      - short_medium_long_horizons_form_exactly_nine_primary_cells_per_hypothesis
-      - matched_dynamic_memory_budget_for_A1_A2_A3
-      - primary_contrasts_A2_vs_A1_and_A3_vs_A2
-      - relative_mean_deficit_reduction_with_explicit_zero_baseline_branch
-      - decision_margin_delta_0_02
-      - four_way_cell_classifier_Beneficial_Equivalent_Harmful_Inconclusive
-      - at_least_95_percent_family_wise_coverage_with_Bonferroni_alpha_0_05_over_9
-      - closed_nine_cell_hypothesis_aggregation_gate
-      - TDI7_2_strict_isolation
-      - negative_equivalent_harmful_and_inconclusive_outcomes_preserved
-      - no_claim_of_strict_O_N_or_constant_total_memory_without_formal_and_measured_scope
-      - no_claim_of_VSA_dimension_level_interpretability
-      - no_claim_that_token_prediction_or_decoding_is_eliminated_without_direct_evidence
-    boundaries:
-      - do_not_modify_consume_reuse_or_reinterpret_TDI7_2_final_holdout
-      - do_not_create_a_new_ASSR_repository_before_TDI8_reference_evidence_justifies_product_ownership
-      - do_not_send_unvalidated_architecture_candidates_to_Forge_for_search
-      - do_not_promote_to_NNIS_FLAT_or_SciRust_before_reference_correctness_and_scientific_evidence
+    primary_contrasts:
+      - A2_vs_A1
+      - A3_vs_A2
   - id: TDI8_1
     name: Bounded deterministic ASSR reference evaluator
-    status: active_authorized_after_TDI8_0_merge
-    entry_gate_evidence:
-      - TDI8_0_is_merged_and_frozen_on_main
-      - pinned_preregistration_blob_matches_main
-      - no_TDI8_2_surface_exists
-      - TDI7_2_rerun_surface_is_closed_and_payload_remains_forbidden
-    goals:
-      - implement_A0_A1_A2_and_A3_reference_semantics
-      - expose_intervention_and_recovery_state_through_tdi_ai
-      - verify_associative_memory_address_write_read_and_collision_semantics
-      - verify_VSA_binding_bundling_and_unbinding_oracles_if_A3_is_retained
-      - measure_exact_or_declared_state_and_external_memory_bytes
-      - implement_the_frozen_nine_cell_classifier_and_hypothesis_gate_without_changing_them
-      - emit_machine_readable_provenance
-      - run_only_train_development_validation_or_bounded_preflight_data
-      - freeze_concrete_dimensions_budgets_horizons_seed_ranges_sample_counts_interval_implementation_and_rejection_taxonomy_before_any_TDI8_2_surface
-      - prove_CI_cannot_access_TDI8_2_final_holdout
+    status: active
+    rule: continue_without_creating_TDI8_2_surface
   - id: TDI8_2
     name: Confirmatory alternative architecture holdout
     status: future_human_only_not_authorized
-    prerequisite: TDI8_1_complete_reviewed_and_CI_green
     agent_policy: forbidden_to_initiate
-    rule: requires_explicit_human_confirmation_at_execution_time_and_a_separately_frozen_holdout_protocol
   - id: TDI8_3_plus
     name: Evidence_justified architecture ablations robustness and transfer
-    status: conditional_not_authorized
+    status: conditional
+  - id: TDI9_0
+    name: Autonomous adaptive inference dynamics preregistration
+    status: active_authorized
+    source: issue_92
+    scientific_question: >-
+      Under a common bounded maximum-compute envelope, can an observation-conditioned
+      inference policy preserve or improve solution quality while consuming less
+      computation than fixed-budget inference, and does explicit verification plus
+      backtracking/recovery add incremental value beyond adaptive stopping alone?
+    policy_ladder:
+      - C0_fixed_compute_budget
+      - C1_static_task_class_preallocation
+      - C2_observation_conditioned_CONTINUE_or_STOP
+      - C3_observation_conditioned_CONTINUE_VERIFY_BACKTRACK_or_STOP
+    primary_contrasts:
+      - H9_A_C2_vs_C0
+      - H9_B_C3_vs_C2
+    autonomy_policy:
+      - development_and_validation_are_agent_driven
+      - no_human_confirmation_token_is_part_of_TDI9
+      - final_confirmation_must_use_future_derived_entropy_frozen_before_reveal
+      - result_conditioned_entropy_selection_retry_or_replacement_is_forbidden
+  - id: TDI9_1
+    name: Bounded autonomous adaptive inference evaluator
+    status: blocked_until_TDI9_0_is_merged_and_frozen
+    goals:
+      - deterministic_trajectory_and_action_semantics
+      - leakage_safe_policy_observation_schema
+      - C0_C1_C2_C3_reference_policies
+      - matched_max_compute_and_declared_memory_envelopes
+      - actual_compute_verification_and_backtracking_accounting
+      - typed_rejection_and_machine_readable_provenance
+      - development_and_validation_search_without_final_entropy
+  - id: TDI9_2
+    name: Autonomous sealed confirmation
+    status: future_not_armed
+    prerequisite: TDI9_1_complete_frozen_and_CI_green
+    execution_policy: autonomous_future_entropy_derived_no_human_token
+    rule: no_final_seed_list_dataset_or_result_payload_exists_before_the_frozen_future_entropy_event
+  - id: TDI9_3_plus
+    name: Evidence_justified adaptive inference extensions
+    status: conditional
     candidate_topics:
-      - associative_memory_capacity_and_collision_ablation
-      - write_forget_gate_ablation
-      - episodic_vs_semantic_memory_separation
-      - VSA_incremental_value_and_binding_operator_controls
-      - long_context_memory_growth_and_bounded_hot_memory_policies
+      - verifier_observable_ablation
+      - verifier_disagreement
+      - backtracking_granularity
+      - memory_aware_stopping
+      - tool_use_interleaving
+      - conditional_routing_and_mixture_of_mechanisms
       - cross_task_and_cross_length_transfer
-      - Forge_parameter_search_only_after_oracle_and_holdout_isolation_contracts_exist
-      - NNIS_real_device_implementation_only_after_reference_evidence
+      - Forge_policy_search_after_leak_safe_contract
+      - NNIS_and_ElasticXxx_promotion_after_reference_evidence
   - id: TDIX
     name: Ecosystem evidence and reusable primitive bridge
     status: planned_parallel
-    goals:
-      - version_machine_readable_TDI_AI_results_and_provenance
-      - integrate_bounded_experiments_with_ITD
-      - prepare_SciRust_Verify_ingestion
-      - promote_only_general_reusable_primitives_to_SciRust
 
 agent_operating_protocol:
   must_read_this_file:
     - at_start_of_every_agent_session
-    - before_any_preregistration_evaluator_or_holdout_related_change
+    - before_any_preregistration_evaluator_or_final_evaluation_change
     - before_TDI8_architecture_or_evaluator_changes
-    - before_ITD_FLAT_Forge_SLHAv2_NNIS_or_SciRust_integration
+    - before_TDI9_adaptive_inference_or_confirmation_changes
+    - before_cross_repository_scientific_integration
     - before_opening_or_merging_scientific_PRs
   must_update_this_file:
     - when_a_TDI_stage_changes_status
-    - when_a_confirmatory_result_is_human_executed_and_frozen
+    - when_a_confirmatory_result_is_frozen
     - when_a_follow_up_is_authorized_or_rejected
     - when_an_ecosystem_contract_changes
-    - when_TDI8_architecture_ladder_controls_or_scope_materially_change
+    - when_TDI8_or_TDI9_primary_scope_materially_changes
   fail_closed: >-
     If this roadmap cannot be read, or if it conflicts with merged protocols,
     immutable manifests, frozen result records, or current default-branch state,
-    do not make scientific-promotion, holdout, preregistration, cross-repository,
-    or merge decisions for the affected stage until coordination state is
-    repaired. Never inspect a forbidden holdout merely to reconcile roadmap
-    drift, and never infer permission to execute a confirmatory run from roadmap
-    availability alone.
+    do not make scientific-promotion, final-evaluation, preregistration,
+    cross-repository, or merge decisions for the affected stage until
+    coordination state is repaired. Never inspect a forbidden historical
+    holdout merely to reconcile roadmap drift.
