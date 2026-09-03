@@ -20,6 +20,9 @@ const RECOVERY_DEPTHS: usize = 4;
 const TDI74_FINAL_START: u64 = 7_100_050_000;
 const TDI74_FINAL_END: u64 = 7_100_059_999;
 
+type FeatureRows = Vec<Vec<f64>>;
+type SourceBlocks = (FeatureRows, FeatureRows);
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum BoundedSplit {
     Training,
@@ -81,10 +84,7 @@ fn validate_split(split: BoundedSplit) -> Result<(), AuditError> {
     Ok(())
 }
 
-fn source_blocks(
-    split: BoundedSplit,
-    task: TaskKind,
-) -> Result<(Vec<Vec<f64>>, Vec<Vec<f64>>), AuditError> {
+fn source_blocks(split: BoundedSplit, task: TaskKind) -> Result<SourceBlocks, AuditError> {
     validate_split(split)?;
     let records = attention_population(
         split.start(),
