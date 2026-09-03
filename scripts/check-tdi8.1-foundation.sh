@@ -108,6 +108,12 @@ if test -f tdi-ai/src/full_history_reference.rs; then
     bash scripts/check-tdi8.1-a0-reference.sh
 fi
 
+if test -f tdi-ai/src/task_generators.rs; then
+    test -s scripts/check-tdi8.1-task-generators.sh \
+        || fail "T1/T2/T3 task-generator source exists without its oracle gate"
+    bash scripts/check-tdi8.1-task-generators.sh
+fi
+
 printf 'TDI-8.1 reference-arm vocabulary: VERIFIED\n'
 printf 'TDI-8.1 exact memory-accounting invariants: VERIFIED\n'
 printf 'TDI-8.1 defining-component guards: VERIFIED\n'
