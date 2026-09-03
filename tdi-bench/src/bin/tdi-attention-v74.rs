@@ -106,17 +106,10 @@ fn bounded_records(
     predictive.iter().map(information_record).collect()
 }
 
-fn evaluate_cell(
-    split: BoundedSplit,
-    task: TaskKind,
-) -> Result<BootstrapSummary, EvaluationError> {
+fn evaluate_cell(split: BoundedSplit, task: TaskKind) -> Result<BootstrapSummary, EvaluationError> {
     let records = bounded_records(split, task)?;
-    bootstrap_pid(
-        &records,
-        TDI74_BOOTSTRAP_REPLICATES,
-        TDI74_BOOTSTRAP_SEED,
-    )
-    .map_err(|_: InformationError| EvaluationError::InformationFailure)
+    bootstrap_pid(&records, TDI74_BOOTSTRAP_REPLICATES, TDI74_BOOTSTRAP_SEED)
+        .map_err(|_: InformationError| EvaluationError::InformationFailure)
 }
 
 fn canonical_cell(split: BoundedSplit, task: TaskKind, summary: BootstrapSummary) -> String {
@@ -215,7 +208,8 @@ mod tests {
 
     #[test]
     fn bounded_point_estimate_is_deterministic() {
-        let records = bounded_records(BoundedSplit::Validation, TaskKind::AssociativeRecall).unwrap();
+        let records =
+            bounded_records(BoundedSplit::Validation, TaskKind::AssociativeRecall).unwrap();
         let left = tdi_bench::gaussian_mmi_v7::evaluate_pid(&records).unwrap();
         let right = tdi_bench::gaussian_mmi_v7::evaluate_pid(&records).unwrap();
         assert_eq!(left, right);
