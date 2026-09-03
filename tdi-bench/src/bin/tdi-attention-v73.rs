@@ -1,13 +1,14 @@
 //! Bounded development/validation evaluator for TDI-7.3 H-AI-2.
 //!
-//! This executable reuses the exact deterministic TDI-7.1 task/intervention
-//! mechanics from `tdi_bench::attention_v7`. It intentionally evaluates only
-//! inherited non-holdout development/validation seeds. It does not fit the
-//! confirmatory B0/B1 models yet and therefore emits no confirmatory verdict.
+//! This executable reuses the protocol-faithful deterministic TDI-7.1
+//! task/intervention/mixer mechanics from `tdi_bench::attention_v7`. It
+//! intentionally evaluates inherited non-holdout development/validation seeds.
+//! It emits measured heterogeneity/coupling diagnostics but no confirmatory
+//! verdict and has no final-holdout execution path.
 
 use tdi_bench::attention_v7::{
-    InterventionSite, MechanisticState, SingleSiteIntervention, TaskKind, apply_joint,
-    generate_task, recovery_trajectory,
+    DeterministicLocalMixer, InterventionSite, MechanisticState, SingleSiteIntervention, TaskKind,
+    apply_joint, generate_task, recovery_trajectory,
 };
 
 const DEVELOPMENT_START: u64 = 7_100_010_000;
@@ -73,6 +74,7 @@ enum EvaluationError {
     InvalidBoundedPopulation,
     FinalRangeOverlap,
     InterventionFailure,
+    DynamicsFailure,
     InvalidTrajectory,
     EmptyPopulation,
 }
@@ -119,6 +121,7 @@ fn generator_diagnostic(
 ) -> Result<GeneratorDiagnostic, EvaluationError> {
     validate_bounded_split(split)?;
     let task_example = generate_task(task, seed);
+    let mixer = DeterministicLocalMixer::from_task(&task_example);
     let reference = MechanisticState::from_task(&task_example);
     let early = SingleSiteIntervention::new(InterventionSite::EarlyToken, INTERVENTION_AMPLITUDE);
     let late = SingleSiteIntervention::new(InterventionSite::LateToken, INTERVENTION_AMPLITUDE);
@@ -131,9 +134,12 @@ fn generator_diagnostic(
     let joint_state =
         apply_joint(&reference, early, late).map_err(|_| EvaluationError::InterventionFailure)?;
 
-    let early_recovery = recovery_trajectory(&reference, &early_state, RECOVERY_HORIZON);
-    let late_recovery = recovery_trajectory(&reference, &late_state, RECOVERY_HORIZON);
-    let joint_recovery = recovery_trajectory(&reference, &joint_state, RECOVERY_HORIZON);
+    let early_recovery = recovery_trajectory(&mixer, &reference, &early_state, RECOVERY_HORIZON)
+        .map_err(|_| EvaluationError::DynamicsFailure)?;
+    let late_recovery = recovery_trajectory(&mixer, &reference, &late_state, RECOVERY_HORIZON)
+        .map_err(|_| EvaluationError::DynamicsFailure)?;
+    let joint_recovery = recovery_trajectory(&mixer, &reference, &joint_state, RECOVERY_HORIZON)
+        .map_err(|_| EvaluationError::DynamicsFailure)?;
     if early_recovery.len() != RECOVERY_HORIZON
         || late_recovery.len() != RECOVERY_HORIZON
         || joint_recovery.len() != RECOVERY_HORIZON
@@ -244,7 +250,7 @@ fn summarize(records: &[GeneratorDiagnostic]) -> Result<StabilitySummary, Evalua
 fn canonical_summary(split: BoundedSplit, task: TaskKind, summary: StabilitySummary) -> String {
     format!(
         concat!(
-            "tdi73-bounded-v1;split={};task={};generators={};points={};",
+            "tdi73-bounded-v2;split={};task={};generators={};points={};",
             "mean_abs_bits={:016x};max_abs_bits={:016x};",
             "mean_rel_bits={:016x};max_rel_bits={:016x};",
             "mean_coupling_bits={:016x};max_abs_coupling_bits={:016x}"
@@ -279,9 +285,11 @@ fn main() {
         Ok(lines) => {
             println!("TDI-7.3 bounded heterogeneity/coupling evaluator");
             println!("scope=development+validation");
+            println!("semantic=deterministic_local_row_stochastic_v1");
+            println!("intervention=balanced_add_subtract_v1");
             println!("final_holdout=NOT_ACCESSED");
             println!("confirmatory_verdict=NOT_COMPUTED");
-            println!("predictive_B0_B1_layer=NOT_YET_IMPLEMENTED");
+            println!("predictive_B0_B1_layer=SEPARATE_BOUNDED_EVALUATOR");
             for line in lines {
                 println!("{line}");
             }
@@ -353,7 +361,7 @@ mod tests {
         assert_eq!(left.len(), 4);
         assert!(
             left.iter()
-                .all(|line| line.starts_with("tdi73-bounded-v1;"))
+                .all(|line| line.starts_with("tdi73-bounded-v2;"))
         );
     }
 
@@ -368,6 +376,16 @@ mod tests {
         assert_eq!(record.split, BoundedSplit::Validation);
         assert_eq!(record.task, TaskKind::Copy);
         assert_eq!(record.seed, VALIDATION_START + 7);
+    }
+
+    #[test]
+    fn protocol_faithful_mechanics_do_not_collapse_to_forced_site_equality() {
+        let records =
+            bounded_population(BoundedSplit::Development, TaskKind::AssociativeRecall).unwrap();
+        let summary = summarize(&records).unwrap();
+        assert!(summary.mean_absolute_site_difference.is_finite());
+        assert!(summary.mean_relative_site_difference.is_finite());
+        assert!(summary.mean_excess_coupling.is_finite());
     }
 
     #[test]

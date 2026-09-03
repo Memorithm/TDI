@@ -1,9 +1,10 @@
 #![forbid(unsafe_code)]
 
-//! Reusable deterministic benchmark fixtures.
+//! Reusable deterministic benchmark fixtures and TDI-7 research evaluators.
 //!
-//! The TDI-7 attention fixture is promoted here only to avoid duplicating the
-//! frozen TDI-7.1 task/intervention mechanics in follow-up evaluators. This is
-//! not a final-holdout API and carries no authorization path.
+//! The TDI-7 modules factor protocol-faithful non-holdout mechanics and
+//! predictive evaluation so follow-up stages can share one audited
+//! implementation rather than duplicating scientific logic.
 
 pub mod attention_v7;
+pub mod predictive_v7;

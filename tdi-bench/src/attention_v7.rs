@@ -1,7 +1,11 @@
-//! Deterministic TDI-7 task and intervention mechanics shared by bounded evaluators.
+//! Protocol-faithful deterministic TDI-7 task, intervention, and mixer mechanics.
 //!
-//! These functions preserve the TDI-7.1 software-oracle semantics. They expose
-//! no final-holdout seed selection and contain no final-run authorization token.
+//! This module is the reusable non-holdout software-oracle surface for TDI-7.x.
+//! It follows `docs/TDI-7.1-EVALUATOR-SPEC.md`: deterministic task generation,
+//! retrieval-distance-conditioned local row-stochastic dynamics, balanced
+//! task-label-preserving interventions, reciprocal L-infinity recovery, and the
+//! frozen depth-5 bounded retrieval-deficit target. No final-holdout selection or
+//! authorization surface is exposed here.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TaskKind {
@@ -25,6 +29,7 @@ pub struct TaskExample {
     kind: TaskKind,
     input: Vec<u16>,
     target: Vec<u16>,
+    retrieval_index: usize,
     retrieval_distance: usize,
     distractor_count: usize,
 }
@@ -48,6 +53,11 @@ impl TaskExample {
     #[must_use]
     pub fn target(&self) -> &[u16] {
         &self.target
+    }
+
+    #[must_use]
+    pub const fn retrieval_index(&self) -> usize {
+        self.retrieval_index
     }
 
     #[must_use]
@@ -116,14 +126,15 @@ pub fn generate_associative_recall(seed: u64) -> TaskExample {
     input.push(keys[query_pair]);
 
     let query_position = input.len() - 1;
-    let value_position = query_pair * 2 + 1;
+    let retrieval_index = query_pair * 2 + 1;
 
     TaskExample {
         seed,
         kind: TaskKind::AssociativeRecall,
         input,
         target: vec![values[query_pair]],
-        retrieval_distance: query_position - value_position,
+        retrieval_index,
+        retrieval_distance: query_position - retrieval_index,
         distractor_count: PAIRS - 1,
     }
 }
@@ -148,6 +159,7 @@ pub fn generate_copy(seed: u64) -> TaskExample {
         kind: TaskKind::Copy,
         input,
         target: source,
+        retrieval_index: 0,
         retrieval_distance: distractor_count + 1,
         distractor_count,
     }
@@ -241,11 +253,12 @@ impl SingleSiteIntervention {
         self.amplitude
     }
 
+    /// Return the `(add_to, subtract_from)` pair frozen by TDI-7.1.
     #[must_use]
-    pub fn index(self, len: usize) -> Option<usize> {
+    pub fn indices(self, len: usize) -> Option<(usize, usize)> {
         match self.site {
-            InterventionSite::EarlyToken => (len >= 2).then_some(1),
-            InterventionSite::LateToken => (len >= 2).then_some(len - 2),
+            InterventionSite::EarlyToken => (len >= 2).then_some((1, 0)),
+            InterventionSite::LateToken => (len >= 2).then_some((len - 2, len - 1)),
         }
     }
 
@@ -256,12 +269,18 @@ impl SingleSiteIntervention {
         if !self.amplitude.is_finite() {
             return Err(InterventionError::NonFiniteAmplitude);
         }
-        let index = self
-            .index(reference.activations.len())
+        let (add_to, subtract_from) = self
+            .indices(reference.activations.len())
             .ok_or(InterventionError::StateTooShort)?;
+        if add_to == subtract_from {
+            return Err(InterventionError::DuplicateIndex);
+        }
         let mut perturbed = reference.clone();
-        perturbed.activations[index] += self.amplitude;
-        if !perturbed.activations[index].is_finite() {
+        perturbed.activations[add_to] += self.amplitude;
+        perturbed.activations[subtract_from] -= self.amplitude;
+        if !perturbed.activations[add_to].is_finite()
+            || !perturbed.activations[subtract_from].is_finite()
+        {
             return Err(InterventionError::NonFiniteResult);
         }
         Ok(perturbed)
@@ -274,6 +293,8 @@ pub enum InterventionError {
     NonFiniteAmplitude,
     NonFiniteResult,
     DuplicateSite,
+    DuplicateIndex,
+    OverlappingSites,
 }
 
 pub fn apply_joint(
@@ -284,29 +305,81 @@ pub fn apply_joint(
     if left.site == right.site {
         return Err(InterventionError::DuplicateSite);
     }
+    let left_indices = left
+        .indices(reference.activations.len())
+        .ok_or(InterventionError::StateTooShort)?;
+    let right_indices = right
+        .indices(reference.activations.len())
+        .ok_or(InterventionError::StateTooShort)?;
+    if [left_indices.0, left_indices.1]
+        .iter()
+        .any(|index| *index == right_indices.0 || *index == right_indices.1)
+    {
+        return Err(InterventionError::OverlappingSites);
+    }
     let once = left.apply(reference)?;
     right.apply(&once)
 }
 
-#[must_use]
-pub fn advance(state: &MechanisticState) -> MechanisticState {
-    let len = state.activations.len();
-    let mut next = state.clone();
-    for index in 0..len {
-        let left = if index == 0 {
-            state.activations[index]
-        } else {
-            state.activations[index - 1]
-        };
-        let center = state.activations[index];
-        let right = if index + 1 == len {
-            state.activations[index]
-        } else {
-            state.activations[index + 1]
-        };
-        next.activations[index] = 0.25 * left + 0.5 * center + 0.25 * right;
+#[derive(Clone, Debug, PartialEq)]
+pub struct DeterministicLocalMixer {
+    matrix: Vec<Vec<f64>>,
+}
+
+impl DeterministicLocalMixer {
+    #[must_use]
+    pub fn from_task(task: &TaskExample) -> Self {
+        let n = task.input.len();
+        assert!(n >= 2, "TDI-7 generated tasks are non-trivial");
+        let spread = (task.retrieval_distance as f64 / (n as f64 + 1.0)).clamp(0.0, 1.0);
+        let side = 0.15 + 0.10 * spread;
+        let center = 1.0 - 2.0 * side;
+        let mut matrix = vec![vec![0.0; n]; n];
+        for row in 0..n {
+            if row == 0 {
+                matrix[row][row] = center + side;
+                matrix[row][row + 1] = side;
+            } else if row + 1 == n {
+                matrix[row][row - 1] = side;
+                matrix[row][row] = center + side;
+            } else {
+                matrix[row][row - 1] = side;
+                matrix[row][row] = center;
+                matrix[row][row + 1] = side;
+            }
+        }
+        Self { matrix }
     }
-    next
+
+    #[must_use]
+    pub fn matrix(&self) -> &[Vec<f64>] {
+        &self.matrix
+    }
+
+    pub fn advance(&self, state: &MechanisticState) -> Result<MechanisticState, DynamicsError> {
+        if state.activations.len() != self.matrix.len() {
+            return Err(DynamicsError::StateWidthMismatch);
+        }
+        let mut next = state.clone();
+        for (row_index, row) in self.matrix.iter().enumerate() {
+            let mut value = 0.0;
+            for (weight, activation) in row.iter().zip(&state.activations) {
+                value += weight * activation;
+            }
+            if !value.is_finite() {
+                return Err(DynamicsError::NonFiniteResult);
+            }
+            next.activations[row_index] = value;
+        }
+        Ok(next)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DynamicsError {
+    StateWidthMismatch,
+    NonFiniteResult,
+    InvalidRetrievalIndex,
 }
 
 #[must_use]
@@ -324,19 +397,52 @@ pub fn reciprocal_linf_recovery(left: &MechanisticState, right: &MechanisticStat
 }
 
 pub fn recovery_trajectory(
+    mixer: &DeterministicLocalMixer,
     reference: &MechanisticState,
     perturbed: &MechanisticState,
     horizon: usize,
-) -> Vec<f64> {
+) -> Result<Vec<f64>, DynamicsError> {
     let mut reference_state = reference.clone();
     let mut perturbed_state = perturbed.clone();
     let mut trajectory = Vec::with_capacity(horizon);
     for _ in 0..horizon {
-        reference_state = advance(&reference_state);
-        perturbed_state = advance(&perturbed_state);
+        reference_state = mixer.advance(&reference_state)?;
+        perturbed_state = mixer.advance(&perturbed_state)?;
         trajectory.push(reciprocal_linf_recovery(&reference_state, &perturbed_state));
     }
-    trajectory
+    Ok(trajectory)
+}
+
+#[must_use]
+pub fn bounded_deficit(distance: f64) -> f64 {
+    assert!(distance.is_finite() && distance >= 0.0);
+    distance / (1.0 + distance)
+}
+
+pub fn late_retrieval_deficit(
+    task: &TaskExample,
+    site: InterventionSite,
+    target_depth: usize,
+    amplitude: f64,
+) -> Result<f64, DynamicsError> {
+    let mixer = DeterministicLocalMixer::from_task(task);
+    let initial = MechanisticState::from_task(task);
+    let intervention = SingleSiteIntervention::new(site, amplitude);
+    let mut reference = initial.clone();
+    let mut perturbed = intervention
+        .apply(&initial)
+        .map_err(|_| DynamicsError::NonFiniteResult)?;
+    for _ in 0..target_depth {
+        reference = mixer.advance(&reference)?;
+        perturbed = mixer.advance(&perturbed)?;
+    }
+    let index = task.retrieval_index;
+    if index >= reference.activations.len() || index >= perturbed.activations.len() {
+        return Err(DynamicsError::InvalidRetrievalIndex);
+    }
+    Ok(bounded_deficit(
+        (reference.activations[index] - perturbed.activations[index]).abs(),
+    ))
 }
 
 #[cfg(test)]
@@ -355,6 +461,7 @@ mod tests {
         assert_eq!(copy.kind(), TaskKind::Copy);
         assert_eq!(copy.target().len(), 4);
         assert_eq!(&copy.input()[..4], copy.target());
+        assert_eq!(copy.retrieval_index(), 0);
     }
 
     #[test]
@@ -365,20 +472,30 @@ mod tests {
     }
 
     #[test]
-    fn intervention_preserves_tokens_and_target() {
+    fn intervention_is_balanced_and_preserves_tokens_target_and_total_mass() {
         let task = generate_copy(123);
         let reference = MechanisticState::from_task(&task);
+        let before_sum: f64 = reference.activations().iter().sum();
         for site in [InterventionSite::EarlyToken, InterventionSite::LateToken] {
             let perturbed = SingleSiteIntervention::new(site, 0.25)
                 .apply(&reference)
                 .expect("fixture intervention succeeds");
+            let after_sum: f64 = perturbed.activations().iter().sum();
             assert_eq!(perturbed.tokens(), reference.tokens());
             assert_eq!(perturbed.target(), reference.target());
+            assert!((after_sum - before_sum).abs() <= 1.0e-12);
+            let changed = reference
+                .activations()
+                .iter()
+                .zip(perturbed.activations())
+                .filter(|(left, right)| left != right)
+                .count();
+            assert_eq!(changed, 2);
         }
     }
 
     #[test]
-    fn joint_intervention_changes_both_distinct_sites() {
+    fn joint_intervention_changes_four_distinct_coordinates() {
         let task = generate_associative_recall(456);
         let reference = MechanisticState::from_task(&task);
         let early = SingleSiteIntervention::new(InterventionSite::EarlyToken, 0.25);
@@ -390,23 +507,44 @@ mod tests {
             .zip(joint.activations())
             .filter(|(left, right)| left != right)
             .count();
-        assert_eq!(changed, 2);
+        assert_eq!(changed, 4);
         assert_eq!(joint.tokens(), reference.tokens());
         assert_eq!(joint.target(), reference.target());
     }
 
     #[test]
+    fn mixer_is_row_stochastic_and_depends_on_task_geometry() {
+        let short = generate_copy(7_100_000_000);
+        let long = generate_associative_recall(7_100_000_000);
+        let short_mixer = DeterministicLocalMixer::from_task(&short);
+        let long_mixer = DeterministicLocalMixer::from_task(&long);
+        for row in short_mixer.matrix().iter().chain(long_mixer.matrix()) {
+            let sum: f64 = row.iter().sum();
+            assert!((sum - 1.0).abs() <= 1.0e-12);
+        }
+        assert_ne!(short_mixer.matrix().len(), long_mixer.matrix().len());
+    }
+
+    #[test]
     fn recovery_is_bounded_and_deterministic() {
         let task = generate_associative_recall(789);
+        let mixer = DeterministicLocalMixer::from_task(&task);
         let reference = MechanisticState::from_task(&task);
         let perturbed = SingleSiteIntervention::new(InterventionSite::EarlyToken, 0.25)
             .apply(&reference)
             .unwrap();
-        let left = recovery_trajectory(&reference, &perturbed, 4);
-        let right = recovery_trajectory(&reference, &perturbed, 4);
+        let left = recovery_trajectory(&mixer, &reference, &perturbed, 4).unwrap();
+        let right = recovery_trajectory(&mixer, &reference, &perturbed, 4).unwrap();
         assert_eq!(left, right);
         assert_eq!(left.len(), 4);
         assert!(left.iter().all(|value| (0.0..=1.0).contains(value)));
+    }
+
+    #[test]
+    fn late_target_is_after_early_horizon_and_bounded() {
+        let task = generate_associative_recall(999);
+        let target = late_retrieval_deficit(&task, InterventionSite::EarlyToken, 5, 0.25).unwrap();
+        assert!((0.0..1.0).contains(&target));
     }
 
     #[test]
