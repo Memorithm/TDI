@@ -12,6 +12,12 @@
 //! sequential task itself. This prevents evaluator-only annotations from being
 //! added as extra arm input features.
 //!
+//! Query-time representation failure is also separated from technical adapter
+//! failure. A finite arm output that cannot be decoded into one exact symbol is
+//! reported as [`TaskPrediction::Invalid`] and remains in the denominator as an
+//! incorrect prediction. It must not become an adapter error that can drop the
+//! query or generator from evaluation.
+//!
 //! No vector encoding, architecture dimension, memory budget, horizon, deficit
 //! function, interval method or TDI-8.2 surface is selected here.
 
@@ -20,6 +26,42 @@ use core::fmt;
 use crate::ReferenceArm;
 use crate::task_generators::{TaskEvent, TaskFamily, TaskInstance, TaskKey, TaskSymbol};
 
+/// Evaluable query-time output from one arm.
+///
+/// `Invalid` means the arm completed the query event but did not produce one
+/// valid exact symbolic prediction. It is an ordinary evaluated failure, not a
+/// technical execution error.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TaskPrediction {
+    /// One exact symbolic prediction.
+    Symbol(TaskSymbol),
+    /// Query completed, but no valid exact symbol was produced.
+    Invalid,
+}
+
+impl TaskPrediction {
+    /// Return the exact symbol only for a valid symbolic prediction.
+    #[must_use]
+    pub const fn symbol(self) -> Option<TaskSymbol> {
+        match self {
+            Self::Symbol(symbol) => Some(symbol),
+            Self::Invalid => None,
+        }
+    }
+
+    /// Whether this output contains one valid exact symbol.
+    #[must_use]
+    pub const fn is_valid(self) -> bool {
+        matches!(self, Self::Symbol(_))
+    }
+}
+
+impl From<TaskSymbol> for TaskPrediction {
+    fn from(symbol: TaskSymbol) -> Self {
+        Self::Symbol(symbol)
+    }
+}
+
 /// Arm-side symbolic interface consumed by the architecture-neutral executor.
 ///
 /// The method signatures intentionally exclude evaluation-only fields present in
@@ -27,7 +69,7 @@ use crate::task_generators::{TaskEvent, TaskFamily, TaskInstance, TaskKey, TaskS
 /// symbolic stimuli into binary64 vectors only after that encoding policy is
 /// reviewed and frozen on non-final TDI-8.1 data.
 pub trait SymbolicTaskAdapter {
-    /// Adapter-specific fail-closed error.
+    /// Adapter-specific fail-closed technical error.
     type Error;
 
     /// Fixed TDI-8 reference arm represented by this adapter.
@@ -56,14 +98,16 @@ pub trait SymbolicTaskAdapter {
     /// Predict the value associated with one queried symbolic key.
     ///
     /// The exact target and source-index annotation are not supplied to the
-    /// adapter.
-    fn query_association(&mut self, key_code: u64) -> Result<TaskSymbol, Self::Error>;
+    /// adapter. An undecodable but otherwise completed query must return
+    /// [`TaskPrediction::Invalid`] rather than `Err`.
+    fn query_association(&mut self, key_code: u64) -> Result<TaskPrediction, Self::Error>;
 
     /// Predict the requested T2 payload position.
     ///
     /// The requested position is part of the symbolic query. The exact target is
-    /// retained by the runner and is not supplied to the adapter.
-    fn query_payload(&mut self, position: u64) -> Result<TaskSymbol, Self::Error>;
+    /// retained by the runner and is not supplied to the adapter. An undecodable
+    /// completed query must return [`TaskPrediction::Invalid`] rather than `Err`.
+    fn query_payload(&mut self, position: u64) -> Result<TaskPrediction, Self::Error>;
 }
 
 /// Runner-owned identity of one exact-target query.
@@ -94,7 +138,7 @@ pub struct TaskQueryRecord {
     event_index: usize,
     identity: TaskQueryIdentity,
     target: TaskSymbol,
-    prediction: TaskSymbol,
+    prediction: TaskPrediction,
 }
 
 impl TaskQueryRecord {
@@ -116,23 +160,33 @@ impl TaskQueryRecord {
         self.target
     }
 
-    /// Symbol predicted by the arm adapter.
+    /// Evaluable arm prediction, including explicit invalid output.
     #[must_use]
-    pub const fn prediction(self) -> TaskSymbol {
+    pub const fn prediction(self) -> TaskPrediction {
         self.prediction
+    }
+
+    /// Whether the arm completed the query without producing a valid symbol.
+    #[must_use]
+    pub const fn invalid_prediction(self) -> bool {
+        matches!(self.prediction, TaskPrediction::Invalid)
     }
 
     /// Exact discrete task success for this query.
     #[must_use]
     pub const fn exact_success(self) -> bool {
-        self.prediction.code() == self.target.code()
+        match self.prediction {
+            TaskPrediction::Symbol(prediction) => prediction.code() == self.target.code(),
+            TaskPrediction::Invalid => false,
+        }
     }
 }
 
 /// Complete architecture-neutral result of one symbolic task execution.
 ///
-/// This record contains exact discrete predictions only. It deliberately does
-/// not define the later TDI-8 late-retrieval deficit or uncertainty interval.
+/// Every source query produces exactly one record when the adapter completes the
+/// event technically, including invalid symbolic outputs. This record deliberately
+/// does not define the later TDI-8 late-retrieval deficit or uncertainty interval.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TaskExecutionRecord {
     arm: ReferenceArm,
@@ -189,7 +243,16 @@ impl TaskExecutionRecord {
             .count()
     }
 
-    /// Number of exact discrete query failures.
+    /// Number of completed queries with no valid symbolic prediction.
+    #[must_use]
+    pub fn invalid_predictions(&self) -> usize {
+        self.queries
+            .iter()
+            .filter(|record| record.invalid_prediction())
+            .count()
+    }
+
+    /// Number of exact discrete query failures, including invalid predictions.
     #[must_use]
     pub fn failed_queries(&self) -> usize {
         self.queries.len() - self.successful_queries()
@@ -218,7 +281,8 @@ pub enum TaskExecutionError<E> {
     },
     /// Adapter reset failed before any task event was processed.
     AdapterReset(E),
-    /// One adapter event failed closed.
+    /// One adapter event failed technically and therefore could not produce a
+    /// meaningful evaluable event outcome.
     AdapterEvent {
         /// Zero-based source event index.
         event_index: usize,
@@ -327,9 +391,9 @@ fn association_identity(key: TaskKey, source_index: u64) -> TaskQueryIdentity {
 ///
 /// Event order, task family, generator seed, query identities and exact targets
 /// are owned by `instance`. The adapter receives only the leakage-safe method
-/// arguments declared by [`SymbolicTaskAdapter`]. A query record is created by
-/// the runner after the adapter returns a prediction; the adapter cannot supply
-/// or rewrite its target/provenance metadata through this API.
+/// arguments declared by [`SymbolicTaskAdapter`]. A query record is created after
+/// every technically completed query, including [`TaskPrediction::Invalid`].
+/// Adapter/runtime errors remain separate and fail closed with the source index.
 pub fn execute_symbolic_task<A>(
     instance: &TaskInstance,
     adapter: &mut A,
@@ -407,7 +471,8 @@ mod tests {
     use std::collections::VecDeque;
 
     use super::{
-        SymbolicTaskAdapter, TaskExecutionError, TaskQueryIdentity, execute_symbolic_task,
+        SymbolicTaskAdapter, TaskExecutionError, TaskPrediction, TaskQueryIdentity,
+        execute_symbolic_task,
     };
     use crate::ReferenceArm;
     use crate::task_generators::{
@@ -443,13 +508,23 @@ mod tests {
         arm: ReferenceArm,
         reset_count: usize,
         calls: Vec<ObservedStimulus>,
-        predictions: VecDeque<TaskSymbol>,
+        predictions: VecDeque<TaskPrediction>,
         fail_on_call: Option<usize>,
         drift_on_call: Option<usize>,
     }
 
     impl ScriptedAdapter {
         fn new(arm: ReferenceArm, predictions: Vec<TaskSymbol>) -> Self {
+            Self::with_predictions(
+                arm,
+                predictions
+                    .into_iter()
+                    .map(TaskPrediction::Symbol)
+                    .collect(),
+            )
+        }
+
+        fn with_predictions(arm: ReferenceArm, predictions: Vec<TaskPrediction>) -> Self {
             Self {
                 arm,
                 reset_count: 0,
@@ -474,7 +549,7 @@ mod tests {
             Ok(())
         }
 
-        fn prediction(&mut self) -> Result<TaskSymbol, SyntheticError> {
+        fn prediction(&mut self) -> Result<TaskPrediction, SyntheticError> {
             self.predictions
                 .pop_front()
                 .ok_or(SyntheticError::MissingPrediction)
@@ -513,14 +588,14 @@ mod tests {
             Ok(())
         }
 
-        fn query_association(&mut self, key_code: u64) -> Result<TaskSymbol, Self::Error> {
+        fn query_association(&mut self, key_code: u64) -> Result<TaskPrediction, Self::Error> {
             self.before_call()?;
             self.calls
                 .push(ObservedStimulus::QueryAssociation { key_code });
             self.prediction()
         }
 
-        fn query_payload(&mut self, position: u64) -> Result<TaskSymbol, Self::Error> {
+        fn query_payload(&mut self, position: u64) -> Result<TaskPrediction, Self::Error> {
             self.before_call()?;
             self.calls.push(ObservedStimulus::QueryPayload { position });
             self.prediction()
@@ -554,9 +629,14 @@ mod tests {
         assert_eq!(record.event_count(), instance.event_count());
         assert_eq!(record.queries().len(), 2);
         assert_eq!(record.successful_queries(), 2);
+        assert_eq!(record.invalid_predictions(), 0);
         assert_eq!(record.failed_queries(), 0);
         assert!(record.all_queries_exact());
         assert_eq!(record.queries()[0].target(), targets[0]);
+        assert_eq!(
+            record.queries()[0].prediction(),
+            TaskPrediction::Symbol(targets[0])
+        );
 
         let first_query_event = instance
             .events()
@@ -632,6 +712,23 @@ mod tests {
                     if observed == key_code
             ));
         }
+    }
+
+    #[test]
+    fn invalid_prediction_is_recorded_as_failure_not_adapter_error() {
+        let instance = generate_t1(5, T1Config::new(3, 2, 1).expect("T1 config")).expect("T1");
+        let mut adapter =
+            ScriptedAdapter::with_predictions(ReferenceArm::A1, vec![TaskPrediction::Invalid]);
+
+        let record = execute_symbolic_task(&instance, &mut adapter)
+            .expect("invalid prediction remains an evaluable record");
+        assert_eq!(record.queries().len(), 1);
+        assert_eq!(record.successful_queries(), 0);
+        assert_eq!(record.invalid_predictions(), 1);
+        assert_eq!(record.failed_queries(), 1);
+        assert!(!record.all_queries_exact());
+        assert!(record.queries()[0].invalid_prediction());
+        assert_eq!(record.queries()[0].prediction(), TaskPrediction::Invalid);
     }
 
     #[test]
