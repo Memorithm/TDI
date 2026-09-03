@@ -11,5 +11,6 @@ pub mod attention_v7;
 pub mod decision_v8;
 #[path = "gaussian_mmi_v7_stable.rs"]
 pub mod gaussian_mmi_v7;
+pub mod paired_resampling_v8;
 pub mod predictive_v7;
 pub mod subspace_v7;
