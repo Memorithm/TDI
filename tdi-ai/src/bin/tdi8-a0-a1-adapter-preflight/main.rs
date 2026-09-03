@@ -22,9 +22,7 @@ use tdi_ai::assr_reference::{
     A1Reference, RecurrentLayout, RecurrentParameters, RecurrentReferenceError,
 };
 use tdi_ai::full_history_reference::{A0Reference, A0ReferenceError, FullHistoryLayout};
-use tdi_ai::task_execution::{
-    SymbolicTaskAdapter, TaskPrediction, execute_symbolic_task,
-};
+use tdi_ai::task_execution::{SymbolicTaskAdapter, TaskPrediction, execute_symbolic_task};
 use tdi_ai::task_generators::{T1Config, T2Config, TaskSymbol, generate_t1, generate_t2};
 
 #[derive(Debug)]
@@ -33,12 +31,25 @@ enum AdapterError {
     Encoding(TaskEncodingError),
     Recurrent(RecurrentReferenceError),
     Readout(TaskReadoutError),
+    ReadoutStateWidthMismatch { recurrent: u64, readout: u64 },
     PayloadPositionOverflow,
 }
 
 impl fmt::Display for AdapterError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{self:?}")
+        match self {
+            Self::A0(error) => write!(formatter, "A0 reference: {error}"),
+            Self::Encoding(error) => write!(formatter, "task encoding: {error}"),
+            Self::Recurrent(error) => write!(formatter, "A1 recurrent reference: {error}"),
+            Self::Readout(error) => write!(formatter, "exact readout: {error}"),
+            Self::ReadoutStateWidthMismatch { recurrent, readout } => write!(
+                formatter,
+                "A1 recurrent state width {recurrent} does not match readout state width {readout}"
+            ),
+            Self::PayloadPositionOverflow => {
+                formatter.write_str("A0 payload position counter overflow")
+            }
+        }
     }
 }
 
@@ -155,16 +166,17 @@ impl A1Adapter {
         parameters: RecurrentParameters,
         readout: ExactStateSymbolReadout,
     ) -> Result<Self, AdapterError> {
-        let input_width = parameters.layout().input_width();
-        if readout.layout().state_width() != parameters.layout().state_width() {
-            return Err(AdapterError::Readout(TaskReadoutError::StateWidthMismatch {
-                expected: usize::try_from(parameters.layout().state_width()).unwrap_or(usize::MAX),
-                actual: usize::try_from(readout.layout().state_width()).unwrap_or(usize::MAX),
-            }));
+        let recurrent_layout = parameters.layout();
+        let readout_layout = readout.layout();
+        if readout_layout.state_width() != recurrent_layout.state_width() {
+            return Err(AdapterError::ReadoutStateWidthMismatch {
+                recurrent: recurrent_layout.state_width(),
+                readout: readout_layout.state_width(),
+            });
         }
         Ok(Self {
             reference: A1Reference::new(parameters)?,
-            encoder: LosslessTaskEncoder::new(TaskInputLayout::new(input_width)?),
+            encoder: LosslessTaskEncoder::new(TaskInputLayout::new(recurrent_layout.input_width())?),
             readout,
         })
     }
@@ -196,23 +208,28 @@ impl SymbolicTaskAdapter for A1Adapter {
     }
 
     fn associate(&mut self, key_code: u64, value: TaskSymbol) -> Result<(), Self::Error> {
-        self.step(self.encoder.association(key_code, value)?)
+        let input = self.encoder.association(key_code, value)?;
+        self.step(input)
     }
 
     fn payload(&mut self, value: TaskSymbol) -> Result<(), Self::Error> {
-        self.step(self.encoder.payload(value)?)
+        let input = self.encoder.payload(value)?;
+        self.step(input)
     }
 
     fn distractor(&mut self, token: TaskSymbol) -> Result<(), Self::Error> {
-        self.step(self.encoder.distractor(token)?)
+        let input = self.encoder.distractor(token)?;
+        self.step(input)
     }
 
     fn query_association(&mut self, key_code: u64) -> Result<TaskPrediction, Self::Error> {
-        self.query(self.encoder.query_association(key_code)?)
+        let input = self.encoder.query_association(key_code)?;
+        self.query(input)
     }
 
     fn query_payload(&mut self, position: u64) -> Result<TaskPrediction, Self::Error> {
-        self.query(self.encoder.query_payload(position)?)
+        let input = self.encoder.query_payload(position)?;
+        self.query(input)
     }
 }
 
