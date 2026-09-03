@@ -74,20 +74,46 @@ impl core::fmt::Display for EvaluationError {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::EmptyDataset => formatter.write_str("dataset must not be empty"),
-            Self::EmptyEvidenceReference => formatter.write_str("evidence reference must not be empty"),
-            Self::EmptySemanticField(field) => write!(formatter, "semantic field {field} must not be empty"),
+            Self::EmptyEvidenceReference => {
+                formatter.write_str("evidence reference must not be empty")
+            }
+            Self::EmptySemanticField(field) => {
+                write!(formatter, "semantic field {field} must not be empty")
+            }
             Self::NonFiniteValue(field) => write!(formatter, "{field} must be finite"),
             Self::OutOfRangeOverlap => formatter.write_str("recovery overlap must be in [0, 1]"),
             Self::ZeroDepth => formatter.write_str("evaluation depth must be positive"),
-            Self::SameInterventionSite => formatter.write_str("coupled intervention sites must be distinct"),
-            Self::MismatchedLength => formatter.write_str("compared vectors must have equal non-zero length"),
-            Self::MismatchedDepth => formatter.write_str("recovery profiles must use identical depths"),
+            Self::SameInterventionSite => {
+                formatter.write_str("coupled intervention sites must be distinct")
+            }
+            Self::MismatchedLength => {
+                formatter.write_str("compared vectors must have equal non-zero length")
+            }
+            Self::MismatchedDepth => {
+                formatter.write_str("recovery profiles must use identical depths")
+            }
             Self::ZeroDenominator => formatter.write_str("transfer source score must be non-zero"),
-            Self::InvalidTolerance => formatter.write_str("tolerance must be finite and non-negative"),
-            Self::DuplicateStage(stage) => write!(formatter, "duplicate synthesis record for {}", stage.label()),
-            Self::MissingStage(stage) => write!(formatter, "missing synthesis record for {}", stage.label()),
-            Self::InvalidSynthesisStage(stage) => write!(formatter, "{} cannot be an input to its own synthesis", stage.label()),
-            Self::UnknownContradictionStage(stage) => write!(formatter, "contradiction references absent stage {}", stage.label()),
+            Self::InvalidTolerance => {
+                formatter.write_str("tolerance must be finite and non-negative")
+            }
+            Self::DuplicateStage(stage) => write!(
+                formatter,
+                "duplicate synthesis record for {}",
+                stage.label()
+            ),
+            Self::MissingStage(stage) => {
+                write!(formatter, "missing synthesis record for {}", stage.label())
+            }
+            Self::InvalidSynthesisStage(stage) => write!(
+                formatter,
+                "{} cannot be an input to its own synthesis",
+                stage.label()
+            ),
+            Self::UnknownContradictionStage(stage) => write!(
+                formatter,
+                "contradiction references absent stage {}",
+                stage.label()
+            ),
         }
     }
 }
@@ -135,7 +161,9 @@ pub struct CouplingDiagnostic {
     pub excess_coupling: f64,
 }
 
-pub fn coupling_diagnostic(observation: &CouplingObservation) -> Result<CouplingDiagnostic, EvaluationError> {
+pub fn coupling_diagnostic(
+    observation: &CouplingObservation,
+) -> Result<CouplingDiagnostic, EvaluationError> {
     if observation.depth == 0 {
         return Err(EvaluationError::ZeroDepth);
     }
@@ -148,7 +176,9 @@ pub fn coupling_diagnostic(observation: &CouplingObservation) -> Result<Coupling
     let magnitude_a = checked_finite(observation.magnitude_a, "magnitude_a")?;
     let magnitude_b = checked_finite(observation.magnitude_b, "magnitude_b")?;
     if magnitude_a <= 0.0 || magnitude_b <= 0.0 {
-        return Err(EvaluationError::NonFiniteValue("intervention magnitude must be positive"));
+        return Err(EvaluationError::NonFiniteValue(
+            "intervention magnitude must be positive",
+        ));
     }
     let single_a = checked_overlap(observation.single_a_overlap)?;
     let single_b = checked_overlap(observation.single_b_overlap)?;
@@ -171,7 +201,9 @@ pub struct CouplingSummary {
     pub max_abs_excess_coupling: f64,
 }
 
-pub fn summarize_coupling(observations: &[CouplingObservation]) -> Result<CouplingSummary, EvaluationError> {
+pub fn summarize_coupling(
+    observations: &[CouplingObservation],
+) -> Result<CouplingSummary, EvaluationError> {
     if observations.is_empty() {
         return Err(EvaluationError::EmptyDataset);
     }
@@ -179,7 +211,11 @@ pub fn summarize_coupling(observations: &[CouplingObservation]) -> Result<Coupli
         .iter()
         .map(coupling_diagnostic)
         .collect::<Result<Vec<_>, _>>()?;
-    let mean = diagnostics.iter().map(|item| item.excess_coupling).sum::<f64>() / diagnostics.len() as f64;
+    let mean = diagnostics
+        .iter()
+        .map(|item| item.excess_coupling)
+        .sum::<f64>()
+        / diagnostics.len() as f64;
     let max_abs = diagnostics
         .iter()
         .map(|item| item.excess_coupling.abs())
@@ -198,7 +234,9 @@ pub struct DiscreteInformationObservation {
     pub outcome_bin: u32,
 }
 
-fn empirical_mutual_information<X: Ord + Clone>(pairs: &[(X, u32)]) -> Result<f64, EvaluationError> {
+fn empirical_mutual_information<X: Ord + Clone>(
+    pairs: &[(X, u32)],
+) -> Result<f64, EvaluationError> {
     if pairs.is_empty() {
         return Err(EvaluationError::EmptyDataset);
     }
@@ -229,9 +267,17 @@ pub struct JointInformationSummary {
     pub joint_increment_over_best_single_bits: f64,
 }
 
-pub fn joint_information_summary(records: &[DiscreteInformationObservation]) -> Result<JointInformationSummary, EvaluationError> {
-    let static_pairs = records.iter().map(|r| (r.static_bin, r.outcome_bin)).collect::<Vec<_>>();
-    let recovery_pairs = records.iter().map(|r| (r.recovery_bin, r.outcome_bin)).collect::<Vec<_>>();
+pub fn joint_information_summary(
+    records: &[DiscreteInformationObservation],
+) -> Result<JointInformationSummary, EvaluationError> {
+    let static_pairs = records
+        .iter()
+        .map(|r| (r.static_bin, r.outcome_bin))
+        .collect::<Vec<_>>();
+    let recovery_pairs = records
+        .iter()
+        .map(|r| (r.recovery_bin, r.outcome_bin))
+        .collect::<Vec<_>>();
     let joint_pairs = records
         .iter()
         .map(|r| ((r.static_bin, r.recovery_bin), r.outcome_bin))
@@ -258,12 +304,23 @@ pub struct SemanticSpecification {
     pub failure_mode_ref: String,
 }
 
-pub fn validate_semantic_specification(specification: &SemanticSpecification) -> Result<(), EvaluationError> {
+pub fn validate_semantic_specification(
+    specification: &SemanticSpecification,
+) -> Result<(), EvaluationError> {
     for (name, value) in [
         ("label", specification.label.as_str()),
-        ("mathematical_specification_ref", specification.mathematical_specification_ref.as_str()),
-        ("scalar_oracle_ref", specification.scalar_oracle_ref.as_str()),
-        ("numerical_policy_ref", specification.numerical_policy_ref.as_str()),
+        (
+            "mathematical_specification_ref",
+            specification.mathematical_specification_ref.as_str(),
+        ),
+        (
+            "scalar_oracle_ref",
+            specification.scalar_oracle_ref.as_str(),
+        ),
+        (
+            "numerical_policy_ref",
+            specification.numerical_policy_ref.as_str(),
+        ),
         ("invariance_ref", specification.invariance_ref.as_str()),
         ("failure_mode_ref", specification.failure_mode_ref.as_str()),
     ] {
@@ -274,7 +331,10 @@ pub fn validate_semantic_specification(specification: &SemanticSpecification) ->
     Ok(())
 }
 
-pub fn recovery_profile_distance(left: &RecoveryProfile<f64>, right: &RecoveryProfile<f64>) -> Result<f64, EvaluationError> {
+pub fn recovery_profile_distance(
+    left: &RecoveryProfile<f64>,
+    right: &RecoveryProfile<f64>,
+) -> Result<f64, EvaluationError> {
     if left.is_empty() || left.horizon() != right.horizon() {
         return Err(EvaluationError::MismatchedLength);
     }
@@ -297,7 +357,9 @@ pub struct EvidenceJustifiedComparison {
     pub variant_metric: f64,
 }
 
-pub fn evidence_justified_delta(comparison: &EvidenceJustifiedComparison) -> Result<f64, EvaluationError> {
+pub fn evidence_justified_delta(
+    comparison: &EvidenceJustifiedComparison,
+) -> Result<f64, EvaluationError> {
     if comparison.motivating_evidence_ref.trim().is_empty() {
         return Err(EvaluationError::EmptyEvidenceReference);
     }
@@ -346,7 +408,11 @@ pub enum ReexecutionVerdict {
     Divergent,
 }
 
-pub fn compare_reexecution(left: &[f64], right: &[f64], tolerance: f64) -> Result<ReexecutionVerdict, EvaluationError> {
+pub fn compare_reexecution(
+    left: &[f64],
+    right: &[f64],
+    tolerance: f64,
+) -> Result<ReexecutionVerdict, EvaluationError> {
     if left.is_empty() || left.len() != right.len() {
         return Err(EvaluationError::MismatchedLength);
     }
@@ -374,11 +440,13 @@ pub fn numerical_sensitivity(left: &[f64], right: &[f64]) -> Result<f64, Evaluat
     if left.is_empty() || left.len() != right.len() {
         return Err(EvaluationError::MismatchedLength);
     }
-    left.iter().zip(right).try_fold(0.0_f64, |maximum, (left_value, right_value)| {
-        let left_value = checked_finite(*left_value, "left_precision_value")?;
-        let right_value = checked_finite(*right_value, "right_precision_value")?;
-        Ok(maximum.max((left_value - right_value).abs()))
-    })
+    left.iter()
+        .zip(right)
+        .try_fold(0.0_f64, |maximum, (left_value, right_value)| {
+            let left_value = checked_finite(*left_value, "left_precision_value")?;
+            let right_value = checked_finite(*right_value, "right_precision_value")?;
+            Ok(maximum.max((left_value - right_value).abs()))
+        })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -482,7 +550,10 @@ fn main() {
         Tdi7Stage::Tdi79,
         Tdi7Stage::Tdi710,
     ] {
-        println!("stage={} implementation=primitive-ready confirmatory=locked", stage.label());
+        println!(
+            "stage={} implementation=primitive-ready confirmatory=locked",
+            stage.label()
+        );
     }
 }
 
@@ -518,19 +589,41 @@ mod tests {
     fn tdi73_coupling_fails_closed_on_invalid_design() {
         let mut invalid = coupling(0.7);
         invalid.site_b = invalid.site_a.clone();
-        assert_eq!(coupling_diagnostic(&invalid), Err(EvaluationError::SameInterventionSite));
+        assert_eq!(
+            coupling_diagnostic(&invalid),
+            Err(EvaluationError::SameInterventionSite)
+        );
         invalid.site_b = "late".to_owned();
         invalid.joint_overlap = 1.5;
-        assert_eq!(coupling_diagnostic(&invalid), Err(EvaluationError::OutOfRangeOverlap));
+        assert_eq!(
+            coupling_diagnostic(&invalid),
+            Err(EvaluationError::OutOfRangeOverlap)
+        );
     }
 
     #[test]
     fn tdi74_discrete_joint_information_detects_xor_without_proxy_scores() {
         let records = [
-            DiscreteInformationObservation { static_bin: 0, recovery_bin: 0, outcome_bin: 0 },
-            DiscreteInformationObservation { static_bin: 0, recovery_bin: 1, outcome_bin: 1 },
-            DiscreteInformationObservation { static_bin: 1, recovery_bin: 0, outcome_bin: 1 },
-            DiscreteInformationObservation { static_bin: 1, recovery_bin: 1, outcome_bin: 0 },
+            DiscreteInformationObservation {
+                static_bin: 0,
+                recovery_bin: 0,
+                outcome_bin: 0,
+            },
+            DiscreteInformationObservation {
+                static_bin: 0,
+                recovery_bin: 1,
+                outcome_bin: 1,
+            },
+            DiscreteInformationObservation {
+                static_bin: 1,
+                recovery_bin: 0,
+                outcome_bin: 1,
+            },
+            DiscreteInformationObservation {
+                static_bin: 1,
+                recovery_bin: 1,
+                outcome_bin: 0,
+            },
         ];
         let summary = joint_information_summary(&records).expect("valid contingency table");
         assert!(summary.static_information_bits.abs() < 1.0e-12);
@@ -588,7 +681,10 @@ mod tests {
     #[test]
     fn tdi79_distinguishes_bit_exact_tolerance_bound_and_divergent_runs() {
         let baseline = [0.1, 0.2, 0.3];
-        assert_eq!(compare_reexecution(&baseline, &baseline, 0.0).unwrap(), ReexecutionVerdict::BitExact);
+        assert_eq!(
+            compare_reexecution(&baseline, &baseline, 0.0).unwrap(),
+            ReexecutionVerdict::BitExact
+        );
         assert_eq!(
             compare_reexecution(&baseline, &[0.1, 0.200_000_1, 0.3], 1.0e-6).unwrap(),
             ReexecutionVerdict::ToleranceBound
