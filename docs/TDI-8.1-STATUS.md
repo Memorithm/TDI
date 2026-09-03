@@ -2,7 +2,7 @@
 
 - Scientific series: TDI-8.x
 - Stage: TDI-8.1 bounded deterministic reference evaluator
-- Status: active — A0/A1/A2/A3, symbolic T1/T2/T3 generators, leakage-safe symbolic execution, frozen primary decision rules and paired-resampling foundation implemented; concrete encoding/adapters and interval method not yet frozen
+- Status: active — A0/A1/A2/A3, symbolic T1/T2/T3 generators, leakage-safe symbolic execution, leakage-safe binary64 encoding preflight candidate, frozen primary decision rules and paired-resampling foundation implemented; concrete arm adapters and interval method not yet frozen
 - TDI-8.0 parent merge: `24d41eb7e5d72fc3b5eec9b6434930b10c1f241f`
 - TDI-8.1 foundation merge: `7cfe1b66e11f1eb5d67a5890b07e6f41fa175670` (PR #89)
 - TDI-8 post-foundation integrity merge: `9ee32002603942b9f4152cad47f7fb59331f8c7a` (PR #90)
@@ -15,6 +15,8 @@
 - TDI-8.1 frozen primary-cell/nine-cell decision merge: PR #106
 - TDI-8.1 arm-accounting contract hardening merge: `f423b4f8a307f9639b83e8471f399918189fb117` (PR #108)
 - TDI-8.1 paired-resampling foundation merge: `85912fde2b3869e91e01058156ef2b1c895d03d4` (PR #109)
+- TDI-8.1 leakage-safe symbolic execution merge: `d11c3a6ccb34dd02cce70758a294295a6d597b31` (PR #110)
+- TDI-8.1 leakage-safe binary64 task-encoding preflight: PR #112
 - Declared Rust MSRV is executable CI evidence since PR #107
 - Frozen TDI-8.0 preregistration blob: `fe80e7053d89824a77ef6790794f6930d1b424e2`
 - Final holdout: does not exist
@@ -78,11 +80,11 @@ T3 generator-side collision classes remain metadata only and are not allowed to 
 
 ## Symbolic execution leakage boundary
 
-The symbolic execution contract now sits between the generator-owned task and future concrete binary64 arm adapters:
+PR #110 merged the symbolic execution contract between the generator-owned task and concrete binary64 arm adapters:
 
 - the runner resets one adapter per generator-level instance and preserves source event order;
 - exact query targets remain runner-owned and are never passed to the adapter API;
-- association `source_index` remains runner-owned provenance metadata;
+- association `source_index` remains runner-owned provenance metadata rather than an explicit adapter feature;
 - T3 `collision_class` remains runner-owned stress metadata and is never supplied as an arm feature;
 - association adapters receive only the stable key code and input value;
 - T2 payload order is conveyed by event order rather than an extra source-position feature;
@@ -90,7 +92,23 @@ The symbolic execution contract now sits between the generator-owned task and fu
 - adapter errors retain exact source event indices and arm identity cannot drift during an instance;
 - the resulting record reports exact discrete success only and does not define the late-retrieval deficit.
 
-No concrete binary64 encoding or A0/A1/A2/A3 task adapter is frozen by this contract.
+A sequential arm can observe event order and maintain its own state. The leakage guarantee is specifically that evaluator annotations are not supplied as additional input features.
+
+## Leakage-safe binary64 task-encoding preflight
+
+PR #112 adds a bounded encoding candidate behind the merged symbolic-execution contract without promoting it into the public `tdi-ai` API:
+
+- every symbolic `u64` maps losslessly to two exact finite binary64 32-bit limbs;
+- the canonical decoder rejects non-finite, out-of-range, off-grid and negative-zero alternate representations;
+- A1/A2/A3 arm-facing frames require only five coordinates at minimum: event kind plus the arguments actually exposed by `SymbolicTaskAdapter`;
+- larger caller-selected widths are deterministic zero padding and do not freeze a concrete experimental dimension;
+- query targets, association source indices and T3 collision classes cannot be supplied to the arm-facing encoding methods;
+- T2 payload position is reconstructed from chronological payload calls rather than supplied as generator provenance;
+- A0 uses exact namespaced key/value helpers whose query methods receive no target;
+- A2/A3 logical association/payload keys are deterministic, and distractor read keys are selected outside the complete instance write set;
+- runner-side physical direct-mapped projection diagnostics remain separate from generator-side T3 collision-class reuse.
+
+The candidate lives in `tdi-ai/src/task_encoding.rs` but is intentionally not exported by `tdi-ai/src/lib.rs`. A bounded preflight binary and dedicated CI gate compile and exercise it. Passing this preflight is software evidence for continuing TDI-8.1 development; it is not an H8-A/H8-B result and does not by itself freeze the candidate as the final experimental encoding.
 
 ## Merged frozen primary decision rules
 
@@ -124,8 +142,8 @@ The foundation intentionally returns unsorted relative-effect replicates and doe
 
 Bounded TDI-8.1 still requires:
 
-1. an explicit non-final binary64 task-encoding/configuration contract, followed by concrete A0/A1/A2/A3 adapters behind the leakage-safe executor and verification of actual A2/A3 occupancy/collision semantics;
-2. exact operation accounting and typed rejection/provenance records;
+1. bounded non-final qualification of the binary64 encoding candidate, followed by an explicit review/promotion decision and concrete A0/A1/A2/A3 adapters behind the leakage-safe executor with verification of actual A2/A3 occupancy/collision semantics;
+2. explicit recurrent-arm output/readout semantics plus exact operation accounting and typed rejection/provenance records;
 3. non-final qualification and freeze of one deterministic paired interval implementation satisfying the frozen Bonferroni family-wise coverage rule, including replicate count, resampling seed and degenerate-replicate policy;
 4. bounded train/development/validation work to freeze concrete dimensions, budgets, horizons, non-final/final seed ranges, sample counts and closed rejection taxonomy;
 5. integration of paired intervals with the already-merged primary-cell classifier and exact nine-cell evidence records;

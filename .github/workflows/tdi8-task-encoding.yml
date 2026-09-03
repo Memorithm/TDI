@@ -1,0 +1,37 @@
+name: TDI-8.1 task encoding preflight
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  task-encoding-preflight:
+    runs-on: ubuntu-24.04
+    env:
+      TDI_CI_RUST: 1.97.1
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run targeted Clippy
+        run: cargo clippy --locked -p tdi-ai --bin tdi8-task-encoding-preflight --all-targets -- -D warnings
+
+      - name: Verify TDI-8 bootstrap integrity
+        run: bash scripts/check-tdi8-bootstrap.sh
+
+      - name: Verify leakage-safe task encoding
+        run: bash scripts/check-tdi8.1-task-encoding.sh
