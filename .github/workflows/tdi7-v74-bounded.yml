@@ -36,7 +36,7 @@ jobs:
             tdi-bench/src/lib.rs \
             tdi-bench/src/attention_v7.rs \
             tdi-bench/src/predictive_v7.rs \
-            tdi-bench/src/gaussian_mmi_v7_impl.rs \
+            tdi-bench/src/gaussian_mmi_v7_stable.rs \
             tdi-bench/src/bin/tdi-attention-v74.rs
       - name: Check TDI-7.4 with Clippy
         run: >-
@@ -68,9 +68,9 @@ jobs:
         run: |
           ! grep -R -F 'I_ACCEPT_THE_TDI7_HOLDOUT_FREEZE' \
             tdi-bench/src/lib.rs \
-            tdi-bench/src/gaussian_mmi_v7_impl.rs \
+            tdi-bench/src/gaussian_mmi_v7_stable.rs \
             tdi-bench/src/bin/tdi-attention-v74.rs
           ! grep -R -F 'TDI7_CONFIRM_FINAL_HOLDOUT' \
             tdi-bench/src/lib.rs \
-            tdi-bench/src/gaussian_mmi_v7_impl.rs \
+            tdi-bench/src/gaussian_mmi_v7_stable.rs \
             tdi-bench/src/bin/tdi-attention-v74.rs
