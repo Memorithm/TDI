@@ -16,8 +16,8 @@
 
 use core::fmt;
 
-use crate::task_generators::{TaskEvent, TaskFamily, TaskInstance, TaskKey, TaskSymbol};
 use crate::ReferenceArm;
+use crate::task_generators::{TaskEvent, TaskFamily, TaskInstance, TaskKey, TaskSymbol};
 
 /// Arm-side symbolic interface consumed by the architecture-neutral executor.
 ///
@@ -272,13 +272,11 @@ impl<E: fmt::Display> fmt::Display for TaskExecutionError<E> {
     }
 }
 
-impl<E> std::error::Error for TaskExecutionError<E>
-where
-    E: std::error::Error + 'static,
-{
-}
+impl<E> std::error::Error for TaskExecutionError<E> where E: std::error::Error + 'static {}
 
-fn reserve_query_records<E>(query_count: u64) -> Result<Vec<TaskQueryRecord>, TaskExecutionError<E>> {
+fn reserve_query_records<E>(
+    query_count: u64,
+) -> Result<Vec<TaskQueryRecord>, TaskExecutionError<E>> {
     let records = usize::try_from(query_count)
         .map_err(|_| TaskExecutionError::QueryCountTooLarge { query_count })?;
     let mut queries = Vec::new();
@@ -356,8 +354,7 @@ where
                 target,
                 source_index,
             } => {
-                let prediction =
-                    adapter_event(event_index, adapter.query_association(key.code()))?;
+                let prediction = adapter_event(event_index, adapter.query_association(key.code()))?;
                 queries.push(TaskQueryRecord {
                     event_index,
                     identity: association_identity(key, source_index),
@@ -378,12 +375,11 @@ where
         ensure_arm(adapter, expected_arm, Some(event_index))?;
     }
 
-    let observed = u64::try_from(queries.len()).map_err(|_| {
-        TaskExecutionError::QueryCountMismatch {
+    let observed =
+        u64::try_from(queries.len()).map_err(|_| TaskExecutionError::QueryCountMismatch {
             declared: instance.query_count(),
             observed: u64::MAX,
-        }
-    })?;
+        })?;
     if observed != instance.query_count() {
         return Err(TaskExecutionError::QueryCountMismatch {
             declared: instance.query_count(),
@@ -410,8 +406,8 @@ mod tests {
     };
     use crate::ReferenceArm;
     use crate::task_generators::{
-        T1Config, T2Config, T3Config, TaskEvent, TaskInstance, TaskSymbol, generate_t1, generate_t2,
-        generate_t3,
+        T1Config, T2Config, T3Config, TaskEvent, TaskInstance, TaskSymbol, generate_t1,
+        generate_t2, generate_t3,
     };
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -521,8 +517,7 @@ mod tests {
 
         fn query_payload(&mut self, position: u64) -> Result<TaskSymbol, Self::Error> {
             self.before_call()?;
-            self.calls
-                .push(ObservedStimulus::QueryPayload { position });
+            self.calls.push(ObservedStimulus::QueryPayload { position });
             self.prediction()
         }
     }
@@ -564,9 +559,7 @@ mod tests {
             .enumerate()
             .find_map(|(index, event)| match event {
                 TaskEvent::QueryAssociation {
-                    key,
-                    source_index,
-                    ..
+                    key, source_index, ..
                 } => Some((index, *key, *source_index)),
                 _ => None,
             })
@@ -598,7 +591,10 @@ mod tests {
         assert_eq!(record.queries().len(), 3);
         assert!(record.all_queries_exact());
         for query in record.queries() {
-            assert!(matches!(query.identity(), TaskQueryIdentity::Payload { .. }));
+            assert!(matches!(
+                query.identity(),
+                TaskQueryIdentity::Payload { .. }
+            ));
             assert!(matches!(
                 adapter.calls[query.event_index()],
                 ObservedStimulus::QueryPayload { .. }
@@ -608,11 +604,8 @@ mod tests {
 
     #[test]
     fn t3_collision_class_and_source_index_remain_runner_owned_metadata() {
-        let instance = generate_t3(
-            41,
-            T3Config::new(8, 3, 4, 20, 3).expect("T3 config"),
-        )
-        .expect("T3");
+        let instance =
+            generate_t3(41, T3Config::new(8, 3, 4, 20, 3).expect("T3 config")).expect("T3");
         let targets = query_targets(&instance);
         let mut adapter = ScriptedAdapter::new(ReferenceArm::A3, targets);
         let record = execute_symbolic_task(&instance, &mut adapter).expect("execution");
