@@ -2,7 +2,7 @@
 
 - Scientific series: TDI-8.x
 - Stage: TDI-8.1 bounded deterministic reference evaluator
-- Status: active — A0/A1/A2/A3, symbolic T1/T2/T3 generators, frozen primary decision rules and paired-resampling foundation implemented; interval method not yet frozen
+- Status: active — A0/A1/A2/A3, symbolic T1/T2/T3 generators, leakage-safe symbolic execution, frozen primary decision rules and paired-resampling foundation implemented; concrete encoding/adapters and interval method not yet frozen
 - TDI-8.0 parent merge: `24d41eb7e5d72fc3b5eec9b6434930b10c1f241f`
 - TDI-8.1 foundation merge: `7cfe1b66e11f1eb5d67a5890b07e6f41fa175670` (PR #89)
 - TDI-8 post-foundation integrity merge: `9ee32002603942b9f4152cad47f7fb59331f8c7a` (PR #90)
@@ -14,6 +14,7 @@
 - TDI-8.1 symbolic T1/T2/T3 generator merge: PR #104
 - TDI-8.1 frozen primary-cell/nine-cell decision merge: PR #106
 - TDI-8.1 arm-accounting contract hardening merge: `f423b4f8a307f9639b83e8471f399918189fb117` (PR #108)
+- TDI-8.1 paired-resampling foundation merge: `85912fde2b3869e91e01058156ef2b1c895d03d4` (PR #109)
 - Declared Rust MSRV is executable CI evidence since PR #107
 - Frozen TDI-8.0 preregistration blob: `fe80e7053d89824a77ef6790794f6930d1b424e2`
 - Final holdout: does not exist
@@ -73,7 +74,23 @@ PR #104 merged architecture-neutral symbolic instances for the three frozen task
 - explicit `Short` / `Medium` / `Long` horizon labels plus a caller-supplied strictly increasing `HorizonPlan` with no numeric defaults;
 - deterministic domain-separated generation and fail-closed allocation/count guards.
 
-T3 generator-side collision classes remain metadata only and are not allowed to stand in for measured physical A2/A3 slot collisions. A later frozen adapter/evaluator must verify actual occupancy/collision pressure under its concrete associative layout/projection.
+T3 generator-side collision classes remain metadata only and are not allowed to stand in for measured physical A2/A3 slot collisions. A later frozen concrete adapter/evaluator must verify actual occupancy/collision pressure under its concrete associative layout/projection.
+
+## Symbolic execution leakage boundary
+
+The symbolic execution contract now sits between the generator-owned task and future concrete binary64 arm adapters:
+
+- the runner resets one adapter per generator-level instance and preserves source event order;
+- exact query targets remain runner-owned and are never passed to the adapter API;
+- association `source_index` remains runner-owned provenance metadata;
+- T3 `collision_class` remains runner-owned stress metadata and is never supplied as an arm feature;
+- association adapters receive only the stable key code and input value;
+- T2 payload order is conveyed by event order rather than an extra source-position feature;
+- T2 query position is exposed because it is the symbolic request, while its exact target remains hidden;
+- adapter errors retain exact source event indices and arm identity cannot drift during an instance;
+- the resulting record reports exact discrete success only and does not define the late-retrieval deficit.
+
+No concrete binary64 encoding or A0/A1/A2/A3 task adapter is frozen by this contract.
 
 ## Merged frozen primary decision rules
 
@@ -88,9 +105,9 @@ PR #106 transcribed the already-frozen TDI-8.0 evidence classifier into `tdi-ben
 
 The classifier consumes an interval but does not construct one.
 
-## Paired-resampling foundation
+## Merged paired-resampling foundation
 
-The paired-resampling foundation adds the software substrate required before selecting the TDI-8.1 paired interval implementation:
+PR #109 added the software substrate required before selecting the TDI-8.1 paired interval implementation:
 
 - validated generator-level baseline/candidate deficit pairs;
 - exact relative mean-deficit point statistic and zero-baseline branch;
@@ -101,17 +118,18 @@ The paired-resampling foundation adds the software substrate required before sel
 - exact reconstruction of all requested replicate counts;
 - frozen Bonferroni family/per-cell/tail alpha values exposed without selecting an interval estimator.
 
-This foundation intentionally returns unsorted relative-effect replicates and does not freeze percentile, BCa, studentized, normal-approximation or another interval construction. Concrete method, replicate count, seed and degenerate-replicate policy remain later non-final TDI-8.1 decisions.
+The foundation intentionally returns unsorted relative-effect replicates and does not freeze percentile, BCa, studentized, normal-approximation or another interval construction. Concrete method, replicate count, seed and degenerate-replicate policy remain later non-final TDI-8.1 decisions.
 
 ## Remaining TDI-8.1 work
 
 Bounded TDI-8.1 still requires:
 
-1. architecture adapters/evaluator execution that map one generated symbolic instance identically into A0/A1/A2/A3 and verify actual task/collision semantics;
+1. an explicit non-final binary64 task-encoding/configuration contract, followed by concrete A0/A1/A2/A3 adapters behind the leakage-safe executor and verification of actual A2/A3 occupancy/collision semantics;
 2. exact operation accounting and typed rejection/provenance records;
 3. non-final qualification and freeze of one deterministic paired interval implementation satisfying the frozen Bonferroni family-wise coverage rule, including replicate count, resampling seed and degenerate-replicate policy;
 4. bounded train/development/validation work to freeze concrete dimensions, budgets, horizons, non-final/final seed ranges, sample counts and closed rejection taxonomy;
 5. integration of paired intervals with the already-merged primary-cell classifier and exact nine-cell evidence records;
-6. a final TDI-8.1 readiness gate proving no TDI-8.2 execution surface exists.
+6. intervention-site/recovery integration using only early observations strictly before late retrieval;
+7. a final TDI-8.1 readiness gate proving no TDI-8.2 execution surface exists.
 
 TDI-8.2 remains future human-only and is not authorized by this status file.
