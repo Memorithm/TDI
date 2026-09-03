@@ -2,14 +2,14 @@
 
 - Scientific series: TDI-8.x
 - Stage: TDI-8.1 bounded deterministic reference evaluator
-- Status: active — A1/A2 and bounded VSA merged; integrated A3 reference under review
+- Status: active — A1/A2/VSA/A3 merged; deterministic A0 full-history reference under review
 - TDI-8.0 parent merge: `24d41eb7e5d72fc3b5eec9b6434930b10c1f241f`
 - TDI-8.1 foundation merge: `7cfe1b66e11f1eb5d67a5890b07e6f41fa175670` (PR #89)
 - TDI-8 post-foundation integrity merge: `9ee32002603942b9f4152cad47f7fb59331f8c7a` (PR #90)
 - TDI-8.1 associative-memory merge: `96deedc454f2bdff03b7ce39565e713f1992dde1` (PR #91)
 - TDI-8.1 A1/A2 recurrent-reference merge: `ee734d16ddfc10509d827b3e2ed90769990970bd` (PR #94)
 - TDI-8.1 VSA workspace merge: `a2b23eb6bc52cb5a6c8a5f41ef339fe4cc94b3cf` (PR #97)
-- Integrated A3 review: PR #96
+- TDI-8.1 integrated A3 merge: `c69d94ded34998353452cbd21474ce5530dbde3b` (PR #96)
 - Frozen TDI-8.0 preregistration blob: `fe80e7053d89824a77ef6790794f6930d1b424e2`
 - Final holdout: does not exist
 - Confirmatory runner: does not exist
@@ -75,11 +75,9 @@ integration. It provides:
 Its fixture width and role seed remain synthetic and do not freeze experimental
 choices.
 
-## Current integrated A3 tranche
+## Merged integrated A3 reference
 
-PR #96 is being rebuilt on current `main` rather than using its obsolete
-pre-#97 VSA implementation. The current tranche composes the merged A2 and VSA
-oracles with one explicit operation order:
+PR #96 composes the merged A2 and VSA oracles with one explicit operation order:
 
 1. unbind/read the VSA workspace with the current read key;
 2. fuse the readout coordinate-wise into the recurrent input using an explicit
@@ -89,29 +87,49 @@ oracles with one explicit operation order:
 4. keep VSA storage as a separate candidate-before-commit operation so a task
    write policy is not silently embedded in the transition primitive.
 
-The workspace width must equal recurrent input width for this reference rule;
-there is no hidden adapter/projection. Integrated temporary accounting includes
-the VSA readout/fused-input vector concurrently with the A2 recurrent candidate.
-A synthetic accounting fixture proves that exact A1/A2/A3 matched dynamic
-budgets are representable without treating those fixture dimensions as
-experimental choices.
+The workspace width equals recurrent input width for this reference rule; there
+is no hidden adapter/projection. Integrated temporary accounting includes the
+VSA readout/fused-input vector concurrently with the A2 recurrent candidate. A
+synthetic accounting fixture proves that exact A1/A2/A3 matched dynamic budgets
+are representable without treating those fixture dimensions as experimental
+choices.
 
-This tranche produces no H8-B evidence and freezes no concrete dimension, seed,
-gain, task encoding, horizon or population.
+This merged tranche produced no H8-B evidence and froze no concrete dimension,
+seed, gain, task encoding, horizon or population.
+
+## Current deterministic A0 full-history tranche
+
+The current non-final-data tranche implements the competent contextual A0
+control required by TDI-8.0:
+
+- every accessible fixed-width key/value item is retained in insertion order;
+- no eviction, truncation, compression, hashing or projection is used;
+- content read scans the complete history with fixed-order squared-L2 distance;
+- the smallest finite distance is selected and exact ties choose the most recent
+  item;
+- one-hot read coefficients are exposed explicitly;
+- invalid append/read inputs fail closed without partial logical mutation;
+- host allocations use validated fallible reservation paths;
+- cumulative history, explicit count metadata, peak read temporaries and layout
+  constants are accounted separately from the A1/A2/A3 matched budget;
+- complete A0 snapshots and a public downstream smoke harness are provided.
+
+The hard-content-attention software rule is deterministic reference semantics,
+not a claim that A0 reproduces Transformer softmax attention. Key/value widths
+and all experimental task encodings remain unfrozen.
 
 ## Remaining TDI-8.1 work
 
-After the integrated A3 reference is merged, TDI-8.1 still requires:
+After the deterministic A0 reference is merged, TDI-8.1 still requires:
 
-1. competent deterministic A0 full-history reference semantics;
-2. T1/T2/T3 task generators and short/medium/long horizon strata;
-3. exact operation accounting and typed rejection/provenance records;
-4. the frozen four-way cell classifier and nine-cell hypothesis aggregator;
-5. a deterministic paired interval implementation satisfying the frozen
+1. T1/T2/T3 task generators and short/medium/long horizon strata;
+2. exact operation accounting and typed rejection/provenance records;
+3. the frozen four-way cell classifier and nine-cell hypothesis aggregator;
+4. a deterministic paired interval implementation satisfying the frozen
    Bonferroni family-wise coverage rule;
-6. bounded train/development/validation work to freeze concrete dimensions,
+5. bounded train/development/validation work to freeze concrete dimensions,
    budgets, horizons, non-final/final seed ranges, sample counts, interval
    replicate count/seed and closed rejection taxonomy;
-7. a final TDI-8.1 readiness gate proving no TDI-8.2 execution surface exists.
+6. a final TDI-8.1 readiness gate proving no TDI-8.2 execution surface exists.
 
 TDI-8.2 remains future human-only and is not authorized by this status file.
