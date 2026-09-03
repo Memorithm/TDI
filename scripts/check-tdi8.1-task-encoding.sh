@@ -26,6 +26,8 @@ grep -Fq 'pub const MIN_TASK_INPUT_WIDTH: u64 = 5;' "$SOURCE" \
     || fail "leakage-safe lossless minimum width is missing"
 grep -Fq 'pub struct ExactU64Binary64' "$SOURCE" \
     || fail "exact u64 binary64 codec is missing"
+grep -Fq 'value.to_bits() == (-0.0f64).to_bits()' "$SOURCE" \
+    || fail "canonical exact-u64 decoder no longer rejects negative zero"
 grep -Fq 'pub struct LosslessTaskEncoder' "$SOURCE" \
     || fail "lossless task encoder is missing"
 grep -Fq 'pub fn association(' "$SOURCE" \
@@ -46,6 +48,8 @@ grep -Fq 'generator_class_reuses' "$SOURCE" \
     || fail "generator-side class diagnostic is missing"
 grep -Fq 'physical_replacement_collisions' "$SOURCE" \
     || fail "physical replacement diagnostic is missing"
+grep -Fq 'negative zero' "$DOC" \
+    || fail "canonical negative-zero rejection is not documented"
 
 # The upstream executor is the authority on what arm adapters may observe.
 grep -Fq 'fn query_association(&mut self, key_code: u64)' "$SYMBOLIC" \
@@ -87,6 +91,7 @@ for required in \
 done
 
 printf 'TDI-8.1 lossless binary64 encoding: VERIFIED\n'
+printf 'TDI-8.1 canonical negative-zero rejection: VERIFIED\n'
 printf 'TDI-8.1 symbolic target/provenance leakage exclusion: VERIFIED\n'
 printf 'TDI-8.1 physical projection diagnostics: VERIFIED SEPARATELY\n'
 printf 'TDI-8.1 public API promotion: NOT PERFORMED\n'
