@@ -17,6 +17,10 @@ done
 
 grep -Fq 'pub mod task_execution;' "$LIB" \
     || fail "task_execution is not exported by tdi-ai"
+grep -Fq 'pub enum TaskPrediction' "$SOURCE" \
+    || fail "evaluable TaskPrediction contract missing"
+grep -Fq '    Invalid,' "$SOURCE" \
+    || fail "explicit invalid-prediction outcome missing"
 grep -Fq 'pub trait SymbolicTaskAdapter' "$SOURCE" \
     || fail "SymbolicTaskAdapter contract missing"
 grep -Fq 'fn associate(&mut self, key_code: u64, value: TaskSymbol)' "$SOURCE" \
@@ -25,10 +29,10 @@ grep -Fq 'fn payload(&mut self, value: TaskSymbol)' "$SOURCE" \
     || fail "payload adapter surface drifted"
 grep -Fq 'fn distractor(&mut self, token: TaskSymbol)' "$SOURCE" \
     || fail "distractor adapter surface drifted"
-grep -Fq 'fn query_association(&mut self, key_code: u64)' "$SOURCE" \
-    || fail "association query surface drifted or exposes extra metadata"
-grep -Fq 'fn query_payload(&mut self, position: u64)' "$SOURCE" \
-    || fail "payload query surface drifted"
+grep -Fq 'fn query_association(&mut self, key_code: u64) -> Result<TaskPrediction, Self::Error>' "$SOURCE" \
+    || fail "association query no longer returns an evaluable prediction outcome"
+grep -Fq 'fn query_payload(&mut self, position: u64) -> Result<TaskPrediction, Self::Error>' "$SOURCE" \
+    || fail "payload query no longer returns an evaluable prediction outcome"
 
 # Exact target, source index and generator collision class must stay in the
 # runner-owned match/record path and must never become extra query arguments.
@@ -52,16 +56,24 @@ grep -Fq 'ensure_arm(adapter, expected_arm, Some(event_index))?;' "$SOURCE" \
     || fail "mid-instance arm identity guard missing"
 grep -Fq 'QueryCountMismatch' "$SOURCE" \
     || fail "query-count consistency guard missing"
+grep -Fq 'pub fn invalid_predictions(&self) -> usize' "$SOURCE" \
+    || fail "invalid prediction accounting missing"
+grep -Fq 'TaskPrediction::Invalid => false,' "$SOURCE" \
+    || fail "invalid predictions are not guaranteed to count as failures"
 
 for test_name in \
     runner_preserves_exact_event_order_and_targets_without_exposing_labels \
     delayed_copy_exposes_query_position_but_not_exact_target \
     t3_collision_class_and_source_index_remain_runner_owned_metadata \
+    invalid_prediction_is_recorded_as_failure_not_adapter_error \
     adapter_failure_is_typed_with_exact_source_event_index \
     adapter_arm_identity_cannot_drift_mid_instance; do
     grep -Fq "fn ${test_name}()" "$SOURCE" \
         || fail "required symbolic-execution regression test missing: $test_name"
 done
+
+grep -Fq 'fn public_symbolic_executor_counts_invalid_prediction_as_failure()' "$HARNESS" \
+    || fail "public compile harness does not exercise invalid prediction accounting"
 
 cargo test -p tdi-ai --locked 'task_execution::tests'
 cargo test -p tdi-ai --locked --test tdi8_symbolic_execution_compile
@@ -69,6 +81,8 @@ cargo test -p tdi-ai --locked --test tdi8_symbolic_execution_compile
 printf 'TDI-8.1 symbolic event order: VERIFIED\n'
 printf 'TDI-8.1 exact target leakage into adapter API: ABSENT\n'
 printf 'TDI-8.1 source-index/collision-class leakage into adapter API: ABSENT\n'
+printf 'TDI-8.1 invalid symbolic predictions: COUNTED_AS_FAILURES\n'
+printf 'TDI-8.1 technical adapter errors: SEPARATE_TYPED_PATH\n'
 printf 'TDI-8.1 per-instance reset and arm identity: VERIFIED\n'
 printf 'TDI-8.1 vector encoding/configuration freeze: NOT SELECTED\n'
 printf 'TDI-8.1 symbolic execution gate: PASS\n'
