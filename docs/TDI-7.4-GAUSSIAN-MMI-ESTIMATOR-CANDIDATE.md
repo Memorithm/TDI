@@ -38,17 +38,21 @@ The canonical log determinants use a single-threaded fixed-order Cholesky decomp
 
 ## 4. Deterministic rank reduction
 
-The deterministic TDI-7 synthetic generator exposes only a small number of geometry states, so the six static diagnostics can be linearly redundant. Direct full-rank covariance determinants would therefore be an invalid implementation assumption.
+The deterministic TDI-7 synthetic generator exposes only a small number of geometry states, so the six static diagnostics can be linearly redundant or nearly collinear. Direct full-rank covariance determinants would therefore be an invalid and numerically fragile implementation assumption.
 
-Before covariance estimation, each source block is centered, scaled to unit RMS when non-constant, and scanned in its declared column order with modified Gram-Schmidt. A column is retained only when its residual norm exceeds `1e-10 * sqrt(n)`.
+Before covariance estimation, each source block is centered, scaled to unit RMS when non-constant, and scanned in its declared column order with two-pass modified Gram-Schmidt. A candidate direction is retained only when its residual norm after re-orthogonalization exceeds `1e-10 * sqrt(n)`.
 
 - Constant columns are removed.
 - Exactly linearly redundant columns are removed.
 - No column reordering or data-dependent pivot search is allowed.
+- Two MGS passes are used to suppress finite-precision loss of orthogonality for nearly collinear controls.
+- The covariance calculations operate on the resulting orthonormal basis of the retained source subspace, not on the original retained coordinates.
 - The retained rank is reported with every estimate.
 - If a source retains zero dimensions, the estimator fails closed.
 
-Dropping linearly dependent coordinates does not remove information from the source sigma-algebra and avoids manufacturing regularization-dependent information values.
+Representing the same retained source subspace in an orthonormal basis is an invertible coordinate change on that subspace and therefore preserves Gaussian mutual information. It also avoids manufacturing a tolerance relaxation or ridge regularization merely to compensate for coordinate ill-conditioning.
+
+This `declared_order_reorthogonalized_mgs_v2` rule supersedes the initial qualification-only one-pass implementation, which selected rank using an orthogonal residual but then returned the original retained coordinates. That mismatch was detected by the independent arithmetic cross-check on bounded data before any final-holdout access.
 
 ## 5. Independent arithmetic cross-check
 
@@ -58,6 +62,8 @@ Every point estimate is computed twice:
 2. multiple-correlation path `I(T;X) = -0.5 log2(1-R^2)` where `R^2 = c^T Sigma_X^-1 c / var(T)` and the covariance system is solved by partial-pivot Gaussian elimination.
 
 The two methods must agree within `1e-9` bit for `I_static`, `I_recovery`, and `I_joint`. Otherwise the evaluator fails closed. This inherits the TDI-6.3 cross-method tolerance while extending the second method from scalar sources to vector blocks.
+
+The tolerance was not enlarged in response to the bounded-data disagreement discovered during qualification. Numerical conditioning was corrected instead.
 
 ## 6. MMI partial information decomposition
 
@@ -107,6 +113,7 @@ The estimator implementation is software-qualified only if:
 
 - analytic/synthetic oracles pass;
 - duplicate-source rank reduction preserves MI;
+- a nearly collinear full-rank source remains cross-method stable without ridge regularization;
 - PID identity passes;
 - both arithmetic paths agree within tolerance;
 - bootstrap is bit-deterministic on the reference toolchain;
