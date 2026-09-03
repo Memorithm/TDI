@@ -145,6 +145,12 @@ if test -f tdi-bench/src/paired_resampling_v8.rs; then
     bash scripts/check-tdi8.1-paired-resampling.sh
 fi
 
+if test -f tdi-bench/src/percentile_interval_v8.rs; then
+    test -s scripts/check-tdi8.1-percentile-interval.sh \
+        || fail "TDI-8 percentile-interval source exists without its integrity gate"
+    bash scripts/check-tdi8.1-percentile-interval.sh
+fi
+
 printf 'TDI-8.1 reference-arm vocabulary: VERIFIED\n'
 printf 'TDI-8.1 exact memory-accounting invariants: VERIFIED\n'
 printf 'TDI-8.1 defining-component guards: VERIFIED\n'
