@@ -559,7 +559,7 @@ pub fn gaussian_mi(target: &[f64], source: &[Vec<f64>]) -> Result<MiEstimate, In
         .map(|(left, right)| left * right)
         .sum::<f64>()
         / var_t;
-    if r2 < 0.0 && r2 >= -PID_TOLERANCE_BITS {
+    if (-PID_TOLERANCE_BITS..0.0).contains(&r2) {
         r2 = 0.0;
     }
     if !r2.is_finite() || r2 < 0.0 || 1.0 - r2 <= PIVOT_FLOOR {
