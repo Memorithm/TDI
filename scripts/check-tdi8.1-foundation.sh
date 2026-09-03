@@ -127,9 +127,22 @@ if test -f tdi-ai/src/task_generators.rs; then
     bash scripts/check-tdi8.1-task-generators.sh
 fi
 
+if test -f tdi-bench/src/decision_v8.rs; then
+    test -s scripts/check-tdi8.1-primary-decision.sh \
+        || fail "TDI-8 primary-decision source exists without its integrity gate"
+    bash scripts/check-tdi8.1-primary-decision.sh
+fi
+
+if test -f tdi-bench/src/paired_resampling_v8.rs; then
+    test -s scripts/check-tdi8.1-paired-resampling.sh \
+        || fail "TDI-8 paired-resampling source exists without its integrity gate"
+    bash scripts/check-tdi8.1-paired-resampling.sh
+fi
+
 printf 'TDI-8.1 reference-arm vocabulary: VERIFIED\n'
 printf 'TDI-8.1 exact memory-accounting invariants: VERIFIED\n'
 printf 'TDI-8.1 defining-component guards: VERIFIED\n'
 printf 'TDI-8.1 matched dynamic-budget guard: VERIFIED\n'
+printf 'TDI-8.1 benchmark/evidence integrity gates: CHAINED\n'
 printf 'TDI-8.2 executable/token surface: ABSENT\n'
 printf 'TDI-8.1 foundation gate: PASS\n'
