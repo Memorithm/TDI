@@ -7,8 +7,8 @@
 //! retrieval-distance-conditioned local mixer.
 
 use tdi_bench::attention_v7::{
-    DeterministicLocalMixer, InterventionSite, MechanisticState, SingleSiteIntervention,
-    TaskKind, generate_task, linf_distance,
+    DeterministicLocalMixer, InterventionSite, MechanisticState, SingleSiteIntervention, TaskKind,
+    generate_task, linf_distance,
 };
 
 fn main() {
