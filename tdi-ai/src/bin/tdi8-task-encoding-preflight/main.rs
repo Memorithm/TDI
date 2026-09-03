@@ -1,6 +1,8 @@
 #[path = "../../task_encoding.rs"]
 pub mod task_encoding;
 
+pub use tdi_ai::{associative_memory, task_generators};
+
 use std::error::Error;
 
 use tdi_ai::associative_memory::{AssociativeMemoryLayout, DirectMappedAssociativeMemory};
