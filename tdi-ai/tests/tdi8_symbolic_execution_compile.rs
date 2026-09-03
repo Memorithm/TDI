@@ -1,9 +1,7 @@
 use std::collections::VecDeque;
 
 use tdi_ai::ReferenceArm;
-use tdi_ai::task_execution::{
-    SymbolicTaskAdapter, TaskPrediction, execute_symbolic_task,
-};
+use tdi_ai::task_execution::{SymbolicTaskAdapter, TaskPrediction, execute_symbolic_task};
 use tdi_ai::task_generators::{T1Config, TaskEvent, TaskSymbol, generate_t1};
 
 #[derive(Debug)]
