@@ -8,8 +8,7 @@
 use tdi_bench::attention_v7::TaskKind;
 use tdi_bench::predictive_v7::{
     NestedSummary, TDI71_BOOTSTRAP_REPLICATES, TDI71_BOOTSTRAP_SEED, TDI71_EARLY_DEPTHS,
-    TDI71_INTERVENTION_AMPLITUDE, TDI71_TARGET_DEPTH, attention_population,
-    evaluate_nested_ridge,
+    TDI71_INTERVENTION_AMPLITUDE, TDI71_TARGET_DEPTH, attention_population, evaluate_nested_ridge,
 };
 
 const TRAIN_START: u64 = 7_100_000_000;
