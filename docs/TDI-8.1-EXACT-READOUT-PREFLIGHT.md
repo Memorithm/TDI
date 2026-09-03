@@ -1,6 +1,6 @@
 # TDI-8.1 exact recurrent-state readout preflight
 
-The merged symbolic executor requires each concrete arm adapter to return one exact `TaskSymbol` at query time. A0 already exposes an exact contextual value vector, while A1/A2/A3 currently expose recurrent state but no symbolic decoder.
+The merged symbolic executor requires each concrete arm adapter to produce one evaluable prediction at query time. A0 already exposes an exact contextual value vector, while A1/A2/A3 currently expose recurrent state but no symbolic decoder.
 
 This tranche qualifies a deliberately minimal **target-blind exact readout candidate** before concrete arm adapters are built.
 
@@ -20,7 +20,12 @@ At query time the readout receives only the complete arm state. It:
 2. requires every state coordinate to be finite;
 3. reads the two caller-selected coordinates;
 4. passes them through the same canonical lossless two-limb decoder qualified in PR #112;
-5. returns the resulting `TaskSymbol` only if both coordinates are exact canonical limbs.
+5. returns `Symbol(TaskSymbol)` when both coordinates are exact canonical limbs;
+6. returns `InvalidEncoding` when the state is finite and correctly shaped but the selected coordinates are not a canonical symbol.
+
+`InvalidEncoding` is deliberately an **evaluable prediction outcome**, not an adapter/runtime error. A future executor integration must count it as an incorrect query prediction. It must never reject the query or generator merely because exact decoding failed; doing so would condition the evaluated sample on successful decoding and could bias quality upward.
+
+Shape drift, non-finite state and other mechanism corruption remain typed errors because those indicate invalid execution rather than an ordinary bad symbolic prediction.
 
 The candidate has no target argument, no source-index argument, no collision-class argument, no candidate vocabulary, no nearest-neighbour lookup, no learned decoder, no tolerance and no rounding path.
 
@@ -28,13 +33,13 @@ The candidate has no target argument, no source-index argument, no collision-cla
 
 The A2/A3 reference memories store binary64 recurrent payloads. An exact readout allows future bounded adapter work to test whether the architecture actually places a retrievable symbolic representation into designated state coordinates. Introducing a nearest-symbol table or tolerant decoder here would add another memory/estimation mechanism and could hide representational error.
 
-Exact decoding can therefore fail frequently, especially for A1. Such failures are valid bounded evidence about a concrete configuration; they are not repaired by the readout layer.
+Exact decoding can therefore yield `InvalidEncoding` frequently, especially for A1. Those outcomes are valid bounded evidence about a concrete configuration and must be counted as failures rather than repaired or excluded by the readout layer.
 
 This is a **candidate**, not the final TDI-8.1 readout freeze. Bounded non-final work may reject it if it makes the comparison ill-posed, but any replacement must be preregistration-compatible, target-blind, explicitly accounted and frozen before a confirmatory stage can exist.
 
 ## A0 compatibility
 
-A0 values already use the exact two-coordinate `u64` encoding. The same target-blind helper can decode those value coordinates. This keeps the final symbolic output representation shared across A0/A1/A2/A3 without giving recurrent arms a target or vocabulary side channel.
+A0 values already use the exact two-coordinate `u64` encoding. The same target-blind helper can decode those value coordinates. Because A0 values are canonical by construction, malformed A0 value coordinates remain a typed mechanism error rather than an ordinary recurrent `InvalidEncoding` outcome.
 
 ## Qualification checks
 
@@ -46,8 +51,8 @@ The software preflight verifies:
 - rejection of duplicate/out-of-range coordinate selections;
 - rejection of runtime state-width drift;
 - rejection of non-finite recurrent state;
-- rejection of off-grid/noncanonical limbs instead of rounding;
-- A0 exact value coordinates use the same decoder.
+- finite off-grid/noncanonical limbs become `InvalidEncoding` instead of an error, rounding or silent exclusion;
+- A0 exact value coordinates use the same canonical decoder.
 
 ## Scientific boundary
 
@@ -58,9 +63,10 @@ This tranche does not:
 - define training/fitting or model-selection rules;
 - define the late retrieval deficit;
 - implement complete A0/A1/A2/A3 `SymbolicTaskAdapter`s;
+- yet modify the merged symbolic executor to carry `InvalidEncoding` as an explicit query record outcome;
 - claim that exact readout is optimal;
 - emit H8-A/H8-B evidence;
 - create/access a TDI-8.2 surface;
 - access or reinterpret TDI-7.2 evidence.
 
-The next adapter tranche must keep this readout target-blind, account any additional state/static/temporary resources, and separately report physical A2/A3 associative occupancy/collision behavior.
+The next execution/adapter tranche must make invalid finite readouts count as failed predictions, keep this readout target-blind, account any additional state/static/temporary resources, and separately report physical A2/A3 associative occupancy/collision behavior.
