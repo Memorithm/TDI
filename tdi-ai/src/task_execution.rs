@@ -6,10 +6,11 @@
 //! order through an arm adapter while evaluation-only target and provenance
 //! metadata remain owned by the runner.
 //!
-//! In particular, an adapter never receives a query target, an association
-//! source index, or a generator-side collision-class label. It receives only the
-//! symbolic stimulus required by the task. This prevents an arm adapter from
-//! obtaining exact-answer or interference annotations through the evaluator API.
+//! In particular, the adapter API never supplies the exact query target, an
+//! association source-index annotation, or a generator-side collision-class
+//! label. Chronological event order remains observable, as required by the
+//! sequential task itself. This prevents evaluator-only annotations from being
+//! added as extra arm input features.
 //!
 //! No vector encoding, architecture dimension, memory budget, horizon, deficit
 //! function, interval method or TDI-8.2 surface is selected here.
@@ -37,8 +38,10 @@ pub trait SymbolicTaskAdapter {
 
     /// Introduce one symbolic key/value association.
     ///
-    /// Only the stable key code is exposed. `TaskKey::collision_class()` and the
-    /// generator-side source index remain hidden from the adapter.
+    /// Only the stable key code and value are supplied as method arguments.
+    /// `TaskKey::collision_class()` and the generator-side source index are not
+    /// supplied as separate evaluator annotations. Chronological call order is
+    /// still visible to the sequential adapter.
     fn associate(&mut self, key_code: u64, value: TaskSymbol) -> Result<(), Self::Error>;
 
     /// Introduce one ordered T2 payload value.
@@ -52,7 +55,8 @@ pub trait SymbolicTaskAdapter {
 
     /// Predict the value associated with one queried symbolic key.
     ///
-    /// The exact target and source index are not supplied to the adapter.
+    /// The exact target and source-index annotation are not supplied to the
+    /// adapter.
     fn query_association(&mut self, key_code: u64) -> Result<TaskSymbol, Self::Error>;
 
     /// Predict the requested T2 payload position.
@@ -70,10 +74,11 @@ pub enum TaskQueryIdentity {
         /// Stable task key code actually supplied to the adapter.
         key_code: u64,
         /// Generator-side collision/interference class retained for analysis.
-        /// This field is never passed to [`SymbolicTaskAdapter`].
+        /// This field is never supplied as an adapter method argument.
         collision_class: u64,
         /// Generator-side association index retained for recent/old analysis.
-        /// This field is never passed to [`SymbolicTaskAdapter`].
+        /// This field is never supplied as an adapter method argument; the
+        /// chronological position itself remains observable from event order.
         source_index: u64,
     },
     /// T2 ordered payload query.
