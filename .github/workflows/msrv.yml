@@ -1,0 +1,43 @@
+name: Declared Rust MSRV
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tdi-msrv-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  msrv:
+    name: Rust MSRV
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Read declared MSRV
+        id: msrv
+        shell: bash
+        run: |
+          mapfile -t versions < <(sed -n 's/^rust-version = "\([^"]*\)"$/\1/p' Cargo.toml)
+          if test "${#versions[@]}" -ne 1 || test -z "${versions[0]}"; then
+            echo "::error::Cargo.toml must declare exactly one workspace rust-version"
+            exit 1
+          fi
+          echo "version=${versions[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Install declared MSRV
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+
+      - name: Check workspace on declared MSRV
+        run: cargo check --workspace --all-targets --locked
