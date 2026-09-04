@@ -78,7 +78,7 @@ fn observation_and_accounting_contracts_are_bounded_and_c3_scoped() {
 
     assert_eq!(meter.envelope(), envelope);
     assert_eq!(meter.usage().total_compute_ops().expect("exact sum"), 75);
-    assert_eq!(meter.usage().total_memory_bits().expect("exact sum"), 120);
+    assert_eq!(meter.usage().total_memory_bits(), 120);
 }
 
 #[test]
