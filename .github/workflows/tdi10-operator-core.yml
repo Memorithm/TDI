@@ -1,0 +1,40 @@
+name: TDI-10.0 operator core
+
+on:
+  pull_request:
+    paths:
+      - "tdi-operator/**"
+      - "docs/TDI-10-PROGRAMME.md"
+      - "docs/tdi10/**"
+      - "scripts/check-tdi10-operator-core.sh"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/tdi10-operator-core.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "tdi-operator/**"
+      - "docs/TDI-10-PROGRAMME.md"
+      - "docs/tdi10/**"
+      - "scripts/check-tdi10-operator-core.sh"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/tdi10-operator-core.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  operator-core:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+      - name: Qualify TDI-10.0 generic operator core
+        run: bash scripts/check-tdi10-operator-core.sh

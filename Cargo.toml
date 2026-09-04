@@ -4,6 +4,7 @@ members = [
     "tdi-core",
     "tdi-bench",
     "tdi-ai",
+    "tdi-operator",
 ]
 
 [workspace.package]

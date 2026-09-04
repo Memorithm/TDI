@@ -1,0 +1,9 @@
+[package]
+name = "tdi-operator"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Generic tridiagonal operator and resolvent research primitives for TDI-10.x"
+
+[lints]
+workspace = true
