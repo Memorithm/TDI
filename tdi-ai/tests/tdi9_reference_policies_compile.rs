@@ -1,15 +1,15 @@
 #[allow(dead_code)]
-#[path = "../src/adaptive_inference.rs"]
-mod adaptive_inference;
-#[allow(dead_code)]
-#[path = "../src/adaptive_task_generators.rs"]
-mod adaptive_task_generators;
-#[allow(dead_code)]
 #[path = "../src/adaptive_execution.rs"]
 mod adaptive_execution;
 #[allow(dead_code)]
+#[path = "../src/adaptive_inference.rs"]
+mod adaptive_inference;
+#[allow(dead_code)]
 #[path = "../src/adaptive_policies.rs"]
 mod adaptive_policies;
+#[allow(dead_code)]
+#[path = "../src/adaptive_task_generators.rs"]
+mod adaptive_task_generators;
 
 use adaptive_execution::{ReferenceExecution, StoppedCandidate, evaluate_stopped};
 use adaptive_inference::{
@@ -20,9 +20,7 @@ use adaptive_policies::{
     C0FixedPolicy, C1StaticPolicy, C2AdaptivePolicy, C3RecoveryPolicy, PolicyDecision,
     ReferencePolicyError,
 };
-use adaptive_task_generators::{
-    DifficultyStratum, P1Config, P3Config, generate_p1, generate_p3,
-};
+use adaptive_task_generators::{DifficultyStratum, P1Config, P3Config, generate_p1, generate_p3};
 
 fn roomy_envelope() -> ResourceEnvelope {
     ResourceEnvelope::new(1_000_000, 1_000_000).expect("valid roomy envelope")
@@ -100,17 +98,9 @@ fn c1_plan_depends_on_family_identity_only() {
 #[test]
 fn c2_rejects_c3_only_observation_fields() {
     let policy = C2AdaptivePolicy::new(0, 1.0, 1.0, 1.0).expect("valid C2 config");
-    let leaked = PolicyObservation::new(
-        1,
-        100,
-        0.0,
-        1.0,
-        3.0,
-        0,
-        Some(VerifierSignal::Satisfied),
-        1,
-    )
-    .expect("finite observation");
+    let leaked =
+        PolicyObservation::new(1, 100, 0.0, 1.0, 3.0, 0, Some(VerifierSignal::Satisfied), 1)
+            .expect("finite observation");
 
     assert!(matches!(
         policy.decide(leaked),
@@ -125,10 +115,10 @@ fn c2_rejects_c3_only_observation_fields() {
 #[test]
 fn c2_adaptive_stop_has_path_invariant_charge() {
     let policy = C2AdaptivePolicy::new(1, 2.0, 1.0, 3.0).expect("valid C2 config");
-    let keep_going = PolicyObservation::new(1, 100, 1.0, 5.0, 4.0, 0, None, 0)
-        .expect("valid observation");
-    let stop_now = PolicyObservation::new(4, 100, 1.0, 2.0, -3.0, 0, None, 0)
-        .expect("valid observation");
+    let keep_going =
+        PolicyObservation::new(1, 100, 1.0, 5.0, 4.0, 0, None, 0).expect("valid observation");
+    let stop_now =
+        PolicyObservation::new(4, 100, 1.0, 2.0, -3.0, 0, None, 0).expect("valid observation");
 
     let continue_decision = policy.decide(keep_going).expect("C2 continue");
     let stop_decision = policy.decide(stop_now).expect("C2 stop");
@@ -141,13 +131,11 @@ fn c2_adaptive_stop_has_path_invariant_charge() {
 
 #[test]
 fn c3_verifier_state_machine_has_path_invariant_charge() {
-    let policy = C3RecoveryPolicy::new(0, 0.0, 0.0, f64::MAX, 2, 2, true)
-        .expect("valid C3 config");
+    let policy = C3RecoveryPolicy::new(0, 0.0, 0.0, f64::MAX, 2, 2, true).expect("valid C3 config");
     let no_signal_before_cadence =
-        PolicyObservation::new(1, 100, 1.0, 5.0, 1.0, 0, None, 1)
-            .expect("valid C3 observation");
-    let no_signal_on_cadence = PolicyObservation::new(2, 100, 1.0, 4.0, 1.0, 0, None, 1)
-        .expect("valid C3 observation");
+        PolicyObservation::new(1, 100, 1.0, 5.0, 1.0, 0, None, 1).expect("valid C3 observation");
+    let no_signal_on_cadence =
+        PolicyObservation::new(2, 100, 1.0, 4.0, 1.0, 0, None, 1).expect("valid C3 observation");
     let indeterminate = PolicyObservation::new(
         2,
         100,
@@ -159,28 +147,12 @@ fn c3_verifier_state_machine_has_path_invariant_charge() {
         1,
     )
     .expect("valid C3 observation");
-    let satisfied = PolicyObservation::new(
-        2,
-        100,
-        1.0,
-        4.0,
-        1.0,
-        0,
-        Some(VerifierSignal::Satisfied),
-        1,
-    )
-    .expect("valid C3 observation");
-    let violated = PolicyObservation::new(
-        2,
-        100,
-        1.0,
-        4.0,
-        1.0,
-        0,
-        Some(VerifierSignal::Violated),
-        1,
-    )
-    .expect("valid C3 observation");
+    let satisfied =
+        PolicyObservation::new(2, 100, 1.0, 4.0, 1.0, 0, Some(VerifierSignal::Satisfied), 1)
+            .expect("valid C3 observation");
+    let violated =
+        PolicyObservation::new(2, 100, 1.0, 4.0, 1.0, 0, Some(VerifierSignal::Violated), 1)
+            .expect("valid C3 observation");
 
     let decisions = [
         policy
@@ -207,19 +179,10 @@ fn c3_verifier_state_machine_has_path_invariant_charge() {
 
 #[test]
 fn c3_unrecoverable_terminal_violation_fails_closed() {
-    let policy = C3RecoveryPolicy::new(0, 0.0, 0.0, f64::MAX, 1, 1, true)
-        .expect("valid C3 config");
-    let observation = PolicyObservation::new(
-        4,
-        100,
-        0.0,
-        0.0,
-        2.0,
-        0,
-        Some(VerifierSignal::Violated),
-        0,
-    )
-    .expect("valid C3 observation");
+    let policy = C3RecoveryPolicy::new(0, 0.0, 0.0, f64::MAX, 1, 1, true).expect("valid C3 config");
+    let observation =
+        PolicyObservation::new(4, 100, 0.0, 0.0, 2.0, 0, Some(VerifierSignal::Violated), 0)
+            .expect("valid C3 observation");
 
     assert_eq!(
         policy.decide(observation),
@@ -265,8 +228,8 @@ fn p3_c2_fails_while_c3_reference_policy_recovers_with_paid_decisions() {
     assert_eq!(c2_stopped.accounting().usage().verifier_ops(), 0);
     assert_eq!(c2_stopped.accounting().usage().checkpoint_ops(), 0);
 
-    let c3_policy = C3RecoveryPolicy::new(0, 0.0, 0.0, f64::MAX, 1, 1, true)
-        .expect("valid C3 config");
+    let c3_policy =
+        C3RecoveryPolicy::new(0, 0.0, 0.0, f64::MAX, 1, 1, true).expect("valid C3 config");
     let mut c3 = ReferenceExecution::new(
         PolicyArm::C3VerificationRecovery,
         policy_task,
