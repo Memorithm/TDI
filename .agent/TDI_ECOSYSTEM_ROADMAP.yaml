@@ -1,7 +1,7 @@
 schema_version: 3
 kind: tdi_ecosystem_agent_roadmap
 status: active
-last_updated: "2026-09-04T19:58+0200"
+last_updated: "2026-09-04T20:55+0200"
 repository: Memorithm/TDI
 intended_consumer: autonomous_coding_agent
 merge_policy: never_merge_this_file_to_default_branch_unless_user_explicitly_requests
@@ -40,6 +40,9 @@ verified_current_facts:
   - TDI_10_1_constant_positive_Toeplitz_reference_was_merged_by_PR_143_as_61a872da59fb427d86aa65762398850cd9d69f66
   - TDI_10_2_exact_cavity_error_transport_was_merged_by_PR_144_as_c57cdfe07341de1e3d47104f1b73dd32f3170c17
   - TDI_10_2_keeps_reference_cavities_caller_supplied_and_does_not_promote_a_row_freezing_convention
+  - TDI_10_3_exact_drift_factorization_was_merged_by_PR_145_as_ac9410632a91e063b7811eacdc2a0b7cfc34c5a4
+  - TDI_10_4_exact_finite_chain_unrolling_PR_146_is_qualified_on_exact_head_7402601bfca559ad3f898b614cedbead830e3d55
+  - TDI_10_4_does_not_assert_uniform_contraction_decay_or_soft_edge_control
   - TDI_10_must_not_import_RH_as_a_hypothesis_or_Riemann_specific_coefficients_as_generic_theorems
 
 scientific_invariants:
@@ -291,26 +294,54 @@ roadmap:
       - no_soft_edge_theorem
   - id: TDI10_3
     name: Exact drift and transport-factor factorization
-    status: authorized_next_compact_increment
-    goals:
-      - algebraically_split_delta_into_edge_or_reference_drift_components_under_explicit_reference_metadata
-      - factor_transport_multiplier_without_claiming_any_factor_is_uniformly_contracting
-      - test_reconstruction_against_TDI10_2_transport
-      - preserve_reference_construction_as_explicit_input_or_versioned_policy
-    forbid:
-      - uniform_contraction_claims
-      - asymptotic_rate_claims
-      - slowly_varying_theorem_claims
-      - soft_edge_theorem_claims
-  - id: TDI10_4_plus
-    name: Cumulative contraction soft-edge scaling counterexamples and generic theorem research
-    status: planned_after_TDI10_3_qualification
+    status: complete_merged_qualified
+    merge_evidence:
+      - PR_145_merged_as_ac9410632a91e063b7811eacdc2a0b7cfc34c5a4
+      - exact_head_be6f507688890913c6f2458f5ebd2fb0b5ae9759_all_25_workflows_green
+    exact_scope:
+      - delta_equals_reference_defect_plus_edge_drift_plus_reference_drift
+      - alpha_equals_normalized_edge_square_times_cavity_correction
+      - local_reference_defect_is_preserved_explicitly
+      - reference_edge_is_caller_supplied_finite_metadata
+    nonclaims:
+      - no_uniform_contraction
+      - no_asymptotic_rate
+      - no_slowly_varying_theorem
+      - no_soft_edge_theorem
+  - id: TDI10_4
+    name: Exact finite cavity-error chain unrolling
+    status: qualified_ready_for_merge_PR_146
+    qualification_evidence:
+      - PR_146_exact_head_7402601bfca559ad3f898b614cedbead830e3d55
+      - all_26_pull_request_workflows_green_on_exact_head
+      - dedicated_TDI10_4_gate_green_on_Rust_1_97_1
+    exact_identity:
+      - E_n_equals_A_n_E_0_plus_B_n
+      - A_n_equals_product_of_step_transport_factors
+      - B_n_equals_weighted_sum_of_step_drifts
+      - equivalent_affine_recurrence_Ak_alpha_k_Akm1_Bk_alpha_k_Bkm1_plus_delta_k
+    integrity_boundary:
+      - adjacent_cavity_reference_and_error_metadata_must_be_contiguous
+      - nonfinite_cumulative_arithmetic_fails_closed
+    nonclaims:
+      - no_factor_or_product_is_claimed_less_than_one
+      - no_uniform_contraction_or_boundary_error_decay
+      - no_summable_drift_or_slowly_varying_bound
+      - no_soft_edge_uniformity_or_double_scaling_theorem
+  - id: TDI10_5_plus
+    name: Nonuniform contraction counterexamples scaling and generic theorem research
+    status: planned_not_authorized_until_TDI10_4_merge_and_explicit_followup_scope
     candidate_topics:
-      - cumulative_nonuniform_contraction
+      - cumulative_nonuniform_transport_products
+      - minimal_counterexamples_to_uniform_contraction
       - soft_edge_counterexamples
       - double_scaling_in_i_m_t
       - eigenvalues_only_and_pairwise_numerical_tools
       - theorem_for_declared_slowly_varying_Jacobi_class_or_minimal_counterexample
+    forbid_until_authorized:
+      - promoting_observed_pointwise_alpha_less_than_one_to_a_uniform_theorem
+      - importing_RiemannBench_specific_coefficients_as_generic_hypotheses
+      - claiming_soft_edge_uniformity_without_a_proved_remainder
   - id: TDIX
     name: Ecosystem evidence and reusable primitive bridge
     status: planned_parallel
