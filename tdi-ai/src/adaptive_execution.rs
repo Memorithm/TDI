@@ -1,10 +1,10 @@
 //! Deterministic TDI-9.1 reference execution for the non-final P1/P2/P3 tasks.
 //!
-//! This module sits between the already-frozen action/accounting contracts and
-//! future C0/C1/C2/C3 policy implementations. It owns solver transitions,
-//! independent verifier semantics, one bounded P3 checkpoint, replay accounting
-//! and post-STOP evaluation. It does not choose actions or inspect evaluator
-//! targets before an arm has stopped.
+//! This module sits between the frozen action/accounting contracts and future
+//! C0/C1/C2/C3 policy implementations. It owns solver transitions, independent
+//! verifier semantics, one bounded P3 checkpoint, replay accounting and the
+//! post-STOP evaluator boundary. It never chooses an action and never reads an
+//! evaluator target before an arm has stopped.
 
 use core::fmt;
 
@@ -34,13 +34,14 @@ const P3_VERIFIER_EVENT_OPS: u64 = 2;
 // cursor:u64 + left:i64 + right:i64 + eliminated:u8 + committed:u8 + forbidden:u8.
 pub const P3_CHECKPOINT_BYTES: u64 = 27;
 
-// The memory contract is a deterministic logical reference model, not a claim
-// about compiler stack layout. Immutable task input is common to all arms and
-// excluded from arm working-memory accounting.
-const RESOURCE_METER_SHADOW_BITS: u64 = 768;
-const EXECUTION_METADATA_BITS: u64 = 456;
-const TRANSACTION_METADATA_SHADOW_BITS: u64 = 456;
+// Deterministic logical arm-memory model. Immutable task input and evaluator
+// bookkeeping counters are common instrumentation and are not charged as arm
+// working memory. The atomic action shadow is charged because it is required by
+// this fail-closed reference implementation.
+const EXECUTION_METADATA_BITS: u64 = 392;
+const TRANSACTION_METADATA_SHADOW_BITS: u64 = 392;
 const ACTION_SCRATCH_BITS: u64 = 256;
+const VERIFIER_SCRATCH_BITS: u64 = 256;
 
 /// Current deterministic solver candidate. No evaluator label is embedded.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -61,7 +62,7 @@ impl SolverCandidate {
     }
 }
 
-/// Checkpoint copy traffic required by the frozen TDI-9 accounting contract.
+/// Exact logical checkpoint copy traffic.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CheckpointTraffic {
     store_bytes: u64,
@@ -102,7 +103,7 @@ impl CheckpointTraffic {
     }
 }
 
-/// Complete execution accounting snapshot.
+/// Complete reference accounting snapshot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ExecutionAccounting {
     usage: ResourceUsage,
@@ -123,8 +124,8 @@ impl ExecutionAccounting {
 
 /// Candidate emitted only by an explicit STOP action.
 ///
-/// Post-hoc evaluator target access requires this type rather than a live
-/// [`ReferenceExecution`], making the STOP boundary explicit in the API.
+/// Post-hoc target access requires this type, so live trajectories cannot call
+/// the evaluator API by accident.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StoppedCandidate {
     candidate: SolverCandidate,
@@ -183,7 +184,7 @@ impl SolverState {
         match self {
             Self::P1 { .. } => 130,
             Self::P2 { .. } => 138,
-            Self::P3 { .. } => 202,
+            Self::P3 { .. } => 200,
         }
     }
 
@@ -238,7 +239,6 @@ pub struct ReferenceExecution {
     checkpoint_traffic: CheckpointTraffic,
     checkpoint: Option<Checkpoint>,
     action_count: u64,
-    high_water_step: u64,
     replay_until: Option<u64>,
     last_verifier_signal: Option<VerifierSignal>,
     last_rejected_branch: Option<ForkBranch>,
@@ -254,11 +254,10 @@ impl ReferenceExecution {
         task: PolicyTask,
         envelope: ResourceEnvelope,
     ) -> Result<Self, ReferenceExecutionError> {
-        let solver = initial_solver(&task)?;
+        let solver = initial_solver(&task);
         let mut meter = ResourceMeter::new(envelope);
-        let residual = task_len_u64(&task)? as f64;
         let last_summary = SolverSummary {
-            residual,
+            residual: task_len_u64(&task)? as f64,
             ..SolverSummary::ZERO
         };
         set_memory_state(&mut meter, solver, 0, None, 0)?;
@@ -270,7 +269,6 @@ impl ReferenceExecution {
             checkpoint_traffic: CheckpointTraffic::default(),
             checkpoint: None,
             action_count: 0,
-            high_water_step: 0,
             replay_until: None,
             last_verifier_signal: None,
             last_rejected_branch: None,
@@ -283,11 +281,6 @@ impl ReferenceExecution {
     #[must_use]
     pub const fn arm(&self) -> PolicyArm {
         self.arm
-    }
-
-    #[must_use]
-    pub fn task(&self) -> &PolicyTask {
-        &self.task
     }
 
     #[must_use]
@@ -326,13 +319,9 @@ impl ReferenceExecution {
         } else {
             None
         };
-        let available_checkpoints = if self.arm == PolicyArm::C3VerificationRecovery
-            && self.checkpoint.is_some()
-        {
-            1
-        } else {
-            0
-        };
+        let available_checkpoints = u32::from(
+            self.arm == PolicyArm::C3VerificationRecovery && self.checkpoint.is_some(),
+        );
         Ok(PolicyObservation::new(
             self.solver.cursor(),
             remaining_compute_ops,
@@ -347,7 +336,7 @@ impl ReferenceExecution {
     }
 
     /// Charge a future policy implementation without embedding policy logic in
-    /// this execution layer. The operation and policy-memory updates are atomic.
+    /// this layer. Compute and policy-memory updates are atomic.
     pub fn charge_policy_decision(
         &mut self,
         operations: u64,
@@ -369,8 +358,8 @@ impl ReferenceExecution {
         Ok(())
     }
 
-    /// Execute one deterministic solver transition. On C3/P3, the first
-    /// ChoicePoint stores exactly one checkpoint before the transition.
+    /// Execute one solver transition. C3 stores exactly one paid P3 checkpoint
+    /// immediately before the first ChoicePoint transition.
     pub fn continue_step(&mut self) -> Result<SolverCandidate, ReferenceExecutionError> {
         self.ensure_running()?;
         validate_action(self.arm, InferenceAction::Continue)?;
@@ -385,15 +374,17 @@ impl ReferenceExecution {
 
         if self.arm == PolicyArm::C3VerificationRecovery
             && checkpoint.is_none()
-            && matches!(next_p3_event(&self.task, self.solver)?, Some(ForkEvent::ChoicePoint))
+            && matches!(
+                next_p3_event(&self.task, self.solver)?,
+                Some(ForkEvent::ChoicePoint)
+            )
         {
-            let bits = P3_CHECKPOINT_BYTES
+            checkpoint_copy_bits = P3_CHECKPOINT_BYTES
                 .checked_mul(8)
                 .ok_or(ReferenceExecutionError::ArithmeticOverflow)?;
             meter.charge_compute(ComputeComponent::Checkpoint, P3_CHECKPOINT_BYTES)?;
             traffic.add_store(P3_CHECKPOINT_BYTES)?;
             checkpoint = Some(Checkpoint { state: self.solver });
-            checkpoint_copy_bits = bits;
         }
 
         let replaying = self
@@ -408,12 +399,10 @@ impl ReferenceExecution {
             },
             transition_ops,
         )?;
-
         let next_action_count = self
             .action_count
             .checked_add(1)
             .ok_or(ReferenceExecutionError::ArithmeticOverflow)?;
-        let next_high_water = self.high_water_step.max(next_solver.cursor());
         let next_replay_until = self
             .replay_until
             .filter(|limit| next_solver.cursor() < *limit);
@@ -430,18 +419,17 @@ impl ReferenceExecution {
         self.checkpoint_traffic = traffic;
         self.checkpoint = checkpoint;
         self.solver = next_solver;
-        self.last_summary = summary;
         self.action_count = next_action_count;
-        self.high_water_step = next_high_water;
         self.replay_until = next_replay_until;
         self.last_verifier_signal = None;
         self.last_rejected_branch = None;
+        self.last_summary = summary;
         solver_candidate(self.solver)
     }
 
-    /// Invoke the frozen independent verifier. It never reads evaluator target
-    /// metadata. P1 and P3 inspect observed evidence only; P2 may check the full
-    /// public constraint system, which is the explicit costed verification path.
+    /// Invoke the independent verifier without evaluator metadata. P1 and P3
+    /// inspect observed evidence only. P2 may scan its full public constraint
+    /// system through this explicit, costed action.
     pub fn verify(&mut self) -> Result<VerifierSignal, ReferenceExecutionError> {
         self.ensure_running()?;
         validate_action(self.arm, InferenceAction::Verify)?;
@@ -450,7 +438,7 @@ impl ReferenceExecution {
 
         let mut meter = self.meter;
         meter.charge_compute(ComputeComponent::Verifier, operations)?;
-        let temporary = transaction_temporary_bits(self.solver, ACTION_SCRATCH_BITS)?;
+        let temporary = transaction_temporary_bits(self.solver, VERIFIER_SCRATCH_BITS)?;
         set_memory_state(
             &mut meter,
             self.solver,
@@ -473,9 +461,8 @@ impl ReferenceExecution {
         Ok(signal)
     }
 
-    /// Restore the single eligible P3 checkpoint after a verifier-confirmed
-    /// violation. The rejected live branch is retained only as local recovery
-    /// state, so replay cannot recommit to the same refuted binary branch.
+    /// Restore the single P3 checkpoint after a verifier-confirmed violation.
+    /// The rejected live branch is retained only as local recovery state.
     pub fn backtrack(&mut self) -> Result<SolverCandidate, ReferenceExecutionError> {
         self.ensure_running()?;
         validate_action(self.arm, InferenceAction::Backtrack)?;
@@ -488,11 +475,11 @@ impl ReferenceExecution {
         let rejected = self
             .last_rejected_branch
             .ok_or(ReferenceExecutionError::BacktrackUnsupportedForTask)?;
-
-        let mut restored = checkpoint.state.with_forbidden_branch(rejected)?;
+        let restored = checkpoint.state.with_forbidden_branch(rejected)?;
         if restored.cursor() >= self.solver.cursor() {
             return Err(ReferenceExecutionError::CheckpointNotEarlier);
         }
+
         let previous_cursor = self.solver.cursor();
         let mut meter = self.meter;
         let mut traffic = self.checkpoint_traffic;
@@ -519,7 +506,6 @@ impl ReferenceExecution {
         let depth = previous_cursor
             .checked_sub(restored.cursor())
             .ok_or(ReferenceExecutionError::AccountingInvariant)?;
-        let score_margin = solver_score_margin(restored)?;
 
         self.meter = meter;
         self.checkpoint_traffic = traffic;
@@ -531,23 +517,20 @@ impl ReferenceExecution {
         self.last_summary = SolverSummary {
             state_delta: depth as f64,
             residual: remaining as f64,
-            score_margin,
+            score_margin: solver_score_margin(restored)?,
         };
-        restored = self.solver;
-        solver_candidate(restored)
+        solver_candidate(self.solver)
     }
 
-    /// STOP emits the live solver candidate and closes the trajectory. No
-    /// evaluator target is needed here.
+    /// Emit the live solver candidate and close the trajectory.
     pub fn stop(&mut self) -> Result<StoppedCandidate, ReferenceExecutionError> {
         self.ensure_running()?;
         validate_action(self.arm, InferenceAction::Stop)?;
         let candidate = solver_candidate(self.solver)?;
-        let next_action_count = self
+        self.action_count = self
             .action_count
             .checked_add(1)
             .ok_or(ReferenceExecutionError::ArithmeticOverflow)?;
-        self.action_count = next_action_count;
         self.stopped = true;
         Ok(StoppedCandidate {
             candidate,
@@ -590,22 +573,22 @@ pub fn evaluate_stopped(
     }
 }
 
-fn initial_solver(task: &PolicyTask) -> Result<SolverState, ReferenceExecutionError> {
+fn initial_solver(task: &PolicyTask) -> SolverState {
     match task {
-        PolicyTask::P1(_) => Ok(SolverState::P1 { cursor: 0, sum: 0 }),
-        PolicyTask::P2(task) => Ok(SolverState::P2 {
+        PolicyTask::P1(_) => SolverState::P1 { cursor: 0, sum: 0 },
+        PolicyTask::P2(task) => SolverState::P2 {
             cursor: 0,
             bits: 0,
             width: task.width(),
-        }),
-        PolicyTask::P3(_) => Ok(SolverState::P3 {
+        },
+        PolicyTask::P3(_) => SolverState::P3 {
             cursor: 0,
             left_score: 0,
             right_score: 0,
             eliminated_mask: 0,
             committed: None,
             forbidden: None,
-        }),
+        },
     }
 }
 
@@ -629,7 +612,9 @@ fn solver_transition(
             let next_cursor = cursor
                 .checked_add(1)
                 .ok_or(ReferenceExecutionError::ArithmeticOverflow)?;
-            let remaining = task_len_u64(task_as_policy(task))?
+            let total = u64::try_from(task.evidence().len())
+                .map_err(|_| ReferenceExecutionError::TaskTooLarge)?;
+            let remaining = total
                 .checked_sub(next_cursor)
                 .ok_or(ReferenceExecutionError::AccountingInvariant)?;
             Ok((
@@ -741,12 +726,10 @@ fn solver_transition(
                             forbidden,
                         )?);
                     }
-                    (
-                        i64::from(left_delta)
-                            .checked_add(i64::from(right_delta))
-                            .ok_or(ReferenceExecutionError::ArithmeticOverflow)? as f64,
-                        P3_EVIDENCE_OPS,
-                    )
+                    let delta = i64::from(left_delta)
+                        .checked_add(i64::from(right_delta))
+                        .ok_or(ReferenceExecutionError::ArithmeticOverflow)?;
+                    (delta as f64, P3_EVIDENCE_OPS)
                 }
                 ForkEvent::EliminateBranch { branch } => {
                     eliminated_mask |= branch_bit(branch);
@@ -763,6 +746,9 @@ fn solver_transition(
                 .map_err(|_| ReferenceExecutionError::TaskTooLarge)?
                 .checked_sub(next_cursor)
                 .ok_or(ReferenceExecutionError::AccountingInvariant)?;
+            let margin = left_score
+                .checked_sub(right_score)
+                .ok_or(ReferenceExecutionError::ArithmeticOverflow)?;
             let next = SolverState::P3 {
                 cursor: next_cursor,
                 left_score,
@@ -776,7 +762,7 @@ fn solver_transition(
                 SolverSummary {
                     state_delta,
                     residual: remaining as f64,
-                    score_margin: (left_score - right_score) as f64,
+                    score_margin: margin as f64,
                 },
                 operations,
             ))
@@ -791,15 +777,18 @@ fn independent_verify(
     candidate: SolverCandidate,
 ) -> Result<(VerifierSignal, u64), ReferenceExecutionError> {
     match (task, state, candidate) {
-        (PolicyTask::P1(task), SolverState::P1 { cursor, .. }, SolverCandidate::P1(candidate)) => {
+        (
+            PolicyTask::P1(task),
+            SolverState::P1 { cursor, .. },
+            SolverCandidate::P1(candidate),
+        ) => {
             let observed = usize::try_from(cursor).map_err(|_| ReferenceExecutionError::TaskTooLarge)?;
-            let event_count = task.evidence().len();
             let operations = checked_linear_ops(
                 P1_VERIFIER_BASE_OPS,
                 P1_VERIFIER_EVENT_OPS,
                 u64::try_from(observed).map_err(|_| ReferenceExecutionError::TaskTooLarge)?,
             )?;
-            if observed < event_count {
+            if observed < task.evidence().len() {
                 return Ok((VerifierSignal::Indeterminate, operations));
             }
             let mut sum = 0i64;
@@ -984,13 +973,6 @@ fn task_len_u64(task: &PolicyTask) -> Result<u64, ReferenceExecutionError> {
     u64::try_from(task.event_count()).map_err(|_| ReferenceExecutionError::TaskTooLarge)
 }
 
-// Helper used only in the P1 transition arm where a concrete P1 task borrow is
-// already available. Reconstructing a PolicyTask would allocate, so this tiny
-// wrapper is deliberately avoided; callers should use the concrete length.
-fn task_as_policy(_task: &crate::adaptive_task_generators::P1PolicyTask) -> &PolicyTask {
-    unreachable!("internal helper must not be called")
-}
-
 fn set_memory_state(
     meter: &mut ResourceMeter,
     solver: SolverState,
@@ -1024,7 +1006,6 @@ fn transaction_temporary_bits(
 ) -> Result<u64, ReferenceExecutionError> {
     [
         solver.logical_bits(),
-        RESOURCE_METER_SHADOW_BITS,
         TRANSACTION_METADATA_SHADOW_BITS,
         ACTION_SCRATCH_BITS,
         extra_bits,
