@@ -19,12 +19,20 @@ grep -Fq 'pub mod assr_h_reference;' "$LIB" \
     || fail "A3 reference is not exported by tdi-ai"
 grep -Fq 'pub struct A3Reference' "$SOURCE" \
     || fail "A3 public reference missing"
-grep -Fq 'let mut fused_input = self.workspace.unbind(read_key)?;' "$SOURCE" \
-    || fail "VSA read-before-A2 integration missing"
+grep -Fq 'pub enum A3VsaReadRoute' "$SOURCE" \
+    || fail "A3 explicit VSA read routing missing"
+grep -Fq 'pub fn step_routed(' "$SOURCE" \
+    || fail "A3 independent VSA/A2 routing surface missing"
+grep -Fq 'self.step_routed(input, A3VsaReadRoute::Key(read_key), read_key, write_key)' "$SOURCE" \
+    || fail "legacy A3 step no longer preserves the original same-key route"
+grep -Fq 'let mut fused_input = self.workspace.unbind(vsa_read_key)?;' "$SOURCE" \
+    || fail "explicit keyed VSA read-before-A2 integration missing"
 grep -Fq 'self.vsa_fusion_gain * *fused' "$SOURCE" \
     || fail "explicit VSA/input fusion missing"
-grep -Fq 'self.a2.step(&fused_input, read_key, write_key)' "$SOURCE" \
-    || fail "integrated A3 step no longer delegates to unchanged A2 semantics"
+grep -Fq '.step(&fused_input, a2_read_key, a2_write_key)' "$SOURCE" \
+    || fail "routed A3 step no longer delegates fused input to unchanged A2 semantics"
+grep -Fq 'A3VsaReadRoute::Skip => Ok(self.a2.step(input, a2_read_key, a2_write_key)?),' "$SOURCE" \
+    || fail "A3 Skip route no longer bypasses VSA fusion"
 grep -Fq 'pub fn store_vsa(' "$SOURCE" \
     || fail "explicit atomic VSA store surface missing"
 grep -Fq '.with_vsa_workspace(vsa.workspace_bits())' "$SOURCE" \
@@ -39,6 +47,9 @@ grep -Fq 'use tdi_ai::assr_h_reference::A3Reference;' "$HARNESS" \
 for test_name in \
     constructor_requires_input_vsa_width_match_and_finite_gain \
     empty_vsa_workspace_preserves_a2_step_semantics_bit_exactly \
+    legacy_step_matches_explicit_same_key_route_bit_exactly \
+    routed_skip_ignores_nonempty_vsa_and_preserves_a2_semantics_bit_exactly \
+    routed_vsa_key_and_a2_read_key_are_independent \
     vsa_readout_changes_the_integrated_a3_recurrent_input \
     rejected_integrated_step_cannot_mutate_a2_or_vsa_state \
     rejected_vsa_store_is_atomic_and_does_not_touch_a2 \
@@ -54,11 +65,16 @@ done
 # make the parent scanner flag its own detection pattern as a confirmation
 # surface, so this gate deliberately does not duplicate that scan.
 
+if test -f scripts/check-tdi8.1-a3-routing.sh; then
+    bash scripts/check-tdi8.1-a3-routing.sh
+fi
+
 cargo test -p tdi-ai --locked 'assr_h_reference::tests'
 cargo test -p tdi-ai --locked --test tdi8_assr_h_reference_compile
 
 printf 'TDI-8.1 A3 public API: VERIFIED\n'
-printf 'TDI-8.1 VSA read/fuse/A2 operation order: VERIFIED\n'
+printf 'TDI-8.1 VSA/A2 routed integration: VERIFIED\n'
+printf 'TDI-8.1 legacy same-key semantics: PRESERVED\n'
 printf 'TDI-8.1 VSA store atomicity boundary: VERIFIED\n'
 printf 'TDI-8.1 A3 exact memory accounting: VERIFIED\n'
 printf 'TDI-8.1 exact matched-budget representability: VERIFIED\n'
