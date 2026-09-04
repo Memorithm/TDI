@@ -1,7 +1,7 @@
 schema_version: 3
 kind: tdi_ecosystem_agent_roadmap
 status: active
-last_updated: "2026-09-04T21:02+0200"
+last_updated: "2026-09-04T21:20+0200"
 repository: Memorithm/TDI
 intended_consumer: autonomous_coding_agent
 merge_policy: never_merge_this_file_to_default_branch_unless_user_explicitly_requests
@@ -44,6 +44,11 @@ verified_current_facts:
   - TDI_10_4_exact_finite_chain_unrolling_was_merged_by_PR_146_as_c49b229254650d9ac52d98aed229b0f6c79abe08
   - TDI_10_4_exact_head_7402601bfca559ad3f898b614cedbead830e3d55_passed_all_26_pull_request_workflows
   - TDI_10_4_does_not_assert_uniform_contraction_decay_or_soft_edge_control
+  - TDI_10_5_pointwise_subunit_counterexample_is_qualified_on_exact_head_b65847fbf7adad35d7910d31cac0603172ff3d70_in_PR_147
+  - TDI_10_5_constructs_alpha_k_equals_1_minus_1_over_k_plus_1_squared_with_exact_product_n_plus_2_over_2_n_plus_1_tending_to_one_half
+  - TDI_10_5_realizes_the_counterexample_with_admissible_CavityTransportStep_values_zero_drift_positive_cavities_and_nonzero_boundary_error
+  - TDI_10_5_dedicated_Rust_1_97_1_gate_Rust_validation_Public_Rust_validation_hosted_validation_and_all_returned_preflights_are_green_on_the_exact_head
+  - TDI_10_5_falsifies_only_pointwise_subunit_implies_boundary_decay_and_does_not_establish_a_replacement_convergence_theorem
   - TDI_10_must_not_import_RH_as_a_hypothesis_or_Riemann_specific_coefficients_as_generic_theorems
 
 scientific_invariants:
@@ -329,12 +334,39 @@ roadmap:
       - no_uniform_contraction_or_boundary_error_decay
       - no_summable_drift_or_slowly_varying_bound
       - no_soft_edge_uniformity_or_double_scaling_theorem
-  - id: TDI10_5_plus
-    name: Nonuniform contraction counterexamples scaling and generic theorem research
+  - id: TDI10_5
+    name: Pointwise-subunit transport counterexample
+    status: qualified_pending_merge_PR_147
+    source: issue_141
+    qualification_evidence:
+      - exact_head_b65847fbf7adad35d7910d31cac0603172ff3d70
+      - dedicated_TDI10_5_gate_green_on_Rust_1_97_1
+      - Rust_validation_green
+      - Public_Rust_validation_green
+      - hosted_software_validation_green
+      - MSRV_and_all_returned_pull_request_preflights_green
+    exact_counterexample:
+      - alpha_k_equals_1_minus_1_over_k_plus_1_squared
+      - every_alpha_k_is_strictly_between_zero_and_one
+      - product_k_1_to_n_alpha_k_equals_n_plus_2_over_2_times_n_plus_1
+      - product_limit_equals_one_half_not_zero
+      - admissible_CavityTransportStep_realization_has_zero_drift_and_positive_cavities
+      - boundary_error_tends_to_one_half_of_the_nonzero_initial_error
+    falsified_implication:
+      - pointwise_0_lt_alpha_k_lt_1_does_not_imply_boundary_product_decay_to_zero
+    nonclaims:
+      - no_necessary_or_sufficient_decay_criterion
+      - no_uniform_rho_less_than_one_theorem
+      - no_summability_or_divergence_theorem_for_1_minus_alpha_k
+      - no_slowly_varying_Jacobi_theorem
+      - no_soft_edge_uniformity_or_double_scaling_theorem
+      - no_Riemann_specific_application
+  - id: TDI10_6_plus
+    name: Scaling criteria counterexamples and generic theorem research
     status: planned_not_authorized_until_explicit_followup_scope
     candidate_topics:
       - cumulative_nonuniform_transport_products
-      - minimal_counterexamples_to_uniform_contraction
+      - necessary_or_sufficient_product_decay_conditions
       - soft_edge_counterexamples
       - double_scaling_in_i_m_t
       - eigenvalues_only_and_pairwise_numerical_tools
