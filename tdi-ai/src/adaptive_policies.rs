@@ -354,8 +354,7 @@ impl C3RecoveryPolicy {
             self.max_state_delta_for_adaptive_stop,
             self.min_abs_margin_for_adaptive_stop,
         );
-        let verification_threshold_met =
-            observation.step_index() >= self.minimum_verification_step;
+        let verification_threshold_met = observation.step_index() >= self.minimum_verification_step;
         let on_verification_cadence = observation.step_index() % self.verify_every_steps == 0;
         let cadence_due = verification_threshold_met & on_verification_cadence;
         let checkpoint_available = observation.available_checkpoints() > 0;
@@ -367,7 +366,7 @@ impl C3RecoveryPolicy {
                 InferenceAction::Continue
             }
             Some(VerifierSignal::Violated) => {
-                return Err(ReferencePolicyError::UnrecoverableVerifiedViolation)
+                return Err(ReferencePolicyError::UnrecoverableVerifiedViolation);
             }
             Some(VerifierSignal::Satisfied) => InferenceAction::Stop,
             Some(VerifierSignal::Indeterminate) => InferenceAction::Continue,
