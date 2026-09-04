@@ -22,6 +22,8 @@ The policy is:
 
 A neutral read may project onto an occupied physical slot, but because its tag was never written it can only be `Empty` or `CollisionMiss`; a neutral `Hit` is a fail-closed adapter error. This prevents a nominal write/distractor event from silently becoming a successful memory retrieval.
 
+For T2 payload writes, the chronological key cursor is transactional. The adapter copies the cursor, derives the candidate write key on that copy, executes the A2 step, and commits the advanced cursor only after the step succeeds. A technical encoding/recurrent/memory failure therefore cannot advance logical payload routing state.
+
 ## Why writes do not read their own key
 
 `A2Reference::step` requires a `read_key` on every event. Passing the same key for both read and write would create implicit read-modify-write behavior when a key is repeated. That is not implied by the symbolic association/payload event contract.
