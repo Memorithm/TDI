@@ -1,0 +1,38 @@
+name: TDI-10.2 cavity transport
+
+on:
+  pull_request:
+    paths:
+      - "tdi-operator/src/transport.rs"
+      - "tdi-operator/src/lib.rs"
+      - "tdi-operator/tests/cavity_transport.rs"
+      - "docs/tdi10/TDI-10.2-CAVITY-TRANSPORT.md"
+      - "scripts/check-tdi10.2-cavity-transport.sh"
+      - ".github/workflows/tdi10.2-cavity-transport.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "tdi-operator/src/transport.rs"
+      - "tdi-operator/src/lib.rs"
+      - "tdi-operator/tests/cavity_transport.rs"
+      - "docs/tdi10/TDI-10.2-CAVITY-TRANSPORT.md"
+      - "scripts/check-tdi10.2-cavity-transport.sh"
+      - ".github/workflows/tdi10.2-cavity-transport.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  cavity-transport:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+      - name: Qualify TDI-10.2 exact cavity transport
+        run: bash scripts/check-tdi10.2-cavity-transport.sh
