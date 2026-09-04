@@ -1,0 +1,40 @@
+name: TDI-10.3 drift factorization
+
+on:
+  pull_request:
+    paths:
+      - "tdi-operator/src/factorization.rs"
+      - "tdi-operator/src/transport.rs"
+      - "tdi-operator/src/lib.rs"
+      - "tdi-operator/tests/cavity_factorization.rs"
+      - "docs/tdi10/TDI-10.3-DRIFT-FACTORIZATION.md"
+      - "scripts/check-tdi10.3-drift-factorization.sh"
+      - ".github/workflows/tdi10.3-drift-factorization.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "tdi-operator/src/factorization.rs"
+      - "tdi-operator/src/transport.rs"
+      - "tdi-operator/src/lib.rs"
+      - "tdi-operator/tests/cavity_factorization.rs"
+      - "docs/tdi10/TDI-10.3-DRIFT-FACTORIZATION.md"
+      - "scripts/check-tdi10.3-drift-factorization.sh"
+      - ".github/workflows/tdi10.3-drift-factorization.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  drift-factorization:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+      - name: Qualify TDI-10.3 exact drift factorization
+        run: bash scripts/check-tdi10.3-drift-factorization.sh
