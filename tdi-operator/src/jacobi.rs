@@ -3,9 +3,18 @@ use core::fmt;
 /// Construction errors for a finite real symmetric tridiagonal matrix.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum JacobiError {
-    DimensionMismatch { diagonal: usize, off_diagonal: usize },
-    NonFiniteDiagonal { index: usize, value: f64 },
-    NonFiniteOffDiagonal { index: usize, value: f64 },
+    DimensionMismatch {
+        diagonal: usize,
+        off_diagonal: usize,
+    },
+    NonFiniteDiagonal {
+        index: usize,
+        value: f64,
+    },
+    NonFiniteOffDiagonal {
+        index: usize,
+        value: f64,
+    },
 }
 
 impl fmt::Display for JacobiError {
