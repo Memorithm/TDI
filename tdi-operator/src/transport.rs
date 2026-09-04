@@ -20,10 +20,16 @@ impl fmt::Display for CavityTransportError {
                 write!(f, "neighbor cavity is not strictly positive: {value:e}")
             }
             Self::NonPositiveReference { name, value } => {
-                write!(f, "{name} reference cavity is not strictly positive: {value:e}")
+                write!(
+                    f,
+                    "{name} reference cavity is not strictly positive: {value:e}"
+                )
             }
             Self::NonPositiveCurrentCavity { value } => {
-                write!(f, "derived current cavity is not strictly positive: {value:e}")
+                write!(
+                    f,
+                    "derived current cavity is not strictly positive: {value:e}"
+                )
             }
             Self::NonFiniteDerivedQuantity => {
                 write!(f, "cavity transport produced a non-finite derived quantity")
