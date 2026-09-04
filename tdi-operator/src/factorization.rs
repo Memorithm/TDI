@@ -16,7 +16,10 @@ impl fmt::Display for CavityFactorizationError {
                 write!(f, "local reference edge is not finite: {value:e}")
             }
             Self::NonFiniteDerivedQuantity => {
-                write!(f, "cavity factorization produced a non-finite derived quantity")
+                write!(
+                    f,
+                    "cavity factorization produced a non-finite derived quantity"
+                )
             }
         }
     }
