@@ -105,7 +105,10 @@ fn policy_and_evaluator_surfaces_remain_structurally_separate() {
     .expect("deterministic P1 generation");
     let (policy, evaluator) = generated.into_parts();
 
-    assert_eq!(policy.family(), AdaptiveTaskFamily::StagedEvidenceAccumulation);
+    assert_eq!(
+        policy.family(),
+        AdaptiveTaskFamily::StagedEvidenceAccumulation
+    );
     assert_eq!(evaluator.stratum(), DifficultyStratum::Deep);
     assert_eq!(evaluator.seed(), 77);
     assert!(matches!(evaluator.target(), EvaluatorTarget::P1(_)));
