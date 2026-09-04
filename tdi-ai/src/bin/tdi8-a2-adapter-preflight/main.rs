@@ -224,8 +224,11 @@ impl SymbolicTaskAdapter for A2Adapter {
 
     fn payload(&mut self, value: TaskSymbol) -> Result<(), Self::Error> {
         let input = self.encoder.payload(value)?;
-        let write_key = self.payload_keys.next_write_key()?;
-        self.non_query_step(input, Some(write_key))
+        let mut next_payload_keys = self.payload_keys;
+        let write_key = next_payload_keys.next_write_key()?;
+        self.non_query_step(input, Some(write_key))?;
+        self.payload_keys = next_payload_keys;
+        Ok(())
     }
 
     fn distractor(&mut self, token: TaskSymbol) -> Result<(), Self::Error> {
