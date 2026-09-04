@@ -204,10 +204,7 @@ pub enum ForkEvent {
     /// the execution policy, but checkpoint semantics are not defined here.
     ChoicePoint,
     /// Local branch evidence. Deltas are exact small non-negative integers.
-    Evidence {
-        left_delta: i16,
-        right_delta: i16,
-    },
+    Evidence { left_delta: i16, right_delta: i16 },
     /// Later ordinary task evidence proves one branch invalid.
     EliminateBranch { branch: ForkBranch },
 }
@@ -503,8 +500,8 @@ pub fn generate_p3(
         .checked_add(config.recovery_steps)
         .and_then(|value| value.checked_add(2))
         .ok_or(AdaptiveTaskError::EventCountOverflow)?;
-    let total_events = usize::try_from(total_events_u32)
-        .map_err(|_| AdaptiveTaskError::EventCountOverflow)?;
+    let total_events =
+        usize::try_from(total_events_u32).map_err(|_| AdaptiveTaskError::EventCountOverflow)?;
     let mut events = Vec::new();
     events
         .try_reserve_exact(total_events)
@@ -516,8 +513,8 @@ pub fn generate_p3(
         events.push(branch_evidence(decoy, magnitude));
     }
 
-    let contradiction_event_index = u32::try_from(events.len())
-        .map_err(|_| AdaptiveTaskError::EventCountOverflow)?;
+    let contradiction_event_index =
+        u32::try_from(events.len()).map_err(|_| AdaptiveTaskError::EventCountOverflow)?;
     events.push(ForkEvent::EliminateBranch { branch: decoy });
 
     for index in 0..config.recovery_steps {
@@ -618,9 +615,9 @@ impl std::error::Error for AdaptiveTaskError {}
 #[cfg(test)]
 mod tests {
     use super::{
-        AdaptiveTaskFamily, AdaptiveTaskError, DifficultyStratum, EvaluatorOracle,
-        EvaluatorTarget, ForkBranch, ForkEvent, P1Config, P2Config, P3Config, PolicyTask,
-        generate_p1, generate_p2, generate_p3,
+        AdaptiveTaskError, AdaptiveTaskFamily, DifficultyStratum, EvaluatorOracle, EvaluatorTarget,
+        ForkBranch, ForkEvent, P1Config, P2Config, P3Config, PolicyTask, generate_p1, generate_p2,
+        generate_p3,
     };
 
     #[test]
@@ -743,7 +740,10 @@ mod tests {
         )
         .expect("P1 generation");
         let (policy, evaluator) = generated.into_parts();
-        assert_eq!(policy.family(), AdaptiveTaskFamily::StagedEvidenceAccumulation);
+        assert_eq!(
+            policy.family(),
+            AdaptiveTaskFamily::StagedEvidenceAccumulation
+        );
         assert_eq!(evaluator.stratum(), DifficultyStratum::Deep);
         assert_eq!(evaluator.seed(), 44);
         assert!(matches!(evaluator.target(), EvaluatorTarget::P1(_)));
