@@ -33,6 +33,8 @@ grep -Fq '.step(&fused_input, a2_read_key, a2_write_key)' "$SOURCE" \
     || fail "routed A3 step no longer delegates fused input to unchanged A2 semantics"
 grep -Fq 'A3VsaReadRoute::Skip => Ok(self.a2.step(input, a2_read_key, a2_write_key)?),' "$SOURCE" \
     || fail "A3 Skip route no longer bypasses VSA fusion"
+grep -Fq 'pub fn step_skip_vsa_and_store(' "$SOURCE" \
+    || fail "A3 cross-mechanism atomic skip-and-store primitive missing"
 grep -Fq 'pub fn store_vsa(' "$SOURCE" \
     || fail "explicit atomic VSA store surface missing"
 grep -Fq '.with_vsa_workspace(vsa.workspace_bits())' "$SOURCE" \
@@ -50,6 +52,9 @@ for test_name in \
     legacy_step_matches_explicit_same_key_route_bit_exactly \
     routed_skip_ignores_nonempty_vsa_and_preserves_a2_semantics_bit_exactly \
     routed_vsa_key_and_a2_read_key_are_independent \
+    atomic_skip_and_store_matches_sequential_success_path_bit_exactly \
+    rejected_atomic_store_preparation_cannot_mutate_a2_or_vsa_state \
+    rejected_atomic_a2_step_cannot_commit_prepared_vsa_state \
     vsa_readout_changes_the_integrated_a3_recurrent_input \
     rejected_integrated_step_cannot_mutate_a2_or_vsa_state \
     rejected_vsa_store_is_atomic_and_does_not_touch_a2 \
@@ -68,6 +73,9 @@ done
 if test -f scripts/check-tdi8.1-a3-routing.sh; then
     bash scripts/check-tdi8.1-a3-routing.sh
 fi
+if test -f scripts/check-tdi8.1-a3-atomic-store.sh; then
+    bash scripts/check-tdi8.1-a3-atomic-store.sh
+fi
 
 cargo test -p tdi-ai --locked 'assr_h_reference::tests'
 cargo test -p tdi-ai --locked --test tdi8_assr_h_reference_compile
@@ -75,6 +83,7 @@ cargo test -p tdi-ai --locked --test tdi8_assr_h_reference_compile
 printf 'TDI-8.1 A3 public API: VERIFIED\n'
 printf 'TDI-8.1 VSA/A2 routed integration: VERIFIED\n'
 printf 'TDI-8.1 legacy same-key semantics: PRESERVED\n'
+printf 'TDI-8.1 A3 cross-mechanism store atomicity: VERIFIED\n'
 printf 'TDI-8.1 VSA store atomicity boundary: VERIFIED\n'
 printf 'TDI-8.1 A3 exact memory accounting: VERIFIED\n'
 printf 'TDI-8.1 exact matched-budget representability: VERIFIED\n'
