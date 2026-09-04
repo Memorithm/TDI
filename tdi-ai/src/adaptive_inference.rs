@@ -420,7 +420,8 @@ impl ResourceMeter {
         candidate.persistent_memory_peak_bits = candidate
             .persistent_memory_peak_bits
             .max(persistent_memory_bits);
-        candidate.policy_memory_peak_bits = candidate.policy_memory_peak_bits.max(policy_memory_bits);
+        candidate.policy_memory_peak_bits =
+            candidate.policy_memory_peak_bits.max(policy_memory_bits);
         candidate.checkpoint_memory_peak_bits = candidate
             .checkpoint_memory_peak_bits
             .max(checkpoint_memory_bits);
