@@ -17,9 +17,7 @@ use crate::adaptive_policies::{
     C0FixedPolicy, C1Plan, C1StaticPolicy, C2AdaptivePolicy, C3RecoveryPolicy, PolicyDecision,
     ReferencePolicyError,
 };
-use crate::adaptive_task_generators::{
-    AdaptiveTaskFamily, DifficultyStratum, GeneratedTask,
-};
+use crate::adaptive_task_generators::{AdaptiveTaskFamily, DifficultyStratum, GeneratedTask};
 
 /// One already-constructed bounded reference policy.
 ///
@@ -258,11 +256,16 @@ pub enum ReferenceEvaluatorError {
     Execution(ReferenceExecutionError),
     Policy(ReferencePolicyError),
     ZeroDecisionLimit,
-    DecisionLimitExceeded { limit: u64 },
+    DecisionLimitExceeded {
+        limit: u64,
+    },
     DecisionCountOverflow,
     MissingC1Plan,
     GeneratorFamilyMismatch,
-    PolicyArmDrift { expected: PolicyArm, actual: PolicyArm },
+    PolicyArmDrift {
+        expected: PolicyArm,
+        actual: PolicyArm,
+    },
 }
 
 impl From<ReferenceExecutionError> for ReferenceEvaluatorError {
