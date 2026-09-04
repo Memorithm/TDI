@@ -35,14 +35,9 @@ fn realized_zero_drift_chain(steps: usize) -> Vec<CavityTransportStep> {
         let current_reference = 1.0;
         let shifted_diagonal = realized_edge_squared / reference + current_reference;
 
-        let step = CavityTransportStep::left(
-            shifted_diagonal,
-            edge,
-            cavity,
-            reference,
-            current_reference,
-        )
-        .expect("the explicit positive counterexample construction must be admissible");
+        let step =
+            CavityTransportStep::left(shifted_diagonal, edge, cavity, reference, current_reference)
+                .expect("the explicit positive counterexample construction must be admissible");
 
         assert!(step.transport_factor() > 0.0);
         assert!(step.transport_factor() < 1.0);
