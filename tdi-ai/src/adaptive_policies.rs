@@ -244,15 +244,15 @@ impl C2AdaptivePolicy {
         min_abs_margin_for_adaptive_stop: f64,
     ) -> Result<Self, ReferencePolicyError> {
         validate_nonnegative_finite(
-            PolicyConfigField::MaxResidualForAdaptiveStop,
+            PolicyConfigField::MaxResidual,
             max_residual_for_adaptive_stop,
         )?;
         validate_nonnegative_finite(
-            PolicyConfigField::MaxStateDeltaForAdaptiveStop,
+            PolicyConfigField::MaxStateDelta,
             max_state_delta_for_adaptive_stop,
         )?;
         validate_nonnegative_finite(
-            PolicyConfigField::MinAbsMarginForAdaptiveStop,
+            PolicyConfigField::MinAbsMargin,
             min_abs_margin_for_adaptive_stop,
         )?;
         Ok(Self {
@@ -317,15 +317,15 @@ impl C3RecoveryPolicy {
         verify_before_stop: bool,
     ) -> Result<Self, ReferencePolicyError> {
         validate_nonnegative_finite(
-            PolicyConfigField::MaxResidualForAdaptiveStop,
+            PolicyConfigField::MaxResidual,
             max_residual_for_adaptive_stop,
         )?;
         validate_nonnegative_finite(
-            PolicyConfigField::MaxStateDeltaForAdaptiveStop,
+            PolicyConfigField::MaxStateDelta,
             max_state_delta_for_adaptive_stop,
         )?;
         validate_nonnegative_finite(
-            PolicyConfigField::MinAbsMarginForAdaptiveStop,
+            PolicyConfigField::MinAbsMargin,
             min_abs_margin_for_adaptive_stop,
         )?;
         if verify_every_steps == 0 {
@@ -387,9 +387,9 @@ impl C3RecoveryPolicy {
 /// Named non-final policy configuration field.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PolicyConfigField {
-    MaxResidualForAdaptiveStop,
-    MaxStateDeltaForAdaptiveStop,
-    MinAbsMarginForAdaptiveStop,
+    MaxResidual,
+    MaxStateDelta,
+    MinAbsMargin,
 }
 
 fn base_should_stop(
