@@ -1,12 +1,12 @@
 #[allow(dead_code)]
+#[path = "../src/adaptive_execution.rs"]
+mod adaptive_execution;
+#[allow(dead_code)]
 #[path = "../src/adaptive_inference.rs"]
 mod adaptive_inference;
 #[allow(dead_code)]
 #[path = "../src/adaptive_task_generators.rs"]
 mod adaptive_task_generators;
-#[allow(dead_code)]
-#[path = "../src/adaptive_execution.rs"]
-mod adaptive_execution;
 
 use adaptive_execution::{
     P3_CHECKPOINT_BYTES, ReferenceExecution, ReferenceExecutionError, evaluate_stopped,
@@ -31,12 +31,9 @@ fn p1_c2_can_stop_from_current_observation_without_evaluator_metadata() {
     )
     .expect("P1 generation");
     let (policy_task, evaluator) = generated.into_parts();
-    let mut execution = ReferenceExecution::new(
-        PolicyArm::C2AdaptiveStopping,
-        policy_task,
-        roomy_envelope(),
-    )
-    .expect("reference execution");
+    let mut execution =
+        ReferenceExecution::new(PolicyArm::C2AdaptiveStopping, policy_task, roomy_envelope())
+            .expect("reference execution");
 
     loop {
         let observation = execution.observation().expect("current observation");
@@ -138,7 +135,10 @@ fn p3_c2_fails_but_c3_verify_backtrack_replay_recovers_without_target_input() {
         accounting.checkpoint_traffic().restore_bytes(),
         P3_CHECKPOINT_BYTES
     );
-    assert_eq!(accounting.usage().checkpoint_ops(), 2 * P3_CHECKPOINT_BYTES);
+    assert_eq!(
+        accounting.usage().checkpoint_ops(),
+        2 * P3_CHECKPOINT_BYTES
+    );
     assert!(accounting.usage().replay_ops() > 0);
     assert!(accounting.usage().checkpoint_memory_bits() >= 8 * P3_CHECKPOINT_BYTES);
 }
@@ -152,12 +152,9 @@ fn non_c3_arms_cannot_invoke_verify_or_backtrack() {
     )
     .expect("P2 generation");
     let (policy_task, _) = generated.into_parts();
-    let mut execution = ReferenceExecution::new(
-        PolicyArm::C2AdaptiveStopping,
-        policy_task,
-        roomy_envelope(),
-    )
-    .expect("C2 execution");
+    let mut execution =
+        ReferenceExecution::new(PolicyArm::C2AdaptiveStopping, policy_task, roomy_envelope())
+            .expect("C2 execution");
 
     assert!(matches!(
         execution.verify(),
@@ -189,12 +186,9 @@ fn rejected_compute_charge_does_not_partially_store_a_checkpoint() {
     .expect("P3 generation");
     let (policy_task, _) = generated.into_parts();
     let envelope = ResourceEnvelope::new(1, 100_000).expect("valid constrained envelope");
-    let mut execution = ReferenceExecution::new(
-        PolicyArm::C3VerificationRecovery,
-        policy_task,
-        envelope,
-    )
-    .expect("initial state fits");
+    let mut execution =
+        ReferenceExecution::new(PolicyArm::C3VerificationRecovery, policy_task, envelope)
+            .expect("initial state fits");
     let before = execution.accounting();
 
     assert!(matches!(
@@ -218,12 +212,9 @@ fn rejected_memory_state_does_not_partially_commit_solver_or_checkpoint() {
     .expect("P3 generation");
     let (policy_task, _) = generated.into_parts();
     let envelope = ResourceEnvelope::new(100_000, 700).expect("valid constrained envelope");
-    let mut execution = ReferenceExecution::new(
-        PolicyArm::C3VerificationRecovery,
-        policy_task,
-        envelope,
-    )
-    .expect("initial state fits");
+    let mut execution =
+        ReferenceExecution::new(PolicyArm::C3VerificationRecovery, policy_task, envelope)
+            .expect("initial state fits");
     let before = execution.accounting();
 
     assert!(matches!(
@@ -246,12 +237,9 @@ fn policy_decision_hook_accounts_compute_and_policy_memory_without_choosing_acti
     )
     .expect("P1 generation");
     let (policy_task, _) = generated.into_parts();
-    let mut execution = ReferenceExecution::new(
-        PolicyArm::C2AdaptiveStopping,
-        policy_task,
-        roomy_envelope(),
-    )
-    .expect("C2 execution");
+    let mut execution =
+        ReferenceExecution::new(PolicyArm::C2AdaptiveStopping, policy_task, roomy_envelope())
+            .expect("C2 execution");
 
     execution
         .charge_policy_decision(17, 96)
