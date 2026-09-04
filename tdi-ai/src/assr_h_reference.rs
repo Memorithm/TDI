@@ -163,9 +163,10 @@ pub enum A3VsaReadRoute {
 /// bounded task adapters do not have to create accidental VSA cross-talk merely
 /// to preserve an independently qualified A2 read policy.
 ///
-/// The VSA workspace is written only through [`Self::store_vsa`]. That operation
-/// remains deliberately separate from transition execution. The later bounded
-/// evaluator owns the task-level policy deciding when and what to store.
+/// VSA storage remains available as the standalone atomic [`Self::store_vsa`]
+/// primitive. [`Self::step_skip_vsa_and_store`] additionally provides one
+/// cross-mechanism transaction for policies that deliberately skip VSA retrieval
+/// on a transition and need an A2 step plus VSA store to commit together.
 #[derive(Clone, Debug, PartialEq)]
 pub struct A3Reference {
     a2: A2Reference,
@@ -259,16 +260,7 @@ impl A3Reference {
         a2_read_key: u64,
         a2_write_key: Option<u64>,
     ) -> Result<A2StepReport, A3ReferenceError> {
-        let expected = self.workspace.components().len();
-        if input.len() != expected {
-            return Err(A3ReferenceError::InputWidthMismatch {
-                expected,
-                actual: input.len(),
-            });
-        }
-        if let Some(index) = input.iter().position(|value| !value.is_finite()) {
-            return Err(A3ReferenceError::NonFiniteInput { index });
-        }
+        self.validate_input(input)?;
 
         match vsa_read {
             A3VsaReadRoute::Skip => Ok(self.a2.step(input, a2_read_key, a2_write_key)?),
@@ -286,6 +278,31 @@ impl A3Reference {
                 Ok(self.a2.step(&fused_input, a2_read_key, a2_write_key)?)
             }
         }
+    }
+
+    /// Execute one VSA-skip A2 transition and one VSA bundle as one transaction.
+    ///
+    /// The complete next VSA superposition is allocated and validated first.
+    /// The unchanged A2 step then executes on the exact external input. Only
+    /// after A2 succeeds is the already-prepared VSA vector committed, with no
+    /// further allocation or numeric operation. A preparation failure therefore
+    /// cannot mutate A2, and an A2 failure cannot commit the VSA update.
+    ///
+    /// This primitive intentionally does not define which task events should use
+    /// it or what payload they should store; those remain evaluator-policy choices.
+    pub fn step_skip_vsa_and_store(
+        &mut self,
+        input: &[f64],
+        a2_read_key: u64,
+        a2_write_key: Option<u64>,
+        vsa_store_key: u64,
+        vsa_payload: &[f64],
+    ) -> Result<A2StepReport, A3ReferenceError> {
+        self.validate_input(input)?;
+        let prepared = self.workspace.prepare_bundle(vsa_store_key, vsa_payload)?;
+        let report = self.a2.step(input, a2_read_key, a2_write_key)?;
+        self.workspace.commit_prepared_bundle(prepared);
+        Ok(report)
     }
 
     /// Atomically bind and superpose one finite payload under one deterministic
@@ -307,13 +324,29 @@ impl A3Reference {
         self.workspace.clear();
     }
 
+    fn validate_input(&self, input: &[f64]) -> Result<(), A3ReferenceError> {
+        let expected = self.workspace.components().len();
+        if input.len() != expected {
+            return Err(A3ReferenceError::InputWidthMismatch {
+                expected,
+                actual: input.len(),
+            });
+        }
+        if let Some(index) = input.iter().position(|value| !value.is_finite()) {
+            return Err(A3ReferenceError::NonFiniteInput { index });
+        }
+        Ok(())
+    }
+
     /// Exact architecture-level memory accounting for this A3 instance.
     ///
     /// The integrated VSA-read path keeps one VSA-width readout/fused-input
-    /// vector alive while A2 computes its state-width candidate vector, so the
-    /// declared temporary component remains the maximum across admissible routed
-    /// steps: A2 temporary storage plus one standalone VSA temporary vector.
-    /// Static accounting additionally records the explicit A3 fusion gain.
+    /// vector alive while A2 computes its state-width candidate vector. The
+    /// atomic skip-and-store path instead keeps one prepared VSA-width next-state
+    /// vector alive while A2 computes that same candidate. Therefore the peak
+    /// declared temporary component remains A2 temporary storage plus one VSA
+    /// temporary vector across all admitted paths. Static accounting additionally
+    /// records the explicit A3 fusion gain.
     pub fn memory_accounting(&self) -> Result<MemoryAccounting, A3ReferenceError> {
         let a2 = self.a2.memory_accounting()?;
         let vsa = self.workspace.storage_accounting()?;
@@ -357,8 +390,9 @@ mod tests {
     use crate::associative_memory::AssociativeMemoryLayout;
     use crate::assr_reference::{
         A1Reference, A2ReadStatus, A2Reference, RecurrentLayout, RecurrentParameters,
+        RecurrentReferenceError,
     };
-    use crate::vsa_workspace::VsaWorkspaceLayout;
+    use crate::vsa_workspace::{VsaWorkspaceError, VsaWorkspaceLayout};
     use crate::{MatchedDynamicBudget, ReferenceArm};
 
     fn parameters(input_width: u64, state_width: u64) -> RecurrentParameters {
@@ -379,6 +413,17 @@ mod tests {
         let layout = RecurrentLayout::new(2, 2).expect("valid fixture layout");
         RecurrentParameters::new(layout, vec![1.0, 0.0, 0.0, 1.0], vec![0.0; 4], vec![0.0; 2])
             .expect("identity parameters")
+    }
+
+    fn overflow_parameters() -> RecurrentParameters {
+        let layout = RecurrentLayout::new(2, 2).expect("valid fixture layout");
+        RecurrentParameters::new(
+            layout,
+            vec![f64::MAX, 0.0, 0.0, 1.0],
+            vec![0.0; 4],
+            vec![0.0; 2],
+        )
+        .expect("finite overflow fixture parameters")
     }
 
     fn a3() -> A3Reference {
@@ -514,6 +559,75 @@ mod tests {
             }
         );
         assert_eq!(model.state(), &[0.5, -0.25]);
+    }
+
+    #[test]
+    fn atomic_skip_and_store_matches_sequential_success_path_bit_exactly() {
+        let mut sequential = a3();
+        let mut atomic = a3();
+
+        let sequential_report = sequential
+            .step_routed(&[0.25, -0.5], A3VsaReadRoute::Skip, 99, Some(3))
+            .expect("sequential A2 transition");
+        sequential
+            .store_vsa(7, &[0.75, -0.25])
+            .expect("sequential VSA store");
+
+        let atomic_report = atomic
+            .step_skip_vsa_and_store(&[0.25, -0.5], 99, Some(3), 7, &[0.75, -0.25])
+            .expect("atomic skip-and-store");
+
+        assert_eq!(atomic_report, sequential_report);
+        assert_eq!(
+            atomic.snapshot().expect("atomic snapshot").state(),
+            sequential.snapshot().expect("sequential snapshot").state()
+        );
+    }
+
+    #[test]
+    fn rejected_atomic_store_preparation_cannot_mutate_a2_or_vsa_state() {
+        let mut model = a3();
+        model.store_vsa(5, &[0.25, 0.5]).expect("seed workspace");
+        let before = model.snapshot().expect("snapshot before rejection");
+
+        assert_eq!(
+            model.step_skip_vsa_and_store(
+                &[0.25, -0.5],
+                99,
+                Some(3),
+                7,
+                &[f64::NAN, 0.0],
+            ),
+            Err(A3ReferenceError::Vsa(VsaWorkspaceError::NonFinitePayload {
+                index: 0,
+            }))
+        );
+        let after = model.snapshot().expect("snapshot after rejection");
+        assert_eq!(before.state(), after.state());
+    }
+
+    #[test]
+    fn rejected_atomic_a2_step_cannot_commit_prepared_vsa_state() {
+        let mut model = A3Reference::new(
+            overflow_parameters(),
+            AssociativeMemoryLayout::new(8, 2).expect("associative layout"),
+            11,
+            1.0,
+            VsaWorkspaceLayout::new(2).expect("VSA layout"),
+            23,
+            1.0,
+        )
+        .expect("overflow A3");
+        let before = model.snapshot().expect("snapshot before rejection");
+
+        assert_eq!(
+            model.step_skip_vsa_and_store(&[2.0, 0.0], 99, Some(3), 7, &[0.5, -0.25]),
+            Err(A3ReferenceError::A2(
+                RecurrentReferenceError::NonFiniteIntermediate { state_index: 0 }
+            ))
+        );
+        let after = model.snapshot().expect("snapshot after rejection");
+        assert_eq!(before.state(), after.state());
     }
 
     #[test]
