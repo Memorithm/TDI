@@ -1,6 +1,5 @@
 use tdi_operator::{
-    CavityDriftFactorization, CavityFactorizationError, CavityTransportStep,
-    FrozenToeplitzCavity,
+    CavityDriftFactorization, CavityFactorizationError, CavityTransportStep, FrozenToeplitzCavity,
 };
 
 fn assert_close(left: f64, right: f64, tolerance: f64) {
@@ -19,8 +18,7 @@ fn factorization_reconstructs_tdi10_2_drift_and_transport_exactly_numerically() 
         (5.0, -0.6, 4.2, 3.8, 4.1, -0.9),
         (3.5, 0.0, 3.3, 3.0, 3.2, 0.0),
     ] {
-        let step =
-            CavityTransportStep::left(a, edge, cavity, q_neighbor, q_current).unwrap();
+        let step = CavityTransportStep::left(a, edge, cavity, q_neighbor, q_current).unwrap();
         let factors = CavityDriftFactorization::new(step, reference_edge).unwrap();
 
         assert_close(factors.reconstructed_drift(), step.drift(), 8.0e-15);
