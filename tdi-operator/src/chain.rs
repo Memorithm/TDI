@@ -21,7 +21,9 @@ pub enum CavityChainError {
         expected: f64,
         observed: f64,
     },
-    NonFiniteAccumulation { index: usize },
+    NonFiniteAccumulation {
+        index: usize,
+    },
 }
 
 impl fmt::Display for CavityChainError {
