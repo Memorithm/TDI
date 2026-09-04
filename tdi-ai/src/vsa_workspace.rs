@@ -172,6 +172,16 @@ impl fmt::Display for VsaWorkspaceError {
 
 impl std::error::Error for VsaWorkspaceError {}
 
+/// Fully validated candidate persistent VSA state.
+///
+/// This crate-private carrier allows A3 to prepare a fallible bundle update
+/// before mutating A2, then commit the already-owned vector without allocation
+/// or another numeric failure after the A2 transition succeeds.
+#[derive(Debug)]
+pub(crate) struct PreparedVsaBundle {
+    components: Vec<f64>,
+}
+
 /// Bounded deterministic VSA workspace with seeded bipolar role projection.
 ///
 /// A role coordinate is generated on demand as `-1` or `+1` from
@@ -231,11 +241,17 @@ impl BoundedVsaWorkspace {
         Ok(bound)
     }
 
-    /// Add one bound key/payload pair to the persistent superposition.
+    /// Prepare one complete finite bundle update without persistent mutation.
     ///
-    /// The complete next workspace is computed and validated before commit, so
-    /// rejected bundling cannot partially mutate persistent state.
-    pub fn bundle(&mut self, key: u64, payload: &[f64]) -> Result<(), VsaWorkspaceError> {
+    /// The returned vector owns every fallible allocation and numeric result
+    /// required by the update. A caller may therefore execute another atomic
+    /// mechanism transition and commit this prepared state only after that
+    /// transition succeeds.
+    pub(crate) fn prepare_bundle(
+        &self,
+        key: u64,
+        payload: &[f64],
+    ) -> Result<PreparedVsaBundle, VsaWorkspaceError> {
         self.validate_payload(payload)?;
         let mut next = allocate_zeroed(payload.len())?;
         for (index, ((next_value, current), payload_value)) in next
@@ -251,7 +267,25 @@ impl BoundedVsaWorkspace {
             }
             *next_value = bundled;
         }
-        self.components = next;
+        Ok(PreparedVsaBundle { components: next })
+    }
+
+    /// Commit a bundle state produced by [`Self::prepare_bundle`].
+    ///
+    /// This operation performs no allocation, numeric calculation or validation
+    /// and is therefore infallible. The prepared carrier is crate-private so it
+    /// can only originate from the validated preparation path above.
+    pub(crate) fn commit_prepared_bundle(&mut self, prepared: PreparedVsaBundle) {
+        self.components = prepared.components;
+    }
+
+    /// Add one bound key/payload pair to the persistent superposition.
+    ///
+    /// The complete next workspace is computed and validated before commit, so
+    /// rejected bundling cannot partially mutate persistent state.
+    pub fn bundle(&mut self, key: u64, payload: &[f64]) -> Result<(), VsaWorkspaceError> {
+        let prepared = self.prepare_bundle(key, payload)?;
+        self.commit_prepared_bundle(prepared);
         Ok(())
     }
 
@@ -404,6 +438,28 @@ mod tests {
             .collect();
         assert_eq!(left_bits, right_bits);
         assert_eq!(left.unbind(11), right.unbind(11));
+    }
+
+    #[test]
+    fn prepared_bundle_matches_direct_bundle_bit_exactly() {
+        let mut direct = workspace(4);
+        let mut prepared = direct.clone();
+        direct.bundle(17, &[1.5, -2.0, 0.25, 8.0]).expect("direct bundle");
+        let next = prepared
+            .prepare_bundle(17, &[1.5, -2.0, 0.25, 8.0])
+            .expect("prepared bundle");
+        prepared.commit_prepared_bundle(next);
+        let direct_bits: Vec<_> = direct
+            .components()
+            .iter()
+            .map(|value| value.to_bits())
+            .collect();
+        let prepared_bits: Vec<_> = prepared
+            .components()
+            .iter()
+            .map(|value| value.to_bits())
+            .collect();
+        assert_eq!(direct_bits, prepared_bits);
     }
 
     #[test]
