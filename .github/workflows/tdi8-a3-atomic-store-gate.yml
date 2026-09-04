@@ -1,0 +1,35 @@
+name: TDI-8.1 A3 atomic store gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  a3-atomic-store:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run targeted Clippy
+        run: cargo clippy --locked -p tdi-ai --lib -- -D warnings
+
+      - name: Verify TDI-8 bootstrap integrity
+        run: bash scripts/check-tdi8-bootstrap.sh
+
+      - name: Enforce A3 cross-mechanism atomicity gate
+        run: bash scripts/check-tdi8.1-a3-atomic-store-gate.sh
