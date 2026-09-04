@@ -183,13 +183,14 @@ impl A3Adapter {
             });
         }
         let input_width = recurrent_layout.input_width();
+        let vsa_layout = VsaWorkspaceLayout::new(input_width).map_err(A3ReferenceError::from)?;
         Ok(Self {
             reference: A3Reference::new(
                 parameters,
                 memory_layout,
                 projection_seed,
                 associative_fusion_gain,
-                VsaWorkspaceLayout::new(input_width)?,
+                vsa_layout,
                 vsa_role_seed,
                 vsa_fusion_gain,
             )?,
@@ -315,7 +316,6 @@ fn dual_path_parameters() -> RecurrentParameters {
     // occupy 1/2. Each path contributes exactly one half before the A2 memory
     // payload contributes the other half at query time.
     input_to_state[3] = FIXTURE_INPUT_WEIGHT;
-    input_to_state[4] = FIXTURE_INPUT_WEIGHT;
     input_to_state[input_width + 4] = FIXTURE_INPUT_WEIGHT;
     input_to_state[2 * input_width + 1] = FIXTURE_INPUT_WEIGHT;
     input_to_state[3 * input_width + 2] = FIXTURE_INPUT_WEIGHT;
