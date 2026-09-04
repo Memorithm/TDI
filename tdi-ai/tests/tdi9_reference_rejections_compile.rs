@@ -24,9 +24,7 @@ use adaptive_policies::{C0FixedPolicy, ReferencePolicyError};
 use adaptive_rejections::{
     ReferenceEvaluationOutcome, ReferenceRejectionCode, evaluate_generated_task_recorded,
 };
-use adaptive_task_generators::{
-    DifficultyStratum, GeneratedTask, P1Config, generate_p1,
-};
+use adaptive_task_generators::{DifficultyStratum, GeneratedTask, P1Config, generate_p1};
 
 fn p1() -> GeneratedTask {
     generate_p1(
@@ -172,10 +170,7 @@ fn rejection_numeric_codes_are_exact_and_stable() {
             ReferenceRejectionCode::ExecutionCheckpointTrafficOverflow,
             0x0207,
         ),
-        (
-            ReferenceRejectionCode::ExecutionAccountingInvariant,
-            0x0208,
-        ),
+        (ReferenceRejectionCode::ExecutionAccountingInvariant, 0x0208),
         (
             ReferenceRejectionCode::ExecutionCheckpointUnavailable,
             0x0209,
@@ -238,10 +233,7 @@ fn rejection_numeric_codes_are_exact_and_stable() {
         ),
         (ReferenceRejectionCode::PolicyZeroFixedSchedule, 0x0401),
         (ReferenceRejectionCode::PolicyZeroStaticSchedule, 0x0402),
-        (
-            ReferenceRejectionCode::PolicyNonFiniteConfiguration,
-            0x0403,
-        ),
+        (ReferenceRejectionCode::PolicyNonFiniteConfiguration, 0x0403),
         (ReferenceRejectionCode::PolicyNegativeConfiguration, 0x0404),
         (
             ReferenceRejectionCode::PolicyZeroVerificationCadence,
