@@ -115,7 +115,7 @@ impl CavityTransportChain {
         let initial_error = first.neighbor_error();
         let mut cumulative_transport_factor = 1.0;
         let mut accumulated_drift = 0.0;
-        let mut previous = None;
+        let mut previous: Option<CavityTransportStep> = None;
 
         for (index, step) in steps.iter().copied().enumerate() {
             if let Some(previous_step) = previous {
