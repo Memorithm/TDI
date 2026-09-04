@@ -46,16 +46,33 @@ import sys
 out = Path(sys.argv[1])
 
 cargo_toml = Path("Cargo.toml").read_text()
-member = '    "tdi-ai",\n'
-if cargo_toml.count(member) != 1:
-    raise SystemExit("Cargo.toml does not contain exactly one additive tdi-ai workspace member")
-(out / "Cargo.toml").write_text(cargo_toml.replace(member, "", 1))
+allowed_members = (
+    '    "tdi-ai",\n',
+    '    "tdi-operator",\n',
+)
+for member in allowed_members:
+    if cargo_toml.count(member) != 1:
+        raise SystemExit(
+            f"Cargo.toml does not contain exactly one reviewed additive workspace member: {member.strip()}"
+        )
+    cargo_toml = cargo_toml.replace(member, "", 1)
+(out / "Cargo.toml").write_text(cargo_toml)
 
 cargo_lock = Path("Cargo.lock").read_text()
-package = '''\n[[package]]\nname = "tdi-ai"\nversion = "0.1.0"\ndependencies = [\n "tdi-core",\n]\n'''
-if cargo_lock.count(package) != 1:
-    raise SystemExit("Cargo.lock does not contain exactly one additive tdi-ai package block")
-(out / "Cargo.lock").write_text(cargo_lock.replace(package, "", 1))
+allowed_packages = (
+    '''\n[[package]]\nname = "tdi-ai"\nversion = "0.1.0"\ndependencies = [\n "tdi-core",\n]\n''',
+    '''\n[[package]]\nname = "tdi-operator"\nversion = "0.1.0"\n''',
+)
+for package in allowed_packages:
+    if cargo_lock.count(package) != 1:
+        package_name = next(
+            line for line in package.splitlines() if line.startswith("name = ")
+        )
+        raise SystemExit(
+            f"Cargo.lock does not contain exactly one reviewed additive package block: {package_name}"
+        )
+    cargo_lock = cargo_lock.replace(package, "", 1)
+(out / "Cargo.lock").write_text(cargo_lock)
 PY
 
     for path in Cargo.toml Cargo.lock; do
@@ -63,7 +80,7 @@ PY
         [[ -n "$expected" ]] || fail "missing TDI-6.8 manifest entry for $path"
         actual="$(sha256sum "$tmpdir/$path" | awk '{print $1}')"
         [[ "$actual" == "$expected" ]] \
-            || fail "workspace metadata drift exceeds the reviewed additive tdi-ai change: $path"
+            || fail "workspace metadata drift exceeds the reviewed additive tdi-ai/tdi-operator changes: $path"
     done
 
     rm -rf "$tmpdir"
@@ -76,7 +93,7 @@ sha256sum -c docs/TDI-7.0-ATTENTION-RECOVERY-PREREGISTRATION.sha256
 printf '\n===== HISTORICAL TDI-6.8 INTEGRITY =====\n'
 verify_tdi68_historical_integrity
 printf 'TDI-6.8 frozen scientific paths: OK\n'
-printf 'TDI-6.8 workspace metadata projection: OK (additive tdi-ai only)\n'
+printf 'TDI-6.8 workspace metadata projection: OK (reviewed additive tdi-ai + tdi-operator only)\n'
 printf 'Current CI workflow: PRESENT (mutable repository infrastructure)\n'
 
 printf '\n===== TDI-7.1 SPECIFICATION SURFACES =====\n'
