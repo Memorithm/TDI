@@ -121,7 +121,7 @@ fn checked_add_bits(
     Ok(StorageBits::new(bits))
 }
 
-/// Complete persistent A3 state used by framework-independent snapshots.
+/// Complete persistent A3 state used by TDI snapshots and later interventions.
 #[derive(Clone, Debug, PartialEq)]
 pub struct A3StateSnapshot {
     a2: A2StateSnapshot,
@@ -142,19 +142,30 @@ impl A3StateSnapshot {
     }
 }
 
+/// Explicit VSA-read routing for one bounded A3 transition.
+///
+/// The associative A2 read key is supplied independently to [`A3Reference::step_routed`].
+/// `Skip` means the persistent VSA workspace must not influence this transition;
+/// `Key` performs the existing deterministic unbind/fuse operation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum A3VsaReadRoute {
+    /// Do not read or fuse the VSA workspace for this transition.
+    Skip,
+    /// Unbind the VSA workspace with this logical key before the A2 step.
+    Key(u64),
+}
+
 /// Bounded A3 reference: A2 plus one explicit VSA workspace.
 ///
-/// One integrated A3 step has this frozen software-oracle operation order:
-///
-/// 1. unbind the current VSA workspace with `read_key` without mutation;
-/// 2. fuse that readout coordinate-wise into the external input as
-///    `input + vsa_fusion_gain * readout` in ascending coordinate order;
-/// 3. execute the unchanged A2 lookup-before-write step using the fused input.
+/// The legacy [`Self::step`] method preserves the original software-oracle
+/// behavior where one `read_key` drives both VSA retrieval and the A2 lookup.
+/// [`Self::step_routed`] exposes those two routing decisions separately so later
+/// bounded task adapters do not have to create accidental VSA cross-talk merely
+/// to preserve an independently qualified A2 read policy.
 ///
 /// The VSA workspace is written only through [`Self::store_vsa`]. That operation
-/// is deliberately separate from [`Self::step`], so either operation fails
-/// without leaving a partially applied cross-mechanism transition. The later
-/// bounded evaluator owns the task-level policy deciding when and what to store.
+/// remains deliberately separate from transition execution. The later bounded
+/// evaluator owns the task-level policy deciding when and what to store.
 #[derive(Clone, Debug, PartialEq)]
 pub struct A3Reference {
     a2: A2Reference,
@@ -221,16 +232,32 @@ impl A3Reference {
         self.vsa_fusion_gain
     }
 
-    /// Execute one integrated A3 read/fuse/A2 step.
+    /// Execute the original integrated A3 read/fuse/A2 step.
     ///
-    /// VSA retrieval is read-only. All fallible VSA allocation and numeric
-    /// fusion checks complete before the mutating A2 step begins, so a rejected
-    /// VSA/fusion operation cannot mutate recurrent or associative A2 state.
+    /// This compatibility wrapper preserves the original contract exactly: the
+    /// same `read_key` drives VSA unbinding and the A2 associative lookup.
     pub fn step(
         &mut self,
         input: &[f64],
         read_key: u64,
         write_key: Option<u64>,
+    ) -> Result<A2StepReport, A3ReferenceError> {
+        self.step_routed(input, A3VsaReadRoute::Key(read_key), read_key, write_key)
+    }
+
+    /// Execute one A3 transition with independent VSA and A2 read routing.
+    ///
+    /// Input shape and finiteness are always validated first. With
+    /// [`A3VsaReadRoute::Skip`], the VSA workspace is neither unbound nor fused
+    /// and the exact external input is passed to the unchanged A2 reference.
+    /// With [`A3VsaReadRoute::Key`], VSA retrieval is read-only and all fallible
+    /// allocation/fusion checks complete before the mutating A2 step begins.
+    pub fn step_routed(
+        &mut self,
+        input: &[f64],
+        vsa_read: A3VsaReadRoute,
+        a2_read_key: u64,
+        a2_write_key: Option<u64>,
     ) -> Result<A2StepReport, A3ReferenceError> {
         let expected = self.workspace.components().len();
         if input.len() != expected {
@@ -243,16 +270,24 @@ impl A3Reference {
             return Err(A3ReferenceError::NonFiniteInput { index });
         }
 
-        let mut fused_input = self.workspace.unbind(read_key)?;
-        for (index, (fused, input_value)) in fused_input.iter_mut().zip(input.iter()).enumerate() {
-            let value = *input_value + self.vsa_fusion_gain * *fused;
-            if !value.is_finite() {
-                return Err(A3ReferenceError::NonFiniteFusedInput { index });
+        match vsa_read {
+            A3VsaReadRoute::Skip => Ok(self.a2.step(input, a2_read_key, a2_write_key)?),
+            A3VsaReadRoute::Key(vsa_read_key) => {
+                let mut fused_input = self.workspace.unbind(vsa_read_key)?;
+                for (index, (fused, input_value)) in
+                    fused_input.iter_mut().zip(input.iter()).enumerate()
+                {
+                    let value = *input_value + self.vsa_fusion_gain * *fused;
+                    if !value.is_finite() {
+                        return Err(A3ReferenceError::NonFiniteFusedInput { index });
+                    }
+                    *fused = value;
+                }
+                Ok(self
+                    .a2
+                    .step(&fused_input, a2_read_key, a2_write_key)?)
             }
-            *fused = value;
         }
-
-        Ok(self.a2.step(&fused_input, read_key, write_key)?)
     }
 
     /// Atomically bind and superpose one finite payload under one deterministic
@@ -276,11 +311,11 @@ impl A3Reference {
 
     /// Exact architecture-level memory accounting for this A3 instance.
     ///
-    /// The integrated step keeps one VSA-width readout/fused-input vector alive
-    /// while A2 computes its state-width candidate vector, so the temporary
-    /// component is the sum of the already-declared A2 temporary storage and the
-    /// standalone VSA temporary vector. Static accounting additionally records
-    /// the explicit A3 fusion gain.
+    /// The integrated VSA-read path keeps one VSA-width readout/fused-input
+    /// vector alive while A2 computes its state-width candidate vector, so the
+    /// declared temporary component remains the maximum across admissible routed
+    /// steps: A2 temporary storage plus one standalone VSA temporary vector.
+    /// Static accounting additionally records the explicit A3 fusion gain.
     pub fn memory_accounting(&self) -> Result<MemoryAccounting, A3ReferenceError> {
         let a2 = self.a2.memory_accounting()?;
         let vsa = self.workspace.storage_accounting()?;
@@ -320,9 +355,11 @@ impl A3Reference {
 
 #[cfg(test)]
 mod tests {
-    use super::{A3Reference, A3ReferenceError};
+    use super::{A3Reference, A3ReferenceError, A3VsaReadRoute};
     use crate::associative_memory::AssociativeMemoryLayout;
-    use crate::assr_reference::{A1Reference, A2Reference, RecurrentLayout, RecurrentParameters};
+    use crate::assr_reference::{
+        A1Reference, A2ReadStatus, A2Reference, RecurrentLayout, RecurrentParameters,
+    };
     use crate::vsa_workspace::VsaWorkspaceLayout;
     use crate::{MatchedDynamicBudget, ReferenceArm};
 
@@ -414,6 +451,70 @@ mod tests {
     }
 
     #[test]
+    fn legacy_step_matches_explicit_same_key_route_bit_exactly() {
+        let mut legacy = a3();
+        let mut routed = a3();
+        legacy.store_vsa(7, &[0.5, -0.25]).expect("legacy VSA store");
+        routed.store_vsa(7, &[0.5, -0.25]).expect("routed VSA store");
+
+        let legacy_report = legacy.step(&[0.25, 0.0], 7, Some(7)).expect("legacy step");
+        let routed_report = routed
+            .step_routed(&[0.25, 0.0], A3VsaReadRoute::Key(7), 7, Some(7))
+            .expect("routed step");
+        assert_eq!(legacy_report, routed_report);
+        assert_eq!(
+            legacy.snapshot().expect("legacy snapshot").state(),
+            routed.snapshot().expect("routed snapshot").state()
+        );
+    }
+
+    #[test]
+    fn routed_skip_ignores_nonempty_vsa_and_preserves_a2_semantics_bit_exactly() {
+        let memory_layout = AssociativeMemoryLayout::new(8, 2).expect("associative layout");
+        let mut a2 = A2Reference::new(identity_parameters(), memory_layout, 11, 1.0).expect("A2");
+        let mut a3 = A3Reference::new(
+            identity_parameters(),
+            memory_layout,
+            11,
+            1.0,
+            VsaWorkspaceLayout::new(2).expect("VSA layout"),
+            23,
+            1.0,
+        )
+        .expect("A3");
+        a3.store_vsa(7, &[0.75, -0.5]).expect("nonempty VSA");
+
+        let a2_report = a2.step(&[0.25, -0.5], 99, Some(3)).expect("A2 step");
+        let a3_report = a3
+            .step_routed(&[0.25, -0.5], A3VsaReadRoute::Skip, 99, Some(3))
+            .expect("routed skip");
+        assert_eq!(a3_report, a2_report);
+        let a2_bits: Vec<_> = a2.state().iter().map(|value| value.to_bits()).collect();
+        let a3_bits: Vec<_> = a3.state().iter().map(|value| value.to_bits()).collect();
+        assert_eq!(a3_bits, a2_bits);
+        assert_ne!(a3.workspace().components(), &[0.0, 0.0]);
+    }
+
+    #[test]
+    fn routed_vsa_key_and_a2_read_key_are_independent() {
+        let mut model = a3();
+        model.store_vsa(7, &[0.5, -0.25]).expect("VSA store");
+        let a2_read_key = 99;
+        let expected_address = model.a2().associative_memory().address_for(a2_read_key);
+
+        let report = model
+            .step_routed(
+                &[0.0, 0.0],
+                A3VsaReadRoute::Key(7),
+                a2_read_key,
+                None,
+            )
+            .expect("independently routed step");
+        assert_eq!(report.read(), A2ReadStatus::Empty { address: expected_address });
+        assert_eq!(model.state(), &[0.5, -0.25]);
+    }
+
+    #[test]
     fn vsa_readout_changes_the_integrated_a3_recurrent_input() {
         let mut model = a3();
         model.store_vsa(7, &[0.5, -0.25]).expect("VSA store");
@@ -429,6 +530,25 @@ mod tests {
 
         assert_eq!(
             model.step(&[f64::NAN, 0.0], 7, Some(7)),
+            Err(A3ReferenceError::NonFiniteInput { index: 0 })
+        );
+        let after = model.snapshot().expect("snapshot after rejection");
+        assert_eq!(before.state(), after.state());
+    }
+
+    #[test]
+    fn rejected_routed_step_cannot_mutate_a2_or_vsa_state() {
+        let mut model = a3();
+        model.store_vsa(7, &[0.5, -0.25]).expect("VSA store");
+        let before = model.snapshot().expect("snapshot before rejection");
+
+        assert_eq!(
+            model.step_routed(
+                &[f64::NAN, 0.0],
+                A3VsaReadRoute::Key(7),
+                99,
+                Some(3),
+            ),
             Err(A3ReferenceError::NonFiniteInput { index: 0 })
         );
         let after = model.snapshot().expect("snapshot after rejection");
