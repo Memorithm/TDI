@@ -70,6 +70,8 @@ impl std::error::Error for CavityTransportError {}
 /// a variable-coefficient operator.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CavityTransportStep {
+    shifted_diagonal: f64,
+    edge: f64,
     neighbor_cavity: f64,
     current_cavity: f64,
     neighbor_reference: f64,
@@ -174,6 +176,8 @@ impl CavityTransportStep {
         }
 
         Ok(Self {
+            shifted_diagonal,
+            edge,
             neighbor_cavity,
             current_cavity,
             neighbor_reference,
@@ -183,6 +187,16 @@ impl CavityTransportStep {
             transport_factor,
             drift,
         })
+    }
+
+    #[inline]
+    pub fn shifted_diagonal(self) -> f64 {
+        self.shifted_diagonal
+    }
+
+    #[inline]
+    pub fn edge(self) -> f64 {
+        self.edge
     }
 
     #[inline]
