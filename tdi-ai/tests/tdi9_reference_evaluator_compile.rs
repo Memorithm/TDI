@@ -55,10 +55,7 @@ fn p3() -> GeneratedTask {
     .expect("P3 generation")
 }
 
-fn evaluate(
-    task: GeneratedTask,
-    policy: impl Into<ReferencePolicy>,
-) -> ReferenceEvaluationRecord {
+fn evaluate(task: GeneratedTask, policy: impl Into<ReferencePolicy>) -> ReferenceEvaluationRecord {
     evaluate_generated_task(task, policy.into(), roomy_envelope(), 128)
         .expect("bounded integrated reference evaluation")
 }
