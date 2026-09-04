@@ -44,8 +44,7 @@ fn frozen_cavity_satisfies_exact_defining_identities_numerically() {
         assert_close(q, diagonal - edge * edge / q, 2.0e-14);
         assert_close(kappa, (edge / q) * (edge / q), 2.0e-15);
         assert_close(
-            diagonal * frozen.green_diagonal()
-                + 2.0 * edge * frozen.green_off_diagonal(),
+            diagonal * frozen.green_diagonal() + 2.0 * edge * frozen.green_off_diagonal(),
             1.0,
             3.0e-14,
         );
