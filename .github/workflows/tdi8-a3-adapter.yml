@@ -1,0 +1,41 @@
+name: TDI-8.1 A3 adapter preflight
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  a3-adapter-preflight:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run targeted Clippy
+        run: cargo clippy --locked -p tdi-ai --bin tdi8-a3-adapter-preflight -- -D warnings
+
+      - name: Verify TDI-8 bootstrap integrity
+        run: bash scripts/check-tdi8-bootstrap.sh
+
+      - name: Re-verify A3 atomic-store admission gate
+        run: bash scripts/check-tdi8.1-a3-atomic-store-gate.sh
+
+      - name: Re-verify qualified A3 atomic store primitive
+        run: bash scripts/check-tdi8.1-a3-atomic-store.sh
+
+      - name: Verify bounded A3 symbolic adapter
+        run: bash scripts/check-tdi8.1-a3-adapter.sh
