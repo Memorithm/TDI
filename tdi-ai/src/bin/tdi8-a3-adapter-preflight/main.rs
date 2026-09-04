@@ -207,6 +207,7 @@ impl A3Adapter {
         self.diagnostics
     }
 
+    #[cfg(test)]
     fn payload_position(&self) -> u64 {
         self.payload_keys.next_position()
     }
@@ -329,19 +330,22 @@ fn dual_path_parameters() -> RecurrentParameters {
     .expect("finite dual-path fixture parameters")
 }
 
+#[cfg(test)]
 fn failing_payload_parameters() -> RecurrentParameters {
     let input_width = MIN_TASK_INPUT_WIDTH as usize;
     let state_width = FIXTURE_STATE_WIDTH as usize;
     let layout = RecurrentLayout::new(MIN_TASK_INPUT_WIDTH, FIXTURE_STATE_WIDTH).expect("layout");
     let mut input_to_state = vec![0.0; input_width * state_width];
-    input_to_state[1] = 1.0;
-    let mut bias = vec![0.0; state_width];
-    bias[0] = f64::MAX;
+    // Both u32 limbs of u64::MAX encode to positive finite values just below 1.
+    // Two independent products by f64::MAX are therefore individually finite
+    // but their fixed-order sum overflows, forcing the A2 transaction to reject.
+    input_to_state[1] = f64::MAX;
+    input_to_state[2] = f64::MAX;
     RecurrentParameters::new(
         layout,
         input_to_state,
         vec![0.0; state_width * state_width],
-        bias,
+        vec![0.0; state_width],
     )
     .expect("finite forced-failure fixture parameters")
 }
