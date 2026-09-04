@@ -1,0 +1,54 @@
+name: TDI-9.1 adaptive task generators
+
+on:
+  pull_request:
+    paths:
+      - 'tdi-ai/src/adaptive_task_generators.rs'
+      - 'tdi-ai/tests/tdi9_adaptive_task_generators_compile.rs'
+      - 'docs/TDI-9*'
+      - 'scripts/check-tdi9*'
+      - '.github/workflows/tdi9.1-task-generators.yml'
+      - 'AGENTS.md'
+      - '.github/copilot-instructions.md'
+  push:
+    branches:
+      - main
+    paths:
+      - 'tdi-ai/src/adaptive_task_generators.rs'
+      - 'tdi-ai/tests/tdi9_adaptive_task_generators_compile.rs'
+      - 'docs/TDI-9*'
+      - 'scripts/check-tdi9*'
+      - '.github/workflows/tdi9.1-task-generators.yml'
+
+permissions:
+  contents: read
+
+env:
+  TDI_CI_RUST: "1.97.1"
+
+jobs:
+  task-generators:
+    name: TDI-9.1 adaptive task generators
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TDI_CI_RUST }}
+          components: rustfmt,clippy
+      - name: Check task-generator formatting
+        run: |
+          rustfmt --edition 2024 --check \
+            tdi-ai/src/adaptive_task_generators.rs \
+            tdi-ai/tests/tdi9_adaptive_task_generators_compile.rs
+      - name: Run targeted Clippy
+        run: |
+          cargo clippy -p tdi-ai --locked \
+            --test tdi9_adaptive_task_generators_compile -- -D warnings
+      - name: Verify deterministic task-generator gate
+        run: |
+          bash -n scripts/check-tdi9.1-task-generators.sh
+          bash scripts/check-tdi9.1-task-generators.sh
