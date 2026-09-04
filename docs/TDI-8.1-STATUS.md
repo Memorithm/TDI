@@ -2,7 +2,7 @@
 
 - Scientific series: TDI-8.x
 - Stage: TDI-8.1 bounded deterministic reference evaluator
-- Status: active — A0/A1/A2/A3, symbolic T1/T2/T3 generators, leakage-safe symbolic execution, qualified leakage-safe binary64 encoding candidate, frozen primary decision rules and paired-resampling foundation implemented; conservative percentile interval candidate under qualification; concrete arm adapters, recurrent readout and final interval method not yet frozen
+- Status: active — A0/A1/A2/A3 references, symbolic T1/T2/T3 generators, leakage-safe execution/encoding, exact target-blind readout, evaluable-invalid prediction accounting, concrete A0/A1 adapters and a transactional A2 adapter are merged; A3 routing is separated and qualified, but the concrete A3 task/VSA policy and final bounded experimental configuration are not yet frozen
 - TDI-8.0 parent merge: `24d41eb7e5d72fc3b5eec9b6434930b10c1f241f`
 - TDI-8.1 foundation merge: `7cfe1b66e11f1eb5d67a5890b07e6f41fa175670` (PR #89)
 - TDI-8 post-foundation integrity merge: `9ee32002603942b9f4152cad47f7fb59331f8c7a` (PR #90)
@@ -17,7 +17,12 @@
 - TDI-8.1 paired-resampling foundation merge: `85912fde2b3869e91e01058156ef2b1c895d03d4` (PR #109)
 - TDI-8.1 leakage-safe symbolic execution merge: `d11c3a6ccb34dd02cce70758a294295a6d597b31` (PR #110)
 - TDI-8.1 leakage-safe binary64 task-encoding qualification merge: `385e5f4153dd27389297a65aeacd95828c9d45ca` (PR #112)
-- TDI-8.1 conservative percentile interval preflight: PR #113
+- TDI-8.1 conservative percentile interval preflight merge: PR #113
+- TDI-8.1 exact target-blind recurrent readout merge: PR #114
+- TDI-8.1 evaluable-invalid prediction contract merge: PR #115
+- TDI-8.1 concrete A0/A1 adapter merge: PR #117
+- TDI-8.1 transactional A2 adapter merge: PR #125
+- TDI-8.1 separated A3 VSA/A2 read-routing merge: PR #127
 - Declared Rust MSRV is executable CI evidence since PR #107
 - Frozen TDI-8.0 preregistration blob: `fe80e7053d89824a77ef6790794f6930d1b424e2`
 - Final holdout: does not exist
@@ -51,7 +56,9 @@ PR #94 added deterministic fixed-order recurrent accumulation, fail-closed A1 tr
 
 PR #97 added deterministic bipolar binding, bundling/superposition, unbinding/retrieval and fixed-order similarity with exact accounting. PR #96 then composed that primitive with A2 under one explicit deterministic A3 rule, complete snapshots and integrated temporary-memory accounting.
 
-No concrete experimental workspace width, seed, fusion gain or budget was frozen by those software-oracle fixtures.
+PR #127 subsequently separated the VSA read route from the embedded A2 associative read key. `A3VsaReadRoute::Skip` permits an event to execute the unchanged A2 path without forcing an unrelated VSA unbind, while keyed VSA reads remain explicit. This removes a routing ambiguity but deliberately does not select the task-level A3 store/read policy.
+
+No concrete experimental workspace width, role seed, fusion gain, event policy or budget is frozen by these software-oracle fixtures.
 
 ## Merged deterministic A0 full-history reference
 
@@ -77,9 +84,9 @@ PR #104 merged architecture-neutral symbolic instances for the three frozen task
 - explicit `Short` / `Medium` / `Long` horizon labels plus a caller-supplied strictly increasing `HorizonPlan` with no numeric defaults;
 - deterministic domain-separated generation and fail-closed allocation/count guards.
 
-T3 generator-side collision classes remain metadata only and are not allowed to stand in for measured physical A2/A3 slot collisions. A later frozen concrete adapter/evaluator must verify actual occupancy/collision pressure under its concrete associative layout/projection.
+T3 generator-side collision classes remain metadata only and are not allowed to stand in for measured physical A2/A3 slot collisions. A frozen concrete evaluator must verify actual occupancy/collision pressure under its concrete associative layout/projection.
 
-## Symbolic execution leakage boundary
+## Symbolic execution and leakage boundary
 
 PR #110 merged the symbolic execution contract between the generator-owned task and concrete binary64 arm adapters:
 
@@ -90,26 +97,31 @@ PR #110 merged the symbolic execution contract between the generator-owned task 
 - association adapters receive only the stable key code and input value;
 - T2 payload order is conveyed by event order rather than an extra source-position feature;
 - T2 query position is exposed because it is the symbolic request, while its exact target remains hidden;
-- adapter errors retain exact source event indices and arm identity cannot drift during an instance;
-- the resulting record reports exact discrete success only and does not define the late-retrieval deficit.
+- adapter errors retain exact source event indices and arm identity cannot drift during an instance.
 
-A sequential arm can observe event order and maintain its own state. The leakage guarantee is specifically that evaluator annotations are not supplied as additional input features.
+PR #115 strengthened this boundary by introducing `TaskPrediction::Invalid`. A technically completed query that produces a finite non-canonical output remains in the evaluation denominator as an explicit failure instead of being converted into an adapter error or silently rejected.
 
-## Qualified leakage-safe binary64 task encoding
+## Qualified binary64 encoding and exact readout
 
-PR #112 qualified a bounded encoding candidate behind the merged symbolic-execution contract without promoting it into the public `tdi-ai` API:
+PR #112 qualified a bounded leakage-safe encoding candidate:
 
 - every symbolic `u64` maps losslessly to two exact finite binary64 32-bit limbs;
 - the canonical decoder rejects non-finite, out-of-range, off-grid and negative-zero alternate representations;
-- A1/A2/A3 arm-facing frames require only five coordinates at minimum: event kind plus the arguments actually exposed by `SymbolicTaskAdapter`;
-- larger caller-selected widths are deterministic zero padding and do not freeze a concrete experimental dimension;
-- query targets, association source indices and T3 collision classes cannot be supplied to the arm-facing encoding methods;
-- T2 payload position is reconstructed from chronological payload calls rather than supplied as generator provenance;
-- A0 uses exact namespaced key/value helpers whose query methods receive no target;
-- A2/A3 logical association/payload keys are deterministic, and distractor read keys are selected outside the complete instance write set;
-- runner-side physical direct-mapped projection diagnostics remain separate from generator-side T3 collision-class reuse.
+- recurrent arm-facing frames require only fields exposed by `SymbolicTaskAdapter`;
+- query targets, source indices and generator collision classes cannot be encoded as arm features;
+- logical A2/A3 association/payload keys are deterministic and physical projection diagnostics remain runner-side.
 
-The candidate remains evaluator-local rather than a frozen public API. Qualification means it is safe to use in further bounded TDI-8.1 work; it does not by itself freeze the final experimental input dimension or configuration.
+PR #114 qualified an exact target-blind recurrent readout candidate. The caller supplies the recurrent width and two distinct coordinates; only those recurrent-state coordinates are decoded through the same canonical two-limb symbol decoder. There is no tolerance, rounding, nearest-neighbour vocabulary or target-conditioned decoder.
+
+Neither PR freezes final recurrent width, readout coordinates or learned/reference recurrent parameters.
+
+## Merged concrete A0/A1/A2 adapters
+
+PR #117 qualified concrete bounded A0 and A1 `SymbolicTaskAdapter` implementations. A0 performs exact namespaced full-history queries. A1 composes the leakage-safe encoder, recurrent reference and exact target-blind readout, with finite non-canonical output becoming `TaskPrediction::Invalid`.
+
+PR #125 qualified an explicit transactional A2 adapter policy. Writes and distractors use an instance-scoped neutral logical read key that is never written; queries use only their logical association/payload keys. T2 payload routing advances only after the underlying A2 step succeeds. The bounded T1 physical fixture reconciles runner-side projection auditing with runtime lookup diagnostics and requires exact target recovery without replacement writes or query collision misses in that software-oracle fixture.
+
+These adapter fixtures are qualification oracles only; they do not establish H8-A quality or freeze the final A2 capacity/projection/parameter configuration.
 
 ## Merged frozen primary decision rules
 
@@ -124,46 +136,22 @@ PR #106 transcribed the already-frozen TDI-8.0 evidence classifier into `tdi-ben
 
 The classifier consumes an interval but does not construct one.
 
-## Merged paired-resampling foundation
+## Paired-resampling and interval candidate
 
-PR #109 added the software substrate required before selecting the TDI-8.1 paired interval implementation:
+PR #109 added validated generator-level paired resampling, caller-supplied deterministic replicate count/seed, rejection-sampled bounded draws, exact zero-baseline accounting and frozen Bonferroni family/per-cell/tail alpha accessors.
 
-- validated generator-level baseline/candidate deficit pairs;
-- exact relative mean-deficit point statistic and zero-baseline branch;
-- caller-supplied replicate count and deterministic seed with no defaults;
-- deterministic paired bootstrap draws using one common sampled index for both arms;
-- rejection-sampled bounded RNG draws rather than modulo-biased indexing;
-- explicit zero/zero and zero/positive resample accounting;
-- exact reconstruction of all requested replicate counts;
-- frozen Bonferroni family/per-cell/tail alpha values exposed without selecting an interval estimator.
-
-The foundation intentionally returns unsorted relative-effect replicates and does not freeze percentile, BCa, studentized, normal-approximation or another interval construction. Concrete method, replicate count, seed and degenerate-replicate policy remain later non-final TDI-8.1 decisions.
-
-## Conservative percentile interval candidate under qualification
-
-PR #113 qualifies one non-interpolated order-statistic candidate without choosing any replicate count or seed:
-
-- complete replicate accounting is mandatory;
-- complete-sample zero baseline remains on the frozen non-relative decision branch;
-- any zero-baseline bootstrap replicate rejects relative interval construction rather than being silently deleted;
-- finite relative effects are sorted with `f64::total_cmp`;
-- the exact frozen two-sided Bonferroni tail is represented as `1/360`;
-- `floor(n/360)` observations are excluded from each sorted tail;
-- fewer than 360 defined replicates therefore retain the complete observed min/max range;
-- caller-selected replicate count and seed are carried through for provenance.
-
-This is a bounded software candidate only. Passing the preflight does not freeze percentile bootstrap, the replicate count, the seed, or the degenerate policy as the final TDI-8.1 experimental choice.
+PR #113 qualified a conservative non-interpolated percentile interval candidate. It requires complete replicate accounting, rejects undefined relative effects caused by zero-baseline bootstrap replicates, and uses the exact frozen two-sided tail allocation `1/360`. It does not freeze the final interval method, replicate count, seed or degenerate-replicate policy.
 
 ## Remaining TDI-8.1 work
 
 Bounded TDI-8.1 still requires:
 
-1. explicit review/promotion of the qualified binary64 encoding for a concrete bounded configuration, followed by concrete A0/A1/A2/A3 adapters behind the leakage-safe executor with verification of actual A2/A3 occupancy/collision semantics;
-2. explicit recurrent-arm output/readout semantics plus exact operation accounting and typed rejection/provenance records;
-3. complete qualification and then freeze of one deterministic paired interval implementation satisfying the frozen Bonferroni family-wise coverage rule, including replicate count, resampling seed and degenerate-replicate policy; PR #113 supplies one candidate but does not freeze it;
-4. bounded train/development/validation work to freeze concrete dimensions, budgets, horizons, non-final/final seed ranges, sample counts and closed rejection taxonomy;
-5. integration of paired intervals with the already-merged primary-cell classifier and exact nine-cell evidence records;
-6. intervention-site/recovery integration using only early observations strictly before late retrieval;
-7. a final TDI-8.1 readiness gate proving no TDI-8.2 execution surface exists.
+1. qualify one explicit concrete A3 task/VSA adapter policy: event-level VSA store payload, role/key routing, `Skip` versus keyed reads, cleanup/readout behavior and transactional ordering, without target/evaluator leakage;
+2. add exact reference operation accounting and typed provenance/rejection records across A0/A1/A2/A3 so the bounded evaluator can compare quality under declared matched memory and report actual compute separately;
+3. use bounded train/development/validation evidence to select and freeze concrete recurrent dimensions/parameters/readout coordinates, A2 capacity/projection settings, A3 VSA width/seed/fusion/store policy, matched dynamic-memory budget and Short/Medium/Long numeric horizons;
+4. freeze the late-retrieval deficit, intervention sites/recovery observable and closed rejection taxonomy using only observations available before the target retrieval;
+5. complete qualification and freeze one deterministic paired interval implementation, including replicate count, resampling seed and degenerate-replicate policy, then integrate it with the already-frozen nine-cell classifier;
+6. freeze non-final/final population domains and sample counts without creating or accessing a TDI-8.2 result surface;
+7. add a final TDI-8.1 readiness/integrity gate proving every experimental choice is frozen and no TDI-8.2 executable, seed/result payload or authorization surface exists.
 
 TDI-8.2 remains future human-only and is not authorized by this status file.
