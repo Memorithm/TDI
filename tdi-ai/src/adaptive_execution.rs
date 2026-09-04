@@ -18,26 +18,27 @@ use crate::adaptive_task_generators::{
 };
 
 const P1_SOLVER_OPS: u64 = 4;
-const P3_CHOICE_OPS: u64 = 2;
-const P3_EVIDENCE_OPS: u64 = 6;
-const P3_ELIMINATE_OPS: u64 = 3;
 const P1_VERIFIER_BASE_OPS: u64 = 3;
 const P1_VERIFIER_EVENT_OPS: u64 = 2;
 const P2_SOLVER_BASE_OPS: u64 = 5;
 const P2_SOLVER_BIT_OPS: u64 = 2;
 const P2_VERIFIER_ROW_BASE_OPS: u64 = 4;
 const P2_VERIFIER_BIT_OPS: u64 = 2;
+const P3_CHOICE_OPS: u64 = 2;
+const P3_EVIDENCE_OPS: u64 = 6;
+const P3_ELIMINATE_OPS: u64 = 3;
 const P3_VERIFIER_BASE_OPS: u64 = 4;
 const P3_VERIFIER_EVENT_OPS: u64 = 2;
 
-// Canonical packed logical P3 checkpoint:
-// cursor:u64 + left:i64 + right:i64 + eliminated:u8 + committed:u8 + forbidden:u8.
+/// Canonical packed logical P3 checkpoint size in bytes.
+///
+/// `cursor:u64 + left:i64 + right:i64 + eliminated:u8 + committed:u8 + forbidden:u8`.
 pub const P3_CHECKPOINT_BYTES: u64 = 27;
 
 // Deterministic logical arm-memory model. Immutable task input and evaluator
-// bookkeeping counters are common instrumentation and are not charged as arm
-// working memory. The atomic action shadow is charged because it is required by
-// this fail-closed reference implementation.
+// instrumentation are common infrastructure and excluded from arm working
+// memory. The transactional shadow and action scratch are charged because they
+// are required by this fail-closed reference implementation.
 const EXECUTION_METADATA_BITS: u64 = 392;
 const TRANSACTION_METADATA_SHADOW_BITS: u64 = 392;
 const ACTION_SCRATCH_BITS: u64 = 256;
@@ -319,9 +320,12 @@ impl ReferenceExecution {
         } else {
             None
         };
-        let available_checkpoints = u32::from(
-            self.arm == PolicyArm::C3VerificationRecovery && self.checkpoint.is_some(),
-        );
+        let available_checkpoints =
+            if self.arm == PolicyArm::C3VerificationRecovery && self.checkpoint.is_some() {
+                1
+            } else {
+                0
+            };
         Ok(PolicyObservation::new(
             self.solver.cursor(),
             remaining_compute_ops,
@@ -598,7 +602,8 @@ fn solver_transition(
 ) -> Result<(SolverState, SolverSummary, u64), ReferenceExecutionError> {
     match (state, task) {
         (SolverState::P1 { cursor, sum }, PolicyTask::P1(task)) => {
-            let index = usize::try_from(cursor).map_err(|_| ReferenceExecutionError::TaskTooLarge)?;
+            let index =
+                usize::try_from(cursor).map_err(|_| ReferenceExecutionError::TaskTooLarge)?;
             let value = *task
                 .evidence()
                 .get(index)
@@ -641,7 +646,8 @@ fn solver_transition(
             if width != task.width() {
                 return Err(ReferenceExecutionError::TaskContractViolation);
             }
-            let index = usize::try_from(cursor).map_err(|_| ReferenceExecutionError::TaskTooLarge)?;
+            let index =
+                usize::try_from(cursor).map_err(|_| ReferenceExecutionError::TaskTooLarge)?;
             let constraint = *task
                 .constraints()
                 .get(index)
@@ -668,11 +674,8 @@ fn solver_transition(
             let remaining = u64::from(width)
                 .checked_sub(next_cursor)
                 .ok_or(ReferenceExecutionError::AccountingInvariant)?;
-            let operations = checked_linear_ops(
-                P2_SOLVER_BASE_OPS,
-                P2_SOLVER_BIT_OPS,
-                u64::from(bit) + 1,
-            )?;
+            let operations =
+                checked_linear_ops(P2_SOLVER_BASE_OPS, P2_SOLVER_BIT_OPS, u64::from(bit) + 1)?;
             Ok((
                 SolverState::P2 {
                     cursor: next_cursor,
@@ -698,7 +701,8 @@ fn solver_transition(
             },
             PolicyTask::P3(task),
         ) => {
-            let index = usize::try_from(cursor).map_err(|_| ReferenceExecutionError::TaskTooLarge)?;
+            let index =
+                usize::try_from(cursor).map_err(|_| ReferenceExecutionError::TaskTooLarge)?;
             let event = *task
                 .events()
                 .get(index)
@@ -777,12 +781,9 @@ fn independent_verify(
     candidate: SolverCandidate,
 ) -> Result<(VerifierSignal, u64), ReferenceExecutionError> {
     match (task, state, candidate) {
-        (
-            PolicyTask::P1(task),
-            SolverState::P1 { cursor, .. },
-            SolverCandidate::P1(candidate),
-        ) => {
-            let observed = usize::try_from(cursor).map_err(|_| ReferenceExecutionError::TaskTooLarge)?;
+        (PolicyTask::P1(task), SolverState::P1 { cursor, .. }, SolverCandidate::P1(candidate)) => {
+            let observed =
+                usize::try_from(cursor).map_err(|_| ReferenceExecutionError::TaskTooLarge)?;
             let operations = checked_linear_ops(
                 P1_VERIFIER_BASE_OPS,
                 P1_VERIFIER_EVENT_OPS,
@@ -853,12 +854,9 @@ fn independent_verify(
                 operations,
             ))
         }
-        (
-            PolicyTask::P3(task),
-            SolverState::P3 { cursor, .. },
-            SolverCandidate::P3(candidate),
-        ) => {
-            let observed = usize::try_from(cursor).map_err(|_| ReferenceExecutionError::TaskTooLarge)?;
+        (PolicyTask::P3(task), SolverState::P3 { cursor, .. }, SolverCandidate::P3(candidate)) => {
+            let observed =
+                usize::try_from(cursor).map_err(|_| ReferenceExecutionError::TaskTooLarge)?;
             let mut saw_elimination = false;
             let mut candidate_eliminated = false;
             for event in task.events().iter().take(observed) {
@@ -936,7 +934,8 @@ fn preferred_branch(
     if forbidden == Some(ForkBranch::Left) || eliminated_mask & branch_bit(ForkBranch::Left) != 0 {
         return Ok(ForkBranch::Right);
     }
-    if forbidden == Some(ForkBranch::Right) || eliminated_mask & branch_bit(ForkBranch::Right) != 0 {
+    if forbidden == Some(ForkBranch::Right) || eliminated_mask & branch_bit(ForkBranch::Right) != 0
+    {
         return Ok(ForkBranch::Left);
     }
     Ok(if left_score >= right_score {
@@ -959,7 +958,8 @@ fn next_p3_event(
 ) -> Result<Option<ForkEvent>, ReferenceExecutionError> {
     match (task, state) {
         (PolicyTask::P3(task), SolverState::P3 { cursor, .. }) => {
-            let index = usize::try_from(cursor).map_err(|_| ReferenceExecutionError::TaskTooLarge)?;
+            let index =
+                usize::try_from(cursor).map_err(|_| ReferenceExecutionError::TaskTooLarge)?;
             Ok(task.events().get(index).copied())
         }
         (_, SolverState::P3 { .. }) | (PolicyTask::P3(_), _) => {
