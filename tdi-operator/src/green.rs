@@ -40,8 +40,7 @@ impl GreenBands {
 
         let mut off_diagonal = vec![0.0; n.saturating_sub(1)];
         for i in 0..off_diagonal.len() {
-            off_diagonal[i] =
-                -matrix.off_diagonal()[i] * diagonal[i] / cavities.right()[i + 1];
+            off_diagonal[i] = -matrix.off_diagonal()[i] * diagonal[i] / cavities.right()[i + 1];
         }
 
         Ok(Self {
