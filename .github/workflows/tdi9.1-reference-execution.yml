@@ -1,0 +1,55 @@
+name: TDI-9.1 reference execution
+
+on:
+  pull_request:
+    paths:
+      - 'tdi-ai/src/adaptive_execution.rs'
+      - 'tdi-ai/src/adaptive_inference.rs'
+      - 'tdi-ai/src/adaptive_task_generators.rs'
+      - 'tdi-ai/tests/tdi9_reference_execution_compile.rs'
+      - 'docs/TDI-9*'
+      - 'scripts/check-tdi9*'
+      - '.github/workflows/tdi9.1-reference-execution.yml'
+      - 'AGENTS.md'
+  push:
+    branches:
+      - main
+    paths:
+      - 'tdi-ai/src/adaptive_execution.rs'
+      - 'tdi-ai/src/adaptive_inference.rs'
+      - 'tdi-ai/src/adaptive_task_generators.rs'
+      - 'tdi-ai/tests/tdi9_reference_execution_compile.rs'
+      - 'docs/TDI-9*'
+      - 'scripts/check-tdi9*'
+      - '.github/workflows/tdi9.1-reference-execution.yml'
+
+permissions:
+  contents: read
+
+env:
+  TDI_CI_RUST: "1.97.1"
+
+jobs:
+  reference-execution:
+    name: TDI-9.1 reference execution
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TDI_CI_RUST }}
+          components: rustfmt,clippy
+      - name: Check reference execution formatting
+        run: |
+          rustfmt --edition 2024 --check \
+            tdi-ai/src/adaptive_execution.rs \
+            tdi-ai/tests/tdi9_reference_execution_compile.rs
+      - name: Run targeted Clippy
+        run: cargo clippy -p tdi-ai --test tdi9_reference_execution_compile --locked -- -D warnings
+      - name: Verify bounded reference execution gate
+        run: |
+          bash -n scripts/check-tdi9.1-reference-execution.sh
+          bash scripts/check-tdi9.1-reference-execution.sh
