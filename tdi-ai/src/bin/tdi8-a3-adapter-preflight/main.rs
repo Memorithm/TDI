@@ -22,9 +22,7 @@ use tdi_ai::associative_memory::{
     DirectMappedAssociativeMemory,
 };
 use tdi_ai::assr_h_reference::{A3Reference, A3ReferenceError, A3VsaReadRoute};
-use tdi_ai::assr_reference::{
-    A2ReadStatus, A2StepReport, RecurrentLayout, RecurrentParameters,
-};
+use tdi_ai::assr_reference::{A2ReadStatus, A2StepReport, RecurrentLayout, RecurrentParameters};
 use tdi_ai::task_execution::{SymbolicTaskAdapter, TaskPrediction, execute_symbolic_task};
 use tdi_ai::task_generators::{T2Config, TaskSymbol, generate_t2};
 use tdi_ai::vsa_workspace::VsaWorkspaceLayout;
@@ -48,7 +46,9 @@ enum AdapterError {
         association_readout: u64,
         payload_readout: u64,
     },
-    UnexpectedNeutralReadHit { address: u64 },
+    UnexpectedNeutralReadHit {
+        address: u64,
+    },
     CounterOverflow,
 }
 
@@ -450,7 +450,9 @@ mod tests {
         let key_code = 42;
         let value = TaskSymbol::new(0x1234_5678_9abc_def0);
         let mut adapter = adapter_with_parameters(dual_path_parameters(), 99).expect("adapter");
-        adapter.associate(key_code, value).expect("association store");
+        adapter
+            .associate(key_code, value)
+            .expect("association store");
         let prediction = adapter
             .query_association(key_code)
             .expect("association query");
@@ -466,18 +468,26 @@ mod tests {
         let key_code = 7;
         let value = TaskSymbol::new(0x0fed_cba9_8765_4321);
         let mut adapter = adapter_with_parameters(dual_path_parameters(), 99).expect("adapter");
-        adapter.associate(key_code, value).expect("association store");
+        adapter
+            .associate(key_code, value)
+            .expect("association store");
         let stored = adapter.reference.workspace().components().to_vec();
 
         adapter
             .distractor(TaskSymbol::new(0x55aa))
             .expect("distractor step");
-        assert_eq!(adapter.reference.workspace().components(), stored.as_slice());
+        assert_eq!(
+            adapter.reference.workspace().components(),
+            stored.as_slice()
+        );
 
         let _ = adapter
             .query_association(key_code)
             .expect("association query");
-        assert_eq!(adapter.reference.workspace().components(), stored.as_slice());
+        assert_eq!(
+            adapter.reference.workspace().components(),
+            stored.as_slice()
+        );
     }
 
     #[test]
