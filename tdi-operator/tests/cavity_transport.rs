@@ -28,11 +28,8 @@ fn left_and_right_steps_reconstruct_the_exact_error_identity() {
 
 #[test]
 fn transport_matches_finite_schur_cavities_for_arbitrary_positive_references() {
-    let matrix = JacobiMatrix::new(
-        vec![3.0, 3.2, 3.4, 3.6, 3.8],
-        vec![0.5, -0.7, 0.6, 0.4],
-    )
-    .unwrap();
+    let matrix =
+        JacobiMatrix::new(vec![3.0, 3.2, 3.4, 3.6, 3.8], vec![0.5, -0.7, 0.6, 0.4]).unwrap();
     let shift = 0.4;
     let cavities = SchurCavities::compute(&matrix, shift).unwrap();
     let references = [2.7, 2.9, 3.1, 3.3, 3.5];
