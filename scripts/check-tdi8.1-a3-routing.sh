@@ -44,7 +44,10 @@ if grep -Eq 'struct A3Adapter|impl SymbolicTaskAdapter for A3Adapter' "$SOURCE";
     fail "concrete A3 task adapter unexpectedly introduced into routing substrate"
 fi
 
-bash scripts/check-tdi8-bootstrap.sh
+# Bootstrap/foundation integrity is deliberately owned by the caller. The
+# bootstrap gate chains the foundation, the foundation chains the A3 reference
+# gate, and the A3 reference gate chains this routing gate. Calling bootstrap
+# here would create a recursive integrity-gate cycle.
 cargo test --locked -p tdi-ai assr_h_reference::tests
 
 printf 'TDI-8.1 A3 legacy same-key route: BIT_EXACT_COMPATIBLE\n'
