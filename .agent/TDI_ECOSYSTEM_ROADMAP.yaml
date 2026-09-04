@@ -1,7 +1,7 @@
 schema_version: 3
 kind: tdi_ecosystem_agent_roadmap
 status: active
-last_updated: "2026-09-04T20:55+0200"
+last_updated: "2026-09-04T21:02+0200"
 repository: Memorithm/TDI
 intended_consumer: autonomous_coding_agent
 merge_policy: never_merge_this_file_to_default_branch_unless_user_explicitly_requests
@@ -41,7 +41,8 @@ verified_current_facts:
   - TDI_10_2_exact_cavity_error_transport_was_merged_by_PR_144_as_c57cdfe07341de1e3d47104f1b73dd32f3170c17
   - TDI_10_2_keeps_reference_cavities_caller_supplied_and_does_not_promote_a_row_freezing_convention
   - TDI_10_3_exact_drift_factorization_was_merged_by_PR_145_as_ac9410632a91e063b7811eacdc2a0b7cfc34c5a4
-  - TDI_10_4_exact_finite_chain_unrolling_PR_146_is_qualified_on_exact_head_7402601bfca559ad3f898b614cedbead830e3d55
+  - TDI_10_4_exact_finite_chain_unrolling_was_merged_by_PR_146_as_c49b229254650d9ac52d98aed229b0f6c79abe08
+  - TDI_10_4_exact_head_7402601bfca559ad3f898b614cedbead830e3d55_passed_all_26_pull_request_workflows
   - TDI_10_4_does_not_assert_uniform_contraction_decay_or_soft_edge_control
   - TDI_10_must_not_import_RH_as_a_hypothesis_or_Riemann_specific_coefficients_as_generic_theorems
 
@@ -310,10 +311,10 @@ roadmap:
       - no_soft_edge_theorem
   - id: TDI10_4
     name: Exact finite cavity-error chain unrolling
-    status: qualified_ready_for_merge_PR_146
-    qualification_evidence:
-      - PR_146_exact_head_7402601bfca559ad3f898b614cedbead830e3d55
-      - all_26_pull_request_workflows_green_on_exact_head
+    status: complete_merged_qualified
+    merge_evidence:
+      - PR_146_merged_as_c49b229254650d9ac52d98aed229b0f6c79abe08
+      - exact_head_7402601bfca559ad3f898b614cedbead830e3d55_all_26_workflows_green
       - dedicated_TDI10_4_gate_green_on_Rust_1_97_1
     exact_identity:
       - E_n_equals_A_n_E_0_plus_B_n
@@ -330,7 +331,7 @@ roadmap:
       - no_soft_edge_uniformity_or_double_scaling_theorem
   - id: TDI10_5_plus
     name: Nonuniform contraction counterexamples scaling and generic theorem research
-    status: planned_not_authorized_until_TDI10_4_merge_and_explicit_followup_scope
+    status: planned_not_authorized_until_explicit_followup_scope
     candidate_topics:
       - cumulative_nonuniform_transport_products
       - minimal_counterexamples_to_uniform_contraction
