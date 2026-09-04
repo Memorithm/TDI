@@ -25,7 +25,7 @@ impl GreenBands {
         let n = matrix.len();
         let mut diagonal = vec![0.0; n];
 
-        for i in 0..n {
+        for (i, value) in diagonal.iter_mut().enumerate() {
             let mut denominator = matrix.diagonal()[i] + shift;
             if i > 0 {
                 let edge = matrix.off_diagonal()[i - 1];
@@ -35,12 +35,12 @@ impl GreenBands {
                 let edge = matrix.off_diagonal()[i];
                 denominator -= edge * edge / cavities.right()[i + 1];
             }
-            diagonal[i] = 1.0 / checked_pivot(i, denominator)?;
+            *value = 1.0 / checked_pivot(i, denominator)?;
         }
 
         let mut off_diagonal = vec![0.0; n.saturating_sub(1)];
-        for i in 0..off_diagonal.len() {
-            off_diagonal[i] = -matrix.off_diagonal()[i] * diagonal[i] / cavities.right()[i + 1];
+        for (i, value) in off_diagonal.iter_mut().enumerate() {
+            *value = -matrix.off_diagonal()[i] * diagonal[i] / cavities.right()[i + 1];
         }
 
         Ok(Self {
