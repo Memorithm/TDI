@@ -135,10 +135,7 @@ fn p3_c2_fails_but_c3_verify_backtrack_replay_recovers_without_target_input() {
         accounting.checkpoint_traffic().restore_bytes(),
         P3_CHECKPOINT_BYTES
     );
-    assert_eq!(
-        accounting.usage().checkpoint_ops(),
-        2 * P3_CHECKPOINT_BYTES
-    );
+    assert_eq!(accounting.usage().checkpoint_ops(), 2 * P3_CHECKPOINT_BYTES);
     assert!(accounting.usage().replay_ops() > 0);
     assert!(accounting.usage().checkpoint_memory_bits() >= 8 * P3_CHECKPOINT_BYTES);
 }
