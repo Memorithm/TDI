@@ -1,4 +1,6 @@
-use tdi_operator::{GreenBands, JacobiError, JacobiMatrix, ResolventError, SchurCavities, ShiftedLdl};
+use tdi_operator::{
+    GreenBands, JacobiError, JacobiMatrix, ResolventError, SchurCavities, ShiftedLdl,
+};
 
 fn shifted_dense(matrix: &JacobiMatrix, shift: f64) -> Vec<Vec<f64>> {
     let n = matrix.len();
@@ -46,7 +48,10 @@ fn dense_inverse(matrix: Vec<Vec<f64>>) -> Vec<Vec<f64>> {
             }
             candidate += 1;
         }
-        assert!(pivot_abs > 1.0e-14, "dense oracle encountered a singular pivot");
+        assert!(
+            pivot_abs > 1.0e-14,
+            "dense oracle encountered a singular pivot"
+        );
         augmented.swap(pivot_column, pivot_row);
 
         let pivot = augmented[pivot_column][pivot_column];
@@ -166,11 +171,7 @@ fn green_and_ldl_bands_match_independent_dense_inverse() {
 
 #[test]
 fn left_cavities_equal_positive_ldl_pivots() {
-    let matrix = JacobiMatrix::new(
-        vec![4.0, 5.0, 6.0, 7.0],
-        vec![-1.0, 0.5, 1.25],
-    )
-    .unwrap();
+    let matrix = JacobiMatrix::new(vec![4.0, 5.0, 6.0, 7.0], vec![-1.0, 0.5, 1.25]).unwrap();
     let shift = 0.125;
     let cavities = SchurCavities::compute(&matrix, shift).unwrap();
     let ldl = ShiftedLdl::factor(&matrix, shift).unwrap();
