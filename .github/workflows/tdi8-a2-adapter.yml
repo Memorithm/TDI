@@ -1,0 +1,35 @@
+name: TDI-8.1 A2 adapter preflight
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  a2-adapter-preflight:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run targeted Clippy
+        run: cargo clippy --locked -p tdi-ai --bin tdi8-a2-adapter-preflight -- -D warnings
+
+      - name: Verify TDI-8 bootstrap integrity
+        run: bash scripts/check-tdi8-bootstrap.sh
+
+      - name: Verify bounded A2 symbolic adapter
+        run: bash scripts/check-tdi8.1-a2-adapter.sh
