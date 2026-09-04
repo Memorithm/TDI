@@ -1,7 +1,7 @@
 schema_version: 2
 kind: tdi_ecosystem_agent_roadmap
 status: active
-last_updated: "2026-09-03T23:57+0200"
+last_updated: "2026-09-04T17:58+0200"
 repository: Memorithm/TDI
 intended_consumer: autonomous_coding_agent
 merge_policy: never_merge_this_file_to_default_branch_unless_user_explicitly_requests
@@ -11,8 +11,9 @@ mission:
     Preserve TDI as a preregistered deterministic research programme while
     supporting autonomous AI-agent research. TDI-7.x remains the frozen
     attention/recovery lineage, TDI-8.x remains the recurrent/associative
-    architecture programme, and TDI-9.x is the distinct adaptive-inference
-    dynamics programme.
+    architecture programme, TDI-9.x is the distinct adaptive-inference
+    dynamics programme, and TDI-10.x is the distinct generic operator/resolvent
+    research line for Jacobi and slowly-varying tridiagonal operators.
   autonomy: >-
     Prefer autonomous hypothesis generation, bounded experimentation,
     falsification, implementation, CI, review and evidence-gated promotion.
@@ -34,6 +35,9 @@ verified_current_facts:
   - TDI_9_1_bounded_non_final_implementation_is_now_authorized
   - no_TDI_9_2_runner_final_seed_list_final_dataset_or_result_surface_exists
   - user_has_explicitly_prioritized_AI_agent_research_without_routine_human_intervention_for_TDI_9
+  - issue_141_tracks_the_active_TDI_10_x_generic_operator_resolvent_programme
+  - user_has_explicitly_authorized_TDI_10_phase0_and_the_first_generic_operator_core
+  - TDI_10_must_not_import_RH_as_a_hypothesis_or_Riemann_specific_coefficients_as_generic_theorems
 
 scientific_invariants:
   - preregistration_precedes_confirmatory_execution
@@ -45,6 +49,9 @@ scientific_invariants:
   - complexity_memory_quality_compute_and_runtime_claims_require_separate_evidence
   - no_mechanism_is_promoted_from_toy_task_success_alone
   - final_evaluation_material_must_not_leak_into_candidate_generation_or_policy_tuning
+  - TDI_10_exact_identities_formal_asymptotics_numerical_evidence_conjectures_and_refutations_must_remain_explicitly_distinct
+  - TDI_10_numerical_fits_or_benchmarks_must_never_be_presented_as_proof
+  - TDI_10_generic_theorems_must_declare_operator_hypotheses_windows_constants_errors_and_boundary_terms
 
 agent_safety_rules:
   - autonomous_agents_must_never_rerun_TDI_7_2_or_access_its_protected_payload_for_later_series
@@ -57,9 +64,11 @@ agent_safety_rules:
   - agents_may_build_test_and_run_bounded_non_final_development_and_validation_paths
   - agents_may_verify_hash_chains_split_disjointness_provenance_and_guard_logic
   - agents_must_fail_closed_on_leakage_nonfinite_results_contract_drift_or_final_entropy_provenance_failure
+  - TDI_10_agents_must_rederive_generic_operator_primitives_without_copying_Riemann_specific_semantics
+  - TDI_10_agents_must_not_describe_numerical_soft_edge_behavior_as_a_uniform_theorem_without_a_proved_remainder
 
 ownership:
-  role: dynamic_information_recovery_architecture_and_adaptive_inference_research_source_of_truth
+  role: dynamic_information_recovery_architecture_adaptive_inference_and_generic_operator_research_source_of_truth
   owns:
     - frozen_TDI_experiment_designs_preregistrations_and_results
     - tdi_core_finite_state_dynamics_and_exact_oracles
@@ -68,6 +77,8 @@ ownership:
     - bounded_reference_architecture_experiments
     - bounded_adaptive_inference_policy_experiments
     - TDI_specific_final_evaluation_derivation_and_provenance_contracts
+    - tdi_operator_generic_finite_Jacobi_resolvent_cavity_and_Green_identities
+    - TDI_10_generic_operator_theorem_attempts_counterexamples_and_reproducible_evidence
   does_not_own:
     - ITD_structural_descriptor_semantics
     - FLAT_ATTENTION_execution_or_kernel_semantics
@@ -77,6 +88,7 @@ ownership:
     - NNIS_GPU_runtime_or_kernel_semantics
     - Forge_candidate_search_or_selection_semantics
     - Hub_orchestration_or_Verify_verdict_semantics
+    - RiemannBench_model_specific_prolate_coefficients_crossings_or_RH_interpretation
 
 control_loop:
   - DEFINE_FALSIFIABLE_QUESTION
@@ -127,11 +139,16 @@ ecosystem_interfaces:
   Memorithm/scirust:
     relationship: promotion_target_for_reusable_general_primitives
     contract:
-      - promote_only_general_statistical_experiment_or_policy_primitives
-      - keep_frozen_TDI_experiment_semantics_and_results_in_TDI
+      - promote_only_general_statistical_experiment_policy_or_operator_primitives_after_TDI_qualification
+      - keep_frozen_TDI_experiment_semantics_results_and_active_theorem_research_in_TDI
   Memorithm/riemann_ndim_bench:
-    relationship: structured_operator_hypothesis_source
-    rule: RiemannBench_supplies_operator_hypotheses_not_TDI_semantics
+    relationship: structured_operator_hypothesis_source_and_model_specific_application_target
+    contract:
+      - RiemannBench_supplies_operator_hypotheses_not_TDI_semantics
+      - TDI_10_may_rederive_only_generic_operator_theory_algorithms_and_independent_oracles
+      - RiemannBench_retains_Wplus_Wminus_prolate_normalizations_Phase4_coefficients_crossing_semantics_and_RH_interpretation
+      - target_boundary_is_TDI_generic_theorem_H1_to_Hn_then_RiemannBench_verifies_H1_to_Hn_for_its_specific_operator_and_applies_the_result
+      - RH_must_never_enter_the_hypotheses_of_a_TDI_10_theorem
 
 roadmap:
   - id: TDI7_2
@@ -216,6 +233,34 @@ roadmap:
       - cross_task_and_cross_length_transfer
       - Forge_policy_search_after_leak_safe_contract
       - NNIS_and_ElasticXxx_promotion_after_reference_evidence
+  - id: TDI10_0
+    name: Generic Jacobi operator and shifted resolvent foundation
+    status: active_phase0_and_first_core_in_progress
+    source: issue_141
+    scientific_scope:
+      - real_symmetric_tridiagonal_Jacobi_operators
+      - shifted_positive_LDL_factorization
+      - left_right_Schur_cavities
+      - selected_Green_diagonal_and_first_off_diagonal
+      - independent_small_dense_oracles
+    evidence_policy:
+      - finite_algebraic_identities_are_EXACT_under_declared_positive_pivot_conditions
+      - floating_point_regressions_are_NUMERICAL_EVIDENCE_only
+      - no_soft_edge_uniform_theorem_is_claimed_in_the_first_core
+      - no_RH_claim_or_Riemann_specific_coefficient_is_permitted
+    first_branch: research/tdi-10.0-operator-core
+  - id: TDI10_1_plus
+    name: Frozen local models cavity transport soft-edge scaling and generic theorem research
+    status: planned_after_TDI10_0_core_qualification
+    candidate_topics:
+      - frozen_Toeplitz_positive_cavity_fixed_point
+      - exact_finite_to_local_cavity_error_transport
+      - drift_factorization
+      - cumulative_nonuniform_contraction
+      - soft_edge_counterexamples
+      - double_scaling_in_i_m_t
+      - eigenvalues_only_and_pairwise_numerical_tools
+      - theorem_for_declared_slowly_varying_Jacobi_class_or_minimal_counterexample
   - id: TDIX
     name: Ecosystem evidence and reusable primitive bridge
     status: planned_parallel
@@ -226,6 +271,7 @@ agent_operating_protocol:
     - before_any_preregistration_evaluator_or_final_evaluation_change
     - before_TDI8_architecture_or_evaluator_changes
     - before_TDI9_adaptive_inference_or_confirmation_changes
+    - before_TDI10_operator_theory_asymptotic_or_cross_repository_changes
     - before_cross_repository_scientific_integration
     - before_opening_or_merging_scientific_PRs
   must_update_this_file:
@@ -234,6 +280,7 @@ agent_operating_protocol:
     - when_a_follow_up_is_authorized_or_rejected
     - when_an_ecosystem_contract_changes
     - when_TDI8_or_TDI9_primary_scope_materially_changes
+    - when_TDI10_scope_evidence_status_or_RiemannBench_boundary_materially_changes
   fail_closed: >-
     If this roadmap cannot be read, or if it conflicts with merged protocols,
     immutable manifests, frozen result records, or current default-branch state,
