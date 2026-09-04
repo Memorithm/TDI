@@ -283,9 +283,7 @@ impl A3Reference {
                     }
                     *fused = value;
                 }
-                Ok(self
-                    .a2
-                    .step(&fused_input, a2_read_key, a2_write_key)?)
+                Ok(self.a2.step(&fused_input, a2_read_key, a2_write_key)?)
             }
         }
     }
@@ -454,8 +452,12 @@ mod tests {
     fn legacy_step_matches_explicit_same_key_route_bit_exactly() {
         let mut legacy = a3();
         let mut routed = a3();
-        legacy.store_vsa(7, &[0.5, -0.25]).expect("legacy VSA store");
-        routed.store_vsa(7, &[0.5, -0.25]).expect("routed VSA store");
+        legacy
+            .store_vsa(7, &[0.5, -0.25])
+            .expect("legacy VSA store");
+        routed
+            .store_vsa(7, &[0.5, -0.25])
+            .expect("routed VSA store");
 
         let legacy_report = legacy.step(&[0.25, 0.0], 7, Some(7)).expect("legacy step");
         let routed_report = routed
@@ -503,14 +505,14 @@ mod tests {
         let expected_address = model.a2().associative_memory().address_for(a2_read_key);
 
         let report = model
-            .step_routed(
-                &[0.0, 0.0],
-                A3VsaReadRoute::Key(7),
-                a2_read_key,
-                None,
-            )
+            .step_routed(&[0.0, 0.0], A3VsaReadRoute::Key(7), a2_read_key, None)
             .expect("independently routed step");
-        assert_eq!(report.read(), A2ReadStatus::Empty { address: expected_address });
+        assert_eq!(
+            report.read(),
+            A2ReadStatus::Empty {
+                address: expected_address
+            }
+        );
         assert_eq!(model.state(), &[0.5, -0.25]);
     }
 
@@ -543,12 +545,7 @@ mod tests {
         let before = model.snapshot().expect("snapshot before rejection");
 
         assert_eq!(
-            model.step_routed(
-                &[f64::NAN, 0.0],
-                A3VsaReadRoute::Key(7),
-                99,
-                Some(3),
-            ),
+            model.step_routed(&[f64::NAN, 0.0], A3VsaReadRoute::Key(7), 99, Some(3),),
             Err(A3ReferenceError::NonFiniteInput { index: 0 })
         );
         let after = model.snapshot().expect("snapshot after rejection");
