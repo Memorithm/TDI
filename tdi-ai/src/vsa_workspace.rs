@@ -444,7 +444,9 @@ mod tests {
     fn prepared_bundle_matches_direct_bundle_bit_exactly() {
         let mut direct = workspace(4);
         let mut prepared = direct.clone();
-        direct.bundle(17, &[1.5, -2.0, 0.25, 8.0]).expect("direct bundle");
+        direct
+            .bundle(17, &[1.5, -2.0, 0.25, 8.0])
+            .expect("direct bundle");
         let next = prepared
             .prepare_bundle(17, &[1.5, -2.0, 0.25, 8.0])
             .expect("prepared bundle");

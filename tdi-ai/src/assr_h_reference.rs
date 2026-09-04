@@ -591,13 +591,7 @@ mod tests {
         let before = model.snapshot().expect("snapshot before rejection");
 
         assert_eq!(
-            model.step_skip_vsa_and_store(
-                &[0.25, -0.5],
-                99,
-                Some(3),
-                7,
-                &[f64::NAN, 0.0],
-            ),
+            model.step_skip_vsa_and_store(&[0.25, -0.5], 99, Some(3), 7, &[f64::NAN, 0.0],),
             Err(A3ReferenceError::Vsa(VsaWorkspaceError::NonFinitePayload {
                 index: 0,
             }))
