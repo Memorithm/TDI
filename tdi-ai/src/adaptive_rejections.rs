@@ -135,9 +135,7 @@ impl ReferenceRejectionCode {
             ReferencePolicyError::NonFiniteConfiguration { .. } => {
                 Self::PolicyNonFiniteConfiguration
             }
-            ReferencePolicyError::NegativeConfiguration { .. } => {
-                Self::PolicyNegativeConfiguration
-            }
+            ReferencePolicyError::NegativeConfiguration { .. } => Self::PolicyNegativeConfiguration,
             ReferencePolicyError::ZeroVerificationCadence => Self::PolicyZeroVerificationCadence,
             ReferencePolicyError::UnrecoverableVerifiedViolation => {
                 Self::PolicyUnrecoverableVerifiedViolation
