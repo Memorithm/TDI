@@ -4,12 +4,14 @@
 //! finite-dimensional shifted resolvent identities, explicitly isolated
 //! constant positive frozen-Toeplitz reference models, exact finite cavity
 //! error transport relative to caller-supplied positive reference cavities,
-//! and exact algebraic factorization of transport drift and multipliers.
+//! exact algebraic factorization of transport drift and multipliers, and exact
+//! finite-chain affine composition of cavity-error transport steps.
 //! This crate deliberately contains no Riemann-specific coefficients, parity
 //! sectors, spectral-crossing interpretation, or hypothesis-specific
 //! normalization.
 
 pub mod cavity;
+pub mod chain;
 pub mod factorization;
 pub mod frozen;
 pub mod green;
@@ -18,6 +20,7 @@ pub mod resolvent;
 pub mod transport;
 
 pub use cavity::SchurCavities;
+pub use chain::{CavityChainError, CavityTransportChain};
 pub use factorization::{CavityDriftFactorization, CavityFactorizationError};
 pub use frozen::{FrozenToeplitzCavity, FrozenToeplitzError};
 pub use green::GreenBands;
