@@ -1,0 +1,38 @@
+name: TDI-10.1 frozen cavity
+
+on:
+  pull_request:
+    paths:
+      - "tdi-operator/src/frozen.rs"
+      - "tdi-operator/src/lib.rs"
+      - "tdi-operator/tests/frozen_toeplitz.rs"
+      - "docs/tdi10/TDI-10.1-FROZEN-CAVITY.md"
+      - "scripts/check-tdi10.1-frozen-cavity.sh"
+      - ".github/workflows/tdi10.1-frozen-cavity.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "tdi-operator/src/frozen.rs"
+      - "tdi-operator/src/lib.rs"
+      - "tdi-operator/tests/frozen_toeplitz.rs"
+      - "docs/tdi10/TDI-10.1-FROZEN-CAVITY.md"
+      - "scripts/check-tdi10.1-frozen-cavity.sh"
+      - ".github/workflows/tdi10.1-frozen-cavity.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-cavity:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+      - name: Qualify TDI-10.1 frozen cavity model
+        run: bash scripts/check-tdi10.1-frozen-cavity.sh
