@@ -15,6 +15,11 @@ use crate::adaptive_inference::{
 };
 use crate::adaptive_task_generators::AdaptiveTaskFamily;
 
+// Reference logical-operation model. These are not CPU instructions. C2 always
+// evaluates 6 scalar predicates/operations plus 4 boolean-composition ops. C3
+// evaluates the same 10-op base vector plus verification-threshold comparison,
+// cadence modulo, cadence composition, checkpoint comparison, violation-residual
+// comparison, verify-before-stop composition and one action-dispatch operation.
 const C0_DECISION_OPS: u64 = 2;
 const C0_POLICY_BITS: u64 = 64;
 const C1_PLANNING_OPS: u64 = 2;
@@ -349,12 +354,16 @@ impl C3RecoveryPolicy {
             self.max_state_delta_for_adaptive_stop,
             self.min_abs_margin_for_adaptive_stop,
         );
-        let cadence_due = observation.step_index() >= self.minimum_verification_step
-            && observation.step_index() % self.verify_every_steps == 0;
+        let verification_threshold_met =
+            observation.step_index() >= self.minimum_verification_step;
+        let on_verification_cadence = observation.step_index() % self.verify_every_steps == 0;
+        let cadence_due = verification_threshold_met & on_verification_cadence;
         let checkpoint_available = observation.available_checkpoints() > 0;
+        let violation_has_remaining_work = observation.residual() > 0.0;
+        let verify_adaptive_stop = base_stop & self.verify_before_stop;
         let action = match observation.verifier_signal() {
             Some(VerifierSignal::Violated) if checkpoint_available => InferenceAction::Backtrack,
-            Some(VerifierSignal::Violated) if observation.residual() > 0.0 => {
+            Some(VerifierSignal::Violated) if violation_has_remaining_work => {
                 InferenceAction::Continue
             }
             Some(VerifierSignal::Violated) => {
@@ -362,7 +371,7 @@ impl C3RecoveryPolicy {
             }
             Some(VerifierSignal::Satisfied) => InferenceAction::Stop,
             Some(VerifierSignal::Indeterminate) => InferenceAction::Continue,
-            None if base_stop && self.verify_before_stop => InferenceAction::Verify,
+            None if verify_adaptive_stop => InferenceAction::Verify,
             None if base_stop => InferenceAction::Stop,
             None if cadence_due => InferenceAction::Verify,
             None => InferenceAction::Continue,
@@ -397,8 +406,8 @@ fn base_should_stop(
     let delta_small = observation.state_delta() <= max_state_delta_for_adaptive_stop;
     let absolute_margin = observation.score_margin().abs();
     let margin_large = absolute_margin >= min_abs_margin_for_adaptive_stop;
-    let adaptive_stop = residual_small && delta_small && margin_large;
-    enough_steps && (terminal || adaptive_stop)
+    let adaptive_stop = residual_small & delta_small & margin_large;
+    enough_steps & (terminal | adaptive_stop)
 }
 
 fn validate_nonnegative_finite(
