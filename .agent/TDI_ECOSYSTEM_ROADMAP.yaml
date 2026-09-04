@@ -1,7 +1,7 @@
-schema_version: 2
+schema_version: 3
 kind: tdi_ecosystem_agent_roadmap
 status: active
-last_updated: "2026-09-04T17:58+0200"
+last_updated: "2026-09-04T19:58+0200"
 repository: Memorithm/TDI
 intended_consumer: autonomous_coding_agent
 merge_policy: never_merge_this_file_to_default_branch_unless_user_explicitly_requests
@@ -36,7 +36,10 @@ verified_current_facts:
   - no_TDI_9_2_runner_final_seed_list_final_dataset_or_result_surface_exists
   - user_has_explicitly_prioritized_AI_agent_research_without_routine_human_intervention_for_TDI_9
   - issue_141_tracks_the_active_TDI_10_x_generic_operator_resolvent_programme
-  - user_has_explicitly_authorized_TDI_10_phase0_and_the_first_generic_operator_core
+  - TDI_10_0_generic_Jacobi_resolvent_core_was_merged_by_PR_142_as_66542d3e4367079d47c029bf5ec953d19c13433d
+  - TDI_10_1_constant_positive_Toeplitz_reference_was_merged_by_PR_143_as_61a872da59fb427d86aa65762398850cd9d69f66
+  - TDI_10_2_exact_cavity_error_transport_was_merged_by_PR_144_as_c57cdfe07341de1e3d47104f1b73dd32f3170c17
+  - TDI_10_2_keeps_reference_cavities_caller_supplied_and_does_not_promote_a_row_freezing_convention
   - TDI_10_must_not_import_RH_as_a_hypothesis_or_Riemann_specific_coefficients_as_generic_theorems
 
 scientific_invariants:
@@ -66,6 +69,7 @@ agent_safety_rules:
   - agents_must_fail_closed_on_leakage_nonfinite_results_contract_drift_or_final_entropy_provenance_failure
   - TDI_10_agents_must_rederive_generic_operator_primitives_without_copying_Riemann_specific_semantics
   - TDI_10_agents_must_not_describe_numerical_soft_edge_behavior_as_a_uniform_theorem_without_a_proved_remainder
+  - TDI_10_agents_must_not_infer_uniform_contraction_from_pointwise_alpha_or_kappa_values
 
 ownership:
   role: dynamic_information_recovery_architecture_adaptive_inference_and_generic_operator_research_source_of_truth
@@ -77,7 +81,7 @@ ownership:
     - bounded_reference_architecture_experiments
     - bounded_adaptive_inference_policy_experiments
     - TDI_specific_final_evaluation_derivation_and_provenance_contracts
-    - tdi_operator_generic_finite_Jacobi_resolvent_cavity_and_Green_identities
+    - tdi_operator_generic_finite_Jacobi_resolvent_cavity_Green_frozen_reference_and_transport_identities
     - TDI_10_generic_operator_theorem_attempts_counterexamples_and_reproducible_evidence
   does_not_own:
     - ITD_structural_descriptor_semantics
@@ -235,8 +239,11 @@ roadmap:
       - NNIS_and_ElasticXxx_promotion_after_reference_evidence
   - id: TDI10_0
     name: Generic Jacobi operator and shifted resolvent foundation
-    status: active_phase0_and_first_core_in_progress
+    status: complete_merged_qualified
     source: issue_141
+    merge_evidence:
+      - PR_142_merged_as_66542d3e4367079d47c029bf5ec953d19c13433d
+      - exact_head_77f4320dad38e49125ceb262f85d5c0c53f25b18_all_required_workflows_green
     scientific_scope:
       - real_symmetric_tridiagonal_Jacobi_operators
       - shifted_positive_LDL_factorization
@@ -246,16 +253,59 @@ roadmap:
     evidence_policy:
       - finite_algebraic_identities_are_EXACT_under_declared_positive_pivot_conditions
       - floating_point_regressions_are_NUMERICAL_EVIDENCE_only
-      - no_soft_edge_uniform_theorem_is_claimed_in_the_first_core
+      - no_soft_edge_uniform_theorem_is_claimed
       - no_RH_claim_or_Riemann_specific_coefficient_is_permitted
-    first_branch: research/tdi-10.0-operator-core
-  - id: TDI10_1_plus
-    name: Frozen local models cavity transport soft-edge scaling and generic theorem research
-    status: planned_after_TDI10_0_core_qualification
+  - id: TDI10_1
+    name: Constant positive Toeplitz cavity reference
+    status: complete_merged_qualified
+    merge_evidence:
+      - PR_143_merged_as_61a872da59fb427d86aa65762398850cd9d69f66
+      - exact_head_426338113976bc041e289e57f8d6a696f81da76c_all_required_workflows_green
+    exact_scope:
+      - positive_symbol_condition_a_gt_2_abs_b
+      - positive_stable_cavity_fixed_point_q
+      - local_kappa_b2_over_q2
+      - exact_two_sided_G00_and_G01
+      - independent_Fourier_quadrature_implementation_check
+    nonclaims:
+      - no_finite_section_convergence
+      - no_slowly_varying_error_bound
+      - no_soft_edge_uniformity
+  - id: TDI10_2
+    name: Exact finite cavity-error transport
+    status: complete_merged_qualified
+    merge_evidence:
+      - PR_144_merged_as_c57cdfe07341de1e3d47104f1b73dd32f3170c17
+      - exact_head_a5af124063f37536509de9d1ad1127aa9e2f7757_all_required_workflows_green
+    exact_identity:
+      - E_i_equals_alpha_E_j_plus_delta
+      - alpha_equals_edge_squared_over_Cj_qj
+      - delta_equals_shifted_diagonal_minus_edge_squared_over_qj_minus_qi
+    abstraction_boundary:
+      - q_references_are_caller_supplied_positive_values
+      - no_row_freezing_or_edge_averaging_convention_is_promoted
+    nonclaims:
+      - no_uniform_alpha_bound
+      - no_cumulative_contraction
+      - no_drift_rate_bound
+      - no_soft_edge_theorem
+  - id: TDI10_3
+    name: Exact drift and transport-factor factorization
+    status: authorized_next_compact_increment
+    goals:
+      - algebraically_split_delta_into_edge_or_reference_drift_components_under_explicit_reference_metadata
+      - factor_transport_multiplier_without_claiming_any_factor_is_uniformly_contracting
+      - test_reconstruction_against_TDI10_2_transport
+      - preserve_reference_construction_as_explicit_input_or_versioned_policy
+    forbid:
+      - uniform_contraction_claims
+      - asymptotic_rate_claims
+      - slowly_varying_theorem_claims
+      - soft_edge_theorem_claims
+  - id: TDI10_4_plus
+    name: Cumulative contraction soft-edge scaling counterexamples and generic theorem research
+    status: planned_after_TDI10_3_qualification
     candidate_topics:
-      - frozen_Toeplitz_positive_cavity_fixed_point
-      - exact_finite_to_local_cavity_error_transport
-      - drift_factorization
       - cumulative_nonuniform_contraction
       - soft_edge_counterexamples
       - double_scaling_in_i_m_t
