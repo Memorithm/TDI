@@ -77,16 +77,24 @@ fn development_and_validation_namespaces_are_domain_separated() {
 }
 
 #[test]
-fn answerable_families_have_one_supported_answer_and_f3_has_none() {
-    for cell in PRIMARY_CELLS {
-        let task = generate_task(SeedDomain::Development, 41, cell).expect("task");
-        let expected = match cell.family {
-            PrimaryTaskFamily::F1ExplicitSupport
-            | PrimaryTaskFamily::F2DerivedSupport
-            | PrimaryTaskFamily::F4ContradictionOverride => 1,
-            PrimaryTaskFamily::F3HiddenTruthInsufficiency => 0,
-        };
-        assert_eq!(supported_answer_count(&task), expected, "cell={cell:?}");
+fn answer_cardinality_is_stable_across_non_final_seed_sweep() {
+    for domain in [SeedDomain::Development, SeedDomain::Validation] {
+        for seed in 0_u64..64 {
+            for cell in PRIMARY_CELLS {
+                let task = generate_task(domain, seed, cell).expect("task");
+                let expected = match cell.family {
+                    PrimaryTaskFamily::F1ExplicitSupport
+                    | PrimaryTaskFamily::F2DerivedSupport
+                    | PrimaryTaskFamily::F4ContradictionOverride => 1,
+                    PrimaryTaskFamily::F3HiddenTruthInsufficiency => 0,
+                };
+                assert_eq!(
+                    supported_answer_count(&task),
+                    expected,
+                    "domain={domain:?} seed={seed} cell={cell:?}"
+                );
+            }
+        }
     }
 }
 
