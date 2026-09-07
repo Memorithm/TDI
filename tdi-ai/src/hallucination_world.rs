@@ -1033,21 +1033,15 @@ mod tests {
         )
         .expect("valid direct-scoring fixture");
 
-        let unknown_subject = StructuredResponse::Assert(Fact::new(
-            entity("ghost"),
-            relation("likes"),
-            entity("e1"),
-        ));
+        let unknown_subject =
+            StructuredResponse::Assert(Fact::new(entity("ghost"), relation("likes"), entity("e1")));
         assert_eq!(
             world.score_response(&unknown_subject),
             world.score_text("ASSERT ghost likes e1")
         );
 
-        let unknown_relation = StructuredResponse::Assert(Fact::new(
-            entity("e0"),
-            relation("invented"),
-            entity("e1"),
-        ));
+        let unknown_relation =
+            StructuredResponse::Assert(Fact::new(entity("e0"), relation("invented"), entity("e1")));
         assert_eq!(
             world.score_response(&unknown_relation),
             world.score_text("ASSERT e0 invented e1")
