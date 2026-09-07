@@ -1,0 +1,46 @@
+name: TDI-11.2 instrumentation pre-arm
+
+on:
+  pull_request:
+    paths:
+      - 'docs/TDI-11.2*'
+      - 'docs/tdi11.2-prearm.yaml'
+      - 'scripts/check-tdi11.2-prearm.sh'
+      - 'scripts/check-tdi11-bootstrap.sh'
+      - '.github/workflows/tdi11.2-prearm.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'docs/TDI-11.2*'
+      - 'docs/tdi11.2-prearm.yaml'
+      - 'scripts/check-tdi11.2-prearm.sh'
+      - 'scripts/check-tdi11-bootstrap.sh'
+      - '.github/workflows/tdi11.2-prearm.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  prearm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify TDI-11.2 pre-arm boundary
+        shell: bash
+        run: bash scripts/check-tdi11.2-prearm.sh
+
+      - name: Verify no TDI-11.2 model runner is introduced
+        shell: bash
+        run: |
+          if find tdi-ai tdi-bench scripts .github/workflows -type f \
+            \( -iname '*tdi11.2*runner*' -o -iname '*tdi11_2*runner*' \
+               -o -iname '*tdi11.2*model*run*' -o -iname '*tdi11_2*model*run*' \
+               -o -iname '*tdi11.2*final*' -o -iname '*tdi11_2*final*' \) \
+            ! -path 'scripts/check-tdi11.2-prearm.sh' | grep -q .; then
+            echo 'TDI-11.2 pre-arm cannot contain model/final runner surfaces' >&2
+            exit 1
+          fi
