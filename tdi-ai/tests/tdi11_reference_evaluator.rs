@@ -12,9 +12,7 @@ use hallucination_evaluator::{
     ActionCounts, ReferenceProvenanceContext, ReferenceResourceEnvelope, ReferenceResourceUsage,
     aggregate_counts, evaluate_response,
 };
-use hallucination_generator::{
-    GeneratedTask, SeedDomain, generate_task, supported_answer_count,
-};
+use hallucination_generator::{GeneratedTask, SeedDomain, generate_task, supported_answer_count};
 use hallucination_world::{
     Fact, HallucinationRejection, PRIMARY_CELLS, PrimaryTaskFamily, StructuredResponse,
     SupportLabel,
