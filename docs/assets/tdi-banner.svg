@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="520" viewBox="0 0 1600 520" role="img" aria-labelledby="title desc">
+  <title id="title">TDI — Dynamic Information Theory</title>
+  <desc id="desc">A dark scientific banner with luminous information-flow trajectories and the TDI project title.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#04111f"/>
+      <stop offset="0.55" stop-color="#071a2b"/>
+      <stop offset="1" stop-color="#140c2c"/>
+    </linearGradient>
+    <linearGradient id="flow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="0.52" stop-color="#34d399"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+    <radialGradient id="glowA">
+      <stop offset="0" stop-color="#38bdf8" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#38bdf8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB">
+      <stop offset="0" stop-color="#a78bfa" stop-opacity=".35"/>
+      <stop offset="1" stop-color="#a78bfa" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="9" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <pattern id="grid" width="44" height="44" patternUnits="userSpaceOnUse">
+      <path d="M 44 0 L 0 0 0 44" fill="none" stroke="#8ecdf0" stroke-opacity=".055" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="1600" height="520" rx="28" fill="url(#bg)"/>
+  <rect width="1600" height="520" rx="28" fill="url(#grid)"/>
+  <circle cx="1230" cy="80" r="430" fill="url(#glowA)"/>
+  <circle cx="1540" cy="440" r="390" fill="url(#glowB)"/>
+
+  <g opacity=".9" fill="none" stroke="url(#flow)" stroke-linecap="round">
+    <path d="M760 410 C920 365 930 160 1110 146 S1370 300 1590 122" stroke-width="4" filter="url(#softGlow)"/>
+    <path d="M760 433 C930 405 1010 265 1162 250 S1405 366 1600 225" stroke-width="2.2" opacity=".72"/>
+    <path d="M760 386 C900 314 934 222 1068 214 S1320 86 1584 80" stroke-width="1.7" opacity=".54"/>
+    <path d="M845 474 C990 410 1094 398 1210 352 S1434 280 1600 334" stroke-width="1.6" opacity=".42"/>
+  </g>
+
+  <g fill="#d9f6ff" filter="url(#softGlow)">
+    <circle cx="943" cy="313" r="5"/><circle cx="1110" cy="146" r="6"/>
+    <circle cx="1162" cy="250" r="4"/><circle cx="1336" cy="184" r="5"/>
+    <circle cx="1452" cy="308" r="4"/><circle cx="1518" cy="136" r="5"/>
+  </g>
+
+  <g font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <text x="88" y="120" fill="#7dd3fc" font-size="22" font-weight="650" letter-spacing="8">MEMORITHM RESEARCH</text>
+    <text x="82" y="275" fill="#f4fbff" font-size="142" font-weight="800" letter-spacing="-5">TDI</text>
+    <text x="92" y="337" fill="#d6e8f5" font-size="44" font-weight="500">Dynamic Information Theory</text>
+    <text x="92" y="392" fill="#8fb0c7" font-size="22" font-weight="450">Deterministic experiments · preregistered evidence · reproducible Rust</text>
+    <rect x="92" y="433" width="455" height="2" rx="1" fill="url(#flow)"/>
+    <text x="92" y="474" fill="#8fb0c7" font-size="17" letter-spacing="3">EXACT SYSTEMS  →  ADAPTIVE INFERENCE  →  OPERATOR RESEARCH</text>
+  </g>
+</svg>
