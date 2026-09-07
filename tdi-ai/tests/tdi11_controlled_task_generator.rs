@@ -63,8 +63,15 @@ fn development_and_validation_namespaces_are_domain_separated() {
     for cell in PRIMARY_CELLS {
         let development = generate_task(SeedDomain::Development, 9, cell).expect("development");
         let validation = generate_task(SeedDomain::Validation, 9, cell).expect("validation");
-        assert_ne!(development.provenance_record(), validation.provenance_record());
-        assert!(development.provenance_record().contains("domain=development"));
+        assert_ne!(
+            development.provenance_record(),
+            validation.provenance_record()
+        );
+        assert!(
+            development
+                .provenance_record()
+                .contains("domain=development")
+        );
         assert!(validation.provenance_record().contains("domain=validation"));
     }
 }
@@ -121,7 +128,11 @@ fn f3_contains_one_hidden_true_answer_but_prompt_does_not_expose_the_fact() {
             .filter(|(_, label)| *label == SupportLabel::TrueHiddenUnsupported)
             .collect::<Vec<_>>();
         assert_eq!(hidden.len(), 1);
-        assert!(!task.model_prompt().contains(&hidden[0].0.canonical_record()));
+        assert!(
+            !task
+                .model_prompt()
+                .contains(&hidden[0].0.canonical_record())
+        );
     }
 }
 
