@@ -10,8 +10,9 @@ PREARM="docs/TDI-11.2-PROSPECTIVE-INSTRUMENTATION-PREARM.md"
 STATE="docs/tdi11.2-prearm.yaml"
 GATE="docs/TDI-11.2-IMPLEMENTATION-GATE.md"
 STATUS="docs/TDI-11.2-STATUS.md"
+PROGRAMME="docs/TDI-11-PROGRAMME.md"
 
-for file in "$PREARM" "$STATE" "$GATE" "$STATUS"; do
+for file in "$PREARM" "$STATE" "$GATE" "$STATUS" "$PROGRAMME" AGENTS.md .github/copilot-instructions.md; do
     test -s "$file" || fail "missing required TDI-11.2 pre-arm surface: $file"
 done
 
@@ -23,6 +24,13 @@ grep -Fq 'MODEL_EXECUTION_AUTHORIZED: NO' "$PREARM" \
     || fail "pre-arm no-model-execution marker missing"
 grep -Fq 'Status: **ACTIVE PRE-ARM — MODEL EXECUTION NOT AUTHORIZED**' "$STATUS" \
     || fail "status no-model-execution marker missing"
+grep -Fq 'TDI-11.2 is now in **pre-arm**.' "$PROGRAMME" \
+    || fail "programme does not expose the TDI-11.2 pre-arm state"
+grep -Fq 'TDI-11.2 starts in a fail-closed pre-arm state.' AGENTS.md \
+    || fail "root agent policy lacks the TDI-11.2 pre-arm boundary"
+grep -Fq 'TDI-11.2 begins fail-closed.' .github/copilot-instructions.md \
+    || fail "Copilot policy lacks the TDI-11.2 pre-arm boundary"
+
 grep -Fq 'model_execution_authorized: false' "$STATE" \
     || fail "machine-readable model execution guard is not false"
 grep -Fq 'final_execution_authorized: false' "$STATE" \
@@ -83,6 +91,7 @@ if ((${#forbidden[@]} != 0)); then
 fi
 
 printf 'TDI-11.0 inherited bootstrap: PASS\n'
+printf 'TDI-11.2 agent/programme policy: PRESENT\n'
 printf 'TDI-11.2 model execution: BLOCKED\n'
 printf 'TDI-11.2 final execution: BLOCKED\n'
 printf 'TDI-11.2 unresolved freeze fields: %s/12\n' "$blocking_count"
