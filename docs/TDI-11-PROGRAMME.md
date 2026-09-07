@@ -16,9 +16,9 @@ Working controller label: **HAC — Hallucination Adaptive Controller**.
 
 | Stage | Purpose | Status |
 | --- | --- | --- |
-| **TDI-11.0** | Freeze scope, taxonomy, evidence boundary and implementation gate | ✅ Frozen by preregistration once merged/blob-verified |
-| **TDI-11.1** | Build deterministic fully specified worlds and reference evaluator | 🟠 Authorized after TDI-11.0 bootstrap passes on `main` |
-| **TDI-11.2** | Instrument prospective trajectory precursors on local/open models | ⏳ Future; requires model/observation freeze |
+| **TDI-11.0** | Freeze scope, taxonomy, evidence boundary and implementation gate | ✅ Frozen and blob-verified |
+| **TDI-11.1** | Build deterministic fully specified worlds and reference evaluator foundation | ✅ Non-final foundation merged through PR #157 |
+| **TDI-11.2** | Instrument prospective trajectory precursors on local/open models | 🟠 Active pre-arm; model execution blocked pending exact model/observation freeze |
 | **TDI-11.3** | Run controlled causal perturbation experiments | ⏳ Future |
 | **TDI-11.4** | Compare single-signal and multisignal hallucination-risk estimators | ⏳ Future |
 | **TDI-11.5** | Evaluate bounded adaptive control: emit, continue, verify, recover, backtrack or abstain | ⏳ Future |
@@ -56,7 +56,7 @@ TDI-11 separates five problems that must not be silently conflated:
 
 A detector that only identifies an error after completion is useful evidence but is not equivalent to prevention. A verifier that corrects an answer is not evidence that its score was predictive before the error. These contrasts remain explicit.
 
-## TDI-11.1 controlled-world principle
+## TDI-11.1 controlled-world foundation
 
 The first evaluator line uses fully specified deterministic synthetic worlds where the experiment owns the complete reference truth and can label:
 
@@ -69,13 +69,23 @@ The first evaluator line uses fully specified deterministic synthetic worlds whe
 
 This avoids depending on unknown training-set membership for the first mechanistic experiments. External factuality benchmarks may be added later as transfer evidence, not as the sole scientific oracle.
 
-The first implementation slice is:
+The merged TDI-11.1 foundation now includes:
 
-`World schema -> visible/hidden partition -> deterministic closure -> ASSERT/ABSTAIN parser -> exact support label -> rejection/provenance record`.
+`World schema -> visible/hidden partition -> deterministic closure -> ASSERT/ABSTAIN parser -> exact support label -> rejection/accounting/provenance -> prospective timing -> guarded model/runtime observation-adapter boundary`.
+
+This remains non-final research infrastructure and does not itself constitute model evidence.
+
+## TDI-11.2 prospective instrumentation pre-arm
+
+TDI-11.2 begins with an explicit fail-closed pre-arm. Before a concrete local/open model may execute, a later freeze must pin the exact non-final model artifact, adapter, tokenizer/template, decoding settings, prompt serializer, observation channel registry and event timing, Development/Validation population derivation, resource accounting, rejection semantics and provenance.
+
+While any required field remains unresolved, model execution is forbidden. The pre-arm permits only protocol/schema/integrity work, non-executing adapter scaffolding and deterministic tests of the gate.
+
+The exact observation vector is intentionally not selected by the pre-arm, and no signal family is presumed sufficient.
 
 ## Candidate observables
 
-Later TDI-11 stages may select from candidate observables, but the exact vector must be frozen before confirmatory evaluation. Candidate families include:
+Later TDI-11 stages may select from candidate observables, but the exact vector must be frozen before the relevant evidence-producing run. Candidate families include:
 
 - token probability, margin and entropy summaries;
 - semantic disagreement across bounded resamples;
@@ -159,6 +169,8 @@ TDI-11 does not currently claim:
 
 ## Current gate
 
-TDI-11.1 non-final reference implementation may begin after the TDI-11.0 preregistration is merged, its Git blob identity is verified, and `scripts/check-tdi11-bootstrap.sh` passes on `main`.
+TDI-11.1 non-final reference foundations are integrated on `main` through PR #157. TDI-11.2 is now in **pre-arm**.
 
-That authorization does not create or authorize final/confirmatory model evaluation. Before such evaluation, a later gate must freeze concrete model/adaptor identities, observation timing/vector, generator parameters, statistical margins, resource envelopes, final population, provenance and non-discretionary final-seed derivation.
+A concrete model must not be implemented or executed through a TDI-11.2 runner until the exact non-final model/observation contract is frozen, content-addressed, CI-verified on the exact PR head, merged to `main`, and the TDI-11.2 implementation gate passes there.
+
+This transition still does not create or authorize final/confirmatory model evaluation. Before any final evaluation, a later gate must separately freeze concrete final population and seed derivation, statistical procedures/margins, resource envelopes, result/provenance schemas and a non-discretionary no-retry final execution contract.
