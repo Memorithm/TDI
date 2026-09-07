@@ -329,6 +329,14 @@ impl MemoryAccounting {
             .checked_add(self.cumulative_history)
     }
 
+    /// Validate architecture and all totals, including static storage.
+    pub fn validate_complete(self, arm: ReferenceArm) -> Result<(), MemoryAccountingError> {
+        self.validate_for_arm(arm)?;
+        self.reported_dynamic_bits()?
+            .checked_add(self.static_parameters)?;
+        Ok(())
+    }
+
     /// Validate both forbidden and defining non-zero components for the frozen
     /// reference arm semantics.
     pub fn validate_for_arm(self, arm: ReferenceArm) -> Result<(), MemoryAccountingError> {
@@ -471,7 +479,7 @@ impl<S> ReferenceSnapshot<S> {
         state: S,
         memory: MemoryAccounting,
     ) -> Result<Self, MemoryAccountingError> {
-        memory.validate_for_arm(arm)?;
+        memory.validate_complete(arm)?;
         Ok(Self { arm, state, memory })
     }
 

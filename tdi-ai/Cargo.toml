@@ -4,8 +4,16 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
+[features]
+default = []
+experimental = []
+
 [dependencies]
 tdi-core = { path = "../tdi-core" }
 
 [lints]
 workspace = true
+
+[[example]]
+name = "development_campaign"
+required-features = ["experimental"]

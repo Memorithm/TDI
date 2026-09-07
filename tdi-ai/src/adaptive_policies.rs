@@ -9,11 +9,11 @@
 
 use core::fmt;
 
-use crate::adaptive_inference::{
+use super::adaptive_inference::{
     AdaptiveInferenceError, InferenceAction, PolicyArm, PolicyObservation, VerifierSignal,
     validate_action,
 };
-use crate::adaptive_task_generators::AdaptiveTaskFamily;
+use super::adaptive_task_generators::AdaptiveTaskFamily;
 
 // Reference logical-operation model. These are not CPU instructions. C2 always
 // evaluates 6 scalar predicates/operations plus 4 boolean-composition ops. C3
@@ -107,6 +107,15 @@ pub struct C0FixedPolicy {
 }
 
 impl C0FixedPolicy {
+    /// Versioned exact configuration identity; floating thresholds use binary64 bits.
+    #[must_use]
+    pub fn canonical_record(self) -> String {
+        format!(
+            "C0FixedPolicy/v1;stop_after_steps={}",
+            self.stop_after_steps
+        )
+    }
+
     pub fn new(stop_after_steps: u64) -> Result<Self, ReferencePolicyError> {
         if stop_after_steps == 0 {
             return Err(ReferencePolicyError::ZeroFixedSchedule);
@@ -147,6 +156,15 @@ pub struct C1StaticPolicy {
 }
 
 impl C1StaticPolicy {
+    /// Versioned exact configuration identity; floating thresholds use binary64 bits.
+    #[must_use]
+    pub fn canonical_record(self) -> String {
+        format!(
+            "C1StaticPolicy/v1;p1_stop_after_steps={};p2_stop_after_steps={};p3_stop_after_steps={}",
+            self.p1_stop_after_steps, self.p2_stop_after_steps, self.p3_stop_after_steps
+        )
+    }
+
     pub fn new(
         p1_stop_after_steps: u64,
         p2_stop_after_steps: u64,
@@ -237,6 +255,18 @@ pub struct C2AdaptivePolicy {
 }
 
 impl C2AdaptivePolicy {
+    /// Versioned exact configuration identity; floating thresholds use binary64 bits.
+    #[must_use]
+    pub fn canonical_record(self) -> String {
+        format!(
+            "C2AdaptivePolicy/v1;minimum_steps={};max_residual_for_adaptive_stop={};max_state_delta_for_adaptive_stop={};min_abs_margin_for_adaptive_stop={}",
+            self.minimum_steps,
+            self.max_residual_for_adaptive_stop.to_bits(),
+            self.max_state_delta_for_adaptive_stop.to_bits(),
+            self.min_abs_margin_for_adaptive_stop.to_bits()
+        )
+    }
+
     pub fn new(
         minimum_steps: u64,
         max_residual_for_adaptive_stop: f64,
@@ -306,6 +336,21 @@ pub struct C3RecoveryPolicy {
 }
 
 impl C3RecoveryPolicy {
+    /// Versioned exact configuration identity; floating thresholds use binary64 bits.
+    #[must_use]
+    pub fn canonical_record(self) -> String {
+        format!(
+            "C3RecoveryPolicy/v1;minimum_steps={};max_residual_for_adaptive_stop={};max_state_delta_for_adaptive_stop={};min_abs_margin_for_adaptive_stop={};minimum_verification_step={};verify_every_steps={};verify_before_stop={}",
+            self.minimum_steps,
+            self.max_residual_for_adaptive_stop.to_bits(),
+            self.max_state_delta_for_adaptive_stop.to_bits(),
+            self.min_abs_margin_for_adaptive_stop.to_bits(),
+            self.minimum_verification_step,
+            self.verify_every_steps,
+            self.verify_before_stop
+        )
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         minimum_steps: u64,

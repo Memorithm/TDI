@@ -4,13 +4,14 @@
 //! compatibility API. Technical, execution, policy and inference failures remain
 //! typed rejections and are never reinterpreted as task-quality outcomes.
 
-use crate::adaptive_evaluator::{
-    ReferenceEvaluationRecord, ReferenceEvaluatorError, ReferencePolicy, evaluate_generated_task,
+use super::adaptive_evaluator::{
+    ReferenceEvaluationRecord, ReferenceEvaluatorError, ReferencePolicy, ReferenceProgress,
+    evaluate_generated_task_with_progress,
 };
-use crate::adaptive_execution::ReferenceExecutionError;
-use crate::adaptive_inference::{AdaptiveInferenceError, PolicyArm, ResourceEnvelope};
-use crate::adaptive_policies::ReferencePolicyError;
-use crate::adaptive_task_generators::{AdaptiveTaskFamily, DifficultyStratum, GeneratedTask};
+use super::adaptive_execution::ReferenceExecutionError;
+use super::adaptive_inference::{AdaptiveInferenceError, PolicyArm, ResourceEnvelope};
+use super::adaptive_policies::ReferencePolicyError;
+use super::adaptive_task_generators::{AdaptiveTaskFamily, DifficultyStratum, GeneratedTask};
 
 /// Stable non-final machine code for every currently represented evaluator
 /// rejection path.
@@ -221,9 +222,16 @@ pub struct ReferenceRejectionRecord {
     seed: u64,
     code: ReferenceRejectionCode,
     error: ReferenceEvaluatorError,
+    progress: Option<ReferenceProgress>,
 }
 
 impl ReferenceRejectionRecord {
+    /// Last accounted state; absent when construction or initial validation failed.
+    #[must_use]
+    pub const fn progress(self) -> Option<ReferenceProgress> {
+        self.progress
+    }
+
     #[must_use]
     pub const fn arm(self) -> PolicyArm {
         self.arm
@@ -266,7 +274,7 @@ pub enum ReferenceEvaluationOutcome {
 /// Execute one complete non-final trajectory while retaining typed provenance
 /// for technical rejection.
 ///
-/// This is additive: [`evaluate_generated_task`] keeps its existing `Result`
+/// This is additive: [`super::adaptive_evaluator::evaluate_generated_task`] keeps its existing `Result`
 /// contract unchanged for compatibility.
 #[must_use]
 pub fn evaluate_generated_task_recorded(
@@ -278,7 +286,14 @@ pub fn evaluate_generated_task_recorded(
     let arm = policy.arm();
     let family = generated.policy().family();
     let evaluator = generated.evaluator();
-    match evaluate_generated_task(generated, policy, envelope, runtime_decision_limit) {
+    let mut progress = None;
+    match evaluate_generated_task_with_progress(
+        generated,
+        policy,
+        envelope,
+        runtime_decision_limit,
+        &mut progress,
+    ) {
         Ok(record) => ReferenceEvaluationOutcome::Completed(record),
         Err(error) => ReferenceEvaluationOutcome::Rejected(ReferenceRejectionRecord {
             arm,
@@ -287,6 +302,7 @@ pub fn evaluate_generated_task_recorded(
             seed: evaluator.seed(),
             code: ReferenceRejectionCode::from_error(error),
             error,
+            progress,
         }),
     }
 }

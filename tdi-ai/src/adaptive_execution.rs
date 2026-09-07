@@ -8,11 +8,11 @@
 
 use core::fmt;
 
-use crate::adaptive_inference::{
+use super::adaptive_inference::{
     AdaptiveInferenceError, ComputeComponent, InferenceAction, PolicyArm, PolicyObservation,
     ResourceEnvelope, ResourceMeter, ResourceUsage, VerifierSignal, validate_action,
 };
-use crate::adaptive_task_generators::{
+use super::adaptive_task_generators::{
     AdaptiveTaskFamily, BinaryTarget, EvaluatorRecord, EvaluatorTarget, ForkBranch, ForkEvent,
     PolicyTask,
 };

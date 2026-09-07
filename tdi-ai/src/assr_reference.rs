@@ -608,6 +608,22 @@ impl A2Reference {
         &self.memory
     }
 
+    /// Causal non-query transition without a future-task-derived neutral key.
+    /// Existing `step` preserves lookup-before-write semantics.
+    pub fn step_without_read(
+        &mut self,
+        input: &[f64],
+        write_key: Option<u64>,
+    ) -> Result<Option<AssociativeWriteOutcome>, RecurrentReferenceError> {
+        let next = self.core.compute_next(input)?;
+        let write = match write_key {
+            Some(key) => Some(self.memory.write(key, &next)?),
+            None => None,
+        };
+        self.core.commit(next);
+        Ok(write)
+    }
+
     /// Advance one deterministic lookup-before-write A2 step.
     pub fn step(
         &mut self,
