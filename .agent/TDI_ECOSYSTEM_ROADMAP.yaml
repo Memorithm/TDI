@@ -1,7 +1,7 @@
 schema_version: 3
 kind: tdi_ecosystem_agent_roadmap
 status: active
-last_updated: "2026-09-07T22:54+0200"
+last_updated: "2026-09-07T23:10+0200"
 repository: Memorithm/TDI
 intended_consumer: autonomous_coding_agent
 merge_policy: never_merge_this_file_to_default_branch_unless_user_explicitly_requests
@@ -65,7 +65,11 @@ verified_current_facts:
   - TDI_11_1_leakage_safe_observation_adapter_contract_was_merged_by_PR_157_as_1c08c51435e5b4f099d688f59b4292f24bb11b09
   - TDI_11_1_PR_157_exact_head_a8c327c9cf06c01b1860e786a7ab51d2632d984d_passed_all_22_returned_pull_request_workflows
   - TDI_11_1_non_final_controlled_world_reference_foundation_is_complete_on_main
-  - TDI_11_2_protocol_model_observation_freeze_is_the_next_active_gate_and_does_not_by_itself_authorize_model_execution
+  - TDI_11_2_fail_closed_instrumentation_prearm_was_merged_by_PR_158_as_7a2382ca739693b6901dadc2d9b2f5c7c441eaa7
+  - TDI_11_2_PR_158_exact_head_679ef5a4f2b60739720e77ecb9c128b42a60ffe7_passed_all_28_returned_pull_request_workflows
+  - TDI_11_2_prearm_keeps_model_execution_authorized_false_and_final_execution_authorized_false
+  - TDI_11_2_prearm_keeps_12_model_observation_freeze_fields_explicitly_unresolved_blocking
+  - TDI_11_2_exact_model_observation_freeze_is_the_next_active_gate_and_concrete_model_execution_remains_forbidden_until_it_merges_and_passes
   - no_TDI_11_final_runner_final_seed_list_final_dataset_or_final_result_surface_is_authorized_or_known_to_exist
 
 scientific_invariants:
@@ -86,7 +90,7 @@ scientific_invariants:
   - TDI_11_complete_world_hidden_truth_must_never_enter_controller_or_verifier_observations
   - TDI_11_H11_A_precursor_evidence_must_be_prospective_and_precede_the_scored_assertion
   - TDI_11_control_benefit_requires_coverage_and_task_success_protection_before_unsupported_risk_reduction
-  - TDI_11_2_model_execution_requires_a_merged_model_observation_protocol_freeze
+  - TDI_11_2_model_execution_requires_a_merged_content_addressed_exact_model_observation_protocol_freeze
 
 agent_safety_rules:
   - autonomous_agents_must_never_rerun_TDI_7_2_or_access_its_protected_payload_for_later_series
@@ -104,10 +108,11 @@ agent_safety_rules:
   - TDI_10_agents_must_not_infer_uniform_contraction_from_pointwise_alpha_or_kappa_values
   - TDI_11_agents_may_implement_only_non_final_surfaces_authorized_by_the_merged_TDI_11_0_gate
   - TDI_11_agents_must_not_create_final_seed_lists_final_datasets_final_runners_or_final_result_payloads_without_a_later_frozen_authorization
-  - TDI_11_agents_must_not_use_complete_world_hidden_truth_evaluator_labels_hidden_difficulty_future_trajectory_states_or_alternative_arm_outcomes_as_controller_features
+  - TDI_11_agents_must_not_use_complete_world_hidden_truth_evaluator_labels_hidden_difficulty future_trajectory_states_or_alternative_arm_outcomes_as_controller_features
   - TDI_11_agents_must_not_replace_the_primary_structured_exact_scorer_with_an_LLM_judge
   - TDI_11_agents_must_preserve_supported_hidden_but_unsupported_contradicted_nonexistent_indeterminate_and_abstained_labels_as_distinct_semantics
-  - TDI_11_2_agents_must_not_execute_a_concrete_model_until_the_model_observation_protocol_freeze_is_merged_and_its_gate_passes
+  - TDI_11_2_agents_must_not_implement_or_execute_a_concrete_model_runner_while_any_prearm_blocker_remains_unresolved_or_model_execution_authorized_is_false
+  - TDI_11_2_agents_may_build_only_nonexecuting_freeze_schema_validation_and_integrity_surfaces_until_the_exact_model_observation_freeze_is_merged
 
 ownership:
   role: dynamic_information_recovery_architecture_adaptive_inference_generic_operator_and_hallucination_control_research_source_of_truth
@@ -466,10 +471,14 @@ roadmap:
       - final_result_conditioned_tuning
   - id: TDI11_2
     name: Prospective local/open-model precursor instrumentation
-    status: active_protocol_freeze_model_execution_not_yet_authorized
+    status: active_prearm_integrated_exact_model_observation_freeze_required
     entry_gate_evidence:
       - TDI11_1_foundation_complete_on_main_through_PR_157
+      - PR_158_prearm_merged_as_7a2382ca739693b6901dadc2d9b2f5c7c441eaa7
+      - PR_158_exact_head_679ef5a4f2b60739720e77ecb9c128b42a60ffe7_all_28_returned_workflows_green
       - prospective_timing_and_leakage_safe_adapter_contracts_are_merged
+      - model_execution_authorized_false_and_final_execution_authorized_false
+      - all_12_prearm_model_observation_fields_remain_unresolved_blocking
       - no_TDI11_final_surface_is_authorized
     freeze_required_before_model_execution:
       - concrete_non_final_model_artifact_identity_and_adapter_version
@@ -482,10 +491,11 @@ roadmap:
       - typed_rejection_and_machine_readable_provenance_contract
       - no_complete_world_hidden_truth_or_evaluator_label_in_adapter_inputs
     next_work:
-      - author_and_merge_TDI11_2_scope_preregistration_and_implementation_gate
-      - keep_model_execution_disabled_until_that_gate_passes_on_main
+      - implement_nonexecuting_exact_model_observation_freeze_manifest_schema_and_validator
+      - keep_all_execution_guards_false_until_every_required_identity_and_setting_is_explicitly_frozen
+      - do_not_silently_select_a_concrete_model_or_observation_vector
     forbidden:
-      - any_concrete_model_execution_before_the_protocol_freeze_merges
+      - any_concrete_model_runner_implementation_or_execution_before_the_exact_freeze_merges
       - final_model_evaluation
       - final_seed_dataset_runner_or_result_materialization
       - result_conditioned_observation_vector_or_threshold_selection
@@ -510,6 +520,7 @@ agent_operating_protocol:
     - before_TDI9_adaptive_inference_or_confirmation_changes
     - before_TDI10_operator_theory_asymptotic_or_cross_repository_changes
     - before_TDI11_hallucination_evaluator_detector_controller_adapter_or_confirmation_changes
+    - before_TDI11_2_model_observation_freeze_or_model_execution_changes
     - before_cross_repository_scientific_integration
     - before_opening_or_merging_scientific_PRs
   must_update_this_file:
@@ -519,7 +530,7 @@ agent_operating_protocol:
     - when_an_ecosystem_contract_changes
     - when_TDI8_or_TDI9_primary_scope_materially_changes
     - when_TDI10_scope_evidence_status_or_RiemannBench_boundary_materially_changes
-    - when_TDI11_scope_gate_evidence_controlled_world_timing_or_adapter_contract_materially_changes
+    - when_TDI11_scope_gate_evidence_controlled_world_timing_adapter_or_prearm_contract_materially_changes
   fail_closed: >-
     If this roadmap cannot be read, or if it conflicts with merged protocols,
     immutable manifests, frozen result records, or current default-branch state,
