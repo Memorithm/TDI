@@ -349,7 +349,7 @@ pub fn generate_task(
                 &mut complete,
                 &mut visible,
                 &entities,
-                r1,
+                r4,
                 parameters.distractor_count,
                 &mut rng,
                 Some(a),
