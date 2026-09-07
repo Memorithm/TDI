@@ -1,212 +1,105 @@
+<p align="center">
+  <img src="docs/assets/tdi-research-roadmap.jpg" alt="TDI research programme" width="100%">
+</p>
+
 # TDI — Dynamic Information Theory
 
-TDI is a deterministic Rust research project investigating whether the
-structure of accessible futures contains predictive information that is not
-preserved by scalar summaries such as Shannon entropy.
+**A deterministic Rust research programme studying which structural and dynamical descriptions of a system retain predictive information beyond simple scalar summaries.**
 
-The project uses exact finite-state dynamics, rational probabilities,
-deterministic generators, untouched holdouts and reproducible statistical
-evaluations.
+TDI develops falsifiable experiments, preregistered decision rules, deterministic evaluators and reproducible evidence. The programme started with exact finite-state dynamics and has expanded into attention / memory, bounded recurrent-associative architectures, adaptive inference dynamics, and generic operator / resolvent research.
 
-## Scientific status
+> The illustration above is a visual introduction. The status table below is the authoritative research map for the repository.
 
-### TDI-1 — deterministic systems
+## Why TDI matters
 
-Within the tested synthetic families, TDI-1 showed that:
+TDI is not a collection of benchmark claims. It is a sequence of controlled research programmes designed to answer narrower questions with stronger evidence.
 
-- equal Shannon block entropy does not imply equal perturbation recovery;
-- prospective return profiles separate many entropy-equivalent systems;
-- these profiles improve holdout prediction relative to entropy alone.
+The project has already established a useful pattern: simple summaries can miss predictive structure, stronger controls can absorb apparent effects, transfer can preserve ordering while losing calibration, and a failed preregistered criterion can still reveal a concrete mechanism worth testing next. Positive, negative, equivalent and inconclusive outcomes are all retained.
 
-A stronger orbital baseline completely subsumed the tested TDI-1 signal:
+The result is a growing body of **code + preregistration + evaluator + provenance + result artefacts**, rather than a narrative reconstructed after the experiment.
 
-- incremental AUPRC gain over the orbital baseline: `0`;
-- incremental Brier improvement: `0`.
+## Research map at a glance
 
-TDI-1 therefore challenges entropy-only sufficiency, but does not establish
-an independent invariant beyond standard orbital information.
+| Series | Research line | Repository status | What it contributes |
+| --- | --- | --- | --- |
+| **TDI-1** | **Deterministic systems** | ✅ Completed | Shows that equal Shannon block entropy need not imply equal perturbation recovery, while also showing that the tested TDI-1 signal is subsumed by a stronger orbital baseline. |
+| **TDI-2** | **Branching systems** | ✅ Completed | Preregistered continuous branching evaluation; predictive signal is measurable, but universal cross-width calibration is not established. |
+| **TDI-3** | **Inter-width evaluation** | ✅ Completed | The preregistered inter-width criteria fail; the experiment isolates a width-sensitive signal rather than a universal representation. |
+| **TDI-4** | **Target geometry** | ✅ Completed | The preregistered two-head protocol fails formally, while the continuous deficit geometry remains strongly informative in the tested regime. |
+| **TDI-5.x** | **Exact confirmatory battery** | ✅ Completed line | Exact-rational, SHA-frozen, confirmation-gated experiments covering overlap ablation, nonlinear sufficiency, spectral controls, generator robustness and cross-width behaviour. |
+| **TDI-6.1–6.7** | **Non-exact frontier** | ✅ Completed line | Extends the controls to literal spectral gap, nonlinear models, information decomposition, causal probes and cross-generator transfer diagnostics under declared floating-point discipline. |
+| **TDI-6.8** | **Transportable Ordering Across Generator Families** | 🟠 Preregistered / research line | Tests whether rank ordering — rather than absolute calibration — transports across fresh generator-family populations under a frozen per-block criterion. |
+| **TDI-7.x** | **Attention / Memory research programme** | 🟠 Active | Moves the intervention-conditioned recovery question into deterministic attention / memory tasks, then studies heterogeneity, long-horizon joint information and successor semantic questions. |
+| **TDI-8.x** | **Recurrent Associative Architecture Research Programme** | 🟠 Active | Matched-budget A0/A1/A2/A3 programme comparing full-history reference, bounded recurrent state, associative memory, and a bounded VSA / holographic workspace. |
+| **TDI-9.x** | **Autonomous Adaptive Inference Dynamics Research Programme** | 🟠 Active | C0/C1/C2/C3 policy ladder: fixed compute, static preallocation, adaptive stopping, then explicit verification / recovery under a declared compute envelope. |
+| **TDI-10.x** | **Operator / Resolvent Research** | 🟠 Active | Generic Jacobi / tridiagonal operator work on shifted resolvents, Schur cavities, Green functions, finite transport and explicitly classified asymptotic claims. |
 
-### TDI-2 — branching systems
+## Current research frontier
 
-TDI-2 studies exact probability distributions generated by locally uniform
-branching transitions.
+The repository no longer stops at TDI-6.x.
 
-Its continuous evaluation was preregistered before the first successful
-holdout calculation.
+### TDI-7.x — Attention / Memory
 
-#### Untouched width-3 holdout
+The programme begins with [`TDI-7.0 — Attention recovery preregistration`](docs/TDI-7.0-ATTENTION-RECOVERY-PREREGISTRATION.md): deterministic associative-recall and copy tasks test whether early intervention-conditioned recovery descriptors predict later retrieval deficit beyond competent static attention diagnostics.
 
-- training systems: `12,000`;
-- holdout systems: `4,000`;
-- observation horizon: `2`;
-- target horizon: `6`;
-- baseline MSE: `0.001816873`;
-- baseline + TDI-2 MSE: `0.001579275`;
-- relative MSE reduction: `13.077285 %`;
-- MAE improvement: `0.001148208`;
-- bootstrap 95% CI for MSE improvement:
-  `[0.000162544, 0.000315743]`;
-- bootstrap 95% CI for MAE improvement:
-  `[0.000788787, 0.001495130]`.
+Later TDI-7 work must preserve the distinction between a **confirmatory result**, a **frozen protocol**, an **identifiability blocker**, and an **unauthorised final holdout**. In particular, the current TDI-7.4 identifiability finding is a blocker for the present H-AI-3 realisation, not a confirmatory negative result.
 
-The preregistered primary criterion passed.
+### TDI-8.x — Recurrent Associative Architecture Research Programme
 
-#### Width-4 out-of-distribution holdout
+[`TDI-8.x`](docs/TDI-8-PROGRAMME.md) is the bounded alternative recurrent / associative architecture line.
 
-TDI-2 retained a relative MSE advantage of `6.198256 %`.
+- **A0** — competent attention-like full-history reference;
+- **A1** — bounded recurrent-state-only reference;
+- **A2** — A1 + explicit bounded associative memory (working label: ASSR);
+- **A3** — A2 + bounded VSA / holographic workspace paid from the same dynamic-memory budget (working label: ASSR-H).
 
-However, both models were badly calibrated and produced negative rank
-correlations. This supports a relative signal, but not successful universal
-transfer across system widths.
+TDI-8.0 is frozen. TDI-8.1 builds the deterministic evaluator. TDI-8.2 remains a future human-only confirmatory holdout and is not authorised by ordinary development or CI.
 
-### TDI-5 series — the exact confirmatory battery (branching systems)
+### TDI-9.x — Autonomous Adaptive Inference Dynamics Research Programme
 
-The TDI-5 series is a chain of independently preregistered,
-SHA-256-frozen, confirmation-gated experiments on the branching systems of
-TDI-2. Each experiment freezes its design, evaluator, reproduction script,
-CI workflow and bounded tests before a single, deliberate, human-only
-`--full` run, and verifies the full frozen ancestor chain before any
-generation. Computation is exact-rational and deterministic; results are
-reproduced **bit-for-bit** on an independent ARM64 host. Full per-experiment
-reports are in [`docs/`](docs/).
+[`TDI-9.x`](docs/TDI-9-PROGRAMME.md) studies how much computation to spend and when to continue, stop, verify or recover.
 
-Each experiment changes exactly **one** factor relative to a frozen ancestor,
-and each one strengthens the baseline the overlaps must beat:
+Its policy ladder deliberately separates **fixed compute**, **static preallocation**, **adaptive stopping**, and **adaptive verification / recovery**. The final confirmation design uses a frozen derivation from future public entropy rather than a discretionary post-hoc seed choice.
 
-- **TDI-5.1** — continuous deficit geometry: the exact target geometry
-  `U_h = -log2(1 - O_h)` over the early-overlap predictors `O_1, O_2`.
-- **TDI-5.2 / 5.3** — independent overlap ablation and its independent
-  replication: the joint `{O_1, O_2}` signal, and `O_2`'s independent
-  contribution beyond a structural/entropic baseline, are confirmed;
-  out-of-distribution transfer across widths is not.
-- **TDI-5.4** — nonlinear sufficiency and horizon asymmetry: `O_1`'s
-  *incremental nonlinear* value over `O_2` is real at short horizons
-  (Beneficial at U₃) but decays monotonically into practical equivalence by
-  mid-horizon — a horizon-localized effect.
-- **TDI-5.5** — the baseline challenge: the overlaps carry signal **beyond an
-  exact contraction descriptor** (Dobrushin coefficient, mean pairwise total
-  variation) **and beyond a naive temporal-persistence competitor**, at every
-  horizon U₃…U₈.
-- **TDI-5.6** — the exact spectral challenge: still Beneficial at every horizon
-  against a baseline further augmented with the **exact spectral moments**
-  `s_2 = trace(P^2)`, `s_3 = trace(P^3)`. The moments are themselves
-  informative, so this is a strictly harder test than 5.5.
-- **TDI-5.7** — generator robustness: 5.6's result **replicates across all four
-  structurally distinct exact generator families**, 3/3 seed blocks in each.
-  The effect *size* is heterogeneous across families, and the same fitted model
-  transports across generators in direction only, not calibration.
-- **TDI-5.8** — cross-width invariance: **all 18** width × horizon cells
-  (widths 3, 4, 5) are Beneficial, and the relative effect size is nearly
-  width-invariant (0.61 pp spread at U₆). Cross-width **calibration fails**
-  (every R² far below zero) while **rank ordering survives** through the
-  overlaps (Spearman 0.695) and not through the exact descriptors (−0.040).
-- **TDI-5.9** — spectral-moment saturation: adding a fourth exact moment
-  `s_4 = trace(P^4)` buys far less than the second and third did (14 % as much
-  at U₃), while the overlaps remain Beneficial at every horizon. **The exact
-  descriptor ladder is saturating; the signal is not.**
+### TDI-10.x — Operator / Resolvent Research
 
-### TDI-6 series — the non-exact frontier
+[`TDI-10.x`](docs/TDI-10-PROGRAMME.md) is a scientifically autonomous generic operator line for real symmetric tridiagonal / Jacobi operators.
 
-TDI-6 relaxes **bit-exactness only**, and only under an explicit preregistered
-non-exact determinism discipline: IEEE-754 binary64, single-threaded, fixed
-operation order, declared tolerances, and a multi-method cross-validation table
-for every non-exact quantity. Reproduction is tolerance-based rather than
-byte-exact; the ±2 % classifier margins dwarf the declared tolerances.
+The latest `main` state includes the TDI-10.5 increment, merged as a pointwise-subunit uniform-decay counterexample. TDI-10 explicitly labels its evidence as **EXACT**, **PROVED UNDER DECLARED ASSUMPTIONS**, **FORMAL ASYMPTOTIC**, **NUMERICAL EVIDENCE**, **CONJECTURE**, or **REFUTED**. Numerical evidence is never silently promoted to proof.
 
-- **TDI-6.1** — the literal spectral gap: the overlaps stay Beneficial at both
-  focal horizons against a baseline containing the **literal** `|λ₂|` and the
-  ε-mixing time of the one-step kernel. The "TDI is just the spectral gap"
-  hypothesis is refuted within this scope.
-- **TDI-6.2** — nonlinear sufficiency: given a degree-2 interaction ridge, the
-  spectral baseline improves — and the overlaps' advantage **grows** rather
-  than shrinks, at all six horizons (54.2 % vs 47.0 % at U₃). The signal is not
-  a linear-modeling artifact.
-- **TDI-6.3** — information decomposition (Gaussian/MMI PID): total information
-  and redundancy both decay with horizon, while **synergy is the only component
-  that grows** (0.005 % → 6.6 %). Note that `Unique(O_1) = 0` throughout is
-  *definitional* under MMI, not an empirical finding.
-- **TDI-6.4** — causal probe: the recovery trajectory **does** depend on which
-  node is perturbed, but the heterogeneity falls from 23.3 % to 11.0 % of the
-  deficit level with horizon, and the early→late coupling is node-invariant.
-  The intervention target changes the *magnitude*, not the *relationship*.
-- **TDI-6.5** — generator-family robustness of the literal-spectral control:
-  Beneficial at both focal horizons in all four families, **24/24** grid cells.
-  But the effect size ranges over 39.8 pp across families, and in the one
-  family where the literal descriptors are *censored* (`|λ₂| = 1` exactly for a
-  large fraction of candidates) they add nothing at U₃.
-- **TDI-6.6** — re-standardized cross-generator transfer: the first candidate
-  repair for the transfer failure. Label-free re-standardization of the
-  features with the target domain's statistics is ***Harmful*** in all four
-  confirmatory cells and does not repair calibration. The oracle arm — which
-  also replaces the target scaler — *does* repair it, locating the residual
-  failure in the target domain's **deficit level**, the very quantity being
-  predicted.
-- **TDI-6.7** — observable-offset cross-generator transfer: the second
-  candidate repair, aimed at the level identified by TDI-6.6. Since `O₂` is a
-  feature, the shift `Δ = μ₂ᵀ − μ₂ˢ` is computable without labels; adding it to
-  the intercept is ***Harmful*** in all four confirmatory cells and repairs
-  nothing. The mechanism is exact: an additive constant moves **only** the bias
-  (residual spread invariant to `3e-12` across 144 blocks), and the frozen
-  model has already carried the level shift through the features. A *perfect*
-  `Δ` would help in **fewer** cells (9/24) than the imperfect one (12/24).
+## What the completed programme has taught us
 
-## Current conclusion
+Across the historical finite-state campaign, the strongest supported conclusion is deliberately narrower than a grand theory claim.
 
-Within small synthetic finite-state branching families, and under
-preregistered one-shot evaluation, early intervention-conditioned distribution
-overlap adds predictive information beyond:
+Within the tested synthetic branching families, early intervention-conditioned distribution overlap contains predictive information beyond entropy/topology controls, exact contraction descriptors, exact spectral moments, the literal spectral gap, ε-mixing time, and the tested degree-2 interaction model. The effect replicates across multiple generator families and widths.
 
-- an entropy and topology baseline at the same observation horizon;
-- an **exact contraction** descriptor and a temporal-persistence competitor;
-- **exact spectral moments** `s_2, s_3` — and a fourth moment `s_4`, which the
-  descriptor ladder is visibly saturating against;
-- the **literal** spectral gap `|λ₂|` and ε-mixing time;
-- all of the above **under a nonlinear (degree-2 interaction) model**;
+At the same time, **transportable calibration fails** across widths and generators, effect size is not universal, and two label-free calibration repairs were refuted. This is not hidden as a weakness: it is part of the scientific result and directly motivates the transport/order and successor programmes.
 
-and this replicates across **four generator families** (twice, exactly and
-non-exactly) and across **widths 3, 4 and 5**.
+## Evidence discipline
 
-The current results do **not** establish:
+TDI uses a fail-closed research workflow:
 
-- a universal physical law, or anything outside small synthetic finite-state
-  families;
-- **transportable calibration.** This is now a measured failure, not merely an
-  untested question: neither across widths (TDI-5.8B) nor across generators
-  (TDI-6.5C) does a fitted model predict absolute deficit levels in a new
-  domain. What transfers is rank ordering. Two label-free repairs have since
-  been preregistered and tested, and **both were refuted**: feature
-  re-standardization (TDI-6.6) and an additive observable offset (TDI-6.7) are
-  each *Harmful* in every confirmatory cell. Their mechanisms differ and are
-  both identified, which bounds the family of remedies rather than merely
-  failing to find one;
-- **a transportable effect size.** Nearly width-invariant (0.61 pp spread) but
-  strongly generator-dependent (39.8 pp) — no single number is "the" effect;
-- superiority over an arbitrarily expressive learner. Degree-2 interaction
-  ridge is the strongest model tested; kernel methods and tree ensembles are
-  untested;
-- causal structure beyond TDI-6.4's node-exchangeability probe, or a
-  decomposition under any PID definition other than Gaussian/MMI.
+1. **Preregister** the question, controls, split discipline, metric and decision rule.
+2. **Freeze** the scientific artefacts and their hashes before confirmatory evidence.
+3. **Implement** deterministic reference semantics and bounded validation tests.
+4. **Keep final material isolated** from ordinary development surfaces.
+5. **Execute once under the declared gate** when a final run is authorised.
+6. **Publish the result even when it fails**, including provenance, limitations and counterexamples.
 
-## Workspace
+TDI-5.x uses exact-rational, bit-reproducible computation. TDI-6.x and later non-exact work must declare numerical policies and evidence boundaries explicitly.
 
-- `tdi-core`: exact finite-state dynamics, rational probabilities,
-  branching distributions, exploration and recovery analysis.
-- `tdi-bench`: counterexamples, exhaustive scans, holdout evaluations,
-  ridge models and deterministic bootstrap confidence intervals.
-- `docs/`: preregistration, result reports and scientific limitations.
-- `results/`: captured deterministic reference outputs.
-- `scripts/`: reproducibility commands.
+## Explore the evidence
 
-## Jetson self-hosted CI
+- [`docs/`](docs/) — preregistrations, scientific reports, status documents, audits and limitations.
+- [`results/`](results/) — captured deterministic reference outputs and result artefacts.
+- [`scripts/`](scripts/) — reproduction commands and integrity checks.
+- [`tdi-core/`](tdi-core/) — finite-state dynamics and structural primitives.
+- [`tdi-bench/`](tdi-bench/) — evaluators, scans, models and deterministic statistical procedures.
+- [`tdi-operator/`](tdi-operator/) — generic operator / resolvent primitives for the TDI-10 line.
 
-The validation workflow runs in parallel on four ARM64 GitHub Actions runners
-hosted by the Jetson. Formatting, tests, Clippy and preregistration integrity
-are separate jobs.
+## Reproducibility
 
-Operational details are documented in
-[`docs/JETSON-CI.md`](docs/JETSON-CI.md).
-
-## Validation
+Standard development validation:
 
 ```bash
 cargo fmt --all -- --check
@@ -214,74 +107,19 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-## Reproduce TDI-1
+Confirmatory experiments may impose additional frozen scripts, manifests, exact tokens or future-entropy rules. Those gates are part of the scientific protocol and must not be bypassed by CI or development automation.
 
-```bash
-./scripts/reproduce-tdi1.sh
-```
+## Non-claims
 
-## Reproduce TDI-2
+TDI does **not** claim a universal law of intelligence, AGI, a world model, proprietary-model reverse engineering, universal asymptotic superiority, or guaranteed hardware speedups.
 
-```bash
-./scripts/reproduce-tdi2.sh
-```
-
-## Reproduce the TDI-5 and TDI-6 series
-
-Every confirmatory run is gated behind an explicit, exact human confirmation
-token and is a deliberate one-time action; **no commit, test or CI workflow
-ever supplies the token**, and the authoring agent never runs `--full`. Each
-experiment has its own script and frozen preregistration, e.g.:
-
-```bash
-TDI55_CONFIRM_FULL_RUN=I_ACCEPT_THE_TDI55_FREEZE_RULE \
-  bash scripts/reproduce-tdi5.5.sh
-
-TDI65_CONFIRM_FULL_RUN=I_ACCEPT_THE_TDI65_FREEZE_RULE \
-  bash scripts/reproduce-tdi6.5.sh
-```
-
-Each script refuses without the exact token, refuses a dirty repository,
-verifies the full frozen hash chain before any generation, runs the evaluator
-once, verifies the final criterion lines, and writes read-only artifacts under
-`results/`. TDI-5.x runs reproduce **byte-exactly**; TDI-6.x runs reproduce
-under their declared tolerances.
-
-See [`docs/`](docs/) for every preregistration and result report, and
-`scripts/reproduce-tdi5.*.sh` / `scripts/reproduce-tdi6.*.sh` for the rest.
-
-## Validated release
-
-`tdi-2-continuous-v0.1.0`
-
-The release contains:
-
-- the frozen preregistration;
-- the scientific result report;
-- the deterministic benchmark log;
-- SHA-256 checksums.
-
-## Reproducibility hashes
-
-Preregistration:
-
-```text
-af87f45bbe536b2479c67160f665fd60bcd09c62f2cbb5687b9b49d21f6115d2
-```
-
-Reference TDI-2 output:
-
-```text
-8b5d8ff7d36e6d39d861cc12f0e3e989ab0142375a1da2f708dd27ecdd723055
-```
+Each result supports only the bounded claim that its frozen experiment actually tests. Promotion into SciRust, Forge, NNIS, ElasticXxx, FLAT-ATTENTION or another Memorithm project requires a separate engineering or scientific contract.
 
 ## License
 
-TDI is **dual-licensed** (see [`LICENSING.md`](LICENSING.md)):
+TDI is **dual-licensed**; see [`LICENSING.md`](LICENSING.md).
 
-- noncommercial and personal use is free under the
-  [PolyForm Noncommercial License 1.0.0](LICENSE.md);
-- commercial use requires a separate commercial license from the copyright
-  holder (Tarek Zekriti, zekrititarek@gmail.com).
+- Noncommercial and personal use: [PolyForm Noncommercial License 1.0.0](LICENSE.md).
+- Commercial use: separate commercial licence from the copyright holder.
 
 Copyright 2026 Tarek Zekriti.
