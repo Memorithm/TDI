@@ -19,7 +19,7 @@ TDI-9 is a separately preregistered exception: it intentionally uses no human co
 
 For such a TDI-9 confirmation, agents must not select, retry, replace, skip, or reinterpret the frozen future entropy event based on results. No final seed list, final dataset, final result payload, or runnable TDI-9.2 surface may exist during TDI-9.0. During TDI-9.1, final-evaluation implementation remains blocked until the complete entropy source/event/derivation, evaluator, population, rejection, and provenance contracts are frozen.
 
-TDI-11 has no final-confirmation authorization at TDI-11.0. Autonomous agents may develop and validate only non-final controlled-world, instrumentation, detector, and controller surfaces allowed by the merged TDI-11 gate. Any later autonomous final confirmation requires its own frozen future-derived entropy contract and no-result-conditioned-retry rule before final material exists.
+TDI-11 has no final-confirmation authorization at TDI-11.0. Autonomous agents may develop and validate only non-final controlled-world, instrumentation, detector, and controller surfaces allowed by the merged TDI-11 gate. TDI-11.2 concrete-model execution is additionally blocked until a merged model/observation freeze resolves every field required by `docs/TDI-11.2-IMPLEMENTATION-GATE.md` and the TDI-11.2 integrity gate passes on `main`. Any later autonomous final confirmation requires its own frozen future-derived entropy contract and no-result-conditioned-retry rule before final material exists.
 
 Roadmap availability alone never authorizes confirmatory execution; the relevant merged preregistration and stage gate must explicitly authorize it.
 
@@ -71,6 +71,13 @@ TDI-11.x is the distinct hallucination-dynamics and control research line. Befor
 4. `docs/TDI-11.0-IMPLEMENTATION-GATE.md`;
 5. `docs/TDI-11.0-STATUS.md`.
 
+For TDI-11.2 work, additionally read:
+
+6. `docs/TDI-11.2-PROSPECTIVE-INSTRUMENTATION-PREARM.md`;
+7. `docs/TDI-11.2-IMPLEMENTATION-GATE.md`;
+8. `docs/TDI-11.2-STATUS.md`;
+9. `docs/tdi11.2-prearm.yaml`.
+
 TDI-11.1 implementation is forbidden until TDI-11.0 is merged, blob-pinned, and `bash scripts/check-tdi11-bootstrap.sh` passes on the relevant branch/main state.
 
 The frozen primary operational target is unsupported generation under evaluator-owned evidence semantics. Primary controlled-world scoring must remain deterministic and must not use an LLM judge. The structured primary response is exactly `ASSERT <subject_id> <relation_id> <object_id>` or `ABSTAIN`.
@@ -79,9 +86,11 @@ The frozen primary families are F1 explicit support, F2 derived support, F3 hidd
 
 TDI-11 controllers/verifiers must never receive complete-world hidden truth, evaluator labels, hidden difficulty annotations, final seed material, future trajectory state, or alternative-arm outcomes as decision features. Coverage and useful-task performance must be protected before reduced unsupported-emission risk can be classified as beneficial control.
 
-TDI-11.0/11.1 may not contain a final runner, final seed list, final dataset, or final result payload. A future final confirmation requires a separately frozen non-discretionary final derivation contract and explicit authorization.
+TDI-11.2 starts in a fail-closed pre-arm state. While `docs/tdi11.2-prearm.yaml` contains any `unresolved_blocking` field or `model_execution_authorized: false`, agents must not implement or execute a concrete TDI-11.2 model runner. Only protocol, schema, integrity, non-executing adapter scaffolding, and deterministic gate tests are permitted. A later non-final model/observation freeze must pin the concrete model artifact, adapter, tokenizer/template, decoding settings, prompt serializer, exact observation registry/timing, Development/Validation population derivation, accounting, rejection, and provenance before model execution can be authorized.
 
-Before a TDI-11 PR or merge decision, run `bash scripts/check-tdi11-bootstrap.sh` when that script exists on the branch.
+TDI-11.0/11.1/11.2 may not contain a final runner, final seed list, final dataset, or final result payload. A future final confirmation requires a separately frozen non-discretionary final derivation contract and explicit authorization.
+
+Before a TDI-11 PR or merge decision, run `bash scripts/check-tdi11-bootstrap.sh` when that script exists on the branch. For TDI-11.2 work, also run `bash scripts/check-tdi11.2-prearm.sh` when that script exists.
 
 ## Scientific boundary
 
