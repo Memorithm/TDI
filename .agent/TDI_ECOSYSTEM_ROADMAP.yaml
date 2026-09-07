@@ -1,7 +1,7 @@
 schema_version: 3
 kind: tdi_ecosystem_agent_roadmap
 status: active
-last_updated: "2026-09-04T21:20+0200"
+last_updated: "2026-09-07T19:50+0200"
 repository: Memorithm/TDI
 intended_consumer: autonomous_coding_agent
 merge_policy: never_merge_this_file_to_default_branch_unless_user_explicitly_requests
@@ -12,8 +12,9 @@ mission:
     supporting autonomous AI-agent research. TDI-7.x remains the frozen
     attention/recovery lineage, TDI-8.x remains the recurrent/associative
     architecture programme, TDI-9.x is the distinct adaptive-inference
-    dynamics programme, and TDI-10.x is the distinct generic operator/resolvent
-    research line for Jacobi and slowly-varying tridiagonal operators.
+    dynamics programme, TDI-10.x is the distinct generic operator/resolvent
+    research line for Jacobi and slowly-varying tridiagonal operators, and
+    TDI-11.x is the distinct hallucination-dynamics and control programme.
   autonomy: >-
     Prefer autonomous hypothesis generation, bounded experimentation,
     falsification, implementation, CI, review and evidence-gated promotion.
@@ -44,12 +45,20 @@ verified_current_facts:
   - TDI_10_4_exact_finite_chain_unrolling_was_merged_by_PR_146_as_c49b229254650d9ac52d98aed229b0f6c79abe08
   - TDI_10_4_exact_head_7402601bfca559ad3f898b614cedbead830e3d55_passed_all_26_pull_request_workflows
   - TDI_10_4_does_not_assert_uniform_contraction_decay_or_soft_edge_control
-  - TDI_10_5_pointwise_subunit_counterexample_is_qualified_on_exact_head_b65847fbf7adad35d7910d31cac0603172ff3d70_in_PR_147
+  - TDI_10_5_pointwise_subunit_counterexample_was_merged_by_PR_147_as_38768d151d23b467f944c89ff12eeb728ec8fb22
+  - TDI_10_5_exact_head_b65847fbf7adad35d7910d31cac0603172ff3d70_passed_its_qualification_gates
   - TDI_10_5_constructs_alpha_k_equals_1_minus_1_over_k_plus_1_squared_with_exact_product_n_plus_2_over_2_n_plus_1_tending_to_one_half
   - TDI_10_5_realizes_the_counterexample_with_admissible_CavityTransportStep_values_zero_drift_positive_cavities_and_nonzero_boundary_error
-  - TDI_10_5_dedicated_Rust_1_97_1_gate_Rust_validation_Public_Rust_validation_hosted_validation_and_all_returned_preflights_are_green_on_the_exact_head
   - TDI_10_5_falsifies_only_pointwise_subunit_implies_boundary_decay_and_does_not_establish_a_replacement_convergence_theorem
   - TDI_10_must_not_import_RH_as_a_hypothesis_or_Riemann_specific_coefficients_as_generic_theorems
+  - issue_151_tracks_the_active_TDI_11_x_hallucination_dynamics_and_control_programme
+  - TDI_11_bootstrap_was_merged_by_PR_150_as_85d01bd93724f53932831be182c30d1c6a2c673b
+  - TDI_11_0_preregistration_was_merged_by_PR_152_as_25f743f7b19cba07a2ed6ca1147fdc4e43cdc69f
+  - TDI_11_0_preregistration_blob_bbf02543f5661a7f5c029b9e4673e697e19a350a_is_pinned_on_main
+  - TDI_11_0_exact_head_7acc67cc8fe340161b1554745a415a56cedf806b_passed_all_26_returned_pull_request_workflows
+  - TDI_11_bootstrap_integrity_passed_again_on_main_after_PR_152_merge
+  - TDI_11_1_non_final_controlled_world_reference_implementation_is_now_authorized
+  - no_TDI_11_final_runner_final_seed_list_final_dataset_or_final_result_surface_is_authorized_or_known_to_exist
 
 scientific_invariants:
   - preregistration_precedes_confirmatory_execution
@@ -64,6 +73,11 @@ scientific_invariants:
   - TDI_10_exact_identities_formal_asymptotics_numerical_evidence_conjectures_and_refutations_must_remain_explicitly_distinct
   - TDI_10_numerical_fits_or_benchmarks_must_never_be_presented_as_proof
   - TDI_10_generic_theorems_must_declare_operator_hypotheses_windows_constants_errors_and_boundary_terms
+  - TDI_11_unsupported_generation_is_not_silently_equated_with_generic_factuality
+  - TDI_11_primary_controlled_world_scoring_uses_evaluator_owned_deterministic_truth_not_an_LLM_judge
+  - TDI_11_complete_world_hidden_truth_must_never_enter_controller_or_verifier_observations
+  - TDI_11_H11_A_precursor_evidence_must_be_prospective_and_precede_the_scored_assertion
+  - TDI_11_control_benefit_requires_coverage_and_task_success_protection_before_unsupported_risk_reduction
 
 agent_safety_rules:
   - autonomous_agents_must_never_rerun_TDI_7_2_or_access_its_protected_payload_for_later_series
@@ -79,9 +93,14 @@ agent_safety_rules:
   - TDI_10_agents_must_rederive_generic_operator_primitives_without_copying_Riemann_specific_semantics
   - TDI_10_agents_must_not_describe_numerical_soft_edge_behavior_as_a_uniform_theorem_without_a_proved_remainder
   - TDI_10_agents_must_not_infer_uniform_contraction_from_pointwise_alpha_or_kappa_values
+  - TDI_11_agents_may_implement_only_non_final_surfaces_authorized_by_the_merged_TDI_11_0_gate
+  - TDI_11_agents_must_not_create_final_seed_lists_final_datasets_final_runners_or_final_result_payloads_without_a_later_frozen_authorization
+  - TDI_11_agents_must_not_use_complete_world_hidden_truth_evaluator_labels_hidden_difficulty_future_trajectory_states_or_alternative_arm_outcomes_as_controller_features
+  - TDI_11_agents_must_not_replace_the_primary_structured_exact_scorer_with_an_LLM_judge
+  - TDI_11_agents_must_preserve_supported_hidden_but_unsupported_contradicted_nonexistent_indeterminate_and_abstained_labels_as_distinct_semantics
 
 ownership:
-  role: dynamic_information_recovery_architecture_adaptive_inference_and_generic_operator_research_source_of_truth
+  role: dynamic_information_recovery_architecture_adaptive_inference_generic_operator_and_hallucination_control_research_source_of_truth
   owns:
     - frozen_TDI_experiment_designs_preregistrations_and_results
     - tdi_core_finite_state_dynamics_and_exact_oracles
@@ -92,6 +111,7 @@ ownership:
     - TDI_specific_final_evaluation_derivation_and_provenance_contracts
     - tdi_operator_generic_finite_Jacobi_resolvent_cavity_Green_frozen_reference_and_transport_identities
     - TDI_10_generic_operator_theorem_attempts_counterexamples_and_reproducible_evidence
+    - TDI_11_controlled_world_truth_support_labels_precursor_experiments_and_reference_controller_semantics
   does_not_own:
     - ITD_structural_descriptor_semantics
     - FLAT_ATTENTION_execution_or_kernel_semantics
@@ -121,17 +141,20 @@ ecosystem_interfaces:
     contract:
       - ITD_and_TDI_descriptors_remain_separate_candidate_information_sources
       - TDI_9_may_consume_versioned_trajectory_diagnostics_only_through_explicit_non_leaking_interfaces
+      - TDI_11_may_test_versioned_ITD_structural_trajectory_signals_only_as_candidate_observables_not_as_truth_labels
       - ITD_must_not_reinterpret_TDI_frozen_results
   Memorithm/ADA:
     relationship: semantic_mechanism_discovery_and_falsification_partner
     contract:
       - ADA_may_propose_candidate_observables_verifiers_or_mechanisms
       - TDI_9_owns_frozen_adaptive_inference_evaluation_and_scientific_verdicts
+      - TDI_11_owns_frozen_hallucination_label_precursor_and_control_evaluation_semantics
       - final_evaluation_material_must_never_reach_ADA_candidate_generation
   Memorithm/Forge:
     relationship: downstream_execution_driven_candidate_search_engine
     contract:
       - Forge_search_begins_only_after_TDI_publishes_a_leak_safe_search_contract
+      - TDI_11_detector_or_controller_search_must_use_only_non_final_generation_and_validation_surfaces
       - search_uses_generation_and_validation_surfaces_separate_from_final_confirmation
       - Forge_scores_are_not_TDI_scientific_results
   Memorithm/FLAT-ATTENTION:
@@ -143,17 +166,19 @@ ecosystem_interfaces:
     relationship: downstream_NVIDIA_execution_measurement_target
     contract:
       - real_device_latency_bandwidth_memory_energy_and_throughput_claims_require_NNIS_measurement
+      - TDI_11_may_later_consume_explicitly_exposed_local_model_internal_signals_through_versioned_adapters
       - TDI_reference_results_do_not_imply_hardware_speedup
   Memorithm/ElasticXxx:
     relationship: downstream_runtime_adaptation_target
     contract:
       - TDI_9_may_export_evidence_qualified_stop_verify_backtrack_or_compute_allocation_policies
+      - TDI_11_may_export_only_evidence_qualified_hallucination_risk_or_recovery_policies_after_separate_promotion_review
       - ElasticXxx_owns_production_resource_actuation_and_runtime_safety
   Memorithm/scirust:
     relationship: promotion_target_for_reusable_general_primitives
     contract:
-      - promote_only_general_statistical_experiment_policy_or_operator_primitives_after_TDI_qualification
-      - keep_frozen_TDI_experiment_semantics_results_and_active_theorem_research_in_TDI
+      - promote_only_general_statistical_experiment_policy_operator_or_calibration_primitives_after_TDI_qualification
+      - keep_frozen_TDI_experiment_semantics_results_and_active_hallucination_or_theorem_research_in_TDI
   Memorithm/riemann_ndim_bench:
     relationship: structured_operator_hypothesis_source_and_model_specific_application_target
     contract:
@@ -336,9 +361,10 @@ roadmap:
       - no_soft_edge_uniformity_or_double_scaling_theorem
   - id: TDI10_5
     name: Pointwise-subunit transport counterexample
-    status: qualified_pending_merge_PR_147
+    status: complete_merged_qualified
     source: issue_141
-    qualification_evidence:
+    merge_evidence:
+      - PR_147_merged_as_38768d151d23b467f944c89ff12eeb728ec8fb22
       - exact_head_b65847fbf7adad35d7910d31cac0603172ff3d70
       - dedicated_TDI10_5_gate_green_on_Rust_1_97_1
       - Rust_validation_green
@@ -375,6 +401,64 @@ roadmap:
       - promoting_observed_pointwise_alpha_less_than_one_to_a_uniform_theorem
       - importing_RiemannBench_specific_coefficients_as_generic_hypotheses
       - claiming_soft_edge_uniformity_without_a_proved_remainder
+  - id: TDI11_0
+    name: Hallucination dynamics and control preregistration
+    status: complete_merged_frozen
+    source: issue_151
+    merge_evidence:
+      - PR_150_bootstrap_merged_as_85d01bd93724f53932831be182c30d1c6a2c673b
+      - PR_152_preregistration_merged_as_25f743f7b19cba07a2ed6ca1147fdc4e43cdc69f
+      - preregistration_blob_bbf02543f5661a7f5c029b9e4673e697e19a350a_pinned
+      - exact_head_7acc67cc8fe340161b1554745a415a56cedf806b_all_26_returned_PR_workflows_green
+      - post_merge_TDI11_bootstrap_integrity_green_on_main
+    scientific_questions:
+      - H11_A_prospective_precursor_value
+      - H11_B_adaptive_control_value
+      - H11_C_recovery_incremental_value
+    frozen_primary_semantics:
+      - unsupported_equals_true_hidden_unsupported_or_contradicted_or_nonexistent
+      - deterministic_ASSERT_or_ABSTAIN_primary_grammar
+      - no_LLM_judge_for_primary_controlled_world_scoring
+      - F1_explicit_support_F2_derived_support_F3_hidden_truth_insufficiency_F4_contradiction_override
+      - Shallow_Intermediate_Deep_strata_for_12_primary_cells
+      - B0_fixed_B1_static_verify_B2_risk_gate_B3_adaptive_recovery
+      - prospective_timing_required_for_H11_A
+      - coverage_then_task_success_then_unsupported_risk_ordered_verdict
+      - hidden_complete_world_truth_is_evaluator_only
+  - id: TDI11_1
+    name: Deterministic controlled-world reference evaluator
+    status: active_authorized_non_final
+    entry_gate_evidence:
+      - TDI11_0_is_merged_and_blob_pinned
+      - TDI11_bootstrap_integrity_passed_on_exact_PR_head_and_post_merge_main
+      - TDI7_2_and_TDI8_2_boundaries_remain_intact
+      - no_TDI11_final_surface_is_authorized
+    first_slice:
+      - finite_typed_world_schema
+      - visible_hidden_partition
+      - deterministic_bounded_forward_closure
+      - strict_ASSERT_or_ABSTAIN_parser
+      - exact_support_label_scorer
+      - F1_F2_F3_F4_reference_fixtures
+      - typed_rejection_and_provenance_foundation
+    forbidden:
+      - final_model_evaluation
+      - final_seed_or_dataset_materialization
+      - hidden_truth_as_controller_or_verifier_input
+      - LLM_judge_as_primary_scorer
+      - final_result_conditioned_tuning
+  - id: TDI11_2_plus
+    name: Prospective precursor instrumentation perturbation risk estimation and adaptive control
+    status: future_requires_additional_freezes_before_confirmatory_model_evidence
+    candidate_topics:
+      - token_probability_entropy_and_margin
+      - bounded_semantic_or_self_consistency_disagreement
+      - evidence_support_and_contradiction_signals
+      - perturbation_sensitivity
+      - local_open_model_hidden_state_summaries
+      - verifier_or_retrieval_disagreement
+      - HAC_risk_gating_verification_recovery_backtracking_and_abstention
+      - cross_model_and_TDI8_architecture_transfer_after_separate_freeze
   - id: TDIX
     name: Ecosystem evidence and reusable primitive bridge
     status: planned_parallel
@@ -386,6 +470,7 @@ agent_operating_protocol:
     - before_TDI8_architecture_or_evaluator_changes
     - before_TDI9_adaptive_inference_or_confirmation_changes
     - before_TDI10_operator_theory_asymptotic_or_cross_repository_changes
+    - before_TDI11_hallucination_evaluator_detector_controller_or_confirmation_changes
     - before_cross_repository_scientific_integration
     - before_opening_or_merging_scientific_PRs
   must_update_this_file:
@@ -395,6 +480,7 @@ agent_operating_protocol:
     - when_an_ecosystem_contract_changes
     - when_TDI8_or_TDI9_primary_scope_materially_changes
     - when_TDI10_scope_evidence_status_or_RiemannBench_boundary_materially_changes
+    - when_TDI11_scope_gate_evidence_or_controlled_world_contract_materially_changes
   fail_closed: >-
     If this roadmap cannot be read, or if it conflicts with merged protocols,
     immutable manifests, frozen result records, or current default-branch state,
