@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'tdi-ai/src/hallucination_world.rs'
+      - 'tdi-ai/src/hallucination_generator.rs'
+      - 'tdi-ai/tests/tdi11_controlled_task_generator.rs'
       - 'tdi-ai/src/lib.rs'
       - 'docs/TDI-11*'
       - 'scripts/check-tdi11-bootstrap.sh'
@@ -12,6 +14,8 @@ on:
     branches: [main]
     paths:
       - 'tdi-ai/src/hallucination_world.rs'
+      - 'tdi-ai/src/hallucination_generator.rs'
+      - 'tdi-ai/tests/tdi11_controlled_task_generator.rs'
       - 'tdi-ai/src/lib.rs'
       - 'docs/TDI-11*'
       - 'scripts/check-tdi11-bootstrap.sh'
@@ -44,6 +48,9 @@ jobs:
 
       - name: Test controlled-world oracle
         run: cargo test -p tdi-ai hallucination_world --all-features
+
+      - name: Test controlled task generator
+        run: cargo test -p tdi-ai --test tdi11_controlled_task_generator
 
       - name: Strict Clippy for tdi-ai
         run: cargo clippy -p tdi-ai --all-targets --all-features -- -D warnings
