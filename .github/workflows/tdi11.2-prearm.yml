@@ -8,7 +8,9 @@ on:
       - 'docs/TDI-11-PROGRAMME.md'
       - 'docs/TDI-11.2*'
       - 'docs/tdi11.2-prearm.yaml'
+      - 'docs/tdi11.2-model-observation-freeze.template.json'
       - 'scripts/check-tdi11.2-prearm.sh'
+      - 'scripts/check-tdi11.2-freeze-schema.py'
       - 'scripts/check-tdi11-bootstrap.sh'
       - '.github/workflows/tdi11.2-prearm.yml'
   push:
@@ -19,7 +21,9 @@ on:
       - 'docs/TDI-11-PROGRAMME.md'
       - 'docs/TDI-11.2*'
       - 'docs/tdi11.2-prearm.yaml'
+      - 'docs/tdi11.2-model-observation-freeze.template.json'
       - 'scripts/check-tdi11.2-prearm.sh'
+      - 'scripts/check-tdi11.2-freeze-schema.py'
       - 'scripts/check-tdi11-bootstrap.sh'
       - '.github/workflows/tdi11.2-prearm.yml'
 
@@ -38,6 +42,13 @@ jobs:
       - name: Verify TDI-11.2 pre-arm boundary
         shell: bash
         run: bash scripts/check-tdi11.2-prearm.sh
+
+      - name: Verify TDI-11.2 model/observation freeze schema remains fail-closed
+        shell: bash
+        run: >-
+          python3 scripts/check-tdi11.2-freeze-schema.py
+          docs/tdi11.2-model-observation-freeze.template.json
+          --self-test
 
       - name: Verify no TDI-11.2 model runner is introduced
         shell: bash
