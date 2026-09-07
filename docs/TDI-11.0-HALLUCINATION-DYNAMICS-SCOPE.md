@@ -1,6 +1,6 @@
 # TDI-11.0 — Hallucination Dynamics Scope and Stage Gate
 
-Status: **ACTIVE BOOTSTRAP — NOT FROZEN**
+Status: **FROZEN SCOPE — see TDI-11.0 preregistration and implementation gate**
 
 TDI-11.0 defines the scientific boundary for the hallucination-dynamics programme before any confirmatory evaluator or controller is permitted.
 
@@ -20,7 +20,7 @@ Evidence for one claim does not establish the others.
 
 For TDI-11 controlled-world experiments, an **unsupported claim** is a generated atomic proposition that is not entailed by the declared evidence available to the model under the experiment's frozen oracle semantics.
 
-The programme must separately label at least:
+The programme separately labels:
 
 - `SUPPORTED_EXPLICIT` — directly present in allowed evidence;
 - `SUPPORTED_DERIVED` — deterministically entailed under frozen world rules;
@@ -30,13 +30,17 @@ The programme must separately label at least:
 - `INDETERMINATE` — the oracle cannot decide under the frozen semantics;
 - `ABSTAINED` — model/controller declines to assert the proposition.
 
-The exact mapping from these atomic labels to experiment-level terms such as `hallucination`, `factual error`, `unsupported generation` or `correct abstention` must be frozen before TDI-11.1 confirmation work. TDI-11 must not silently equate factual falsity with unsupported generation.
+The preregistration freezes the primary mapping as:
+
+`UNSUPPORTED = TRUE_HIDDEN_UNSUPPORTED OR CONTRADICTED OR NONEXISTENT`.
+
+TDI-11 does not silently equate factual falsity with unsupported generation.
 
 ## Controlled-world requirement
 
-TDI-11.1 must begin from generated worlds whose complete truth state is owned by the evaluator. Each world instance must have deterministic serialization, validation and provenance.
+TDI-11.1 begins from generated worlds whose complete truth state is owned by the evaluator. Each world instance has deterministic serialization, validation and provenance.
 
-A world generator should support controlled manipulation of:
+The world generator supports controlled manipulation of:
 
 - visible evidence fraction;
 - deterministic inference depth;
@@ -48,19 +52,29 @@ A world generator should support controlled manipulation of:
 - question difficulty;
 - required answer granularity.
 
-The generator must permit matched counterfactual pairs that differ in one declared intervention whenever feasible.
+The generator should permit matched counterfactual pairs that differ in one declared intervention whenever feasible.
+
+## Primary task families
+
+The frozen primary families are:
+
+- `F1` explicit support;
+- `F2` derived support;
+- `F3` hidden-truth insufficiency;
+- `F4` contradiction/override stress.
+
+Each family uses `Shallow`, `Intermediate`, and `Deep` strata, producing 12 primary cells.
 
 ## Baseline policy ladder
 
-TDI-11 should compare at least the following conceptual controls before promoting a new controller:
+TDI-11 compares the following conceptual controls before promoting a new controller:
 
 - `B0_FIXED` — ordinary fixed inference with no hallucination-specific intervention;
 - `B1_STATIC_VERIFY` — fixed verification schedule independent of trajectory signals;
 - `B2_RISK_GATE` — observation-conditioned decision using a frozen risk estimator;
-- `B3_ADAPTIVE_RECOVERY` — B2 plus bounded verification/backtrack/recovery actions;
-- `B4_ABSTENTION_CONTROL` — competent abstention/calibration baseline where applicable.
+- `B3_ADAPTIVE_RECOVERY` — B2 plus bounded verification/backtrack/recovery actions.
 
-Names and exact semantics remain provisional until preregistration freeze.
+Always/near-always abstention may be reported as a sanity control but cannot earn a beneficial primary verdict by collapsing coverage.
 
 ## Candidate precursor families
 
@@ -78,7 +92,7 @@ No candidate family is privileged by this scope document.
 
 ## Required causal distinction
 
-A proposed precursor must be tested against matched interventions where possible. TDI-11 should explicitly distinguish:
+A proposed precursor must be tested against matched interventions where possible. TDI-11 explicitly distinguishes:
 
 - predictive association;
 - intervention sensitivity;
@@ -89,23 +103,24 @@ A variable may be useful for control without being a root cause. The programme m
 
 ## Evaluation requirements
 
-Before TDI-11.1 confirmatory execution is authorized, the preregistration must freeze:
+The merged preregistration freezes:
 
 - atomic support/error labels;
-- answer parsing and proposition extraction semantics;
-- controlled-world generator and validator;
-- task families and strata;
+- deterministic structured answer parsing;
+- controlled-world generator/oracle boundary;
+- primary task families and strata;
 - baseline policies;
-- allowed observables and their timing;
-- intervention/action semantics;
-- maximum compute and memory accounting;
-- verifier/retrieval/tool accounting where applicable;
-- development, validation and final domains;
-- primary metrics;
-- statistical decision procedure and margins;
-- rejection conditions and provenance.
+- allowed observation families and timing restrictions;
+- intervention/action names;
+- resource-accounting requirements;
+- development/validation/final domain discipline;
+- primary outcome families;
+- typed rejection taxonomy;
+- provenance requirements.
 
-Primary evaluation must jointly account for hallucination/unsupported-claim risk, answer coverage and useful-task performance. Compute/resource cost must be reported rather than hidden.
+Concrete generator sizes, exact model adapters, exact observation vectors, numerical decision margins, family-wise statistics, and any final-entropy contract remain later freeze items before confirmatory model evaluation.
+
+Primary evaluation jointly accounts for unsupported-claim risk, answer coverage and useful-task performance. Compute/resource cost is reported rather than hidden.
 
 ## Leakage boundary
 
@@ -117,7 +132,7 @@ Policy/search code must never receive:
 - counterfactual-arm outcomes for the same live decision;
 - protected material from TDI-7.2 or any unauthorized TDI-8.2 surface.
 
-Development instrumentation may log richer information for scientific analysis only when it is explicitly excluded from controller inputs and from later final-evaluation leakage paths.
+Development instrumentation may log richer information for scientific analysis only when it is explicitly excluded from controller inputs and later final-evaluation leakage paths.
 
 ## HAC working architecture
 
@@ -125,7 +140,7 @@ The working Hallucination Adaptive Controller decomposition is:
 
 `OBSERVE -> ESTIMATE RISK -> LOCALIZE -> CHOOSE ACTION -> VERIFY EFFECT -> EMIT / RECOVER / ABSTAIN`
 
-Candidate actions are bounded and must be explicitly accounted:
+Candidate actions are bounded and explicitly accounted:
 
 - `CONTINUE`;
 - `VERIFY`;
@@ -135,7 +150,7 @@ Candidate actions are bounded and must be explicitly accounted:
 - `EMIT` / `STOP`;
 - `ABSTAIN`.
 
-The initial implementation must prefer interpretable reference estimators before opaque high-capacity detectors unless evidence shows the simpler controls are inadequate.
+The initial implementation prefers interpretable reference estimators before opaque high-capacity detectors unless non-final evidence shows simpler controls are inadequate.
 
 ## Relationship to TDI-9
 
@@ -149,15 +164,8 @@ A future integration must declare whether HAC is:
 
 ## Stage gate
 
-TDI-11.1 evaluator implementation is **NOT AUTHORIZED** by this bootstrap document alone.
+TDI-11.1 non-final evaluator implementation is authorized only when the TDI-11.0 preregistration is merged and blob-pinned and `scripts/check-tdi11-bootstrap.sh` passes.
 
-Authorization requires a merged and explicitly frozen TDI-11.0 preregistration plus an implementation-gate document that confirms:
+That authorization covers controlled-world generator/oracle, deterministic parser/scorer, provenance/accounting/timing records, non-final fixtures and development/validation evaluator work. It does **not** authorize final/confirmatory model evaluation.
 
-- scope and taxonomy are frozen;
-- no final dataset/seed surface has been materialized prematurely;
-- the controlled-world oracle is fully specified;
-- allowed controller observations cannot see hidden truth;
-- metrics and decision rules are frozen;
-- protected TDI lineages remain isolated.
-
-Until then, allowed work is limited to scope/preregistration design, literature-backed candidate enumeration, bootstrap integrity, non-final prototypes clearly marked exploratory, and tooling needed to validate the future contract.
+A later frozen gate is required before any final model-evaluation surface exists.
