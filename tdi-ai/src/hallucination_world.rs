@@ -14,7 +14,10 @@ impl fmt::Display for IdentifierError {
         match self {
             Self::Empty => formatter.write_str("identifier must not be empty"),
             Self::InvalidCharacter(character) => {
-                write!(formatter, "identifier contains invalid character {character:?}")
+                write!(
+                    formatter,
+                    "identifier contains invalid character {character:?}"
+                )
             }
         }
     }
@@ -359,9 +362,7 @@ impl fmt::Display for HallucinationRejection {
             }
             Self::ObservationLeakage => formatter.write_str("OBSERVATION_LEAKAGE"),
             Self::TimingViolation => formatter.write_str("TIMING_VIOLATION"),
-            Self::ResourceAccountingOverflow => {
-                formatter.write_str("RESOURCE_ACCOUNTING_OVERFLOW")
-            }
+            Self::ResourceAccountingOverflow => formatter.write_str("RESOURCE_ACCOUNTING_OVERFLOW"),
             Self::ResourceEnvelopeExceeded => formatter.write_str("RESOURCE_ENVELOPE_EXCEEDED"),
             Self::NonfiniteScore => formatter.write_str("NONFINITE_SCORE"),
             Self::PairingMismatch => formatter.write_str("PAIRING_MISMATCH"),
@@ -491,10 +492,7 @@ impl PolicyWorldView {
         )
     }
 
-    pub fn parse_response(
-        &self,
-        text: &str,
-    ) -> Result<StructuredResponse, HallucinationRejection> {
+    pub fn parse_response(&self, text: &str) -> Result<StructuredResponse, HallucinationRejection> {
         let trimmed = text.trim();
         if trimmed == "ABSTAIN" {
             return Ok(StructuredResponse::Abstain);
@@ -505,12 +503,12 @@ impl PolicyWorldView {
             return Err(HallucinationRejection::MalformedOutput);
         }
 
-        let subject = EntityId::new(fields[1])
-            .map_err(|_| HallucinationRejection::MalformedOutput)?;
-        let relation = RelationId::new(fields[2])
-            .map_err(|_| HallucinationRejection::MalformedOutput)?;
-        let object = EntityId::new(fields[3])
-            .map_err(|_| HallucinationRejection::MalformedOutput)?;
+        let subject =
+            EntityId::new(fields[1]).map_err(|_| HallucinationRejection::MalformedOutput)?;
+        let relation =
+            RelationId::new(fields[2]).map_err(|_| HallucinationRejection::MalformedOutput)?;
+        let object =
+            EntityId::new(fields[3]).map_err(|_| HallucinationRejection::MalformedOutput)?;
 
         if !self.entities.contains(&subject) {
             return Err(HallucinationRejection::UnknownIdentifier(
@@ -550,7 +548,10 @@ impl fmt::Debug for ControlledWorld {
             .field("relation_count", &self.policy_view.relations.len())
             .field("visible_evidence_count", &self.policy_view.evidence.len())
             .field("rule_count", &self.policy_view.rules.len())
-            .field("max_derivation_depth", &self.policy_view.max_derivation_depth)
+            .field(
+                "max_derivation_depth",
+                &self.policy_view.max_derivation_depth,
+            )
             .finish_non_exhaustive()
     }
 }
@@ -753,7 +754,9 @@ fn effective_visible_facts(
             Some((revision, object)) if entry.revision() > *revision => {
                 functional.insert(key, (entry.revision(), fact.object().clone()));
             }
-            Some((revision, object)) if entry.revision() == *revision && object != fact.object() => {
+            Some((revision, object))
+                if entry.revision() == *revision && object != fact.object() =>
+            {
                 return Err(WorldBuildError::AmbiguousVisibleRevision {
                     subject: fact.subject().clone(),
                     relation: fact.relation().clone(),
@@ -780,7 +783,10 @@ fn derive_closure(
         let snapshot = closure.iter().cloned().collect::<Vec<_>>();
         let mut additions = BTreeSet::new();
         for rule in rules {
-            for left in snapshot.iter().filter(|fact| fact.relation() == rule.left()) {
+            for left in snapshot
+                .iter()
+                .filter(|fact| fact.relation() == rule.left())
+            {
                 for right in snapshot.iter().filter(|fact| {
                     fact.relation() == rule.right() && fact.subject() == left.object()
                 }) {
@@ -822,10 +828,7 @@ mod tests {
     }
 
     fn base_entities() -> Vec<EntityId> {
-        ["e0", "e1", "e2", "e3"]
-            .into_iter()
-            .map(entity)
-            .collect()
+        ["e0", "e1", "e2", "e3"].into_iter().map(entity).collect()
     }
 
     #[test]
@@ -881,10 +884,7 @@ mod tests {
                 RelationSpec::new(relation("parent"), false),
                 RelationSpec::new(relation("grandparent"), false),
             ],
-            [
-                fact("e0", "parent", "e1"),
-                fact("e1", "parent", "e2"),
-            ],
+            [fact("e0", "parent", "e1"), fact("e1", "parent", "e2")],
             [
                 EvidenceFact::new(fact("e0", "parent", "e1"), 0),
                 EvidenceFact::new(fact("e1", "parent", "e2"), 0),
