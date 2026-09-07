@@ -3,6 +3,9 @@ name: TDI-11.2 instrumentation pre-arm
 on:
   pull_request:
     paths:
+      - 'AGENTS.md'
+      - '.github/copilot-instructions.md'
+      - 'docs/TDI-11-PROGRAMME.md'
       - 'docs/TDI-11.2*'
       - 'docs/tdi11.2-prearm.yaml'
       - 'scripts/check-tdi11.2-prearm.sh'
@@ -11,6 +14,9 @@ on:
   push:
     branches: [main]
     paths:
+      - 'AGENTS.md'
+      - '.github/copilot-instructions.md'
+      - 'docs/TDI-11-PROGRAMME.md'
       - 'docs/TDI-11.2*'
       - 'docs/tdi11.2-prearm.yaml'
       - 'scripts/check-tdi11.2-prearm.sh'
