@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "kind": "tdi11_2_model_observation_freeze",
+  "status": "template_unfrozen",
+  "model_execution_authorized": false,
+  "final_execution_authorized": false,
+  "allowed_domains": [
+    "Development",
+    "Validation"
+  ],
+  "contract_digest_sha256": null,
+  "freeze": {
+    "model_artifact_identity": {
+      "status": "unresolved_blocking",
+      "value": null
+    },
+    "adapter_identity_and_version": {
+      "status": "unresolved_blocking",
+      "value": null
+    },
+    "tokenizer_and_template_identity": {
+      "status": "unresolved_blocking",
+      "value": null
+    },
+    "decoding_configuration": {
+      "status": "unresolved_blocking",
+      "value": null
+    },
+    "prompt_serializer_version": {
+      "status": "unresolved_blocking",
+      "value": null
+    },
+    "exact_observation_registry": {
+      "status": "unresolved_blocking",
+      "value": null
+    },
+    "exact_observation_timing": {
+      "status": "unresolved_blocking",
+      "value": null
+    },
+    "primary_pre_assertion_eligibility": {
+      "status": "unresolved_blocking",
+      "value": null
+    },
+    "development_validation_population_derivation": {
+      "status": "unresolved_blocking",
+      "value": null
+    },
+    "resource_accounting_contract": {
+      "status": "unresolved_blocking",
+      "value": null
+    },
+    "typed_rejection_contract": {
+      "status": "unresolved_blocking",
+      "value": null
+    },
+    "provenance_contract": {
+      "status": "unresolved_blocking",
+      "value": null
+    }
+  }
+}
