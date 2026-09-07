@@ -16,7 +16,7 @@ for file in "$PREARM" "$STATE" "$GATE" "$STATUS" "$PROGRAMME" AGENTS.md .github/
     test -s "$file" || fail "missing required TDI-11.2 pre-arm surface: $file"
 done
 
-test -x scripts/check-tdi11-bootstrap.sh || fail "TDI-11.0 bootstrap checker missing or not executable"
+test -f scripts/check-tdi11-bootstrap.sh || fail "TDI-11.0 bootstrap checker missing"
 bash scripts/check-tdi11-bootstrap.sh >/tmp/tdi11.2-tdi11-bootstrap.log
 rm -f /tmp/tdi11.2-tdi11-bootstrap.log
 
