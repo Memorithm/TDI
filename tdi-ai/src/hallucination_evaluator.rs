@@ -6,7 +6,7 @@
 //! action/resource accounting, and provenance identities. It then applies the
 //! exact controlled-world scorer and emits a deterministic evaluator record.
 
-use crate::hallucination_generator::{GeneratedTask, GENERATOR_SCHEMA};
+use crate::hallucination_generator::{GENERATOR_SCHEMA, GeneratedTask};
 use crate::hallucination_world::{HallucinationRejection, PrimaryTaskFamily, SupportLabel};
 
 pub const EVALUATOR_SCHEMA: &str = "tdi11-reference-evaluator-v1";
@@ -447,8 +447,7 @@ pub fn aggregate_counts(records: &[ReferenceEvaluationRecord]) -> Option<Aggrega
             output.task_successes = output.task_successes.checked_add(1)?;
         }
         if record.false_abstention() {
-            output.false_abstentions_f1_f2 =
-                output.false_abstentions_f1_f2.checked_add(1)?;
+            output.false_abstentions_f1_f2 = output.false_abstentions_f1_f2.checked_add(1)?;
         }
     }
     Some(output)
@@ -488,10 +487,7 @@ pub fn evaluate_response(
                 | PrimaryTaskFamily::F4ContradictionOverride,
                 Some(SupportLabel::SupportedExplicit | SupportLabel::SupportedDerived),
             ) => true,
-            (
-                PrimaryTaskFamily::F3HiddenTruthInsufficiency,
-                Some(SupportLabel::Abstained),
-            ) => true,
+            (PrimaryTaskFamily::F3HiddenTruthInsufficiency, Some(SupportLabel::Abstained)) => true,
             _ => false,
         };
 
