@@ -6,8 +6,8 @@ mod hallucination_observation_adapter;
 
 use hallucination_observation::{ObservableSignal, PrecursorEligibility, SignalChannel};
 use hallucination_observation_adapter::{
-    OBSERVATION_ADAPTER_SCHEMA, AdapterObservationPacket, DeclaredSignalChannel,
-    GuardedObservationAdapter, ObservationAdapterError, ObservationAdapterManifest,
+    AdapterObservationPacket, DeclaredSignalChannel, GuardedObservationAdapter,
+    OBSERVATION_ADAPTER_SCHEMA, ObservationAdapterError, ObservationAdapterManifest,
     ObservationSourceClass,
 };
 
@@ -46,8 +46,14 @@ fn manifest() -> ObservationAdapterManifest {
 #[test]
 fn all_source_classes_have_stable_non_oracle_names() {
     let cases = [
-        (ObservationSourceClass::DecoderStatistics, "decoder_statistics"),
-        (ObservationSourceClass::HiddenStateSummary, "hidden_state_summary"),
+        (
+            ObservationSourceClass::DecoderStatistics,
+            "decoder_statistics",
+        ),
+        (
+            ObservationSourceClass::HiddenStateSummary,
+            "hidden_state_summary",
+        ),
         (
             ObservationSourceClass::VisibleEvidenceSummary,
             "visible_evidence_summary",
@@ -81,33 +87,15 @@ fn manifest_requires_complete_identity_and_nonempty_channels() {
     )];
 
     assert_eq!(
-        ObservationAdapterManifest::new(
-            "",
-            "v1",
-            "model",
-            "prompt",
-            declared.clone()
-        ),
+        ObservationAdapterManifest::new("", "v1", "model", "prompt", declared.clone()),
         Err(ObservationAdapterError::EmptyAdapterName)
     );
     assert_eq!(
-        ObservationAdapterManifest::new(
-            "adapter",
-            "",
-            "model",
-            "prompt",
-            declared.clone()
-        ),
+        ObservationAdapterManifest::new("adapter", "", "model", "prompt", declared.clone()),
         Err(ObservationAdapterError::EmptyAdapterVersion)
     );
     assert_eq!(
-        ObservationAdapterManifest::new(
-            "adapter",
-            "v1",
-            "",
-            "prompt",
-            declared.clone()
-        ),
+        ObservationAdapterManifest::new("adapter", "v1", "", "prompt", declared.clone()),
         Err(ObservationAdapterError::EmptyModelArtifactIdentity)
     );
     assert_eq!(
@@ -136,7 +124,10 @@ fn manifest_rejects_duplicate_channel_names_even_across_source_classes() {
             DeclaredSignalChannel::new(duplicate, ObservationSourceClass::HiddenStateSummary),
         ],
     );
-    assert_eq!(result, Err(ObservationAdapterError::DuplicateDeclaredChannel));
+    assert_eq!(
+        result,
+        Err(ObservationAdapterError::DuplicateDeclaredChannel)
+    );
 }
 
 #[test]
@@ -144,13 +135,19 @@ fn manifest_is_sorted_and_provenance_is_deterministic() {
     let manifest = manifest();
     assert_eq!(manifest.adapter_name(), "local-open-model-adapter");
     assert_eq!(manifest.adapter_version(), "dev-v1");
-    assert_eq!(manifest.model_artifact_identity(), "model-artifact:fixture-001");
+    assert_eq!(
+        manifest.model_artifact_identity(),
+        "model-artifact:fixture-001"
+    );
     assert_eq!(
         manifest.prompt_serializer_version(),
         "tdi11-controlled-prompt-v1"
     );
     assert_eq!(manifest.declared_channels().len(), 3);
-    assert_eq!(manifest.declared_channels()[0].channel().as_str(), "decoder.entropy");
+    assert_eq!(
+        manifest.declared_channels()[0].channel().as_str(),
+        "decoder.entropy"
+    );
     assert_eq!(
         manifest.declared_channels()[0].source_class(),
         ObservationSourceClass::DecoderStatistics
@@ -166,18 +163,17 @@ fn manifest_is_sorted_and_provenance_is_deterministic() {
 #[test]
 fn packet_requires_nonempty_unique_channels_and_exposes_no_eligibility_flag() {
     assert_eq!(
-        AdapterObservationPacket::new(
-            1,
-            ObservationSourceClass::DecoderStatistics,
-            Vec::new()
-        ),
+        AdapterObservationPacket::new(1, ObservationSourceClass::DecoderStatistics, Vec::new()),
         Err(ObservationAdapterError::EmptyPacket)
     );
 
     let packet = AdapterObservationPacket::new(
         2,
         ObservationSourceClass::DecoderStatistics,
-        vec![signal("decoder.entropy", 0.75), signal("decoder.entropy", 0.25)],
+        vec![
+            signal("decoder.entropy", 0.75),
+            signal("decoder.entropy", 0.25),
+        ],
     );
     assert_eq!(packet, Err(ObservationAdapterError::DuplicatePacketChannel));
 
@@ -188,14 +184,20 @@ fn packet_requires_nonempty_unique_channels_and_exposes_no_eligibility_flag() {
     )
     .expect("valid packet");
     assert_eq!(packet.event_index(), 3);
-    assert_eq!(packet.source_class(), ObservationSourceClass::DecoderStatistics);
+    assert_eq!(
+        packet.source_class(),
+        ObservationSourceClass::DecoderStatistics
+    );
     assert_eq!(packet.signals().len(), 1);
 }
 
 #[test]
 fn guarded_adapter_rejects_undeclared_and_wrong_source_channels() {
     let mut adapter = GuardedObservationAdapter::new(manifest());
-    assert_eq!(adapter.manifest().adapter_name(), "local-open-model-adapter");
+    assert_eq!(
+        adapter.manifest().adapter_name(),
+        "local-open-model-adapter"
+    );
 
     let undeclared = AdapterObservationPacket::new(
         1,
@@ -261,8 +263,14 @@ fn guarded_adapter_preserves_prospective_timing_and_posthoc_boundary() {
 
     let timing = adapter.timeline().timing_records().expect("boundary known");
     assert_eq!(timing.len(), 3);
-    assert_eq!(timing[0].eligibility(), PrecursorEligibility::PrimaryEligible);
-    assert_eq!(timing[1].eligibility(), PrecursorEligibility::PrimaryEligible);
+    assert_eq!(
+        timing[0].eligibility(),
+        PrecursorEligibility::PrimaryEligible
+    );
+    assert_eq!(
+        timing[1].eligibility(),
+        PrecursorEligibility::PrimaryEligible
+    );
     assert_eq!(timing[2].eligibility(), PrecursorEligibility::PostHocOnly);
     assert_eq!(
         adapter
