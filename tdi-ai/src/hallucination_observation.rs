@@ -159,9 +159,7 @@ impl ObservationTimeline {
             }
         }
         if self.first_assertion_event == Some(event_index) {
-            return Err(ObservationContractError::ObservationAtAssertionBoundary {
-                event_index,
-            });
+            return Err(ObservationContractError::ObservationAtAssertionBoundary { event_index });
         }
         self.observations.push(ObservationEvent {
             event_index,
@@ -207,9 +205,7 @@ impl ObservationTimeline {
     }
 
     /// Derive timing eligibility for every retained observation.
-    pub fn timing_records(
-        &self,
-    ) -> Result<Vec<ObservationTimingRecord>, ObservationContractError> {
+    pub fn timing_records(&self) -> Result<Vec<ObservationTimingRecord>, ObservationContractError> {
         let boundary = self
             .first_assertion_event
             .ok_or(ObservationContractError::AssertionBoundaryUnknown)?;
@@ -268,10 +264,21 @@ pub enum ObservationContractError {
     EmptySignalChannel,
     NonFiniteSignal,
     EmptySignalVector,
-    NonMonotonicEventIndex { previous: u64, attempted: u64 },
-    ObservationAtAssertionBoundary { event_index: u64 },
-    AssertionBoundaryAlreadySet { existing: u64, attempted: u64 },
-    AssertionBoundaryNotAfterHistory { last_observation: u64, attempted: u64 },
+    NonMonotonicEventIndex {
+        previous: u64,
+        attempted: u64,
+    },
+    ObservationAtAssertionBoundary {
+        event_index: u64,
+    },
+    AssertionBoundaryAlreadySet {
+        existing: u64,
+        attempted: u64,
+    },
+    AssertionBoundaryNotAfterHistory {
+        last_observation: u64,
+        attempted: u64,
+    },
     AssertionBoundaryUnknown,
 }
 
