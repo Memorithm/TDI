@@ -629,7 +629,10 @@ impl ControlledWorld {
     ) -> Result<ScoredResponse, HallucinationRejection> {
         let label = match response {
             StructuredResponse::Abstain => SupportLabel::Abstained,
-            StructuredResponse::Assert(fact) => self.score_fact(fact),
+            StructuredResponse::Assert(fact) => {
+                self.validate_response_fact(fact)?;
+                self.score_fact(fact)
+            }
         };
         if label == SupportLabel::Indeterminate {
             return Err(HallucinationRejection::IndeterminateLabel);
@@ -644,6 +647,25 @@ impl ControlledWorld {
     pub fn score_text(&self, text: &str) -> Result<ScoredResponse, HallucinationRejection> {
         let response = self.policy_view.parse_response(text)?;
         self.score_response(&response)
+    }
+
+    fn validate_response_fact(&self, fact: &Fact) -> Result<(), HallucinationRejection> {
+        if !self.policy_view.entities.contains(fact.subject()) {
+            return Err(HallucinationRejection::UnknownIdentifier(
+                fact.subject().to_string(),
+            ));
+        }
+        if !self.policy_view.relations.contains_key(fact.relation()) {
+            return Err(HallucinationRejection::UnknownIdentifier(
+                fact.relation().to_string(),
+            ));
+        }
+        if !self.policy_view.entities.contains(fact.object()) {
+            return Err(HallucinationRejection::UnknownIdentifier(
+                fact.object().to_string(),
+            ));
+        }
+        Ok(())
     }
 
     fn score_fact(&self, fact: &Fact) -> SupportLabel {
@@ -812,7 +834,7 @@ mod tests {
     use super::{
         ComposeRule, ControlledWorld, DifficultyStratum, EntityId, EvidenceFact, Fact,
         HallucinationRejection, PRIMARY_CELLS, PrimaryTaskFamily, RelationId, RelationSpec,
-        SupportLabel, WorldBuildError,
+        StructuredResponse, SupportLabel, WorldBuildError,
     };
 
     fn entity(value: &str) -> EntityId {
@@ -996,6 +1018,39 @@ mod tests {
             Err(HallucinationRejection::UnknownIdentifier(
                 "ghost".to_string()
             ))
+        );
+    }
+
+    #[test]
+    fn direct_structured_scoring_rejects_unknown_identifiers_like_text_scoring() {
+        let world = ControlledWorld::new(
+            base_entities(),
+            [RelationSpec::new(relation("likes"), false)],
+            [],
+            [],
+            [],
+            0,
+        )
+        .expect("valid direct-scoring fixture");
+
+        let unknown_subject = StructuredResponse::Assert(Fact::new(
+            entity("ghost"),
+            relation("likes"),
+            entity("e1"),
+        ));
+        assert_eq!(
+            world.score_response(&unknown_subject),
+            world.score_text("ASSERT ghost likes e1")
+        );
+
+        let unknown_relation = StructuredResponse::Assert(Fact::new(
+            entity("e0"),
+            relation("invented"),
+            entity("e1"),
+        ));
+        assert_eq!(
+            world.score_response(&unknown_relation),
+            world.score_text("ASSERT e0 invented e1")
         );
     }
 
