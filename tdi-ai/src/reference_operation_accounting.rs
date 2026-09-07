@@ -98,10 +98,8 @@ impl ReferenceOperationAccounting {
         if history_items == 0 {
             return Err(ReferenceOperationAccountingError::ZeroHistoryItemsForRead);
         }
-        let distance_terms = checked_mul(
-            u128::from(history_items),
-            u128::from(layout.key_width()),
-        )?;
+        let distance_terms =
+            checked_mul(u128::from(history_items), u128::from(layout.key_width()))?;
         Ok(Self {
             history_distance_terms: distance_terms,
             history_selection_comparisons: u128::from(history_items),
@@ -140,10 +138,8 @@ impl ReferenceOperationAccounting {
             accounting.activation_terms = checked_add(accounting.activation_terms, state_width)?;
         }
         if report.write().is_some() {
-            accounting.associative_address_projections = checked_add(
-                accounting.associative_address_projections,
-                1,
-            )?;
+            accounting.associative_address_projections =
+                checked_add(accounting.associative_address_projections, 1)?;
             accounting.associative_payload_stores = state_width;
         }
         Ok(accounting)
@@ -184,10 +180,7 @@ impl ReferenceOperationAccounting {
     }
 
     /// Checked component-wise accumulation across task events.
-    pub fn checked_add(
-        self,
-        other: Self,
-    ) -> Result<Self, ReferenceOperationAccountingError> {
+    pub fn checked_add(self, other: Self) -> Result<Self, ReferenceOperationAccountingError> {
         Ok(Self {
             recurrent_mac_terms: checked_add(self.recurrent_mac_terms, other.recurrent_mac_terms)?,
             activation_terms: checked_add(self.activation_terms, other.activation_terms)?,
@@ -245,29 +238,53 @@ impl ReferenceOperationAccounting {
     }
 
     #[must_use]
-    pub const fn recurrent_mac_terms(self) -> u128 { self.recurrent_mac_terms }
+    pub const fn recurrent_mac_terms(self) -> u128 {
+        self.recurrent_mac_terms
+    }
     #[must_use]
-    pub const fn activation_terms(self) -> u128 { self.activation_terms }
+    pub const fn activation_terms(self) -> u128 {
+        self.activation_terms
+    }
     #[must_use]
-    pub const fn associative_address_projections(self) -> u128 { self.associative_address_projections }
+    pub const fn associative_address_projections(self) -> u128 {
+        self.associative_address_projections
+    }
     #[must_use]
-    pub const fn associative_payload_fusions(self) -> u128 { self.associative_payload_fusions }
+    pub const fn associative_payload_fusions(self) -> u128 {
+        self.associative_payload_fusions
+    }
     #[must_use]
-    pub const fn associative_payload_stores(self) -> u128 { self.associative_payload_stores }
+    pub const fn associative_payload_stores(self) -> u128 {
+        self.associative_payload_stores
+    }
     #[must_use]
-    pub const fn vsa_bind_terms(self) -> u128 { self.vsa_bind_terms }
+    pub const fn vsa_bind_terms(self) -> u128 {
+        self.vsa_bind_terms
+    }
     #[must_use]
-    pub const fn vsa_bundle_terms(self) -> u128 { self.vsa_bundle_terms }
+    pub const fn vsa_bundle_terms(self) -> u128 {
+        self.vsa_bundle_terms
+    }
     #[must_use]
-    pub const fn vsa_unbind_terms(self) -> u128 { self.vsa_unbind_terms }
+    pub const fn vsa_unbind_terms(self) -> u128 {
+        self.vsa_unbind_terms
+    }
     #[must_use]
-    pub const fn vsa_input_fusions(self) -> u128 { self.vsa_input_fusions }
+    pub const fn vsa_input_fusions(self) -> u128 {
+        self.vsa_input_fusions
+    }
     #[must_use]
-    pub const fn history_distance_terms(self) -> u128 { self.history_distance_terms }
+    pub const fn history_distance_terms(self) -> u128 {
+        self.history_distance_terms
+    }
     #[must_use]
-    pub const fn history_selection_comparisons(self) -> u128 { self.history_selection_comparisons }
+    pub const fn history_selection_comparisons(self) -> u128 {
+        self.history_selection_comparisons
+    }
     #[must_use]
-    pub const fn history_scalar_stores(self) -> u128 { self.history_scalar_stores }
+    pub const fn history_scalar_stores(self) -> u128 {
+        self.history_scalar_stores
+    }
 }
 
 fn checked_add(left: u128, right: u128) -> Result<u128, ReferenceOperationAccountingError> {
@@ -290,13 +307,8 @@ mod tests {
 
     fn recurrent_parameters() -> RecurrentParameters {
         let layout = RecurrentLayout::new(2, 2).expect("layout");
-        RecurrentParameters::new(
-            layout,
-            vec![1.0, 0.0, 0.0, 1.0],
-            vec![0.0; 4],
-            vec![0.0; 2],
-        )
-        .expect("parameters")
+        RecurrentParameters::new(layout, vec![1.0, 0.0, 0.0, 1.0], vec![0.0; 4], vec![0.0; 2])
+            .expect("parameters")
     }
 
     fn hit_and_write_report() -> (RecurrentLayout, crate::assr_reference::A2StepReport) {
@@ -333,12 +345,9 @@ mod tests {
     #[test]
     fn a3_keyed_read_and_atomic_store_have_distinct_vsa_work() {
         let (layout, report) = hit_and_write_report();
-        let keyed = ReferenceOperationAccounting::a3_routed_step(
-            layout,
-            A3VsaReadRoute::Key(17),
-            report,
-        )
-        .expect("keyed count");
+        let keyed =
+            ReferenceOperationAccounting::a3_routed_step(layout, A3VsaReadRoute::Key(17), report)
+                .expect("keyed count");
         assert_eq!(keyed.vsa_unbind_terms(), 2);
         assert_eq!(keyed.vsa_input_fusions(), 2);
         assert_eq!(keyed.vsa_bind_terms(), 0);
