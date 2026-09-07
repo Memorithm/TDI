@@ -113,11 +113,17 @@ fn primary_eligibility_is_derived_from_event_order() {
 
     assert_eq!(records[0].event_index(), 1);
     assert_eq!(records[0].first_assertion_event(), 5);
-    assert_eq!(records[0].eligibility(), PrecursorEligibility::PrimaryEligible);
+    assert_eq!(
+        records[0].eligibility(),
+        PrecursorEligibility::PrimaryEligible
+    );
     assert!(records[0].observed_before_claim());
 
     assert_eq!(records[1].event_index(), 3);
-    assert_eq!(records[1].eligibility(), PrecursorEligibility::PrimaryEligible);
+    assert_eq!(
+        records[1].eligibility(),
+        PrecursorEligibility::PrimaryEligible
+    );
     assert!(records[1].observed_before_claim());
 
     assert_eq!(records[2].event_index(), 6);
@@ -188,9 +194,7 @@ fn signal_values_are_visible_but_timing_provenance_contains_only_indices() {
     let provenance = timeline.timing_provenance().expect("boundary known");
     assert_eq!(
         provenance,
-        format!(
-            "{OBSERVATION_TIMING_SCHEMA};first_assertion_event=8;observation_events=7"
-        )
+        format!("{OBSERVATION_TIMING_SCHEMA};first_assertion_event=8;observation_events=7")
     );
     assert!(!provenance.contains("123.456"));
     assert!(!provenance.contains("hidden_state_norm"));
@@ -208,13 +212,17 @@ fn posthoc_events_are_retained_without_becoming_primary_evidence() {
         .expect("post-hoc event");
 
     assert_eq!(timeline.observations().len(), 2);
-    assert!(timeline
-        .primary_precursor_events()
-        .expect("boundary known")
-        .is_empty());
-    assert!(timeline
-        .timing_records()
-        .expect("boundary known")
-        .iter()
-        .all(|record| record.eligibility() == PrecursorEligibility::PostHocOnly));
+    assert!(
+        timeline
+            .primary_precursor_events()
+            .expect("boundary known")
+            .is_empty()
+    );
+    assert!(
+        timeline
+            .timing_records()
+            .expect("boundary known")
+            .iter()
+            .all(|record| record.eligibility() == PrecursorEligibility::PostHocOnly)
+    );
 }
