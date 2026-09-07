@@ -163,6 +163,12 @@ if test -f tdi-ai/src/reference_operation_accounting.rs; then
     bash scripts/check-tdi8.1-operation-accounting.sh
 fi
 
+if test -f tdi-ai/src/task_rejections.rs; then
+    test -s scripts/check-tdi8.1-symbolic-rejections.sh \
+        || fail "symbolic rejection source exists without its integrity gate"
+    bash scripts/check-tdi8.1-symbolic-rejections.sh
+fi
+
 if test -f tdi-bench/src/decision_v8.rs; then
     test -s scripts/check-tdi8.1-primary-decision.sh \
         || fail "TDI-8 primary-decision source exists without its integrity gate"
@@ -191,6 +197,7 @@ printf 'TDI-8.1 A0/A1 symbolic adapter boundary: CHAINED\n'
 printf 'TDI-8.1 A2 associative adapter boundary: CHAINED\n'
 printf 'TDI-8.1 A3 associative+VSA adapter boundary: CHAINED\n'
 printf 'TDI-8.1 exact semantic operation accounting: CHAINED\n'
+printf 'TDI-8.1 typed symbolic rejection provenance: CHAINED\n'
 printf 'TDI-8.1 benchmark/evidence integrity gates: CHAINED\n'
 printf 'TDI-8.2 executable/token surface: ABSENT\n'
 printf 'TDI-8.1 foundation gate: PASS\n'
