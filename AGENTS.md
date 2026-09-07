@@ -19,6 +19,8 @@ TDI-9 is a separately preregistered exception: it intentionally uses no human co
 
 For such a TDI-9 confirmation, agents must not select, retry, replace, skip, or reinterpret the frozen future entropy event based on results. No final seed list, final dataset, final result payload, or runnable TDI-9.2 surface may exist during TDI-9.0. During TDI-9.1, final-evaluation implementation remains blocked until the complete entropy source/event/derivation, evaluator, population, rejection, and provenance contracts are frozen.
 
+TDI-11 has no final-confirmation authorization at TDI-11.0. Autonomous agents may develop and validate only non-final controlled-world, instrumentation, detector, and controller surfaces allowed by the merged TDI-11 gate. Any later autonomous final confirmation requires its own frozen future-derived entropy contract and no-result-conditioned-retry rule before final material exists.
+
 Roadmap availability alone never authorizes confirmatory execution; the relevant merged preregistration and stage gate must explicitly authorize it.
 
 ## TDI-8.x bootstrap and stage gate
@@ -59,15 +61,37 @@ TDI-9 development is agent-first: agents may autonomously propose, implement, mu
 
 Before a TDI-9 PR or merge decision, run `bash scripts/check-tdi9-bootstrap.sh` when that script exists on the branch.
 
+## TDI-11.x bootstrap and stage gate
+
+TDI-11.x is the distinct hallucination-dynamics and control research line. Before TDI-11 work, read in order:
+
+1. `docs/TDI-11-PROGRAMME.md`;
+2. `docs/TDI-11.0-HALLUCINATION-DYNAMICS-SCOPE.md`;
+3. `docs/TDI-11.0-HALLUCINATION-DYNAMICS-PREREGISTRATION.md`;
+4. `docs/TDI-11.0-IMPLEMENTATION-GATE.md`;
+5. `docs/TDI-11.0-STATUS.md`.
+
+TDI-11.1 implementation is forbidden until TDI-11.0 is merged, blob-pinned, and `bash scripts/check-tdi11-bootstrap.sh` passes on the relevant branch/main state.
+
+The frozen primary operational target is unsupported generation under evaluator-owned evidence semantics. Primary controlled-world scoring must remain deterministic and must not use an LLM judge. The structured primary response is exactly `ASSERT <subject_id> <relation_id> <object_id>` or `ABSTAIN`.
+
+The frozen primary families are F1 explicit support, F2 derived support, F3 hidden-truth insufficiency, and F4 contradiction/override stress, each at Shallow/Intermediate/Deep strata. H11-A is prospective: a post-hoc detector cannot satisfy the primary precursor claim.
+
+TDI-11 controllers/verifiers must never receive complete-world hidden truth, evaluator labels, hidden difficulty annotations, final seed material, future trajectory state, or alternative-arm outcomes as decision features. Coverage and useful-task performance must be protected before reduced unsupported-emission risk can be classified as beneficial control.
+
+TDI-11.0/11.1 may not contain a final runner, final seed list, final dataset, or final result payload. A future final confirmation requires a separately frozen non-discretionary final derivation contract and explicit authorization.
+
+Before a TDI-11 PR or merge decision, run `bash scripts/check-tdi11-bootstrap.sh` when that script exists on the branch.
+
 ## Scientific boundary
 
-Frozen TDI-1 through TDI-6.x results remain scoped to their original finite-state experiments. They are not Transformer/attention results. TDI-7.x is the distinct attention/memory research programme. TDI-8.x is a separate recurrent/associative architecture programme. TDI-9.x is a separate adaptive-inference dynamics programme.
+Frozen TDI-1 through TDI-6.x results remain scoped to their original finite-state experiments. They are not Transformer/attention results. TDI-7.x is the distinct attention/memory research programme. TDI-8.x is a separate recurrent/associative architecture programme. TDI-9.x is a separate adaptive-inference dynamics programme. TDI-10.x is a separate generic operator/resolvent programme. TDI-11.x is a separate hallucination-dynamics and control programme.
 
 Preserve preregistration, untouched or future-derived final-evaluation lineage, frozen negative/null results, calibration limitations, and explicit boundaries between scientific reference evidence and downstream optimization.
 
 ADA is a semantic discovery/falsification partner, ITD Simulator is a comparative structural-diagnostics harness, Forge is a downstream candidate-search engine only after leak-safe bounded contracts exist, SciRust is a promotion target for reusable general primitives, NNIS owns later NVIDIA execution evidence, ElasticXxx owns production runtime/resource actuation, FLAT-ATTENTION remains an execution/comparison target, and SLHAv2 remains the primary owner of DA-LUC-like KV representation work. TDI remains the source of truth for its frozen experimental lineage.
 
-No TDI-8 or TDI-9 result may be described as a proprietary architecture reconstruction, Transformer replacement, superiority to a named commercial model, strict end-to-end O(N), constant total memory, tokenizer elimination, cognitive transparency, or GPU/Jetson speedup without separate direct evidence.
+No TDI-8, TDI-9, or TDI-11 result may be described as a proprietary architecture reconstruction, Transformer replacement, superiority to a named commercial model, strict end-to-end O(N), constant total memory, tokenizer elimination, cognitive transparency, universal hallucination elimination, guaranteed factuality, production safety, or GPU/Jetson speedup without separate direct evidence.
 
 Required CI must be green on the exact PR head before merge.
 
