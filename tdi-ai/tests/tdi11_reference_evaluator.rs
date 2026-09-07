@@ -2,6 +2,7 @@ mod hallucination_world {
     pub use tdi_ai::hallucination_world::*;
 }
 
+#[allow(clippy::match_like_matches_macro)]
 #[path = "../src/hallucination_evaluator.rs"]
 mod hallucination_evaluator;
 #[path = "../src/hallucination_generator.rs"]
@@ -11,7 +12,9 @@ use hallucination_evaluator::{
     ActionCounts, ReferenceProvenanceContext, ReferenceResourceEnvelope, ReferenceResourceUsage,
     aggregate_counts, evaluate_response,
 };
-use hallucination_generator::{GeneratedTask, SeedDomain, generate_task};
+use hallucination_generator::{
+    GeneratedTask, SeedDomain, generate_task, supported_answer_count,
+};
 use hallucination_world::{
     Fact, HallucinationRejection, PRIMARY_CELLS, PrimaryTaskFamily, StructuredResponse,
     SupportLabel,
@@ -305,6 +308,49 @@ fn deterministic_replay_produces_identical_record_hash() {
     assert_eq!(first.provenance_record(), second.provenance_record());
     assert_eq!(first.result_record_hash(), second.result_record_hash());
     assert_eq!(first.result_record_hash().len(), 16);
+}
+
+#[test]
+fn validation_domain_and_full_accounting_round_trip() {
+    let task = generate_task(
+        SeedDomain::Validation,
+        13,
+        cell(PrimaryTaskFamily::F1ExplicitSupport),
+    )
+    .expect("validation task");
+    let response = supported_assertion(&task);
+    let actions = ActionCounts::single_emit()
+        .with_continue(2)
+        .with_verify(1)
+        .with_resample(2)
+        .with_backtrack(1)
+        .with_recover(1);
+    let usage = ReferenceResourceUsage::default()
+        .with_tokens(20, 5)
+        .with_decode_steps(5)
+        .with_resamples(2)
+        .with_verifier(1, 7)
+        .with_retrieval(1, 64)
+        .with_recovery(1, 1, 3)
+        .with_estimator_operations(9)
+        .with_state_bytes(32, 16);
+    let record = evaluate_response(
+        &task,
+        &response,
+        actions,
+        usage,
+        ReferenceResourceEnvelope::unlimited_for_development(),
+        &provenance(),
+    );
+
+    assert!(record.is_valid());
+    assert_eq!(record.family(), PrimaryTaskFamily::F1ExplicitSupport);
+    assert_eq!(record.seed(), 13);
+    assert_eq!(record.actions(), actions);
+    assert_eq!(record.usage(), usage);
+    assert_eq!(supported_answer_count(&task), 1);
+    assert!(task.model_prompt().contains("Respond exactly with ASSERT"));
+    assert!(task.provenance_record().contains("domain=validation"));
 }
 
 #[test]
