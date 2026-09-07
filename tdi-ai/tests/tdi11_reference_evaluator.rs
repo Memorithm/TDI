@@ -2,10 +2,10 @@ mod hallucination_world {
     pub use tdi_ai::hallucination_world::*;
 }
 
-#[path = "../src/hallucination_generator.rs"]
-mod hallucination_generator;
 #[path = "../src/hallucination_evaluator.rs"]
 mod hallucination_evaluator;
+#[path = "../src/hallucination_generator.rs"]
+mod hallucination_generator;
 
 use hallucination_evaluator::{
     ActionCounts, ReferenceProvenanceContext, ReferenceResourceEnvelope, ReferenceResourceUsage,
@@ -13,7 +13,8 @@ use hallucination_evaluator::{
 };
 use hallucination_generator::{GeneratedTask, SeedDomain, generate_task};
 use hallucination_world::{
-    Fact, HallucinationRejection, PRIMARY_CELLS, PrimaryTaskFamily, StructuredResponse, SupportLabel,
+    Fact, HallucinationRejection, PRIMARY_CELLS, PrimaryTaskFamily, StructuredResponse,
+    SupportLabel,
 };
 
 fn cell(family: PrimaryTaskFamily) -> hallucination_world::PrimaryCell {
@@ -97,7 +98,9 @@ fn f1_supported_emit_is_answered_success_without_unsupported_flag() {
         &task,
         &response,
         ActionCounts::single_emit(),
-        ReferenceResourceUsage::default().with_tokens(12, 4).with_decode_steps(4),
+        ReferenceResourceUsage::default()
+            .with_tokens(12, 4)
+            .with_decode_steps(4),
         ReferenceResourceEnvelope::unlimited_for_development(),
         &provenance(),
     );
@@ -164,7 +167,11 @@ fn hidden_true_emission_remains_unsupported_and_hidden_payload_is_not_in_provena
     assert!(record.unsupported_emit());
     assert!(record.answered());
     assert!(!record.task_success());
-    assert!(!record.provenance_record().contains(&hidden_fact.canonical_record()));
+    assert!(
+        !record
+            .provenance_record()
+            .contains(&hidden_fact.canonical_record())
+    );
 }
 
 #[test]
@@ -181,9 +188,16 @@ fn malformed_output_is_preserved_as_a_rejected_record() {
 
     assert!(!record.is_valid());
     assert_eq!(record.label(), None);
-    assert_eq!(record.rejection(), Some(&HallucinationRejection::MalformedOutput));
+    assert_eq!(
+        record.rejection(),
+        Some(&HallucinationRejection::MalformedOutput)
+    );
     assert!(!record.task_success());
-    assert!(record.provenance_record().contains("rejection=MALFORMED_OUTPUT"));
+    assert!(
+        record
+            .provenance_record()
+            .contains("rejection=MALFORMED_OUTPUT")
+    );
 }
 
 #[test]
@@ -222,7 +236,10 @@ fn action_resource_mismatch_is_contract_drift() {
         &provenance(),
     );
 
-    assert_eq!(record.rejection(), Some(&HallucinationRejection::ContractDrift));
+    assert_eq!(
+        record.rejection(),
+        Some(&HallucinationRejection::ContractDrift)
+    );
 }
 
 #[test]
