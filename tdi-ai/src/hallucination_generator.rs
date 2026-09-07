@@ -138,7 +138,9 @@ impl core::fmt::Display for GeneratorError {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::Identifier => formatter.write_str("failed to build opaque generator identifier"),
-            Self::World(error) => write!(formatter, "controlled-world construction failed: {error}"),
+            Self::World(error) => {
+                write!(formatter, "controlled-world construction failed: {error}")
+            }
         }
     }
 }
@@ -445,14 +447,12 @@ pub fn supported_answer_count(task: &GeneratedTask) -> usize {
                 task.query().relation().clone(),
                 (*object).clone(),
             ));
-            task.world()
-                .score_response(&response)
-                .is_ok_and(|score| {
-                    matches!(
-                        score.label(),
-                        SupportLabel::SupportedExplicit | SupportLabel::SupportedDerived
-                    )
-                })
+            task.world().score_response(&response).is_ok_and(|score| {
+                matches!(
+                    score.label(),
+                    SupportLabel::SupportedExplicit | SupportLabel::SupportedDerived
+                )
+            })
         })
         .count()
 }
