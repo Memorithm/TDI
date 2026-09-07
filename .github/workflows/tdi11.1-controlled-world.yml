@@ -1,0 +1,49 @@
+name: TDI-11.1 controlled-world core
+
+on:
+  pull_request:
+    paths:
+      - 'tdi-ai/src/hallucination_world.rs'
+      - 'tdi-ai/src/lib.rs'
+      - 'docs/TDI-11*'
+      - 'scripts/check-tdi11-bootstrap.sh'
+      - '.github/workflows/tdi11.1-controlled-world.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tdi-ai/src/hallucination_world.rs'
+      - 'tdi-ai/src/lib.rs'
+      - 'docs/TDI-11*'
+      - 'scripts/check-tdi11-bootstrap.sh'
+      - '.github/workflows/tdi11.1-controlled-world.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  controlled-world:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+
+      - name: Verify TDI-11 bootstrap boundary
+        shell: bash
+        run: bash scripts/check-tdi11-bootstrap.sh
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Test controlled-world oracle
+        run: cargo test -p tdi-ai hallucination_world --all-features
+
+      - name: Strict Clippy for tdi-ai
+        run: cargo clippy -p tdi-ai --all-targets --all-features -- -D warnings
