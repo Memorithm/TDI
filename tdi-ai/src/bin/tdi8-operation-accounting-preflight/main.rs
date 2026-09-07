@@ -17,12 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         vec![0.0; 4],
         vec![0.0; 2],
     )?;
-    let mut a2 = A2Reference::new(
-        parameters,
-        AssociativeMemoryLayout::new(8, 2)?,
-        7,
-        1.0,
-    )?;
+    let mut a2 = A2Reference::new(parameters, AssociativeMemoryLayout::new(8, 2)?, 7, 1.0)?;
     a2.step(&[0.25, -0.25], 99, Some(17))?;
     let report = a2.step(&[0.0, 0.0], 17, Some(17))?;
 
@@ -32,8 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         A3VsaReadRoute::Key(17),
         report,
     )?;
-    let a3_store =
-        ReferenceOperationAccounting::a3_skip_and_store_step(recurrent_layout, report)?;
+    let a3_store = ReferenceOperationAccounting::a3_skip_and_store_step(recurrent_layout, report)?;
     let a0_layout = FullHistoryLayout::new(3, 2)?;
     let a0_read = ReferenceOperationAccounting::a0_read(a0_layout, 4)?;
 
@@ -46,7 +40,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("A2 hit+write semantic units: {}", a2_count.total()?);
     println!("A3 keyed-read semantic units: {}", a3_read.total()?);
     println!("A3 atomic-store semantic units: {}", a3_store.total()?);
-    println!("A0 four-item/width-three read semantic units: {}", a0_read.total()?);
+    println!(
+        "A0 four-item/width-three read semantic units: {}",
+        a0_read.total()?
+    );
     println!("hardware performance claim: ABSENT");
     println!("TDI-8.2 surface: ABSENT");
     Ok(())
