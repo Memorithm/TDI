@@ -1,0 +1,35 @@
+name: TDI-8.1 symbolic rejection provenance
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  symbolic-rejections:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run symbolic rejection Clippy
+        run: cargo clippy -p tdi-ai --test tdi8_symbolic_rejections_compile --locked -- -D warnings
+
+      - name: Verify TDI-8 bootstrap integrity
+        run: bash scripts/check-tdi8-bootstrap.sh
+
+      - name: Verify symbolic rejection provenance
+        run: bash scripts/check-tdi8.1-symbolic-rejections.sh
