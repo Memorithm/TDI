@@ -27,8 +27,18 @@ No final TDI-9.2 seed list, dataset, result payload, or runnable confirmation su
 
 When `scripts/check-tdi9-bootstrap.sh` exists, run it before a TDI-9 pull request or merge decision.
 
+For TDI-11.x work, read `docs/TDI-11-PROGRAMME.md`, `docs/TDI-11.0-HALLUCINATION-DYNAMICS-SCOPE.md`, `docs/TDI-11.0-HALLUCINATION-DYNAMICS-PREREGISTRATION.md`, `docs/TDI-11.0-IMPLEMENTATION-GATE.md`, and `docs/TDI-11.0-STATUS.md` before evaluator, model-adapter, detector, controller, or scientific changes.
+
+TDI-11.1 implementation is forbidden until TDI-11.0 is merged, blob-pinned and `scripts/check-tdi11-bootstrap.sh` passes. Primary TDI-11 controlled-world scoring must use the deterministic evaluator-owned oracle and the frozen `ASSERT <subject_id> <relation_id> <object_id>` / `ABSTAIN` grammar; do not substitute an LLM judge.
+
+The TDI-11 controller/verifier observation path must never receive complete-world hidden truth, evaluator labels, hidden difficulty annotations, final seed material, future trajectory state, or alternative-arm outcomes. H11-A is prospective; post-hoc scoring cannot be promoted to precursor evidence.
+
+TDI-11.0/11.1 may not create a final runner, final seed list, final dataset, or final result payload. A future autonomous final confirmation is allowed only if a later merged protocol freezes a non-discretionary future-derived entropy contract before the value is knowable and forbids result-conditioned retry/replacement.
+
+When `scripts/check-tdi11-bootstrap.sh` exists, run it before a TDI-11 pull request or merge decision.
+
 Preserve preregistration, untouched or future-derived final-evaluation lineage, frozen negative/null results, calibration limitations, explicit matched-resource controls, and the separation between scientific reference evidence and downstream optimization. Architecture and policy labels are hypotheses, not novelty or performance claims.
 
-Do not claim proprietary architecture reconstruction, Transformer replacement, superiority to a named commercial model, strict end-to-end O(N), constant total memory, tokenizer elimination, cognitive transparency, or GPU/Jetson speedup without separate direct evidence.
+Do not claim proprietary architecture reconstruction, Transformer replacement, superiority to a named commercial model, strict end-to-end O(N), constant total memory, tokenizer elimination, cognitive transparency, universal hallucination elimination, guaranteed factuality, production safety, or GPU/Jetson speedup without separate direct evidence.
 
 If the roadmap is unavailable, fail closed for major scientific-promotion, final-evaluation, preregistration, cross-repository, or merge decisions.
