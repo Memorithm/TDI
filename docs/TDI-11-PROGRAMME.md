@@ -2,7 +2,7 @@
 
 TDI-11.x is the TDI scientific line dedicated to studying hallucination as an observable inference phenomenon and to testing whether measurable precursors can support bounded interventions that reduce unsupported generation without collapsing useful answer coverage.
 
-The programme does **not** assume that hallucination has a single cause, that uncertainty alone is sufficient, or that complete elimination is possible. It is designed to separate detection, localization, verification, recovery and abstention under explicit evidence and compute budgets.
+The programme does **not** assume that hallucination has a single cause, that uncertainty alone is sufficient, or that complete elimination is possible. It separates detection, localization, verification, recovery and abstention under explicit evidence and compute budgets.
 
 ## Research objective
 
@@ -16,13 +16,33 @@ Working controller label: **HAC — Hallucination Adaptive Controller**.
 
 | Stage | Purpose | Status |
 | --- | --- | --- |
-| **TDI-11.0** | Define scope, taxonomy, evidence boundaries, observables, interventions and preregistration requirements | 🟠 Active bootstrap |
-| **TDI-11.1** | Build deterministic fully specified worlds and reference evaluator | ⏳ Blocked until TDI-11.0 is frozen |
-| **TDI-11.2** | Instrument trajectory precursors on local/open models where observability permits | ⏳ Future |
+| **TDI-11.0** | Freeze scope, taxonomy, evidence boundary and implementation gate | ✅ Frozen by preregistration once merged/blob-verified |
+| **TDI-11.1** | Build deterministic fully specified worlds and reference evaluator | 🟠 Authorized after TDI-11.0 bootstrap passes on `main` |
+| **TDI-11.2** | Instrument prospective trajectory precursors on local/open models | ⏳ Future; requires model/observation freeze |
 | **TDI-11.3** | Run controlled causal perturbation experiments | ⏳ Future |
 | **TDI-11.4** | Compare single-signal and multisignal hallucination-risk estimators | ⏳ Future |
 | **TDI-11.5** | Evaluate bounded adaptive control: emit, continue, verify, recover, backtrack or abstain | ⏳ Future |
 | **TDI-11.6+** | Transfer, robustness, architecture comparison and evidence-qualified promotion | ⏳ Conditional |
+
+## Frozen TDI-11.0 contract
+
+The TDI-11.0 preregistration fixes the first controlled research boundary before model evidence exists:
+
+- primary phenomenon: unsupported generation under declared model-visible evidence;
+- exact evaluator-owned controlled-world truth;
+- structured primary response `ASSERT <subject_id> <relation_id> <object_id>` or `ABSTAIN`;
+- no LLM judge in primary controlled-world scoring;
+- exact atomic support/error labels;
+- F1 explicit support, F2 derived support, F3 hidden-truth insufficiency, F4 contradiction/override stress;
+- Shallow/Intermediate/Deep strata, producing 12 primary cells;
+- B0 fixed inference, B1 static verification, B2 risk gating, B3 adaptive recovery;
+- prospective timing requirement for precursor evidence;
+- coverage and task-success protection before unsupported-risk reduction can count as beneficial;
+- explicit resource accounting, typed rejection and provenance;
+- strict hidden-truth leakage boundary;
+- development/validation/final separation.
+
+Concrete model adapters, generator sizes, exact observation vectors, numerical decision margins and final-confirmation derivation remain later freeze items.
 
 ## Core decomposition
 
@@ -34,11 +54,11 @@ TDI-11 separates five problems that must not be silently conflated:
 4. **Intervention** — can a bounded action change the outcome?
 5. **Decision** — should the runtime emit, continue, verify, recover, backtrack or abstain?
 
-A detector that only identifies an error after completion is useful evidence but is not equivalent to prevention. A verifier that corrects an answer is not evidence that its score was predictive before the error. These contrasts must remain explicit.
+A detector that only identifies an error after completion is useful evidence but is not equivalent to prevention. A verifier that corrects an answer is not evidence that its score was predictive before the error. These contrasts remain explicit.
 
 ## TDI-11.1 controlled-world principle
 
-The first evaluator line should use fully specified deterministic synthetic worlds where the experiment owns the complete reference truth and can label:
+The first evaluator line uses fully specified deterministic synthetic worlds where the experiment owns the complete reference truth and can label:
 
 - facts explicitly provided to the model;
 - facts deterministically derivable from provided facts;
@@ -49,9 +69,13 @@ The first evaluator line should use fully specified deterministic synthetic worl
 
 This avoids depending on unknown training-set membership for the first mechanistic experiments. External factuality benchmarks may be added later as transfer evidence, not as the sole scientific oracle.
 
+The first implementation slice is:
+
+`World schema -> visible/hidden partition -> deterministic closure -> ASSERT/ABSTAIN parser -> exact support label -> rejection/provenance record`.
+
 ## Candidate observables
 
-TDI-11.0 may define candidate observables, but TDI-11.1+ must freeze which are allowed before confirmatory evaluation. Candidate families include:
+Later TDI-11 stages may select from candidate observables, but the exact vector must be frozen before confirmatory evaluation. Candidate families include:
 
 - token probability, margin and entropy summaries;
 - semantic disagreement across bounded resamples;
@@ -65,7 +89,7 @@ No observable is presumed sufficient. Internal-state observables are architectur
 
 ## Candidate actions
 
-TDI-11 will align with the existing TDI-9 adaptive-inference vocabulary where possible. Candidate bounded actions are:
+TDI-11 aligns with the existing TDI-9 adaptive-inference vocabulary where possible. Candidate bounded actions are:
 
 - `EMIT` / `STOP`;
 - `CONTINUE`;
@@ -75,16 +99,16 @@ TDI-11 will align with the existing TDI-9 adaptive-inference vocabulary where po
 - evidence retrieval or tool verification when a study explicitly permits it;
 - `ABSTAIN`.
 
-The controller must not receive hidden evaluator labels, ground-truth answers, final seeds, future events or alternative-arm outcomes as policy features.
+The controller must not receive hidden evaluator labels, complete-world hidden truth, final seeds, future events or alternative-arm outcomes as policy features.
 
 ## Primary evaluation axes
 
-A TDI-11 controller must not be judged by hallucination rate alone. At minimum, experiments should report jointly:
+A TDI-11 controller is not judged by hallucination rate alone. At minimum, experiments report jointly:
 
-- unsupported-claim / hallucination risk under the declared oracle;
+- unsupported-claim risk under the declared oracle;
 - answer coverage;
 - task accuracy or utility;
-- calibration where meaningful;
+- calibration/risk stratification where meaningful;
 - false-abstention rate;
 - regression rate on answers that were correct without intervention;
 - compute and memory cost under the declared accounting model;
@@ -119,8 +143,6 @@ TDI-11 inherits the repository-wide rules:
 6. classify claims by what the experiment actually demonstrates;
 7. require separate evidence for architecture, runtime, hardware or cross-model transfer claims.
 
-TDI-11.0 is a bootstrap/scope stage. No TDI-11 confirmatory result exists at programme initialization.
-
 ## Non-claims
 
 TDI-11 does not currently claim:
@@ -132,22 +154,11 @@ TDI-11 does not currently claim:
 - that hidden-state signals transfer across architectures;
 - that HAC is scientifically novel;
 - that any controller improves every model or task;
-- that reduced hallucination implies improved factuality in every setting;
+- that reduced unsupported generation implies improved factuality in every setting;
 - that a research controller is production-safe.
 
-## Immediate next gate
+## Current gate
 
-TDI-11.0 must produce and freeze a preregistration/implementation gate before TDI-11.1 evaluator code is authorized. That gate must define at least:
+TDI-11.1 non-final reference implementation may begin after the TDI-11.0 preregistration is merged, its Git blob identity is verified, and `scripts/check-tdi11-bootstrap.sh` passes on `main`.
 
-- operational label taxonomy;
-- controlled-world generator semantics;
-- evidence/support oracle;
-- task families and difficulty strata;
-- allowed observables;
-- allowed interventions;
-- compute/memory accounting;
-- development/validation/final split discipline;
-- primary metrics and decision margins;
-- typed rejection taxonomy;
-- provenance schema;
-- transfer/non-claim boundaries.
+That authorization does not create or authorize final/confirmatory model evaluation. Before such evaluation, a later gate must freeze concrete model/adaptor identities, observation timing/vector, generator parameters, statistical margins, resource envelopes, final population, provenance and non-discretionary final-seed derivation.
