@@ -159,12 +159,25 @@ fn f4_exposes_one_current_answer_and_rejects_the_stale_override() {
                 .count(),
             1
         );
-        assert_eq!(
-            labels
-                .iter()
-                .filter(|(_, label)| *label == SupportLabel::Contradicted)
-                .count(),
-            1
-        );
+
+        let stale = task
+            .world()
+            .policy_view()
+            .evidence()
+            .iter()
+            .find(|entry| {
+                entry.revision() == 1
+                    && entry.fact().subject() == task.query().subject()
+                    && entry.fact().relation() == task.query().relation()
+            })
+            .expect("F4 fixture must expose one stale revision")
+            .fact()
+            .clone();
+        let stale_score = task
+            .world()
+            .score_response(&StructuredResponse::Assert(stale))
+            .expect("stale fact uses known identifiers");
+        assert_eq!(stale_score.label(), SupportLabel::Contradicted);
+        assert!(stale_score.unsupported_emit());
     }
 }
