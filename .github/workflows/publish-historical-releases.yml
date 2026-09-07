@@ -1,0 +1,91 @@
+name: Publish historical TDI releases
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/publish-historical-releases.yml"
+      - "release-manifests/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-historical-tdi-releases
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish missing tagged releases
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout full history and tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Publish TDI-3 and TDI-4 historical releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          publish_release() {
+            local tag="$1"
+            local title="$2"
+            local notes="$3"
+            local archive="$4"
+            shift 4
+            local paths=("$@")
+
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "Release $tag already exists; leaving it untouched."
+              return 0
+            fi
+
+            git rev-parse --verify "$tag^{commit}" >/dev/null
+
+            git archive \
+              --format=tar.gz \
+              --output="$archive" \
+              "$tag" \
+              -- "${paths[@]}"
+
+            sha256sum "$archive" > "$archive.sha256"
+
+            gh release create "$tag" \
+              "$archive#Frozen evidence bundle" \
+              "$archive.sha256#SHA-256 checksum" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "$title" \
+              --notes-file "$notes"
+          }
+
+          publish_release \
+            "tdi-3-preregistered-results" \
+            "TDI-3 — Preregistered Inter-Width Results" \
+            "release-manifests/tdi-3-preregistered-results.md" \
+            "tdi-3-preregistered-results-evidence.tar.gz" \
+            "docs/TDI-3-INTERWIDTH-PREREGISTRATION.md" \
+            "docs/TDI-3-INTERWIDTH-PREREGISTRATION.sha256" \
+            "docs/TDI-3-INTERWIDTH-EVALUATOR.sha256" \
+            "docs/TDI-3-SCIENTIFIC-CODE.sha256" \
+            "docs/TDI-3-INTERWIDTH-RESULTS.md" \
+            "docs/TDI-3-NUMERICAL-CORRECTION.md"
+
+          publish_release \
+            "tdi-4-preregistered-results" \
+            "TDI-4 — Preregistered Target Geometry Results" \
+            "release-manifests/tdi-4-preregistered-results.md" \
+            "tdi-4-preregistered-results-evidence.tar.gz" \
+            "docs/TDI-4-TARGET-GEOMETRY-PREREGISTRATION.md" \
+            "docs/TDI-4-TARGET-GEOMETRY-PREREGISTRATION.sha256" \
+            "docs/TDI-4-TARGET-GEOMETRY-EVALUATOR.sha256" \
+            "docs/TDI-4-SCIENTIFIC-CODE.sha256" \
+            "docs/TDI-4-TARGET-GEOMETRY-RESULTS.md" \
+            "docs/TDI-4-TARGET-GEOMETRY-RESULTS.sha256" \
+            "docs/TDI-4-CI-INTEGRITY-CORRECTION.md"
