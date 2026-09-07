@@ -151,6 +151,18 @@ if test -f tdi-ai/src/bin/tdi8-a2-adapter-preflight/main.rs; then
     bash scripts/check-tdi8.1-a2-adapter.sh
 fi
 
+if test -f tdi-ai/src/bin/tdi8-a3-adapter-preflight/main.rs; then
+    test -s scripts/check-tdi8.1-a3-adapter.sh \
+        || fail "A3 adapter preflight exists without its integrity gate"
+    bash scripts/check-tdi8.1-a3-adapter.sh
+fi
+
+if test -f tdi-ai/src/reference_operation_accounting.rs; then
+    test -s scripts/check-tdi8.1-operation-accounting.sh \
+        || fail "operation-accounting source exists without its integrity gate"
+    bash scripts/check-tdi8.1-operation-accounting.sh
+fi
+
 if test -f tdi-bench/src/decision_v8.rs; then
     test -s scripts/check-tdi8.1-primary-decision.sh \
         || fail "TDI-8 primary-decision source exists without its integrity gate"
@@ -177,6 +189,8 @@ printf 'TDI-8.1 symbolic task-execution leakage boundary: VERIFIED\n'
 printf 'TDI-8.1 recurrent symbolic readout boundary: CHAINED\n'
 printf 'TDI-8.1 A0/A1 symbolic adapter boundary: CHAINED\n'
 printf 'TDI-8.1 A2 associative adapter boundary: CHAINED\n'
+printf 'TDI-8.1 A3 associative+VSA adapter boundary: CHAINED\n'
+printf 'TDI-8.1 exact semantic operation accounting: CHAINED\n'
 printf 'TDI-8.1 benchmark/evidence integrity gates: CHAINED\n'
 printf 'TDI-8.2 executable/token surface: ABSENT\n'
 printf 'TDI-8.1 foundation gate: PASS\n'
