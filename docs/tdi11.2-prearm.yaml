@@ -1,0 +1,49 @@
+schema_version: 1
+kind: tdi11_2_prospective_instrumentation_prearm
+status: active_prearm
+model_execution_authorized: false
+final_execution_authorized: false
+allowed_domains:
+  - Development
+  - Validation
+
+required_before_model_execution:
+  model_artifact_identity: unresolved_blocking
+  adapter_identity_and_version: unresolved_blocking
+  tokenizer_and_template_identity: unresolved_blocking
+  decoding_configuration: unresolved_blocking
+  prompt_serializer_version: unresolved_blocking
+  exact_observation_registry: unresolved_blocking
+  exact_observation_timing: unresolved_blocking
+  primary_pre_assertion_eligibility: unresolved_blocking
+  development_validation_population_derivation: unresolved_blocking
+  resource_accounting_contract: unresolved_blocking
+  typed_rejection_contract: unresolved_blocking
+  provenance_contract: unresolved_blocking
+
+inherited_observation_source_classes:
+  - decoder_statistics
+  - hidden_state_summary
+  - visible_evidence_summary
+  - verifier_result
+  - retrieval_tool_result
+  - action_history
+  - runtime_resource_summary
+  - resample_summary
+
+forbidden_inputs:
+  - complete_world_hidden_truth
+  - evaluator_labels
+  - hidden_difficulty
+  - future_trajectory_state
+  - alternative_arm_outcomes
+  - final_seed_material
+
+forbidden_surfaces:
+  - concrete_model_runner
+  - final_seed_list
+  - final_dataset
+  - final_runner
+  - final_result_payload
+
+next_transition: freeze_exact_non_final_model_observation_contract
