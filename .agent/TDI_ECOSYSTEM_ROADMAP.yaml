@@ -1,7 +1,7 @@
 schema_version: 3
 kind: tdi_ecosystem_agent_roadmap
 status: active
-last_updated: "2026-09-07T22:38+0200"
+last_updated: "2026-09-07T22:54+0200"
 repository: Memorithm/TDI
 intended_consumer: autonomous_coding_agent
 merge_policy: never_merge_this_file_to_default_branch_unless_user_explicitly_requests
@@ -57,12 +57,15 @@ verified_current_facts:
   - TDI_11_0_preregistration_blob_bbf02543f5661a7f5c029b9e4673e697e19a350a_is_pinned_on_main
   - TDI_11_0_exact_head_7acc67cc8fe340161b1554745a415a56cedf806b_passed_all_26_returned_pull_request_workflows
   - TDI_11_bootstrap_integrity_passed_again_on_main_after_PR_152_merge
-  - TDI_11_1_non_final_controlled_world_reference_implementation_is_now_authorized
   - TDI_11_1_controlled_world_oracle_core_was_merged_by_PR_153_as_424a62901af3c3b27be63b53dea34263474cc0ec
   - TDI_11_1_deterministic_non_final_task_generator_was_merged_by_PR_154_as_2c8b6c38736ee867c1c33160280e4d31adffa686
   - TDI_11_1_reference_evaluator_accounting_was_merged_by_PR_155_as_ca885cd20c461b6ee4c7760df46089e7c1eaf208
   - TDI_11_1_prospective_H11_A_timing_contract_was_merged_by_PR_156_as_9b3ee087d53d1777a17d081cdc4327c482e353c9
   - TDI_11_1_PR_156_exact_head_c69c26e3a0e0026a88409645dd992ce5ff0ef82c_passed_all_22_returned_pull_request_workflows
+  - TDI_11_1_leakage_safe_observation_adapter_contract_was_merged_by_PR_157_as_1c08c51435e5b4f099d688f59b4292f24bb11b09
+  - TDI_11_1_PR_157_exact_head_a8c327c9cf06c01b1860e786a7ab51d2632d984d_passed_all_22_returned_pull_request_workflows
+  - TDI_11_1_non_final_controlled_world_reference_foundation_is_complete_on_main
+  - TDI_11_2_protocol_model_observation_freeze_is_the_next_active_gate_and_does_not_by_itself_authorize_model_execution
   - no_TDI_11_final_runner_final_seed_list_final_dataset_or_final_result_surface_is_authorized_or_known_to_exist
 
 scientific_invariants:
@@ -83,6 +86,7 @@ scientific_invariants:
   - TDI_11_complete_world_hidden_truth_must_never_enter_controller_or_verifier_observations
   - TDI_11_H11_A_precursor_evidence_must_be_prospective_and_precede_the_scored_assertion
   - TDI_11_control_benefit_requires_coverage_and_task_success_protection_before_unsupported_risk_reduction
+  - TDI_11_2_model_execution_requires_a_merged_model_observation_protocol_freeze
 
 agent_safety_rules:
   - autonomous_agents_must_never_rerun_TDI_7_2_or_access_its_protected_payload_for_later_series
@@ -103,6 +107,7 @@ agent_safety_rules:
   - TDI_11_agents_must_not_use_complete_world_hidden_truth_evaluator_labels_hidden_difficulty_future_trajectory_states_or_alternative_arm_outcomes_as_controller_features
   - TDI_11_agents_must_not_replace_the_primary_structured_exact_scorer_with_an_LLM_judge
   - TDI_11_agents_must_preserve_supported_hidden_but_unsupported_contradicted_nonexistent_indeterminate_and_abstained_labels_as_distinct_semantics
+  - TDI_11_2_agents_must_not_execute_a_concrete_model_until_the_model_observation_protocol_freeze_is_merged_and_its_gate_passes
 
 ownership:
   role: dynamic_information_recovery_architecture_adaptive_inference_generic_operator_and_hallucination_control_research_source_of_truth
@@ -431,8 +436,8 @@ roadmap:
       - coverage_then_task_success_then_unsupported_risk_ordered_verdict
       - hidden_complete_world_truth_is_evaluator_only
   - id: TDI11_1
-    name: Deterministic controlled-world reference evaluator
-    status: active_authorized_non_final
+    name: Deterministic controlled-world reference foundation
+    status: complete_merged_non_final_foundation
     entry_gate_evidence:
       - TDI11_0_is_merged_and_blob_pinned
       - TDI11_bootstrap_integrity_passed_on_exact_PR_head_and_post_merge_main
@@ -443,18 +448,15 @@ roadmap:
       - PR_154_deterministic_development_validation_task_generator_merged_as_2c8b6c38736ee867c1c33160280e4d31adffa686
       - PR_155_reference_evaluator_accounting_and_provenance_merged_as_ca885cd20c461b6ee4c7760df46089e7c1eaf208
       - PR_156_prospective_H11_A_observation_timing_contract_merged_as_9b3ee087d53d1777a17d081cdc4327c482e353c9
-      - PR_156_exact_head_c69c26e3a0e0026a88409645dd992ce5ff0ef82c_all_22_returned_workflows_green
+      - PR_157_leakage_safe_model_runtime_observation_adapter_contract_merged_as_1c08c51435e5b4f099d688f59b4292f24bb11b09
+      - PR_157_exact_head_a8c327c9cf06c01b1860e786a7ab51d2632d984d_all_22_returned_workflows_green
       - finite_typed_world_schema_visible_hidden_partition_and_bounded_forward_closure
       - strict_ASSERT_or_ABSTAIN_parser_and_exact_support_label_scorer
       - deterministic_F1_F2_F3_F4_by_Shallow_Intermediate_Deep_non_final_generator
       - typed_rejections_resource_accounting_and_machine_readable_provenance
       - append_only_observation_event_timeline_with_immutable_first_assertion_boundary
       - observed_before_claim_is_derived_from_event_order_and_posthoc_events_are_retained_but_primary_ineligible
-    next_slice:
-      - leakage_safe_model_runtime_observation_adapter_contract
-      - adapter_identity_and_versioned_model_artifact_provenance
-      - only_explicit_model_or_runtime_visible_signal_source_classes
-      - no_model_execution_detector_threshold_or_controller_selection_in_this_contract_slice
+      - guarded_versioned_model_runtime_observation_adapter_with_only_declared_visible_source_classes
     forbidden:
       - final_model_evaluation
       - final_seed_or_dataset_materialization
@@ -462,15 +464,37 @@ roadmap:
       - evaluator_labels_hidden_difficulty_future_state_or_alternative_arm_outcomes_as_adapter_inputs
       - LLM_judge_as_primary_scorer
       - final_result_conditioned_tuning
-  - id: TDI11_2_plus
-    name: Prospective precursor instrumentation perturbation risk estimation and adaptive control
-    status: future_requires_additional_freezes_before_confirmatory_model_evidence
+  - id: TDI11_2
+    name: Prospective local/open-model precursor instrumentation
+    status: active_protocol_freeze_model_execution_not_yet_authorized
+    entry_gate_evidence:
+      - TDI11_1_foundation_complete_on_main_through_PR_157
+      - prospective_timing_and_leakage_safe_adapter_contracts_are_merged
+      - no_TDI11_final_surface_is_authorized
+    freeze_required_before_model_execution:
+      - concrete_non_final_model_artifact_identity_and_adapter_version
+      - exact_decoding_and_generation_settings
+      - exact_prompt_serializer_version
+      - exact_observation_channel_names_source_classes_and_event_timing
+      - explicit_pre_assertion_primary_eligibility_rules
+      - development_validation_population_and_seed_derivation_without_final_material
+      - resource_accounting_for_model_verifier_retrieval_resampling_and_adapter_work
+      - typed_rejection_and_machine_readable_provenance_contract
+      - no_complete_world_hidden_truth_or_evaluator_label_in_adapter_inputs
+    next_work:
+      - author_and_merge_TDI11_2_scope_preregistration_and_implementation_gate
+      - keep_model_execution_disabled_until_that_gate_passes_on_main
+    forbidden:
+      - any_concrete_model_execution_before_the_protocol_freeze_merges
+      - final_model_evaluation
+      - final_seed_dataset_runner_or_result_materialization
+      - result_conditioned_observation_vector_or_threshold_selection
+  - id: TDI11_3_plus
+    name: Causal perturbation risk estimation adaptive control transfer and robustness
+    status: future_requires_additional_stage_specific_freezes
     candidate_topics:
-      - token_probability_entropy_and_margin
-      - bounded_semantic_or_self_consistency_disagreement
-      - evidence_support_and_contradiction_signals
-      - perturbation_sensitivity
-      - local_open_model_hidden_state_summaries
+      - controlled_causal_perturbations
+      - single_signal_and_multisignal_risk_estimators
       - verifier_or_retrieval_disagreement
       - HAC_risk_gating_verification_recovery_backtracking_and_abstention
       - cross_model_and_TDI8_architecture_transfer_after_separate_freeze
