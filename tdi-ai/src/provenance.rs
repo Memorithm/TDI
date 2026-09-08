@@ -1,6 +1,14 @@
 //! Explicit development provenance. Caller declarations are not attestations.
 use std::collections::BTreeMap;
 
+#[path = "task_rejections.rs"]
+mod task_rejections;
+
+pub use task_rejections::{
+    RecordedSymbolicTaskOutcome, SymbolicRejectionCode, SymbolicTaskRejectionRecord,
+    execute_symbolic_task_recorded,
+};
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ManifestError {
     EmptyField,
