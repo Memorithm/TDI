@@ -8,9 +8,7 @@ use tdi_ai::task_encoding::{
 };
 use tdi_ai::task_execution::{SymbolicTaskAdapter, TaskPrediction, execute_symbolic_task};
 use tdi_ai::task_generators::{T2Config, TaskSymbol, generate_t2};
-use tdi_ai::task_readout::{
-    ExactStateReadoutLayout, ExactStateSymbolReadout,
-};
+use tdi_ai::task_readout::{ExactStateReadoutLayout, ExactStateSymbolReadout};
 
 const FIXTURE_SLOTS: u64 = 4_096;
 const FIXTURE_PROJECTION_SEED: u64 = 11;
