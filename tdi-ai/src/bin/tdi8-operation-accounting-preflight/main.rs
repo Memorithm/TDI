@@ -1,13 +1,8 @@
-#[path = "../../reference_operation_accounting.rs"]
-mod reference_operation_accounting;
-
-pub use tdi_ai::{associative_memory, assr_h_reference, assr_reference, full_history_reference};
-
-use reference_operation_accounting::ReferenceOperationAccounting;
 use tdi_ai::associative_memory::AssociativeMemoryLayout;
 use tdi_ai::assr_h_reference::A3VsaReadRoute;
 use tdi_ai::assr_reference::{A2Reference, RecurrentLayout, RecurrentParameters};
 use tdi_ai::full_history_reference::FullHistoryLayout;
+use tdi_ai::reference_operation_accounting::ReferenceOperationAccounting;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let recurrent_layout = RecurrentLayout::new(2, 2)?;
