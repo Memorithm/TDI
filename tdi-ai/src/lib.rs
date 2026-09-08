@@ -12,6 +12,7 @@ pub mod associative_memory;
 mod assr;
 pub mod assr_h_reference;
 pub mod assr_reference;
+pub mod bounded_recovery;
 pub mod experiment;
 #[cfg(feature = "experimental")]
 pub mod experimental;
@@ -339,6 +340,10 @@ pub type RecoveryResult<Score, DynamicsError, InterventionError, ObservableError
     >;
 
 /// Run the generic TDI-AI recovery protocol.
+///
+/// Historical compatibility API. New qualified adapters should use
+/// [`bounded_recovery::analyze_bounded`] for explicit limits, cancellation and
+/// partial failure reports. This function retains its original semantics.
 ///
 /// The intervention is applied exactly once at depth zero. The reference and
 /// perturbed states then follow the same declared dynamics. At every downstream
