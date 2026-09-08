@@ -1,15 +1,10 @@
-#[path = "../../task_encoding.rs"]
-pub mod task_encoding;
-#[path = "../../task_readout.rs"]
-pub mod task_readout;
-
-pub use tdi_ai::{associative_memory, task_generators};
-
 use std::error::Error;
 
-use task_encoding::ExactU64Binary64;
-use task_readout::{ExactStatePrediction, ExactStateReadoutLayout, ExactStateSymbolReadout};
+use tdi_ai::task_encoding::ExactU64Binary64;
 use tdi_ai::task_generators::TaskSymbol;
+use tdi_ai::task_readout::{
+    ExactStatePrediction, ExactStateReadoutLayout, ExactStateSymbolReadout,
+};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let expected = TaskSymbol::new(0x0123_4567_89ab_cdef);

@@ -16,11 +16,12 @@ for file in "$SOURCE" "$RUNNER" "$DOC" "$SYMBOLIC" "$LIB"; do
     test -s "$file" || fail "missing task-encoding preflight surface: $file"
 done
 
-# This tranche is intentionally evaluator-local. Promotion into the tdi-ai
-# public library remains a later reviewed decision after non-final qualification.
-if grep -Fq 'pub mod task_encoding;' "$LIB"; then
-    fail "task_encoding was promoted into the public tdi-ai API before qualification"
-fi
+# TDI-8.1 issue #163 is the reviewed promotion tranche after bounded
+# qualification. Keep public promotion gated by the full leakage, canonicality,
+# oracle-test and executable-preflight checks below rather than accepting an
+# unverified export.
+grep -Fq 'pub mod task_encoding;' "$LIB" \
+    || fail "qualified task_encoding is not exposed through the public tdi-ai API"
 
 grep -Fq 'pub const MIN_TASK_INPUT_WIDTH: u64 = 5;' "$SOURCE" \
     || fail "leakage-safe lossless minimum width is missing"
@@ -94,5 +95,5 @@ printf 'TDI-8.1 lossless binary64 encoding: VERIFIED\n'
 printf 'TDI-8.1 canonical negative-zero rejection: VERIFIED\n'
 printf 'TDI-8.1 symbolic target/provenance leakage exclusion: VERIFIED\n'
 printf 'TDI-8.1 physical projection diagnostics: VERIFIED SEPARATELY\n'
-printf 'TDI-8.1 public API promotion: NOT PERFORMED\n'
+printf 'TDI-8.1 public API promotion: VERIFIED THROUGH QUALIFICATION GATE\n'
 printf 'TDI-8.1 task-encoding gate: PASS\n'
