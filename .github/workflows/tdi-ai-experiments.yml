@@ -17,6 +17,10 @@ jobs:
           toolchain: 1.97.1
           components: rustfmt, clippy
       - run: bash scripts/check-tdi-ai-experiments.sh
+      - run: cargo run --locked -p tdi-ai --example durable_worker -- --tdi-seed 0 --tdi-plan-id 0000000000000000000000000000000000000000000000000000000000000000
+      - run: python3 -m unittest discover -s scripts -p test_tdi_experiment_supervisor.py -v
+        env:
+          TDI_DURABLE_WORKER: target/debug/examples/durable_worker
   experimental-msrv:
     runs-on: ubuntu-latest
     steps:

@@ -236,21 +236,52 @@ where
     A::Observation: PartialEq,
 {
     let original = factory.checkpoint().map_err(ConformanceError::Adapter)?;
-    let mut left = factory.fork(&original).map_err(ConformanceError::Adapter)?;
-    let mut right = factory.fork(&original).map_err(ConformanceError::Adapter)?;
-    for &context in contexts {
-        let before = left.checkpoint().map_err(ConformanceError::Adapter)?;
-        let a = left.advance(context).map_err(ConformanceError::Adapter)?;
-        if factory.checkpoint().map_err(ConformanceError::Adapter)? != original {
-            return Err(ConformanceError::SourceMutated);
+    let unchanged = || {
+        if factory.checkpoint().map_err(ConformanceError::Adapter)? == original {
+            Ok(())
+        } else {
+            Err(ConformanceError::SourceMutated)
         }
-        let b = right.advance(context).map_err(ConformanceError::Adapter)?;
-        if a != b {
-            return Err(ConformanceError::OrderMismatch);
-        }
-        let mut replay = factory.fork(&before).map_err(ConformanceError::Adapter)?;
-        if replay.advance(context).map_err(ConformanceError::Adapter)? != a {
-            return Err(ConformanceError::ReplayMismatch);
+    };
+    // Exercise both branch orders. Compare complete checkpoints as well as
+    // observations: equal outputs can conceal divergent caches or RNG state.
+    for reverse in [false, true] {
+        let mut left = factory.fork(&original).map_err(ConformanceError::Adapter)?;
+        unchanged()?;
+        let mut right = factory.fork(&original).map_err(ConformanceError::Adapter)?;
+        unchanged()?;
+        for &context in contexts {
+            let before = left.checkpoint().map_err(ConformanceError::Adapter)?;
+            if right.checkpoint().map_err(ConformanceError::Adapter)? != before {
+                return Err(ConformanceError::OrderMismatch);
+            }
+            let (first, second) = if reverse {
+                (&mut right, &mut left)
+            } else {
+                (&mut left, &mut right)
+            };
+            let a = first.advance(context).map_err(ConformanceError::Adapter)?;
+            unchanged()?;
+            if second.checkpoint().map_err(ConformanceError::Adapter)? != before {
+                return Err(ConformanceError::OrderMismatch);
+            }
+            let after = first.checkpoint().map_err(ConformanceError::Adapter)?;
+            let b = second.advance(context).map_err(ConformanceError::Adapter)?;
+            unchanged()?;
+            if a != b
+                || first.checkpoint().map_err(ConformanceError::Adapter)? != after
+                || second.checkpoint().map_err(ConformanceError::Adapter)? != after
+            {
+                return Err(ConformanceError::OrderMismatch);
+            }
+            let mut replay = factory.fork(&before).map_err(ConformanceError::Adapter)?;
+            unchanged()?;
+            if replay.advance(context).map_err(ConformanceError::Adapter)? != a
+                || replay.checkpoint().map_err(ConformanceError::Adapter)? != after
+            {
+                return Err(ConformanceError::ReplayMismatch);
+            }
+            unchanged()?;
         }
     }
     Ok(())
