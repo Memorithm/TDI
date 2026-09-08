@@ -320,10 +320,8 @@ impl A3Adapter {
         if let A2ReadStatus::Hit { address } = report.read() {
             return Err(A3AdapterError::UnexpectedNeutralReadHit { address });
         }
-        let event = ReferenceOperationAccounting::a3_skip_and_store_step(
-            self.recurrent_layout,
-            report,
-        )?;
+        let event =
+            ReferenceOperationAccounting::a3_skip_and_store_step(self.recurrent_layout, report)?;
         self.accumulate_operation_accounting(event)?;
         self.diagnostics.observe_write(report.write())?;
         A3Diagnostics::increment(&mut self.diagnostics.vsa_stores)?;
@@ -356,14 +354,9 @@ impl A3Adapter {
         readout: ExactStateSymbolReadout,
     ) -> Result<TaskPrediction, A3AdapterError> {
         let route = A3VsaReadRoute::Key(read_key);
-        let report: A2StepReport = self
-            .reference
-            .step_routed(&input, route, read_key, None)?;
-        let event = ReferenceOperationAccounting::a3_routed_step(
-            self.recurrent_layout,
-            route,
-            report,
-        )?;
+        let report: A2StepReport = self.reference.step_routed(&input, route, read_key, None)?;
+        let event =
+            ReferenceOperationAccounting::a3_routed_step(self.recurrent_layout, route, report)?;
         self.accumulate_operation_accounting(event)?;
         self.diagnostics.observe_query(report.read())?;
         A3Diagnostics::increment(&mut self.diagnostics.vsa_queries)?;
