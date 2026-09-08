@@ -1,0 +1,28 @@
+name: Temporary pinned rustfmt diagnostic
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  format-diagnostic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.97.1"
+          components: rustfmt
+      - name: Produce exact formatted source
+        run: cargo fmt --all
+      - name: Upload formatted A3 source
+        uses: actions/upload-artifact@v4
+        with:
+          name: pinned-rustfmt-a3
+          path: tdi-ai/src/task_adapters/a3.rs
+          if-no-files-found: error
