@@ -1,0 +1,28 @@
+{
+  "schema": "tdi8.1-configuration-freeze-v1",
+  "stage": "TDI-8.1",
+  "scientific_status": "unresolved_blocking",
+  "tdi8_2_execution_authorized": false,
+  "final_holdout_exists": false,
+  "confirmatory_runner_exists": false,
+  "human_confirmation_token_exists": false,
+  "fields": {
+    "recurrent_dimension_and_parameters": {"status": "unresolved_blocking", "value": null},
+    "readout_coordinates": {"status": "unresolved_blocking", "value": null},
+    "a2_capacity_and_projection": {"status": "unresolved_blocking", "value": null},
+    "a3_vsa_width_role_seed_and_fusion": {"status": "unresolved_blocking", "value": null},
+    "a3_event_store_read_cleanup_policy": {"status": "unresolved_blocking", "value": null},
+    "matched_dynamic_memory_budget": {"status": "unresolved_blocking", "value": null},
+    "short_medium_long_numeric_horizons": {"status": "unresolved_blocking", "value": null},
+    "late_retrieval_deficit_definition": {"status": "unresolved_blocking", "value": null},
+    "intervention_sites_and_recovery_observable": {"status": "unresolved_blocking", "value": null},
+    "closed_rejection_taxonomy": {"status": "unresolved_blocking", "value": null},
+    "paired_interval_method": {"status": "unresolved_blocking", "value": null},
+    "paired_resampling_replicate_count": {"status": "unresolved_blocking", "value": null},
+    "paired_resampling_seed": {"status": "unresolved_blocking", "value": null},
+    "degenerate_replicate_policy": {"status": "unresolved_blocking", "value": null},
+    "development_population_domain_and_sample_count": {"status": "unresolved_blocking", "value": null},
+    "validation_population_domain_and_sample_count": {"status": "unresolved_blocking", "value": null},
+    "final_population_domain_and_sample_count": {"status": "unresolved_blocking", "value": null}
+  }
+}
