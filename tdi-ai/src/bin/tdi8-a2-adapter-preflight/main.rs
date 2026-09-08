@@ -1,21 +1,14 @@
-pub use tdi_ai::{
-    ReferenceArm, associative_memory, assr_reference, full_history_reference, task_encoding,
-    task_execution, task_generators, task_readout,
-};
-#[path = "../../task_adapters.rs"]
-mod task_adapters;
-
 use std::error::Error;
 
-use task_adapters::A2Adapter;
-use task_encoding::{
-    MIN_TASK_INPUT_WIDTH, audit_associative_projection, distractor_read_key_for_instance,
-};
-use task_readout::{ExactStateReadoutLayout, ExactStateSymbolReadout};
 use tdi_ai::associative_memory::{AssociativeMemoryLayout, DirectMappedAssociativeMemory};
 use tdi_ai::assr_reference::{RecurrentLayout, RecurrentParameters};
+use tdi_ai::task_adapters::A2Adapter;
+use tdi_ai::task_encoding::{
+    MIN_TASK_INPUT_WIDTH, audit_associative_projection, distractor_read_key_for_instance,
+};
 use tdi_ai::task_execution::execute_symbolic_task;
 use tdi_ai::task_generators::{T1Config, generate_t1};
+use tdi_ai::task_readout::{ExactStateReadoutLayout, ExactStateSymbolReadout};
 
 const FIXTURE_SLOTS: u64 = 4_096;
 const FIXTURE_PROJECTION_SEED: u64 = 11;
