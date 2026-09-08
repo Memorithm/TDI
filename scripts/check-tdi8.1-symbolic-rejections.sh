@@ -7,10 +7,11 @@ fail() {
 }
 
 MODULE="tdi-ai/src/task_rejections.rs"
+PROVENANCE="tdi-ai/src/provenance.rs"
 TEST="tdi-ai/tests/tdi8_symbolic_rejections_compile.rs"
 DOC="docs/TDI-8.1-SYMBOLIC-REJECTIONS.md"
 
-for file in "$MODULE" "$TEST" "$DOC"; do
+for file in "$MODULE" "$PROVENANCE" "$TEST" "$DOC"; do
     test -s "$file" || fail "missing symbolic rejection qualification surface: $file"
 done
 
@@ -41,10 +42,17 @@ if grep -E -n '\.(target|oracle)\(\)' "$MODULE" >/tmp/tdi81-symbolic-rejection-l
 fi
 rm -f /tmp/tdi81-symbolic-rejection-leak.log
 
-# Keep this qualification layer outside the stable tdi-ai API until concrete
-# A0/A1/A2/A3 adapters are promoted from preflight binaries.
-if grep -Eq 'pub mod task_rejections|mod task_rejections' tdi-ai/src/lib.rs; then
-    fail "symbolic rejection layer was prematurely promoted into stable tdi-ai API"
+# A0/A1/A2/A3 are now reusable library adapters. The reviewed rejection wrapper
+# must therefore be consumed through the public provenance surface rather than a
+# qualification-local #[path] include, while keeping its stable codes unchanged.
+grep -Fq '#[path = "task_rejections.rs"]' "$PROVENANCE" \
+    || fail "public provenance module does not bind the reviewed rejection implementation"
+grep -Fq 'pub use task_rejections::{' "$PROVENANCE" \
+    || fail "symbolic rejection types are not re-exported from public provenance"
+grep -Fq 'use tdi_ai::provenance::{' "$TEST" \
+    || fail "qualification test does not consume the promoted public API"
+if grep -Fq '#[path = "../src/task_rejections.rs"]' "$TEST"; then
+    fail "qualification test still recompiles a private rejection module"
 fi
 
 for test_name in \
@@ -64,7 +72,7 @@ grep -Fq 'TaskPrediction::Invalid' "$DOC" \
 grep -Fq 'TDI-8.2 seeds, runner, result payload, confirmation token or final holdout' "$DOC" \
     || fail "TDI-8.2 absence boundary missing"
 
-rustfmt --edition 2024 --check "$MODULE" "$TEST"
+rustfmt --edition 2024 --check "$MODULE" "$PROVENANCE" "$TEST"
 cargo clippy -p tdi-ai --test tdi8_symbolic_rejections_compile --locked -- -D warnings
 cargo test -p tdi-ai --test tdi8_symbolic_rejections_compile --locked
 
@@ -73,5 +81,6 @@ printf 'TDI-8.1 stable symbolic rejection code coverage: PRESENT\n'
 printf 'TDI-8.1 original typed rejection diagnostics: PRESERVED\n'
 printf 'TDI-8.1 evaluator-side arm/family/seed provenance: PRESERVED\n'
 printf 'TDI-8.1 target/oracle access in rejection layer: ABSENT\n'
+printf 'TDI-8.1 reusable provenance API: PROMOTED\n'
 printf 'TDI-8.2 executable/token/result surface: ABSENT\n'
 printf 'TDI-8.1 symbolic rejection gate: PASS\n'

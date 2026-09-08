@@ -2,7 +2,7 @@
 
 Status: **bounded deterministic software qualification only — not H8-A/H8-B evidence and not a TDI-8.2 authorization surface**.
 
-Tracks #161 and the TDI-8 programme issue #87.
+Tracks #161, #163 and the TDI-8 programme issue #87.
 
 ## Purpose
 
@@ -46,11 +46,11 @@ Every rejection record contains only evaluator-side execution provenance require
 
 The wrapper does not inspect or copy exact query targets, source answers or oracle values. Target-bearing events remain encapsulated by the already-qualified symbolic executor.
 
-## Qualification-local boundary
+## Reusable provenance boundary
 
-`task_rejections.rs` intentionally remains outside the stable `tdi-ai` module API in this tranche. The concrete A0/A1/A2/A3 adapters still reside in qualification preflight binaries. Promoting a rejection API before those concrete evaluator adapters have a reusable reviewed surface would freeze an incomplete adapter-specific error taxonomy.
+A0/A1/A2/A3 now have reusable reviewed library implementations, so the rejection wrapper is promoted through the existing public `tdi_ai::provenance` surface. The implementation remains in `task_rejections.rs`; `provenance.rs` re-exports only the already-qualified `RecordedSymbolicTaskOutcome`, `SymbolicTaskRejectionRecord`, `SymbolicRejectionCode` and `execute_symbolic_task_recorded` API.
 
-The generic executor-level codes are therefore frozen first. Adapter-specific sub-codes can be considered only when the adapters themselves are promoted without changing their reviewed TDI-8.1 semantics.
+The promotion does not alter numeric rejection identities, adapter error payloads, evaluator-side provenance or the completed-quality/rejected-technical boundary. Qualification tests consume the same public surface as downstream evaluators instead of recompiling the source through a local `#[path]` include.
 
 ## Scientific boundary
 
@@ -76,4 +76,4 @@ Run:
 bash scripts/check-tdi8.1-symbolic-rejections.sh
 ```
 
-The gate verifies stable code coverage, original typed-error retention, the invalid-prediction quality boundary, provenance fields, absence of target/oracle reads in the rejection layer, qualification-local API status and TDI-8.2 absence.
+The gate verifies stable code coverage, original typed-error retention, the invalid-prediction quality boundary, provenance fields, absence of target/oracle reads in the rejection layer, public provenance consumption and TDI-8.2 absence.
