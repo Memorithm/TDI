@@ -14,9 +14,8 @@ for file in "$ADAPTER_SOURCE" "$PREFLIGHT" "$DOC"; do
     test -s "$file" || fail "missing bounded A0/A1 adapter surface: $file"
 done
 
-# The concrete reviewed policies now live in the reusable adapter module. Keep
-# checking the same semantic invariants rather than weakening the historical
-# qualification gate merely because the implementation moved out of the binary.
+# The concrete reviewed A0/A1 policies live in the reusable adapter module.
+# Continue checking the original semantic invariants after extraction.
 grep -Fq 'impl SymbolicTaskAdapter for A0Adapter' "$ADAPTER_SOURCE" \
     || fail "A0 SymbolicTaskAdapter implementation missing"
 grep -Fq 'impl SymbolicTaskAdapter for A1Adapter' "$ADAPTER_SOURCE" \
@@ -31,12 +30,13 @@ grep -Fq 'self.reference.step(&input)?;' "$ADAPTER_SOURCE" \
     || fail "A1 adapter no longer advances the bounded recurrent reference"
 
 # The preflight remains the owner of fixture-only parameters and qualification
-# assertions. It must consume the extracted implementation rather than duplicate
-# the concrete adapter policy locally.
-grep -Fq '#[path = "../../task_adapters.rs"]' "$PREFLIGHT" \
-    || fail "A0/A1 preflight does not consume the reusable adapter source"
-grep -Fq 'use task_adapters::{A0Adapter, A1Adapter};' "$PREFLIGHT" \
-    || fail "A0/A1 preflight does not instantiate the extracted adapters"
+# assertions. It must consume the public library implementation rather than
+# recompiling or duplicating adapter policy locally.
+grep -Fq 'use tdi_ai::task_adapters::{A0Adapter, A1Adapter};' "$PREFLIGHT" \
+    || fail "A0/A1 preflight does not consume the public reusable adapters"
+if grep -Fq '#[path = "../../task_adapters.rs"]' "$PREFLIGHT"; then
+    fail "A0/A1 preflight must not recompile the reusable adapter source"
+fi
 grep -Fq 'a1_invalid_readout=COUNTED_AS_FAILURE' "$PREFLIGHT" \
     || fail "A1 invalid-readout preflight assertion marker missing"
 grep -Fq 'a2_a3_adapter_policy=NOT_SELECTED' "$PREFLIGHT" \
@@ -44,9 +44,11 @@ grep -Fq 'a2_a3_adapter_policy=NOT_SELECTED' "$PREFLIGHT" \
 grep -Fq 'Choosing what is read and written for association, payload and distractor events is part of the architecture semantics' "$DOC" \
     || fail "A2/A3 semantic deferral rationale missing"
 
-# This bounded tranche must not accidentally instantiate A2/A3 concrete adapters.
-if grep -Eq 'impl SymbolicTaskAdapter for A[23]Adapter|struct A[23]Adapter' "$ADAPTER_SOURCE" "$PREFLIGHT"; then
-    fail "A2/A3 concrete adapter policy unexpectedly introduced"
+# Later qualified adapters may coexist in the shared library. This historical
+# A0/A1 qualification must itself remain scoped to A0/A1 and must not instantiate
+# A2/A3 policy in its preflight binary.
+if grep -Eq 'A2Adapter|A3Adapter' "$PREFLIGHT"; then
+    fail "A0/A1 preflight unexpectedly instantiates A2/A3 adapter policy"
 fi
 
 cargo run --locked -p tdi-ai --bin tdi8-a0-a1-adapter-preflight
@@ -55,5 +57,5 @@ printf 'TDI-8.1 A0 full-history adapter: VERIFIED\n'
 printf 'TDI-8.1 A1 encoder/recurrent/readout bridge: VERIFIED\n'
 printf 'TDI-8.1 A1 invalid readout accounting: VERIFIED\n'
 printf 'TDI-8.1 reusable adapter extraction: VERIFIED\n'
-printf 'TDI-8.1 A2/A3 adapter policy: NOT_SELECTED\n'
+printf 'TDI-8.1 A0/A1 preflight scope: A0_A1_ONLY\n'
 printf 'TDI-8.1 A0/A1 adapter preflight: PASS\n'
