@@ -48,10 +48,9 @@ impl FutureOverlap<i32> for Metric {
 fn bounded_migration_matches_legacy_and_applies_intervention_once() {
     for horizon in [0, 1, 5, 30] {
         let shift = Shift(Cell::new(0));
-        let legacy = analyze_intervention_recovery(
-            &Dynamics, &shift, &Observable, &Metric, &0, horizon,
-        )
-        .unwrap();
+        let legacy =
+            analyze_intervention_recovery(&Dynamics, &shift, &Observable, &Metric, &0, horizon)
+                .unwrap();
         let report = analyze_bounded(
             Dynamics,
             &shift,
@@ -119,7 +118,10 @@ impl ReplayAdapter for Stateful {
         if self.failure == Some(0) {
             return Err("fork");
         }
-        Ok(Self { state: *state, failure: self.failure })
+        Ok(Self {
+            state: *state,
+            failure: self.failure,
+        })
     }
     fn checkpoint(&self) -> Result<u64, Self::Error> {
         if self.failure == Some(usize::MAX) {
@@ -131,7 +133,9 @@ impl ReplayAdapter for Stateful {
         if self.failure == Some(context.depth) {
             return Err("advance");
         }
-        self.state = self.state.wrapping_mul(6364136223846793005)
+        self.state = self
+            .state
+            .wrapping_mul(6364136223846793005)
             .wrapping_add(context.noise_stream + 1);
         Ok(self.state)
     }
@@ -139,12 +143,35 @@ impl ReplayAdapter for Stateful {
 
 #[test]
 fn rng_checkpoint_replay_and_failure_injection() {
-    let contexts: Vec<_> = (1..=8).map(|depth| StepContext { depth, noise_stream: depth as u64 % 2 }).collect();
+    let contexts: Vec<_> = (1..=8)
+        .map(|depth| StepContext {
+            depth,
+            noise_stream: depth as u64 % 2,
+        })
+        .collect();
     for seed in [0, 1, u64::MAX] {
-        assert_eq!(check_replay_conformance(&Stateful { state: seed, failure: None }, &contexts), Ok(()));
+        assert_eq!(
+            check_replay_conformance(
+                &Stateful {
+                    state: seed,
+                    failure: None
+                },
+                &contexts
+            ),
+            Ok(())
+        );
     }
     for failure in [0, 1, 2, 3, 4, 5, 6, 7, 8, usize::MAX] {
-        assert!(matches!(check_replay_conformance(&Stateful { state: 0, failure: Some(failure) }, &contexts), Err(ConformanceError::Adapter(_))));
+        assert!(matches!(
+            check_replay_conformance(
+                &Stateful {
+                    state: 0,
+                    failure: Some(failure)
+                },
+                &contexts
+            ),
+            Err(ConformanceError::Adapter(_))
+        ));
     }
 }
 
@@ -167,7 +194,13 @@ fn equal_observations_do_not_hide_shared_cache_mutation() {
         }
     }
     assert_eq!(
-        check_replay_conformance(&Shared(Rc::new(Cell::new(0))), &[StepContext { depth: 1, noise_stream: 0 }]),
+        check_replay_conformance(
+            &Shared(Rc::new(Cell::new(0))),
+            &[StepContext {
+                depth: 1,
+                noise_stream: 0
+            }]
+        ),
         Err(ConformanceError::SourceMutated)
     );
 }

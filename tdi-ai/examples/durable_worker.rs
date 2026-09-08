@@ -57,7 +57,12 @@ fn main() {
     )
     .unwrap();
     assert!(report.failure.is_none());
-    let values: Vec<u64> = report.profile.points().iter().map(|p| *p.overlap()).collect();
+    let values: Vec<u64> = report
+        .profile
+        .points()
+        .iter()
+        .map(|p| *p.overlap())
+        .collect();
     println!(
         "{{\"seed\":{seed},\"plan_id\":\"{plan}\",\"status\":\"Evaluated\",\"scores\":{values:?}}}"
     );
