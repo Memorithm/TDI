@@ -18,6 +18,7 @@ pub mod experimental;
 pub mod full_history_reference;
 pub mod hallucination_world;
 pub mod provenance;
+pub mod reference_operation_accounting;
 mod static_diagnostics;
 pub mod task_execution;
 pub mod task_generators;
