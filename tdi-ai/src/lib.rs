@@ -20,6 +20,7 @@ pub mod hallucination_world;
 pub mod provenance;
 pub mod reference_operation_accounting;
 mod static_diagnostics;
+pub mod task_adapters;
 pub mod task_encoding;
 pub mod task_execution;
 pub mod task_generators;
@@ -479,69 +480,46 @@ mod tests {
     }
 
     #[test]
-    fn early_features_stop_strictly_before_target_depth() {
-        let profile = RecoveryProfile::from_overlaps([0.25, 0.5, 0.75]);
-        let features = extract_early_recovery_features(&profile, 3).expect("early prefix");
+    fn exact_branching_adapter_preserves_existing_overlap_profile() {
+        let system = TableSystem::new(vec![
+            State::new(vec![Action::new(1), Action::new(2)]).expect("state 0"),
+            State::new(vec![Action::new(1), Action::new(2)]).expect("state 1"),
+            State::new(vec![Action::new(2)]).expect("state 2"),
+        ])
+        .expect("table system");
+        let analysis = analyze_branching_recovery(&system, 0, 2).expect("analysis");
+        let adapted = from_exact_branching_analysis(&analysis);
 
-        assert_eq!(features.target_depth(), 3);
+        assert_eq!(adapted.horizon(), analysis.overlap_profile().len());
+        assert_eq!(adapted.final_overlap(), analysis.overlap_profile().last());
+    }
+
+    #[test]
+    fn early_features_exclude_target_and_later_points() {
+        let profile = RecoveryProfile::new(vec![
+            RecoveryPoint::new(1, 0.25),
+            RecoveryPoint::new(2, 0.5),
+            RecoveryPoint::new(3, 0.75),
+        ]);
+        let features = extract_early_recovery_features(&profile, 3).expect("early features");
         assert_eq!(features.depths(), &[1, 2]);
         assert_eq!(features.overlaps(), &[0.25, 0.5]);
-        assert!(features.canonical_record().contains("target_depth=3"));
+        assert_eq!(features.target_depth(), 3);
+        assert!(!features.canonical_record().contains("3ff8000000000000"));
     }
 
     #[test]
-    fn early_features_fail_closed_without_an_early_observation() {
-        let profile = RecoveryProfile::from_overlaps([0.5]);
+    fn early_features_fail_closed_on_empty_or_nonfinite_prefix() {
+        let empty = RecoveryProfile::new(vec![RecoveryPoint::new(2, 0.5)]);
         assert_eq!(
-            extract_early_recovery_features(&profile, 1),
-            Err(EarlyRecoveryFeatureError::EmptyEarlyWindow { target_depth: 1 })
+            extract_early_recovery_features(&empty, 2),
+            Err(EarlyRecoveryFeatureError::EmptyEarlyWindow { target_depth: 2 })
         );
+
+        let nonfinite = RecoveryProfile::new(vec![RecoveryPoint::new(1, f64::NAN)]);
         assert_eq!(
-            extract_early_recovery_features(&profile, 0),
-            Err(EarlyRecoveryFeatureError::ZeroTargetDepth)
-        );
-    }
-
-    #[test]
-    fn zero_horizon_does_not_require_future_observations() {
-        let profile = analyze_intervention_recovery(
-            &Increment,
-            &Shift(2),
-            &IdentityObservable,
-            &ReciprocalDistance,
-            &0,
-            0,
-        )
-        .expect("infallible fixture");
-
-        assert!(profile.is_empty());
-        assert_eq!(profile.final_overlap(), None);
-    }
-
-    #[test]
-    fn exact_branching_oracle_maps_without_numerical_conversion() {
-        let zero = State::new(0b00, 2).expect("valid state");
-        let one = State::new(0b01, 2).expect("valid state");
-        let two = State::new(0b10, 2).expect("valid state");
-        let three = State::new(0b11, 2).expect("valid state");
-
-        let mut system = TableSystem::new(2).expect("valid system");
-        system
-            .insert(zero, Action::Noop, vec![two, three])
-            .expect("valid transition");
-        system
-            .insert(one, Action::Noop, vec![three])
-            .expect("valid transition");
-
-        let exact =
-            analyze_branching_recovery(&system, zero, Action::Flip { node: 0 }, Action::Noop, 1)
-                .expect("exact analysis succeeds");
-        let generic = from_exact_branching_analysis(&exact);
-
-        assert_eq!(generic.horizon(), 1);
-        assert_eq!(
-            generic.final_overlap(),
-            Some(&ExactRatio::new(1, 2).expect("valid ratio"))
+            extract_early_recovery_features(&nonfinite, 2),
+            Err(EarlyRecoveryFeatureError::NonFiniteOverlap { depth: 1 })
         );
     }
 }
