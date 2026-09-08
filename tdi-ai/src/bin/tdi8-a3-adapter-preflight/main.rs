@@ -6,8 +6,8 @@ use tdi_ai::task_adapters::a3::{A3Adapter, A3AdapterError, A3Diagnostics};
 use tdi_ai::task_encoding::{
     MIN_TASK_INPUT_WIDTH, audit_associative_projection, distractor_read_key_for_instance,
 };
-use tdi_ai::task_execution::{SymbolicTaskAdapter, TaskPrediction, execute_symbolic_task};
-use tdi_ai::task_generators::{T2Config, TaskSymbol, generate_t2};
+use tdi_ai::task_execution::execute_symbolic_task;
+use tdi_ai::task_generators::{T2Config, generate_t2};
 use tdi_ai::task_readout::{ExactStateReadoutLayout, ExactStateSymbolReadout};
 
 const FIXTURE_SLOTS: u64 = 4_096;
@@ -151,6 +151,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tdi_ai::task_execution::{SymbolicTaskAdapter, TaskPrediction};
+    use tdi_ai::task_generators::TaskSymbol;
 
     #[test]
     fn bounded_t2_dual_path_preflight_is_exact() {
