@@ -1,11 +1,8 @@
-#[path = "../src/task_rejections.rs"]
-mod task_rejections;
-
 pub use tdi_ai::{ReferenceArm, task_execution, task_generators};
 
 use core::fmt;
 
-use task_rejections::{
+use tdi_ai::provenance::{
     RecordedSymbolicTaskOutcome, SymbolicRejectionCode, execute_symbolic_task_recorded,
 };
 use tdi_ai::task_execution::{SymbolicTaskAdapter, TaskExecutionError, TaskPrediction};
