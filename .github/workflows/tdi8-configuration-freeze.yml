@@ -1,0 +1,23 @@
+name: TDI-8.1 configuration freeze contract
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  configuration-freeze:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Verify TDI-8 bootstrap integrity
+        run: bash scripts/check-tdi8-bootstrap.sh
+
+      - name: Validate non-executing configuration freeze
+        run: python3 scripts/check-tdi8.1-configuration-freeze.py
