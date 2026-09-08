@@ -1,5 +1,5 @@
 {
-  "schema": "tdi11.2-model-observation-freeze-v1",
+  "schema": "tdi11.2-model-observation-freeze-v2",
   "stage": "TDI-11.2",
   "scientific_status": "unresolved_blocking",
   "model_execution_authorized": false,
@@ -10,18 +10,18 @@
   "confirmatory_result_exists": false,
   "allowed_domains": ["Development", "Validation"],
   "fields": {
-    "model_artifact_identity": {"status": "unresolved_blocking", "value": null},
-    "adapter_identity_and_version": {"status": "unresolved_blocking", "value": null},
-    "tokenizer_and_template_identity": {"status": "unresolved_blocking", "value": null},
-    "decoding_configuration": {"status": "unresolved_blocking", "value": null},
-    "prompt_serializer_version": {"status": "unresolved_blocking", "value": null},
-    "exact_observation_registry": {"status": "unresolved_blocking", "value": null},
-    "exact_observation_timing": {"status": "unresolved_blocking", "value": null},
-    "primary_pre_assertion_eligibility": {"status": "unresolved_blocking", "value": null},
-    "development_validation_population_derivation": {"status": "unresolved_blocking", "value": null},
-    "resource_accounting_contract": {"status": "unresolved_blocking", "value": null},
-    "typed_rejection_contract": {"status": "unresolved_blocking", "value": null},
-    "provenance_contract": {"status": "unresolved_blocking", "value": null}
+    "model_artifact_identity": {"status": "unresolved_blocking", "value": null, "pin_provenance": null},
+    "adapter_identity_and_version": {"status": "unresolved_blocking", "value": null, "pin_provenance": null},
+    "tokenizer_and_template_identity": {"status": "unresolved_blocking", "value": null, "pin_provenance": null},
+    "decoding_configuration": {"status": "unresolved_blocking", "value": null, "pin_provenance": null},
+    "prompt_serializer_version": {"status": "unresolved_blocking", "value": null, "pin_provenance": null},
+    "exact_observation_registry": {"status": "unresolved_blocking", "value": null, "pin_provenance": null},
+    "exact_observation_timing": {"status": "unresolved_blocking", "value": null, "pin_provenance": null},
+    "primary_pre_assertion_eligibility": {"status": "unresolved_blocking", "value": null, "pin_provenance": null},
+    "development_validation_population_derivation": {"status": "unresolved_blocking", "value": null, "pin_provenance": null},
+    "resource_accounting_contract": {"status": "unresolved_blocking", "value": null, "pin_provenance": null},
+    "typed_rejection_contract": {"status": "unresolved_blocking", "value": null, "pin_provenance": null},
+    "provenance_contract": {"status": "unresolved_blocking", "value": null, "pin_provenance": null}
   },
   "forbidden_inputs": [
     "complete_world_hidden_truth",
