@@ -411,7 +411,7 @@ mod tests {
         RecoveryProfile, ReferenceDynamics, analyze_intervention_recovery,
         extract_early_recovery_features, from_exact_branching_analysis,
     };
-    use tdi_core::{Action, ExactRatio, State, TableSystem, analyze_branching_recovery};
+    use tdi_core::{Action, State, TableSystem, analyze_branching_recovery};
 
     #[derive(Clone, Copy)]
     struct Increment;
@@ -481,13 +481,28 @@ mod tests {
 
     #[test]
     fn exact_branching_adapter_preserves_existing_overlap_profile() {
-        let system = TableSystem::new(vec![
-            State::new(vec![Action::new(1), Action::new(2)]).expect("state 0"),
-            State::new(vec![Action::new(1), Action::new(2)]).expect("state 1"),
-            State::new(vec![Action::new(2)]).expect("state 2"),
-        ])
-        .expect("table system");
-        let analysis = analyze_branching_recovery(&system, 0, 2).expect("analysis");
+        let zero = State::new(0b00, 2).expect("state 0");
+        let one = State::new(0b01, 2).expect("state 1");
+        let two = State::new(0b10, 2).expect("state 2");
+        let three = State::new(0b11, 2).expect("state 3");
+
+        let mut system = TableSystem::new(2).expect("table system");
+        system
+            .insert(zero, Action::Noop, vec![two])
+            .expect("transition 0");
+        system
+            .insert(one, Action::Noop, vec![three])
+            .expect("transition 1");
+        system
+            .insert(two, Action::Noop, vec![zero])
+            .expect("transition 2");
+        system
+            .insert(three, Action::Noop, vec![zero])
+            .expect("transition 3");
+
+        let analysis =
+            analyze_branching_recovery(&system, zero, Action::Flip { node: 0 }, Action::Noop, 2)
+                .expect("analysis");
         let adapted = from_exact_branching_analysis(&analysis);
 
         assert_eq!(adapted.horizon(), analysis.overlap_profile().len());
