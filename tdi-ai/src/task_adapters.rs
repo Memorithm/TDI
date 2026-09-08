@@ -140,13 +140,14 @@ impl A0Adapter {
 
     fn decode_readout(&self, query: &[f64]) -> Result<TaskPrediction, AdapterError> {
         let readout = self.reference.read(query)?;
-        let coordinates: [f64; A0_TASK_VALUE_WIDTH] = readout
-            .value()
-            .try_into()
-            .map_err(|_| A0ReferenceError::ValueWidthMismatch {
-                expected: A0_TASK_VALUE_WIDTH,
-                actual: readout.value().len(),
-            })?;
+        let coordinates: [f64; A0_TASK_VALUE_WIDTH] =
+            readout
+                .value()
+                .try_into()
+                .map_err(|_| A0ReferenceError::ValueWidthMismatch {
+                    expected: A0_TASK_VALUE_WIDTH,
+                    actual: readout.value().len(),
+                })?;
         Ok(TaskPrediction::Symbol(decode_exact_symbol_coordinates(
             coordinates,
         )?))
@@ -413,7 +414,9 @@ impl A2Adapter {
         input: Vec<f64>,
         write_key: Option<u64>,
     ) -> Result<(), AdapterError> {
-        let report = self.reference.step(&input, self.neutral_read_key, write_key)?;
+        let report = self
+            .reference
+            .step(&input, self.neutral_read_key, write_key)?;
         if let A2ReadStatus::Hit { address } = report.read() {
             return Err(AdapterError::UnexpectedNeutralReadHit { address });
         }
