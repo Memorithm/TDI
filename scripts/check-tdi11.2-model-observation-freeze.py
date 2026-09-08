@@ -24,6 +24,13 @@ EXPECTED_FIELDS = {
     "provenance_contract",
 }
 ALLOWED_FIELD_STATUS = {"unresolved_blocking", "pinned"}
+ALLOWED_PROVENANCE_KINDS = {
+    "git_blob",
+    "git_commit",
+    "sha256",
+    "registry_digest",
+    "protocol_revision",
+}
 EXPECTED_DOMAINS = ["Development", "Validation"]
 EXPECTED_FORBIDDEN_INPUTS = [
     "complete_world_hidden_truth",
@@ -54,11 +61,32 @@ def fail(message: str) -> None:
     raise SystemExit(f"TDI-11.2 model/observation freeze ERROR: {message}")
 
 
+def validate_pin_provenance(name: str, provenance: object) -> None:
+    if not isinstance(provenance, dict):
+        fail(f"{name} pinned value requires pin_provenance")
+    if set(provenance) != {"kind", "immutable_reference"}:
+        fail(f"{name} pin_provenance must contain exactly kind and immutable_reference")
+    kind = provenance["kind"]
+    reference = provenance["immutable_reference"]
+    if kind not in ALLOWED_PROVENANCE_KINDS:
+        fail(f"{name} has unsupported pin provenance kind {kind!r}")
+    if not isinstance(reference, str) or not reference.strip():
+        fail(f"{name} immutable_reference must be a non-empty string")
+    if kind in {"git_blob", "git_commit"}:
+        ref = reference.lower()
+        if len(ref) != 40 or any(ch not in "0123456789abcdef" for ch in ref):
+            fail(f"{name} {kind} reference must be an exact 40-hex Git object id")
+    elif kind == "sha256":
+        ref = reference.lower()
+        if len(ref) != 64 or any(ch not in "0123456789abcdef" for ch in ref):
+            fail(f"{name} sha256 reference must be an exact 64-hex digest")
+
+
 def main() -> None:
     data = json.loads(CONTRACT.read_text(encoding="utf-8"))
     prearm = PREARM.read_text(encoding="utf-8")
 
-    if data.get("schema") != "tdi11.2-model-observation-freeze-v1":
+    if data.get("schema") != "tdi11.2-model-observation-freeze-v2":
         fail("unexpected schema")
     if data.get("stage") != "TDI-11.2":
         fail("unexpected stage")
@@ -91,18 +119,23 @@ def main() -> None:
     all_pinned = True
     for name in sorted(EXPECTED_FIELDS):
         entry = fields[name]
-        if not isinstance(entry, dict) or set(entry) != {"status", "value"}:
-            fail(f"{name} must contain exactly status and value")
+        if not isinstance(entry, dict) or set(entry) != {"status", "value", "pin_provenance"}:
+            fail(f"{name} must contain exactly status, value and pin_provenance")
         status = entry["status"]
         value = entry["value"]
+        provenance = entry["pin_provenance"]
         if status not in ALLOWED_FIELD_STATUS:
             fail(f"{name} has unsupported status {status!r}")
         if status == "unresolved_blocking":
             all_pinned = False
             if value is not None:
                 fail(f"{name} unresolved value must be null")
-        elif value is None or (isinstance(value, str) and not value.strip()):
-            fail(f"{name} pinned value must be explicit and non-empty")
+            if provenance is not None:
+                fail(f"{name} unresolved pin_provenance must be null")
+        else:
+            if value is None or (isinstance(value, str) and not value.strip()):
+                fail(f"{name} pinned value must be explicit and non-empty")
+            validate_pin_provenance(name, provenance)
 
     expected_scientific_status = "frozen_nonfinal" if all_pinned else "unresolved_blocking"
     if data.get("scientific_status") != expected_scientific_status:
