@@ -1,6 +1,3 @@
-#[path = "../../task_adapters.rs"]
-mod task_adapters;
-
 pub use tdi_ai::{
     ReferenceArm, assr_reference, full_history_reference, task_encoding, task_execution,
     task_generators, task_readout,
@@ -8,8 +5,8 @@ pub use tdi_ai::{
 
 use std::error::Error;
 
-use task_adapters::{A0Adapter, A1Adapter};
 use tdi_ai::assr_reference::{RecurrentLayout, RecurrentParameters};
+use tdi_ai::task_adapters::{A0Adapter, A1Adapter};
 use tdi_ai::task_encoding::MIN_TASK_INPUT_WIDTH;
 use tdi_ai::task_execution::execute_symbolic_task;
 use tdi_ai::task_generators::{T1Config, T2Config, generate_t1, generate_t2};
