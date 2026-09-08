@@ -4,6 +4,8 @@
 //! fixture-only recurrent parameters, memory sizing, seeds, gains and readout
 //! layouts to preflight clients.
 
+pub mod a3;
+
 use core::fmt;
 use std::error::Error;
 

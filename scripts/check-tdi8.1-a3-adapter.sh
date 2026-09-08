@@ -7,33 +7,41 @@ fail() {
 }
 
 SOURCE="tdi-ai/src/bin/tdi8-a3-adapter-preflight/main.rs"
+ADAPTER="tdi-ai/src/task_adapters/a3.rs"
+PARENT="tdi-ai/src/task_adapters.rs"
 A3="tdi-ai/src/assr_h_reference.rs"
 VSA="tdi-ai/src/vsa_workspace.rs"
 DOC="docs/TDI-8.1-A3-ADAPTER-PREFLIGHT.md"
 
-for file in "$SOURCE" "$A3" "$VSA" "$DOC"; do
+for file in "$SOURCE" "$ADAPTER" "$PARENT" "$A3" "$VSA" "$DOC"; do
     test -s "$file" || fail "missing bounded A3 adapter qualification surface: $file"
 done
 
-grep -Fq 'impl SymbolicTaskAdapter for A3Adapter' "$SOURCE" \
+grep -Fq 'pub mod a3;' "$PARENT" \
+    || fail "A3 reusable adapter module is not exposed through task_adapters"
+grep -Fq 'use tdi_ai::task_adapters::a3::{A3Adapter, A3AdapterError, A3Diagnostics};' "$SOURCE" \
+    || fail "A3 preflight no longer consumes the reusable adapter"
+grep -Fq 'impl SymbolicTaskAdapter for A3Adapter' "$ADAPTER" \
     || fail "A3 SymbolicTaskAdapter implementation missing"
 grep -Fq 'distractor_read_key_for_instance(&instance)?;' "$SOURCE" \
     || fail "instance-scoped neutral non-query read key is missing"
-grep -Fq 'self.reference.step_skip_vsa_and_store(' "$SOURCE" \
+grep -Fq 'self.reference.step_skip_vsa_and_store(' "$ADAPTER" \
     || fail "A3 write events no longer use the atomic A2+VSA transaction"
-grep -Fq 'Some(logical_key)' "$SOURCE" \
+grep -Fq 'Some(logical_key)' "$ADAPTER" \
     || fail "A2 write key is no longer the prepared logical store key"
-grep -Fq 'logical_key,' "$SOURCE" \
+grep -Fq 'logical_key,' "$ADAPTER" \
     || fail "shared logical A2/VSA store key marker missing"
-grep -Fq 'A3VsaReadRoute::Skip' "$SOURCE" \
+grep -Fq 'A3VsaReadRoute::Skip' "$ADAPTER" \
     || fail "distractor VSA-skip routing missing"
-grep -Fq '.step_routed(&input, A3VsaReadRoute::Key(read_key), read_key, None)?;' "$SOURCE" \
-    || fail "queries no longer share one logical key across VSA and A2 reads"
-grep -Fq 'let mut next_payload_keys = self.payload_keys;' "$SOURCE" \
+grep -Fq 'A3VsaReadRoute::Key(read_key),' "$ADAPTER" \
+    || fail "queries no longer route the logical key through VSA"
+grep -Fq 'read_key,' "$ADAPTER" \
+    || fail "queries no longer share the logical key with the A2 read"
+grep -Fq 'let mut next_payload_keys = self.payload_keys;' "$ADAPTER" \
     || fail "payload routing is no longer prepared transactionally"
-grep -Fq 'self.payload_keys = next_payload_keys;' "$SOURCE" \
+grep -Fq 'self.payload_keys = next_payload_keys;' "$ADAPTER" \
     || fail "payload cursor is no longer committed after successful atomic store"
-grep -Fq 'UnexpectedNeutralReadHit' "$SOURCE" \
+grep -Fq 'UnexpectedNeutralReadHit' "$ADAPTER" \
     || fail "neutral non-query A2 hit is no longer fail-closed"
 grep -Fq 'FIXTURE_ASSOCIATIVE_FUSION_GAIN: f64 = 1.0' "$SOURCE" \
     || fail "dual-path fixture no longer exercises non-zero A2 fusion"
