@@ -117,7 +117,9 @@ pub struct A3Diagnostics {
 
 impl A3Diagnostics {
     fn increment(value: &mut u64) -> Result<(), A3AdapterError> {
-        *value = value.checked_add(1).ok_or(A3AdapterError::CounterOverflow)?;
+        *value = value
+            .checked_add(1)
+            .ok_or(A3AdapterError::CounterOverflow)?;
         Ok(())
     }
 
