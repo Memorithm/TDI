@@ -33,10 +33,10 @@ grep -Fq 'logical_key,' "$ADAPTER" \
     || fail "shared logical A2/VSA store key marker missing"
 grep -Fq 'A3VsaReadRoute::Skip' "$ADAPTER" \
     || fail "distractor VSA-skip routing missing"
-grep -Fq 'A3VsaReadRoute::Key(read_key),' "$ADAPTER" \
-    || fail "queries no longer route the logical key through VSA"
-grep -Fq 'read_key,' "$ADAPTER" \
-    || fail "queries no longer share the logical key with the A2 read"
+grep -Fq 'let route = A3VsaReadRoute::Key(read_key);' "$ADAPTER" \
+    || fail "queries no longer construct the logical-key VSA route"
+grep -Fq 'step_routed(&input, route, read_key, None)?;' "$ADAPTER" \
+    || fail "queries no longer share the logical key across VSA and A2 reads"
 grep -Fq 'let mut next_payload_keys = self.payload_keys;' "$ADAPTER" \
     || fail "payload routing is no longer prepared transactionally"
 grep -Fq 'self.payload_keys = next_payload_keys;' "$ADAPTER" \

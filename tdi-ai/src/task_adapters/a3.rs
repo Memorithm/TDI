@@ -13,7 +13,10 @@ use crate::associative_memory::{
     AssociativeMemoryError, AssociativeMemoryLayout, AssociativeWriteOutcome,
 };
 use crate::assr_h_reference::{A3Reference, A3ReferenceError, A3VsaReadRoute};
-use crate::assr_reference::{A2ReadStatus, A2StepReport, RecurrentParameters};
+use crate::assr_reference::{A2ReadStatus, A2StepReport, RecurrentLayout, RecurrentParameters};
+use crate::reference_operation_accounting::{
+    ReferenceOperationAccounting, ReferenceOperationAccountingError,
+};
 use crate::task_encoding::{
     LosslessTaskEncoder, PayloadKeyCursor, TaskEncodingError, TaskInputLayout,
     association_memory_key, payload_memory_key,
@@ -34,6 +37,8 @@ pub enum A3AdapterError {
     A3(A3ReferenceError),
     /// Exact target-blind readout failure.
     Readout(TaskReadoutError),
+    /// Exact semantic operation accounting failure.
+    Accounting(ReferenceOperationAccountingError),
     /// Recurrent/readout state widths disagree.
     ReadoutStateWidthMismatch {
         /// Recurrent state width.
@@ -59,6 +64,7 @@ impl fmt::Display for A3AdapterError {
             Self::Encoding(error) => write!(formatter, "task encoding: {error}"),
             Self::A3(error) => write!(formatter, "A3 reference: {error}"),
             Self::Readout(error) => write!(formatter, "exact readout: {error}"),
+            Self::Accounting(error) => write!(formatter, "operation accounting: {error}"),
             Self::ReadoutStateWidthMismatch {
                 recurrent,
                 association_readout,
@@ -99,6 +105,12 @@ impl From<A3ReferenceError> for A3AdapterError {
 impl From<TaskReadoutError> for A3AdapterError {
     fn from(error: TaskReadoutError) -> Self {
         Self::Readout(error)
+    }
+}
+
+impl From<ReferenceOperationAccountingError> for A3AdapterError {
+    fn from(error: ReferenceOperationAccountingError) -> Self {
+        Self::Accounting(error)
     }
 }
 
@@ -201,12 +213,14 @@ impl A3Diagnostics {
 /// Qualified A3 recurrent + A2 associative-memory + VSA symbolic task adapter.
 pub struct A3Adapter {
     reference: A3Reference,
+    recurrent_layout: RecurrentLayout,
     encoder: LosslessTaskEncoder,
     association_readout: ExactStateSymbolReadout,
     payload_readout: ExactStateSymbolReadout,
     payload_keys: PayloadKeyCursor,
     neutral_read_key: u64,
     diagnostics: A3Diagnostics,
+    operation_accounting: ReferenceOperationAccounting,
 }
 
 impl A3Adapter {
@@ -248,12 +262,14 @@ impl A3Adapter {
                 vsa_role_seed,
                 vsa_fusion_gain,
             )?,
+            recurrent_layout,
             encoder: LosslessTaskEncoder::new(TaskInputLayout::new(input_width)?),
             association_readout,
             payload_readout,
             payload_keys: PayloadKeyCursor::default(),
             neutral_read_key,
             diagnostics: A3Diagnostics::default(),
+            operation_accounting: ReferenceOperationAccounting::zero(),
         })
     }
 
@@ -261,6 +277,12 @@ impl A3Adapter {
     #[must_use]
     pub fn diagnostics(&self) -> A3Diagnostics {
         self.diagnostics
+    }
+
+    /// Return exact semantic work accumulated from successfully executed A3 paths.
+    #[must_use]
+    pub fn operation_accounting(&self) -> ReferenceOperationAccounting {
+        self.operation_accounting
     }
 
     /// Current ordered-payload position, exposed for transactional qualification.
@@ -273,6 +295,14 @@ impl A3Adapter {
     #[must_use]
     pub fn vsa_components(&self) -> &[f64] {
         self.reference.workspace().components()
+    }
+
+    fn accumulate_operation_accounting(
+        &mut self,
+        event: ReferenceOperationAccounting,
+    ) -> Result<(), A3AdapterError> {
+        self.operation_accounting = self.operation_accounting.checked_add(event)?;
+        Ok(())
     }
 
     fn atomic_store_step(
@@ -290,6 +320,9 @@ impl A3Adapter {
         if let A2ReadStatus::Hit { address } = report.read() {
             return Err(A3AdapterError::UnexpectedNeutralReadHit { address });
         }
+        let event =
+            ReferenceOperationAccounting::a3_skip_and_store_step(self.recurrent_layout, report)?;
+        self.accumulate_operation_accounting(event)?;
         self.diagnostics.observe_write(report.write())?;
         A3Diagnostics::increment(&mut self.diagnostics.vsa_stores)?;
         Ok(())
@@ -305,6 +338,12 @@ impl A3Adapter {
         if let A2ReadStatus::Hit { address } = report.read() {
             return Err(A3AdapterError::UnexpectedNeutralReadHit { address });
         }
+        let event = ReferenceOperationAccounting::a3_routed_step(
+            self.recurrent_layout,
+            A3VsaReadRoute::Skip,
+            report,
+        )?;
+        self.accumulate_operation_accounting(event)?;
         Ok(())
     }
 
@@ -314,9 +353,11 @@ impl A3Adapter {
         read_key: u64,
         readout: ExactStateSymbolReadout,
     ) -> Result<TaskPrediction, A3AdapterError> {
-        let report: A2StepReport =
-            self.reference
-                .step_routed(&input, A3VsaReadRoute::Key(read_key), read_key, None)?;
+        let route = A3VsaReadRoute::Key(read_key);
+        let report: A2StepReport = self.reference.step_routed(&input, route, read_key, None)?;
+        let event =
+            ReferenceOperationAccounting::a3_routed_step(self.recurrent_layout, route, report)?;
+        self.accumulate_operation_accounting(event)?;
         self.diagnostics.observe_query(report.read())?;
         A3Diagnostics::increment(&mut self.diagnostics.vsa_queries)?;
         Ok(match readout.decode_state(self.reference.state())? {
@@ -337,6 +378,7 @@ impl SymbolicTaskAdapter for A3Adapter {
         self.reference.reset();
         self.payload_keys.reset();
         self.diagnostics = A3Diagnostics::default();
+        self.operation_accounting = ReferenceOperationAccounting::zero();
         Ok(())
     }
 
