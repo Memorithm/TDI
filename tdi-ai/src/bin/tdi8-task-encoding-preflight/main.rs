@@ -1,16 +1,10 @@
-#[path = "../../task_encoding.rs"]
-pub mod task_encoding;
-
-pub use tdi_ai::{associative_memory, task_generators};
-
 use std::error::Error;
 
 use tdi_ai::associative_memory::{AssociativeMemoryLayout, DirectMappedAssociativeMemory};
-use tdi_ai::task_generators::{T3Config, generate_t3};
-
-use task_encoding::{
+use tdi_ai::task_encoding::{
     LosslessTaskEncoder, MIN_TASK_INPUT_WIDTH, TaskInputLayout, audit_associative_projection,
 };
+use tdi_ai::task_generators::{T3Config, generate_t3};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let encoder = LosslessTaskEncoder::new(TaskInputLayout::new(MIN_TASK_INPUT_WIDTH)?);
