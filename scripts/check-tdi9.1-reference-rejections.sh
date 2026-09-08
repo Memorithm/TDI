@@ -22,8 +22,8 @@ grep -Fq 'pub struct ReferenceRejectionRecord' "$MODULE" || fail "immutable reje
 grep -Fq 'pub enum ReferenceEvaluationOutcome' "$MODULE" || fail "completed/rejected outcome split missing"
 grep -Fq 'pub fn evaluate_generated_task_recorded(' "$MODULE" \
     || fail "recorded evaluator entry point missing"
-grep -Fq 'match evaluate_generated_task(generated, policy, envelope, runtime_decision_limit)' "$MODULE" \
-    || fail "recorded evaluator does not wrap the qualified compatibility API"
+grep -Fq 'match evaluate_generated_task_with_progress(' "$MODULE" \
+    || fail "recorded evaluator does not wrap the qualified diagnostic evaluator"
 grep -Fq 'code: ReferenceRejectionCode::from_error(error)' "$MODULE" \
     || fail "typed evaluator error is not mapped to a stable code"
 grep -Fq 'error: ReferenceEvaluatorError' "$MODULE" \

@@ -12,12 +12,17 @@ pub mod associative_memory;
 mod assr;
 pub mod assr_h_reference;
 pub mod assr_reference;
+pub mod experiment;
+#[cfg(feature = "experimental")]
+pub mod experimental;
 pub mod full_history_reference;
 pub mod hallucination_world;
+pub mod provenance;
 mod static_diagnostics;
 pub mod task_execution;
 pub mod task_generators;
 mod toy_attention;
+pub mod validated_profile;
 pub mod vsa_workspace;
 
 use tdi_core::{BranchingRecoveryAnalysis, ExactRatio};

@@ -8,16 +8,16 @@
 
 use core::fmt;
 
-use crate::adaptive_execution::{
+use super::adaptive_execution::{
     CheckpointTraffic, ExecutionAccounting, ReferenceExecution, ReferenceExecutionError,
     SolverCandidate, StoppedCandidate, evaluate_stopped,
 };
-use crate::adaptive_inference::{InferenceAction, PolicyArm, ResourceEnvelope, ResourceUsage};
-use crate::adaptive_policies::{
+use super::adaptive_inference::{InferenceAction, PolicyArm, ResourceEnvelope, ResourceUsage};
+use super::adaptive_policies::{
     C0FixedPolicy, C1Plan, C1StaticPolicy, C2AdaptivePolicy, C3RecoveryPolicy, PolicyDecision,
     ReferencePolicyError,
 };
-use crate::adaptive_task_generators::{AdaptiveTaskFamily, DifficultyStratum, GeneratedTask};
+use super::adaptive_task_generators::{AdaptiveTaskFamily, DifficultyStratum, GeneratedTask};
 
 /// One already-constructed bounded reference policy.
 ///
@@ -32,6 +32,16 @@ pub enum ReferencePolicy {
 }
 
 impl ReferencePolicy {
+    #[must_use]
+    pub fn canonical_record(self) -> String {
+        match self {
+            Self::C0(p) => p.canonical_record(),
+            Self::C1(p) => p.canonical_record(),
+            Self::C2(p) => p.canonical_record(),
+            Self::C3(p) => p.canonical_record(),
+        }
+    }
+
     #[must_use]
     pub const fn arm(self) -> PolicyArm {
         match self {
@@ -152,6 +162,43 @@ pub fn evaluate_generated_task(
     envelope: ResourceEnvelope,
     runtime_decision_limit: u64,
 ) -> Result<ReferenceEvaluationRecord, ReferenceEvaluatorError> {
+    evaluate_generated_task_with_progress(
+        generated,
+        policy,
+        envelope,
+        runtime_decision_limit,
+        &mut None,
+    )
+}
+
+/// Last observable execution state, including policy charges before a rejected
+/// action. Not a successful task result or a resumable solver checkpoint.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ReferenceProgress {
+    pub step_index: u64,
+    pub completed_decisions: u64,
+    pub accounting: ExecutionAccounting,
+}
+impl ReferenceProgress {
+    fn capture(execution: &ReferenceExecution, completed_decisions: u64) -> Self {
+        Self {
+            step_index: execution.step_index(),
+            completed_decisions,
+            accounting: execution.accounting(),
+        }
+    }
+}
+
+/// Compatibility-equivalent evaluation with diagnostics on rejection.
+/// `progress` is cleared before validation and updated around charged operations.
+pub fn evaluate_generated_task_with_progress(
+    generated: GeneratedTask,
+    policy: ReferencePolicy,
+    envelope: ResourceEnvelope,
+    runtime_decision_limit: u64,
+    progress: &mut Option<ReferenceProgress>,
+) -> Result<ReferenceEvaluationRecord, ReferenceEvaluatorError> {
+    *progress = None;
     if runtime_decision_limit == 0 {
         return Err(ReferenceEvaluatorError::ZeroDecisionLimit);
     }
@@ -164,7 +211,10 @@ pub fn evaluate_generated_task(
     }
 
     let mut execution = ReferenceExecution::new(arm, policy_task, envelope)?;
-    let c1_plan = prepare_c1_plan(policy, family, &mut execution)?;
+    *progress = Some(ReferenceProgress::capture(&execution, 0));
+    let planned = prepare_c1_plan(policy, family, &mut execution);
+    *progress = Some(ReferenceProgress::capture(&execution, 0));
+    let c1_plan = planned?;
 
     for decision_index in 0..runtime_decision_limit {
         let decision = choose_decision(policy, c1_plan, &execution)?;
@@ -176,8 +226,15 @@ pub fn evaluate_generated_task(
         }
 
         let charge = decision.charge();
-        execution.charge_policy_decision(charge.operations(), charge.memory_bits())?;
-        if let Some(stopped) = apply_action(&mut execution, decision)? {
+        let charged = execution.charge_policy_decision(charge.operations(), charge.memory_bits());
+        *progress = Some(ReferenceProgress::capture(&execution, decision_index));
+        charged?;
+        let action = apply_action(&mut execution, decision);
+        *progress = Some(ReferenceProgress::capture(
+            &execution,
+            decision_index + u64::from(action.is_ok()),
+        ));
+        if let Some(stopped) = action? {
             let success = evaluate_stopped(stopped, evaluator)?;
             let runtime_decisions = decision_index
                 .checked_add(1)
