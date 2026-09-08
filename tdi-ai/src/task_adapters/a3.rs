@@ -312,12 +312,9 @@ impl A3Adapter {
         read_key: u64,
         readout: ExactStateSymbolReadout,
     ) -> Result<TaskPrediction, A3AdapterError> {
-        let report: A2StepReport = self.reference.step_routed(
-            &input,
-            A3VsaReadRoute::Key(read_key),
-            read_key,
-            None,
-        )?;
+        let report: A2StepReport =
+            self.reference
+                .step_routed(&input, A3VsaReadRoute::Key(read_key), read_key, None)?;
         self.diagnostics.observe_query(report.read())?;
         A3Diagnostics::increment(&mut self.diagnostics.vsa_queries)?;
         Ok(match readout.decode_state(self.reference.state())? {
