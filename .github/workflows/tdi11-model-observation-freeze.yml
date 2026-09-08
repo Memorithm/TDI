@@ -1,0 +1,20 @@
+name: TDI-11.2 model observation freeze
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  model-observation-freeze:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Validate non-executing TDI-11.2 freeze
+        run: python3 scripts/check-tdi11.2-model-observation-freeze.py
