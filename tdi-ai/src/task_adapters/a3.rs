@@ -13,9 +13,7 @@ use crate::associative_memory::{
     AssociativeMemoryError, AssociativeMemoryLayout, AssociativeWriteOutcome,
 };
 use crate::assr_h_reference::{A3Reference, A3ReferenceError, A3VsaReadRoute};
-use crate::assr_reference::{
-    A2ReadStatus, A2StepReport, RecurrentLayout, RecurrentParameters,
-};
+use crate::assr_reference::{A2ReadStatus, A2StepReport, RecurrentLayout, RecurrentParameters};
 use crate::reference_operation_accounting::{
     ReferenceOperationAccounting, ReferenceOperationAccountingError,
 };
@@ -361,8 +359,11 @@ impl A3Adapter {
         let report: A2StepReport = self
             .reference
             .step_routed(&input, route, read_key, None)?;
-        let event =
-            ReferenceOperationAccounting::a3_routed_step(self.recurrent_layout, route, report)?;
+        let event = ReferenceOperationAccounting::a3_routed_step(
+            self.recurrent_layout,
+            route,
+            report,
+        )?;
         self.accumulate_operation_accounting(event)?;
         self.diagnostics.observe_query(report.read())?;
         A3Diagnostics::increment(&mut self.diagnostics.vsa_queries)?;
