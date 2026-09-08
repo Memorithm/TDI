@@ -14,10 +14,13 @@ use crate::associative_memory::{
     AssociativeMemoryError, AssociativeMemoryLayout, AssociativeWriteOutcome,
 };
 use crate::assr_reference::{
-    A1Reference, A2ReadStatus, A2Reference, A2StepReport, RecurrentParameters,
+    A1Reference, A2ReadStatus, A2Reference, A2StepReport, RecurrentLayout, RecurrentParameters,
     RecurrentReferenceError,
 };
 use crate::full_history_reference::{A0Reference, A0ReferenceError, FullHistoryLayout};
+use crate::reference_operation_accounting::{
+    ReferenceOperationAccounting, ReferenceOperationAccountingError,
+};
 use crate::task_encoding::{
     A0_TASK_KEY_WIDTH, A0_TASK_VALUE_WIDTH, LosslessTaskEncoder, PayloadKeyCursor,
     TaskEncodingError, TaskInputLayout, a0_association_item, a0_association_query_key,
@@ -44,6 +47,8 @@ pub enum AdapterError {
     Recurrent(RecurrentReferenceError),
     /// Exact target-blind readout failure.
     Readout(TaskReadoutError),
+    /// Exact semantic operation accounting failure.
+    Accounting(ReferenceOperationAccountingError),
     /// Recurrent/readout state widths disagree.
     ReadoutStateWidthMismatch {
         /// Recurrent state width.
@@ -70,6 +75,7 @@ impl fmt::Display for AdapterError {
             Self::Encoding(error) => write!(formatter, "task encoding: {error}"),
             Self::Recurrent(error) => write!(formatter, "recurrent reference: {error}"),
             Self::Readout(error) => write!(formatter, "exact readout: {error}"),
+            Self::Accounting(error) => write!(formatter, "operation accounting: {error}"),
             Self::ReadoutStateWidthMismatch { recurrent, readout } => write!(
                 formatter,
                 "recurrent state width {recurrent} does not match readout state width {readout}"
@@ -120,10 +126,17 @@ impl From<TaskReadoutError> for AdapterError {
     }
 }
 
+impl From<ReferenceOperationAccountingError> for AdapterError {
+    fn from(error: ReferenceOperationAccountingError) -> Self {
+        Self::Accounting(error)
+    }
+}
+
 /// Qualified A0 namespaced full-history symbolic task adapter.
 pub struct A0Adapter {
     reference: A0Reference,
     next_payload_position: u64,
+    operation_accounting: ReferenceOperationAccounting,
 }
 
 impl A0Adapter {
@@ -135,11 +148,36 @@ impl A0Adapter {
                 A0_TASK_VALUE_WIDTH as u64,
             )?)?,
             next_payload_position: 0,
+            operation_accounting: ReferenceOperationAccounting::zero(),
         })
     }
 
-    fn decode_readout(&self, query: &[f64]) -> Result<TaskPrediction, AdapterError> {
+    /// Return exact semantic work accumulated from successfully executed A0 paths.
+    #[must_use]
+    pub fn operation_accounting(&self) -> ReferenceOperationAccounting {
+        self.operation_accounting
+    }
+
+    fn accumulate_operation_accounting(
+        &mut self,
+        event: ReferenceOperationAccounting,
+    ) -> Result<(), AdapterError> {
+        self.operation_accounting = self.operation_accounting.checked_add(event)?;
+        Ok(())
+    }
+
+    fn record_append(&mut self) -> Result<(), AdapterError> {
+        let event = ReferenceOperationAccounting::a0_append(self.reference.layout())?;
+        self.accumulate_operation_accounting(event)
+    }
+
+    fn decode_readout(&mut self, query: &[f64]) -> Result<TaskPrediction, AdapterError> {
         let readout = self.reference.read(query)?;
+        let event = ReferenceOperationAccounting::a0_read(
+            self.reference.layout(),
+            self.reference.item_count(),
+        )?;
+        self.accumulate_operation_accounting(event)?;
         let coordinates: [f64; A0_TASK_VALUE_WIDTH] =
             readout
                 .value()
@@ -164,13 +202,14 @@ impl SymbolicTaskAdapter for A0Adapter {
     fn reset(&mut self) -> Result<(), Self::Error> {
         self.reference.clear();
         self.next_payload_position = 0;
+        self.operation_accounting = ReferenceOperationAccounting::zero();
         Ok(())
     }
 
     fn associate(&mut self, key_code: u64, value: TaskSymbol) -> Result<(), Self::Error> {
         let item = a0_association_item(key_code, value);
         self.reference.append(&item.key(), &item.value())?;
-        Ok(())
+        self.record_append()
     }
 
     fn payload(&mut self, value: TaskSymbol) -> Result<(), Self::Error> {
@@ -181,13 +220,13 @@ impl SymbolicTaskAdapter for A0Adapter {
             .ok_or(AdapterError::PayloadPositionOverflow)?;
         let item = a0_payload_item(position, value);
         self.reference.append(&item.key(), &item.value())?;
-        Ok(())
+        self.record_append()
     }
 
     fn distractor(&mut self, token: TaskSymbol) -> Result<(), Self::Error> {
         let item = a0_distractor_item(token);
         self.reference.append(&item.key(), &item.value())?;
-        Ok(())
+        self.record_append()
     }
 
     fn query_association(&mut self, key_code: u64) -> Result<TaskPrediction, Self::Error> {
@@ -202,8 +241,10 @@ impl SymbolicTaskAdapter for A0Adapter {
 /// Qualified A1 leakage-safe recurrent symbolic task adapter.
 pub struct A1Adapter {
     reference: A1Reference,
+    recurrent_layout: RecurrentLayout,
     encoder: LosslessTaskEncoder,
     readout: ExactStateSymbolReadout,
+    operation_accounting: ReferenceOperationAccounting,
 }
 
 impl A1Adapter {
@@ -222,20 +263,37 @@ impl A1Adapter {
         }
         Ok(Self {
             reference: A1Reference::new(parameters)?,
+            recurrent_layout,
             encoder: LosslessTaskEncoder::new(TaskInputLayout::new(
                 recurrent_layout.input_width(),
             )?),
             readout,
+            operation_accounting: ReferenceOperationAccounting::zero(),
         })
+    }
+
+    /// Return exact semantic work accumulated from successfully executed A1 paths.
+    #[must_use]
+    pub fn operation_accounting(&self) -> ReferenceOperationAccounting {
+        self.operation_accounting
+    }
+
+    fn accumulate_operation_accounting(
+        &mut self,
+        event: ReferenceOperationAccounting,
+    ) -> Result<(), AdapterError> {
+        self.operation_accounting = self.operation_accounting.checked_add(event)?;
+        Ok(())
     }
 
     fn step(&mut self, input: Vec<f64>) -> Result<(), AdapterError> {
         self.reference.step(&input)?;
-        Ok(())
+        let event = ReferenceOperationAccounting::a1_step(self.recurrent_layout)?;
+        self.accumulate_operation_accounting(event)
     }
 
     fn query(&mut self, input: Vec<f64>) -> Result<TaskPrediction, AdapterError> {
-        self.reference.step(&input)?;
+        self.step(input)?;
         Ok(match self.readout.decode_state(self.reference.state())? {
             ExactStatePrediction::Symbol(symbol) => TaskPrediction::Symbol(symbol),
             ExactStatePrediction::InvalidEncoding => TaskPrediction::Invalid,
@@ -252,6 +310,7 @@ impl SymbolicTaskAdapter for A1Adapter {
 
     fn reset(&mut self) -> Result<(), Self::Error> {
         self.reference.reset();
+        self.operation_accounting = ReferenceOperationAccounting::zero();
         Ok(())
     }
 
@@ -366,11 +425,13 @@ impl A2Diagnostics {
 /// Qualified A2 recurrent plus direct-mapped associative-memory task adapter.
 pub struct A2Adapter {
     reference: A2Reference,
+    recurrent_layout: RecurrentLayout,
     encoder: LosslessTaskEncoder,
     readout: ExactStateSymbolReadout,
     payload_keys: PayloadKeyCursor,
     neutral_read_key: u64,
     diagnostics: A2Diagnostics,
+    operation_accounting: ReferenceOperationAccounting,
 }
 
 impl A2Adapter {
@@ -393,6 +454,7 @@ impl A2Adapter {
         }
         Ok(Self {
             reference: A2Reference::new(parameters, memory_layout, projection_seed, fusion_gain)?,
+            recurrent_layout,
             encoder: LosslessTaskEncoder::new(TaskInputLayout::new(
                 recurrent_layout.input_width(),
             )?),
@@ -400,6 +462,7 @@ impl A2Adapter {
             payload_keys: PayloadKeyCursor::default(),
             neutral_read_key,
             diagnostics: A2Diagnostics::default(),
+            operation_accounting: ReferenceOperationAccounting::zero(),
         })
     }
 
@@ -407,6 +470,20 @@ impl A2Adapter {
     #[must_use]
     pub fn diagnostics(&self) -> A2Diagnostics {
         self.diagnostics
+    }
+
+    /// Return exact semantic work accumulated from successfully executed A2 paths.
+    #[must_use]
+    pub fn operation_accounting(&self) -> ReferenceOperationAccounting {
+        self.operation_accounting
+    }
+
+    fn accumulate_operation_accounting(
+        &mut self,
+        event: ReferenceOperationAccounting,
+    ) -> Result<(), AdapterError> {
+        self.operation_accounting = self.operation_accounting.checked_add(event)?;
+        Ok(())
     }
 
     fn non_query_step(
@@ -420,6 +497,8 @@ impl A2Adapter {
         if let A2ReadStatus::Hit { address } = report.read() {
             return Err(AdapterError::UnexpectedNeutralReadHit { address });
         }
+        let event = ReferenceOperationAccounting::a2_step(self.recurrent_layout, report)?;
+        self.accumulate_operation_accounting(event)?;
         self.diagnostics.observe_write(report.write())?;
         Ok(())
     }
@@ -430,6 +509,8 @@ impl A2Adapter {
         read_key: u64,
     ) -> Result<TaskPrediction, AdapterError> {
         let report: A2StepReport = self.reference.step(&input, read_key, None)?;
+        let event = ReferenceOperationAccounting::a2_step(self.recurrent_layout, report)?;
+        self.accumulate_operation_accounting(event)?;
         self.diagnostics.observe_query(report.read())?;
         Ok(match self.readout.decode_state(self.reference.state())? {
             ExactStatePrediction::Symbol(symbol) => TaskPrediction::Symbol(symbol),
@@ -449,6 +530,7 @@ impl SymbolicTaskAdapter for A2Adapter {
         self.reference.reset();
         self.payload_keys.reset();
         self.diagnostics = A2Diagnostics::default();
+        self.operation_accounting = ReferenceOperationAccounting::zero();
         Ok(())
     }
 
