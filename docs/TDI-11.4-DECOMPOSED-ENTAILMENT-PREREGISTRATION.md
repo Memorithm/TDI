@@ -75,7 +75,7 @@ Source retrieval/selection must be causally available and must not use hidden co
 - Use only Development and Validation populations authorized by the TDI-11.2 freeze.
 - Preserve all existing TDI-7.2/TDI-8.2 protected boundaries.
 - No final dataset, final seed list, final result payload or confirmatory evaluation may be created by this study.
-- Threshold selection, aggregation rules and combination weights are Development/Validation-only.
+- Threshold selection, aggregation rules and combination weights are Development-only. Validation is reserved for the preregistered one-shot evaluation of the frozen configuration.
 - Any materially changed detector after observing Validation results receives a new versioned hypothesis identifier.
 
 ## Primary metrics
