@@ -1,0 +1,60 @@
+{
+  "schema": "tdi11.4-uncertainty-stratified-preregistration-v1",
+  "status": "preregistered_nonfinal_nonexecuting",
+  "external_prior_art": {
+    "title": "Evaluating the Relevance of Uncertainty Estimators for LLM Hallucination",
+    "authors": ["Yedidia Agnimo", "Anna Korba", "Annabelle Blangero", "Nicolas Chesneau", "Karteek Alahari"],
+    "arxiv_id": "2605.27016",
+    "published": "2026-05-26",
+    "role": "external_prior_art_only_not_memorithm_evidence"
+  },
+  "observation": "External evidence reports that the association between uncertainty estimators and hallucination is highly variable and often weak across hallucination types and models.",
+  "hypothesis": {
+    "id": "TDI11.4-H-UE-STRAT-01",
+    "statement": "No candidate uncertainty estimator will be treated as a universal hallucination proxy; predictive utility must be demonstrated separately within each preregistered model x task x hallucination-type stratum.",
+    "falsification": "The hypothesis is provisionally falsified for the authorized Development/Validation population only if a preregistered estimator shows materially stable predictive utility across every preregistered stratum under the frozen acceptance rule."
+  },
+  "design": {
+    "populations": ["Development", "Validation"],
+    "final_test_allowed": false,
+    "model_execution_allowed_by_this_artifact": false,
+    "stratification_axes": ["model_id", "task_id", "hallucination_type"],
+    "hallucination_types": ["intrinsic", "extrinsic"],
+    "candidate_estimator_families": ["information_theoretic", "sampling_based", "reflexive"],
+    "minimum_baselines": ["constant_score", "random_rank", "existing_authorized_TDI11_signal_if_available"],
+    "primary_metrics": ["AUROC", "AUPRC", "risk_coverage_curve"],
+    "calibration_metrics": ["Brier_score", "expected_calibration_error"],
+    "reporting_requirements": [
+      "per_stratum_metrics",
+      "macro_aggregate_only_after_per_stratum_reporting",
+      "confidence_intervals_or_resampling_uncertainty",
+      "negative_results_preserved",
+      "estimator_compute_cost",
+      "missing_or_invalid_signal_rate"
+    ]
+  },
+  "anti_leakage": {
+    "threshold_selection": "Development_only",
+    "model_or_estimator_selection": "Development_only",
+    "validation_use": "single_frozen_protocol_evaluation_after_selection",
+    "final_holdout": "forbidden_until_separately_authorized",
+    "no_benchmark_target_optimization": true
+  },
+  "acceptance_rule": {
+    "state": "unresolved_blocking",
+    "required_before_execution": [
+      "exact_model_freeze",
+      "exact_observation_freeze",
+      "exact_estimator_implementations",
+      "exact_strata_membership",
+      "exact_resampling_procedure",
+      "numerical_materiality_thresholds"
+    ]
+  },
+  "stop_conditions": [
+    "stop_and_report_if_signal_is_nonfinite_or_missing_above_the_frozen_tolerance",
+    "stop_and_report_if_any_stratum_has_insufficient_authorized_samples",
+    "do_not_pool_away_a_failed_stratum",
+    "do_not_access_final_holdout"
+  ]
+}

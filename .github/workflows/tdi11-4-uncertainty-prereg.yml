@@ -1,0 +1,28 @@
+name: TDI-11.4 uncertainty preregistration
+
+on:
+  pull_request:
+    paths:
+      - 'docs/tdi11.4-uncertainty-stratified-preregistration.json'
+      - 'scripts/validate_tdi11_4_uncertainty_prereg.py'
+      - '.github/workflows/tdi11-4-uncertainty-prereg.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'docs/tdi11.4-uncertainty-stratified-preregistration.json'
+      - 'scripts/validate_tdi11_4_uncertainty_prereg.py'
+      - '.github/workflows/tdi11-4-uncertainty-prereg.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Validate fail-closed preregistration
+        run: python scripts/validate_tdi11_4_uncertainty_prereg.py
