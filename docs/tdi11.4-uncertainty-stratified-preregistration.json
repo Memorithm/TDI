@@ -1,5 +1,5 @@
 {
-  "schema": "tdi11.4-uncertainty-stratified-preregistration-v1",
+  "schema": "tdi11.4-uncertainty-stratified-preregistration-v2",
   "status": "preregistered_nonfinal_nonexecuting",
   "external_prior_art": {
     "title": "Evaluating the Relevance of Uncertainty Estimators for LLM Hallucination",
@@ -8,11 +8,23 @@
     "published": "2026-05-26",
     "role": "external_prior_art_only_not_memorithm_evidence"
   },
-  "observation": "External evidence reports that the association between uncertainty estimators and hallucination is highly variable and often weak across hallucination types and models.",
+  "external_claim_level_prior_art": {
+    "title": "Think Through Uncertainty: Improving Long-Form Generation Factuality via Reasoning Calibration",
+    "authors": ["Xin Liu", "Lu Wang"],
+    "arxiv_id": "2604.12046",
+    "published": "2026-04-13",
+    "role": "external_prior_art_only_not_memorithm_evidence"
+  },
+  "observation": "External evidence reports that the association between uncertainty estimators and hallucination is highly variable across hallucination types and models. Separate external work proposes claim-level confidence and selective abstention for long-form factuality. Neither result is Memorithm evidence; both motivate bounded, stratified ablations under a frozen protocol.",
   "hypothesis": {
     "id": "TDI11.4-H-UE-STRAT-01",
     "statement": "No candidate uncertainty estimator will be treated as a universal hallucination proxy; predictive utility must be demonstrated separately within each preregistered model x task x hallucination-type stratum.",
     "falsification": "The hypothesis is provisionally falsified for the authorized Development/Validation population only if a preregistered estimator shows materially stable predictive utility across every preregistered stratum under the frozen acceptance rule."
+  },
+  "claim_level_secondary_hypothesis": {
+    "id": "TDI11.4-H-CLAIM-CAL-02",
+    "statement": "Within each frozen stratum, claim-level uncertainty with selective abstention will be compared against response-level uncertainty and no-abstention calibration under matched authorized populations and declared compute; superiority is not assumed.",
+    "falsification": "Record a negative or inconclusive result if the frozen claim-level arm fails its preregistered risk-coverage and calibration materiality rules, or if any apparent gain is accompanied by an unacceptable loss in coverage, useful-task performance, or retention of originally correct answers. Validation results may not trigger retuning."
   },
   "design": {
     "populations": ["Development", "Validation"],
@@ -22,20 +34,27 @@
     "hallucination_types": ["intrinsic", "extrinsic"],
     "candidate_estimator_families": ["information_theoretic", "sampling_based", "reflexive"],
     "minimum_baselines": ["constant_score", "random_rank", "existing_authorized_TDI11_signal_if_available"],
+    "uncertainty_resolution_ablations": ["response_level", "claim_level"],
+    "abstention_ablations": ["no_abstention", "claim_level_selective_abstention"],
     "primary_metrics": ["AUROC", "AUPRC", "risk_coverage_curve"],
     "calibration_metrics": ["Brier_score", "expected_calibration_error"],
+    "coverage_and_utility_metrics": ["answer_coverage", "claim_coverage", "false_abstention_rate", "originally_correct_answer_regression", "useful_task_performance"],
     "reporting_requirements": [
       "per_stratum_metrics",
       "macro_aggregate_only_after_per_stratum_reporting",
       "confidence_intervals_or_resampling_uncertainty",
       "negative_results_preserved",
       "estimator_compute_cost",
-      "missing_or_invalid_signal_rate"
+      "missing_or_invalid_signal_rate",
+      "claim_segmentation_failure_rate",
+      "abstention_rate_by_stratum"
     ]
   },
   "anti_leakage": {
     "threshold_selection": "Development_only",
     "model_or_estimator_selection": "Development_only",
+    "abstention_threshold_selection": "Development_only",
+    "claim_segmentation_contract_changes_after_validation": "forbidden",
     "validation_use": "single_frozen_protocol_evaluation_after_selection",
     "final_holdout": "forbidden_until_separately_authorized",
     "no_benchmark_target_optimization": true
@@ -48,13 +67,19 @@
       "exact_estimator_implementations",
       "exact_strata_membership",
       "exact_resampling_procedure",
-      "numerical_materiality_thresholds"
+      "numerical_materiality_thresholds",
+      "exact_claim_segmentation_contract",
+      "exact_claim_level_score_aggregation",
+      "exact_abstention_policy",
+      "exact_coverage_and_utility_accounting"
     ]
   },
   "stop_conditions": [
     "stop_and_report_if_signal_is_nonfinite_or_missing_above_the_frozen_tolerance",
     "stop_and_report_if_any_stratum_has_insufficient_authorized_samples",
+    "stop_and_report_if_claim_segmentation_failure_exceeds_the_frozen_tolerance",
     "do_not_pool_away_a_failed_stratum",
+    "do_not_retune_after_validation",
     "do_not_access_final_holdout"
   ]
 }
