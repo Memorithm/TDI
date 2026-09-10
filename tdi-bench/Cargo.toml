@@ -3,10 +3,11 @@ name = "tdi-bench"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "Reproducible benchmarks for the TDI-1 prospective information hypothesis"
+description = "Reproducible benchmarks for the TDI research programmes"
 
 [lints]
 workspace = true
 
 [dependencies]
 tdi-core = { path = "../tdi-core" }
+tdi-operator = { path = "../tdi-operator" }
