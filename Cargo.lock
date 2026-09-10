@@ -48,6 +48,7 @@ name = "tdi-bench"
 version = "0.1.0"
 dependencies = [
  "tdi-core",
+ "tdi-operator",
 ]
 
 [[package]]
