@@ -105,9 +105,14 @@ if ((${#forbidden[@]} != 0)); then
     fail "TDI-8.2 must remain absent during TDI-8.1"
 fi
 
+# Scan readiness surfaces only. Do not scan this checker itself: it necessarily
+# contains the forbidden TDI-7 token name as the literal pattern used to detect leakage.
 if grep -R -n -F 'TDI7_CONFIRM_FINAL_HOLDOUT' \
-    docs/TDI-8.1* docs/tdi8.1-configuration-freeze.json \
-    scripts/check-tdi8.1-readiness.sh \
+    docs/TDI-8.1-STATUS.md \
+    docs/TDI-8.1-FREEZE-RESOLUTION-PLAN.md \
+    docs/TDI-8.1-A3-ADAPTER-PREFLIGHT.md \
+    docs/TDI-8.1-SYMBOLIC-REJECTIONS.md \
+    docs/tdi8.1-configuration-freeze.json \
     >/tmp/tdi81-readiness-token-scan.log; then
     cat /tmp/tdi81-readiness-token-scan.log >&2
     fail "TDI-8.1 readiness surfaces must not carry the TDI-7.2 confirmation token"

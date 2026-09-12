@@ -19,9 +19,10 @@ verify_tdi68_historical_integrity() {
 
     while read -r expected path; do
         case "$path" in
-            Cargo.toml|Cargo.lock|.github/workflows/ci.yml)
-                # These repository-level integration surfaces legitimately
-                # evolve after TDI-6.8. The frozen manifest remains historical
+            Cargo.toml|Cargo.lock|.github/workflows/ci.yml|tdi-bench/Cargo.toml|tdi-core/Cargo.toml)
+                # These repository-level / crate-manifest integration surfaces
+                # legitimately evolve after TDI-6.8 (workspace members, deps,
+                # MSRV metadata). The frozen manifest remains historical
                 # evidence; current scientific source paths stay hash-checked.
                 continue
                 ;;
@@ -143,4 +144,4 @@ printf '\n===== TDI-7.1 COMPLETE BOUNDED PREFLIGHT =====\n'
 bash scripts/reproduce-tdi7.1-preflight.sh
 
 printf '\nTDI-7.1 readiness gate: PASS\n'
-printf 'TDI-7.2 current state: HISTORICAL RESULT FROZEN / EXECUTABLE RERUN RETIRED\n'
+printf 'TDI-7.2 current state: HISTORICAL RESULT FROZEN / EXECUTABLE RERUN SURFACE CLOSED\n'
