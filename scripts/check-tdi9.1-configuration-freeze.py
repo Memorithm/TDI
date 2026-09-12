@@ -24,6 +24,9 @@ EXPECTED_FIELDS = {
     "h9_classifier_aggregation_plumbing",
 }
 ALLOWED_FIELD_STATUS = {"unresolved_blocking", "pinned"}
+AUTHORIZED_PINS = {
+    "closed_rejection_taxonomy": "ReferenceRejectionCode",
+}
 FORBIDDEN_TOP_LEVEL = {
     "tdi9_2_seed_list",
     "tdi9_2_result",
@@ -91,8 +94,23 @@ def main() -> None:
             "then frozen_nonfinal"
         )
 
+    for name, record in fields.items():
+        if name in AUTHORIZED_PINS:
+            if record["status"] != "pinned":
+                fail(f"{name} is an authorized pin and must remain pinned")
+            blob = json.dumps(record["value"], sort_keys=True)
+            marker = AUTHORIZED_PINS[name]
+            if marker not in blob:
+                fail(f"{name} pin missing required marker {marker!r}")
+        elif record["status"] != "unresolved_blocking":
+            fail(
+                f"{name} is not an authorized evidence-backed pin and must "
+                "remain unresolved_blocking"
+            )
+
     print(f"TDI-9.1 configuration fields: {len(fields)}")
     print(f"TDI-9.1 unresolved blocking fields: {len(unresolved)}")
+    print(f"TDI-9.1 authorized pins: {len(AUTHORIZED_PINS)}")
     print("TDI-9.2 execution authorization: ABSENT")
     print("TDI-9.2 final seed/dataset/runner/result surface: ABSENT")
     print("TDI-9.1 configuration freeze schema: PASS")

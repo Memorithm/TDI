@@ -13,6 +13,7 @@
 - Frozen TDI-9.0 preregistration blob: `babad0a4e309e67e57820281a0f31284ba1e5da0`
 - Configuration freeze contract: `docs/tdi9.1-configuration-freeze.json` (schema `tdi9.1-configuration-freeze-v1`)
 - Freeze resolution ledger: `docs/TDI-9.1-FREEZE-RESOLUTION-PLAN.md`
+- Integrity readiness gate: `scripts/check-tdi9.1-readiness.sh` (workflow `tdi9-readiness.yml`)
 - TDI-9.2 runner / final seed list / dataset / result payload: **absent**
 - Human confirmation token: intentionally absent from TDI-9
 - TDI-7.2 / TDI-8.2 interaction: **forbidden**
@@ -28,7 +29,7 @@
 
 ## Remaining TDI-9.1 work
 
-1. Follow `docs/TDI-9.1-FREEZE-RESOLUTION-PLAN.md` to resolve remaining freeze fields from Dev/Val evidence only.
+1. Follow `docs/TDI-9.1-FREEZE-RESOLUTION-PLAN.md` to resolve remaining freeze fields from Dev/Val evidence only. `PolicyObservation` remains a closed type, not a pinned experimental observation vector.
 2. Define agent-search-safe policy mutation/evaluation for development/validation only.
 3. Implement deterministic paired primary-cell evidence + frozen H9 classifier plumbing.
 4. Freeze future public-entropy source/event/encoding and final-seed derivation **before** that public value is knowable.
