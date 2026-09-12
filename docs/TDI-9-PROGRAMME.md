@@ -12,7 +12,7 @@ systems. It does not claim knowledge of any proprietary model architecture.
 | Stage | Purpose | Status |
 | --- | --- | --- |
 | TDI-9.0 | Freeze adaptive-inference questions, policy ladder, evidence rules and autonomous-confirmation contract | active |
-| TDI-9.1 | Build bounded deterministic policy/evaluator stack and run agent-driven development/validation | blocked until TDI-9.0 is merged and frozen |
+| TDI-9.1 | Build bounded deterministic policy/evaluator stack and run agent-driven development/validation | active — freeze 1/14 pinned; remaining scientific fields `unresolved_blocking` |
 | TDI-9.2 | Execute autonomous sealed confirmation from future-derived entropy | future, does not yet exist |
 | TDI-9.3+ | Ablation, transfer, tool interleaving, routing and ecosystem extensions | conditional on evidence |
 

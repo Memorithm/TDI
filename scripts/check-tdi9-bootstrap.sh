@@ -69,6 +69,7 @@ mapfile -t forbidden < <(
     find tdi-ai tdi-bench scripts .github/workflows -type f \
         \( -iname '*tdi9.2*' -o -iname '*tdi9_2*' -o -iname '*tdi9-final*' -o -iname '*tdi9_final*' -o -iname '*tdi92*' \) \
         ! -path 'scripts/check-tdi9-bootstrap.sh' \
+        ! -path 'scripts/check-tdi9.1-readiness.sh' \
         -print
 )
 if ((${#forbidden[@]} != 0)); then

@@ -39,6 +39,7 @@ if find tdi-ai tdi-bench scripts .github/workflows -type f \
     \( -iname '*tdi9.2*' -o -iname '*tdi9_2*' -o -iname '*tdi9-final*' -o -iname '*tdi9_final*' \) \
     ! -path 'scripts/check-tdi9-bootstrap.sh' \
     ! -path 'scripts/check-tdi9.1-foundation.sh' \
+    ! -path 'scripts/check-tdi9.1-readiness.sh' \
     -print -quit | grep -q .; then
     fail "TDI-9.2/final executable surface exists during TDI-9.1 foundation"
 fi

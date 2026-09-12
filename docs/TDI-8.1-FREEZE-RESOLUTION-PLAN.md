@@ -18,7 +18,7 @@ Tracks programme issue #87 and contract `docs/tdi8.1-configuration-freeze.json`.
 | `a3_event_store_read_cleanup_policy` | **pinned** (`tdi8.1-a3-qualified-adapter-v1`) | A3 adapter preflight + PRs #138/#172 |
 | `closed_rejection_taxonomy` | **pinned** (`SymbolicRejectionCode`) | Symbolic rejections docs + PRs #162/#175 |
 | `degenerate_replicate_policy` | **pinned** (`tdi8.1-reject-zero-baseline-bootstrap-replicates-v1`) | Percentile preflight + PR #113 |
-| `paired_interval_method` | blocked | Final choice beyond the PR #113 candidate |
+| `paired_interval_method` | blocked | PR #113 / `docs/TDI-8.1-PERCENTILE-INTERVAL-PREFLIGHT.md` qualify a conservative percentile *candidate* and explicitly do **not** freeze it as the final estimator. No later merged tranche compares admissible constructions. |
 | `paired_resampling_replicate_count` | blocked | Dev/Val under `alpha = 0.05 / 9` |
 | `paired_resampling_seed` | blocked | Explicit Domains seed |
 | `recurrent_dimension_and_parameters` | blocked | Matched-budget Dev/Val selection |
@@ -36,3 +36,12 @@ Tracks programme issue #87 and contract `docs/tdi8.1-configuration-freeze.json`.
 ## Holdout boundary
 
 TDI-8.2 remains absent.
+
+## Why remaining fields stay unresolved
+
+The three pinned fields are closed software policies already qualified on merged
+Dev/Val surfaces. The remaining fourteen require experimental choices
+(dimensions, seeds, budgets, horizons, sample counts, or a selected interval
+estimator) that do not exist as frozen values in-repo. Inventing them to clear
+`unresolved_blocking` is forbidden. The readiness / freeze validators now
+fail-closed if any unauthorized field is pinned.

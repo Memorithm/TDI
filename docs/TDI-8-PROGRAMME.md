@@ -13,7 +13,7 @@ Current bounded implementation status is tracked in
 | Stage | Purpose | Status |
 | --- | --- | --- |
 | TDI-8.0 | Freeze falsifiable ASSR / ASSR-H questions and controls | complete — merged and frozen by PR #88 |
-| TDI-8.1 | Build bounded deterministic A0/A1/A2/A3 evaluator | active — reference foundation merged by PR #89 |
+| TDI-8.1 | Build bounded deterministic A0/A1/A2/A3 evaluator | active — freeze 3/17 pinned; remaining scientific fields `unresolved_blocking` |
 | TDI-8.2 | Execute untouched confirmatory holdout | future human-only, does not exist and is not authorized |
 | TDI-8.3+ | Ablation, robustness, transfer and ecosystem extensions | conditional on evidence |
 
