@@ -87,11 +87,27 @@ for name, marker in required.items():
     if marker not in blob:
         raise SystemExit(f"{name} pin missing required marker {marker!r}")
 print("authorized policy pins: PRESENT")
+unauthorized = [
+    name
+    for name, record in fields.items()
+    if name not in required and record["status"] != "unresolved_blocking"
+]
+if unauthorized:
+    raise SystemExit(
+        "unauthorized freeze pins (evidence required before pin): "
+        + ", ".join(sorted(unauthorized))
+    )
+print("unauthorized fields remain unresolved_blocking: YES")
 PY
+
+grep -Fq '3/17 pinned' "$STATUS" \
+    || fail "STATUS must keep the current 3/17 freeze-progress count until a new authorized pin is added"
+grep -Fq 'paired_interval_method' "$PLAN" \
+    || fail "resolution plan must still list paired_interval_method"
 
 printf '\n===== TDI-8.2 / TDI-7.2 SURFACE EXCLUSION =====\n'
 mapfile -t forbidden < <(
-    find tdi-ai tdi-bench scripts docs -type f \
+    find tdi-ai tdi-bench scripts docs .github/workflows -type f \
         \( -iname '*tdi8.2*' -o -iname '*tdi8_2*' -o -iname '*tdi8-final*' -o -iname '*tdi8_final*' \) \
         ! -path 'scripts/check-tdi8-bootstrap.sh' \
         ! -path 'scripts/check-tdi8.1-foundation.sh' \
@@ -99,6 +115,7 @@ mapfile -t forbidden < <(
         ! -path 'docs/TDI-8.1-STATUS.md' \
         ! -path 'docs/TDI-8.1-FREEZE-RESOLUTION-PLAN.md' \
         ! -path 'docs/tdi8.1-configuration-freeze.json' \
+        ! -path 'scripts/check-tdi8.1-configuration-freeze.py' \
         -print
 )
 if ((${#forbidden[@]} != 0)); then

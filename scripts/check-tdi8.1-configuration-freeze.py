@@ -27,6 +27,11 @@ EXPECTED_FIELDS = {
     "final_population_domain_and_sample_count",
 }
 ALLOWED_FIELD_STATUS = {"unresolved_blocking", "pinned"}
+AUTHORIZED_PINS = {
+    "a3_event_store_read_cleanup_policy": "tdi8.1-a3-qualified-adapter-v1",
+    "closed_rejection_taxonomy": "SymbolicRejectionCode",
+    "degenerate_replicate_policy": "tdi8.1-reject-zero-baseline-bootstrap-replicates-v1",
+}
 FORBIDDEN_TOP_LEVEL = {
     "tdi8_2_seed_range",
     "tdi8_2_result",
@@ -91,8 +96,23 @@ def main() -> None:
             "then frozen_nonfinal"
         )
 
+    for name, record in fields.items():
+        if name in AUTHORIZED_PINS:
+            if record["status"] != "pinned":
+                fail(f"{name} is an authorized pin and must remain pinned")
+            blob = json.dumps(record["value"], sort_keys=True)
+            marker = AUTHORIZED_PINS[name]
+            if marker not in blob:
+                fail(f"{name} pin missing required marker {marker!r}")
+        elif record["status"] != "unresolved_blocking":
+            fail(
+                f"{name} is not an authorized evidence-backed pin and must "
+                "remain unresolved_blocking"
+            )
+
     print(f"TDI-8.1 configuration fields: {len(fields)}")
     print(f"TDI-8.1 unresolved blocking fields: {len(unresolved)}")
+    print(f"TDI-8.1 authorized pins: {len(AUTHORIZED_PINS)}")
     print("TDI-8.2 execution authorization: ABSENT")
     print("TDI-8.2 result/seed/token surface: ABSENT")
     print("TDI-8.1 configuration freeze schema: PASS")

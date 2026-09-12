@@ -21,7 +21,10 @@
 
 Still unresolved (must not be guessed): recurrent/A2/A3 dimensions and fusion, matched budget, numeric horizons, deficit/interventions, paired interval method/count/seed, population domains.
 
+`paired_interval_method` remains a qualified percentile *candidate* only (#113). It is not a closed final choice.
+
 `scientific_status` remains `unresolved_blocking` until all 17 fields are `pinned`.
+The readiness gate fail-closes if any field outside the three authorized pins is marked `pinned`.
 
 ## Remaining TDI-8.1 work
 
