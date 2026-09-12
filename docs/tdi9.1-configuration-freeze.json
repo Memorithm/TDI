@@ -1,0 +1,46 @@
+{
+  "schema": "tdi9.1-configuration-freeze-v1",
+  "stage": "TDI-9.1",
+  "scientific_status": "unresolved_blocking",
+  "tdi9_2_execution_authorized": false,
+  "final_seed_list_exists": false,
+  "final_dataset_exists": false,
+  "final_runner_exists": false,
+  "final_result_payload_exists": false,
+  "human_confirmation_token_exists": false,
+  "fields": {
+    "p1_p2_p3_difficulty_parameters": {"status": "unresolved_blocking", "value": null},
+    "c0_c1_schedules": {"status": "unresolved_blocking", "value": null},
+    "c2_c3_thresholds_and_verification_cadence": {"status": "unresolved_blocking", "value": null},
+    "permitted_observation_vector": {"status": "unresolved_blocking", "value": null},
+    "common_max_compute_memory_envelopes": {"status": "unresolved_blocking", "value": null},
+    "paired_interval_method": {"status": "unresolved_blocking", "value": null},
+    "paired_resampling_replicate_count": {"status": "unresolved_blocking", "value": null},
+    "paired_resampling_seed": {"status": "unresolved_blocking", "value": null},
+    "closed_rejection_taxonomy": {
+      "status": "pinned",
+      "value": {
+        "vocabulary": "ReferenceRejectionCode",
+        "evidence": [
+          "docs/TDI-9.1-REFERENCE-REJECTIONS.md",
+          "PR #140",
+          "scripts/check-tdi9.1-reference-rejections.sh"
+        ],
+        "ranges": {
+          "0x01xx": "evaluator-integration failures",
+          "0x02xx": "direct reference-execution failures",
+          "0x03xx": "adaptive-inference failures via reference execution",
+          "0x04xx": "direct reference-policy failures",
+          "0x05xx": "adaptive-inference failures via reference policy logic"
+        },
+        "rule": "Technical rejection is never mapped to success=true/false quality; Completed vs Rejected remain structurally distinct",
+        "note": "Pins the closed rejection vocabulary only. Does not freeze rejection-rate thresholds or populations."
+      }
+    },
+    "development_validation_population_domains": {"status": "unresolved_blocking", "value": null},
+    "future_public_entropy_source_event_encoding": {"status": "unresolved_blocking", "value": null},
+    "final_seed_derivation_contract": {"status": "unresolved_blocking", "value": null},
+    "agent_search_safe_policy_mutation_contract": {"status": "unresolved_blocking", "value": null},
+    "h9_classifier_aggregation_plumbing": {"status": "unresolved_blocking", "value": null}
+  }
+}

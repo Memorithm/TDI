@@ -61,7 +61,26 @@
     "paired_interval_method": {"status": "unresolved_blocking", "value": null},
     "paired_resampling_replicate_count": {"status": "unresolved_blocking", "value": null},
     "paired_resampling_seed": {"status": "unresolved_blocking", "value": null},
-    "degenerate_replicate_policy": {"status": "unresolved_blocking", "value": null},
+    "degenerate_replicate_policy": {
+      "status": "pinned",
+      "value": {
+        "policy_id": "tdi8.1-reject-zero-baseline-bootstrap-replicates-v1",
+        "evidence": [
+          "docs/TDI-8.1-PERCENTILE-INTERVAL-PREFLIGHT.md",
+          "PR #113",
+          "scripts/check-tdi8.1-percentile-interval.sh"
+        ],
+        "rule": "Reject relative-interval construction if any bootstrap replicate has zero baseline mean (zero_zero_replicates or zero_positive_replicates non-zero).",
+        "forbidden": [
+          "discard those replicates",
+          "replace with finite sentinels",
+          "condition only on positive-baseline resamples",
+          "reinterpret zero/zero as an ordinary relative effect"
+        ],
+        "complete_sample_zero_baseline": "Reject relative interval construction; frozen classifier uses the non-relative branch",
+        "note": "Pins the degenerate-replicate fail-closed rule from the qualified percentile candidate. Does not freeze the interval method, replicate count, or seed as final."
+      }
+    },
     "development_population_domain_and_sample_count": {"status": "unresolved_blocking", "value": null},
     "validation_population_domain_and_sample_count": {"status": "unresolved_blocking", "value": null},
     "final_population_domain_and_sample_count": {"status": "unresolved_blocking", "value": null}
