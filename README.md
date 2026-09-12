@@ -66,7 +66,7 @@ Its policy ladder deliberately separates **fixed compute**, **static preallocati
 
 [`TDI-10.x`](docs/TDI-10-PROGRAMME.md) is a scientifically autonomous generic operator line for real symmetric tridiagonal / Jacobi operators.
 
-The latest `main` state includes the TDI-10.5 increment, merged as a pointwise-subunit uniform-decay counterexample. TDI-10 explicitly labels its evidence as **EXACT**, **PROVED UNDER DECLARED ASSUMPTIONS**, **FORMAL ASYMPTOTIC**, **NUMERICAL EVIDENCE**, **CONJECTURE**, or **REFUTED**. Numerical evidence is never silently promoted to proof.
+The latest `main` state includes TDI-10.5 (**REFUTED** pointwise-subunit decay), TDI-10.6 (**EXACT** uniform geometric bound), and TDI-10.7 (**EXACT** divergent-remainder decay lemma). TDI-10 explicitly labels its evidence as **EXACT**, **PROVED UNDER DECLARED ASSUMPTIONS**, **FORMAL ASYMPTOTIC**, **NUMERICAL EVIDENCE**, **CONJECTURE**, or **REFUTED**. Numerical evidence is never silently promoted to proof.
 
 ### TDI-11.x — Hallucination Dynamics & Control Research Programme
 

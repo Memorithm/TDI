@@ -1,0 +1,38 @@
+name: TDI-10.7 divergent remainder decay
+
+on:
+  pull_request:
+    paths:
+      - "tdi-operator/src/chain.rs"
+      - "tdi-operator/src/transport.rs"
+      - "tdi-operator/tests/cavity_divergent_remainder_decay.rs"
+      - "docs/tdi10/TDI-10.7-DIVERGENT-REMAINDER-DECAY.md"
+      - "scripts/check-tdi10.7-divergent-remainder-decay.sh"
+      - ".github/workflows/tdi10.7-divergent-remainder-decay.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "tdi-operator/src/chain.rs"
+      - "tdi-operator/src/transport.rs"
+      - "tdi-operator/tests/cavity_divergent_remainder_decay.rs"
+      - "docs/tdi10/TDI-10.7-DIVERGENT-REMAINDER-DECAY.md"
+      - "scripts/check-tdi10.7-divergent-remainder-decay.sh"
+      - ".github/workflows/tdi10.7-divergent-remainder-decay.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  divergent-remainder-decay:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+      - name: Qualify TDI-10.7 divergent remainder decay lemma
+        run: bash scripts/check-tdi10.7-divergent-remainder-decay.sh
