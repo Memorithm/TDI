@@ -11,12 +11,53 @@
     "readout_coordinates": {"status": "unresolved_blocking", "value": null},
     "a2_capacity_and_projection": {"status": "unresolved_blocking", "value": null},
     "a3_vsa_width_role_seed_and_fusion": {"status": "unresolved_blocking", "value": null},
-    "a3_event_store_read_cleanup_policy": {"status": "unresolved_blocking", "value": null},
+    "a3_event_store_read_cleanup_policy": {
+      "status": "pinned",
+      "value": {
+        "policy_id": "tdi8.1-a3-qualified-adapter-v1",
+        "evidence": [
+          "docs/TDI-8.1-A3-ADAPTER-PREFLIGHT.md",
+          "PR #138",
+          "PR #172",
+          "scripts/check-tdi8.1-a3-adapter.sh"
+        ],
+        "association_and_payload_writes": "atomic A2+VSA via step_skip_vsa_and_store under one shared logical key",
+        "distractors": "A3VsaReadRoute::Skip, instance-scoped neutral non-query A2 read, no VSA store, no write",
+        "queries": "keyed VSA read plus matching logical A2 association/payload key; never write",
+        "payload_cursor": "commit only after successful atomic store",
+        "cleanup": "none",
+        "similarity_search_or_target_conditioned_decoder": false,
+        "multi_item_vsa_superposition_cleanup": "not_qualified_by_this_policy",
+        "note": "Pins the qualified software-oracle event policy only. Does not freeze VSA width, role seed, fusion gains, budgets, or horizons."
+      }
+    },
     "matched_dynamic_memory_budget": {"status": "unresolved_blocking", "value": null},
     "short_medium_long_numeric_horizons": {"status": "unresolved_blocking", "value": null},
     "late_retrieval_deficit_definition": {"status": "unresolved_blocking", "value": null},
     "intervention_sites_and_recovery_observable": {"status": "unresolved_blocking", "value": null},
-    "closed_rejection_taxonomy": {"status": "unresolved_blocking", "value": null},
+    "closed_rejection_taxonomy": {
+      "status": "pinned",
+      "value": {
+        "vocabulary": "SymbolicRejectionCode",
+        "evidence": [
+          "docs/TDI-8.1-SYMBOLIC-REJECTIONS.md",
+          "PR #162",
+          "PR #175",
+          "scripts/check-tdi8.1-symbolic-rejections.sh"
+        ],
+        "codes": {
+          "0x0101": "generated query count cannot fit the host index type",
+          "0x0102": "exact query-record reservation failed",
+          "0x0201": "adapter reset failed",
+          "0x0202": "one adapter event failed technically",
+          "0x0301": "adapter arm identity changed during execution",
+          "0x0302": "observed completed query count disagreed with the generator declaration"
+        },
+        "invalid_finite_prediction": "TaskPrediction::Invalid remains a Completed quality failure in the evaluation denominator",
+        "rule": "technical rejection is never reinterpreted as quality; quality failure is never converted into a technical rejection",
+        "note": "Pins the closed technical-rejection vocabulary only. Does not freeze populations, deficits, or interval parameters."
+      }
+    },
     "paired_interval_method": {"status": "unresolved_blocking", "value": null},
     "paired_resampling_replicate_count": {"status": "unresolved_blocking", "value": null},
     "paired_resampling_seed": {"status": "unresolved_blocking", "value": null},
