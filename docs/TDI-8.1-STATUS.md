@@ -2,11 +2,13 @@
 
 - Scientific series: TDI-8.x
 - Stage: TDI-8.1 bounded deterministic reference evaluator
-- Status: **active** — reference arms A0/A1/A2/A3, symbolic generators, leakage-safe execution/encoding/readout, concrete adapters (including qualified A3), exact semantic operation accounting, typed rejection provenance, and a fail-closed **configuration freeze registry** are merged on `main`. All **17** scientific freeze fields remain `unresolved_blocking`; no experimental values have been selected yet.
+- Status: **active** — reference arms A0/A1/A2/A3, symbolic generators, leakage-safe execution/encoding/readout, concrete adapters (including qualified A3), exact semantic operation accounting, typed rejection provenance, and a fail-closed **configuration freeze registry** are on the working branch / merged lineage. Freeze progress: **2/17 pinned** (A3 event policy + closed rejection taxonomy); **15** fields remain `unresolved_blocking`. No experimental dimensions/budgets/horizons/populations have been selected.
 - Parent programme issue: #87
 - TDI-8.0 parent merge: `24d41eb7e5d72fc3b5eec9b6434930b10c1f241f`
 - Frozen TDI-8.0 preregistration blob: `fe80e7053d89824a77ef6790794f6930d1b424e2`
-- Configuration freeze contract: `docs/tdi8.1-configuration-freeze.json` (schema `tdi8.1-configuration-freeze-v1`, PR #176)
+- Configuration freeze contract: `docs/tdi8.1-configuration-freeze.json` (schema `tdi8.1-configuration-freeze-v1`, PR #176 + follow-on pins)
+- Freeze resolution ledger: `docs/TDI-8.1-FREEZE-RESOLUTION-PLAN.md`
+- Integrity readiness gate: `scripts/check-tdi8.1-readiness.sh` (workflow `tdi8-readiness.yml`) — passes while freeze is incomplete; refuses TDI-8.2 surfaces
 - Final holdout: does **not** exist
 - Confirmatory runner: does **not** exist
 - Human confirmation token: does **not** exist
@@ -51,31 +53,30 @@
 
 ### Configuration freeze contract (non-executing)
 
-PR #176 added `docs/tdi8.1-configuration-freeze.json`:
+PR #176 added `docs/tdi8.1-configuration-freeze.json`. Authorized policy pins now present:
 
-- every registered scientific choice starts as `unresolved_blocking` with `value: null`
-- `scientific_status` cannot become `frozen_nonfinal` until all registered choices are explicit
-- TDI-8.2 authorization / holdout / confirmatory runner / human token remain hard-false
-- validator + CI reject accidental TDI-8.2 seed/result/confirmation surfaces
+- `a3_event_store_read_cleanup_policy` → `tdi8.1-a3-qualified-adapter-v1` (evidence: A3 preflight + #138/#172)
+- `closed_rejection_taxonomy` → `SymbolicRejectionCode` vocabulary (evidence: #162/#175)
 
-This contract **does not select** dimensions, seeds, budgets, horizons, or sample counts.
+Still unresolved (must not be guessed):
+
+- recurrent dimensions/parameters, readout coordinates
+- A2 capacity/projection; A3 VSA width/role seed/fusion
+- matched dynamic-memory budget; numeric Short/Medium/Long horizons
+- late-retrieval deficit; intervention sites/recovery observable
+- paired interval method/replicate count/seed/degenerate policy
+- development/validation/final population domains and sample counts
+
+`scientific_status` remains `unresolved_blocking` until all 17 fields are `pinned`. TDI-8.2 authorization / holdout / confirmatory runner / human token remain hard-false.
 
 ## Remaining TDI-8.1 work (ordered)
 
-1. Using only admissible **Development/Validation** (non-holdout) evidence, propose and review concrete values for the 17 freeze fields in `docs/tdi8.1-configuration-freeze.json`, including at least:
-   - recurrent dimension/parameters and readout coordinates
-   - A2 capacity/projection
-   - A3 VSA width/role seed/fusion and event store/read/cleanup policy
-   - matched dynamic-memory budget
-   - Short/Medium/Long numeric horizons
-   - late-retrieval deficit, intervention sites/recovery observable, closed rejection taxonomy
-   - paired interval method + replicate count + seed + degenerate-replicate policy
-   - development / validation / final population domains and sample counts (final domain rules only — **no** final seed list or result payload)
-2. Content-address and CI-qualify the completed non-final freeze on its exact head before treating it as authoritative.
-3. Add a final TDI-8.1 readiness/integrity gate proving every experimental choice is frozen and that **no** TDI-8.2 executable, seed/result payload, confirmation token, or authorization surface exists.
+1. Follow `docs/TDI-8.1-FREEZE-RESOLUTION-PLAN.md` to resolve the remaining **15** fields from admissible Development/Validation evidence only.
+2. Content-address and CI-qualify the completed non-final freeze on its exact head before treating it as authoritative (`scientific_status: frozen_nonfinal`).
+3. Keep the integrity readiness gate green; once the freeze is complete it should report freeze-complete while still refusing any TDI-8.2 surface.
 4. Keep `docs/TDI-8.1-STATUS.md` synchronized with merges (this file).
 
-Do **not** invent freeze values without reviewable Dev/Val evidence. Do **not** authorize model/holdout execution from numbering alone.
+Do **not** invent freeze values without reviewable Dev/Val evidence. Do **not** authorize holdout execution from numbering alone.
 
 ## Holdout boundary
 
