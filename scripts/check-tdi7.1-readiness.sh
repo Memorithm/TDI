@@ -144,4 +144,4 @@ printf '\n===== TDI-7.1 COMPLETE BOUNDED PREFLIGHT =====\n'
 bash scripts/reproduce-tdi7.1-preflight.sh
 
 printf '\nTDI-7.1 readiness gate: PASS\n'
-printf 'TDI-7.2 current state: HISTORICAL RESULT FROZEN / EXECUTABLE RERUN SURFACE CLOSED\n'
+printf 'TDI-7.2 current state: HISTORICAL RESULT FROZEN / EXECUTABLE RERUN RETIRED\n'
