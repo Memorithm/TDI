@@ -21,6 +21,7 @@ for file in \
     "$PLAN" \
     docs/TDI-8.1-A3-ADAPTER-PREFLIGHT.md \
     docs/TDI-8.1-SYMBOLIC-REJECTIONS.md \
+    docs/TDI-8.1-PERCENTILE-INTERVAL-PREFLIGHT.md \
     scripts/check-tdi8.1-configuration-freeze.py \
     scripts/check-tdi8.1-a3-adapter.sh \
     scripts/check-tdi8.1-symbolic-rejections.sh \
@@ -67,13 +68,14 @@ if [[ "$scientific_status" == "unresolved_blocking" ]]; then
         || fail "STATUS must point at the configuration freeze contract"
 fi
 
-# Require the two currently authorized policy pins to remain present and non-empty.
+# Require currently authorized policy pins to remain present and non-empty.
 python3 - "$FREEZE" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1], encoding="utf-8"))
 required = {
     "a3_event_store_read_cleanup_policy": "tdi8.1-a3-qualified-adapter-v1",
     "closed_rejection_taxonomy": "SymbolicRejectionCode",
+    "degenerate_replicate_policy": "tdi8.1-reject-zero-baseline-bootstrap-replicates-v1",
 }
 fields = data["fields"]
 for name, marker in required.items():
@@ -105,13 +107,13 @@ if ((${#forbidden[@]} != 0)); then
     fail "TDI-8.2 must remain absent during TDI-8.1"
 fi
 
-# Scan readiness surfaces only. Do not scan this checker itself: it necessarily
-# contains the forbidden TDI-7 token name as the literal pattern used to detect leakage.
+# Scan readiness surfaces only. Do not scan this checker itself.
 if grep -R -n -F 'TDI7_CONFIRM_FINAL_HOLDOUT' \
     docs/TDI-8.1-STATUS.md \
     docs/TDI-8.1-FREEZE-RESOLUTION-PLAN.md \
     docs/TDI-8.1-A3-ADAPTER-PREFLIGHT.md \
     docs/TDI-8.1-SYMBOLIC-REJECTIONS.md \
+    docs/TDI-8.1-PERCENTILE-INTERVAL-PREFLIGHT.md \
     docs/tdi8.1-configuration-freeze.json \
     >/tmp/tdi81-readiness-token-scan.log; then
     cat /tmp/tdi81-readiness-token-scan.log >&2
