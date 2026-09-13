@@ -61,6 +61,8 @@ TDI-9 development is agent-first: agents may autonomously propose, implement, mu
 
 Before a TDI-9 PR or merge decision, run `bash scripts/check-tdi9-bootstrap.sh` when that script exists on the branch.
 
+For TDI-9.3 Boolean-policy representation work, also run `bash scripts/check-tdi9.3-representation-calibration.sh` when that script exists. TDI-9.3 surfaces must not pin TDI-9.1 freeze fields or authorize TDI-9.2.
+
 ## TDI-11.x bootstrap and stage gate
 
 TDI-11.x is the distinct hallucination-dynamics and control research line. Before TDI-11 work, read in order:
