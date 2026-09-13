@@ -37,7 +37,32 @@ sequence are invariant.
 
 On a nondegenerate sample, Spearman/Kendall of a sequence against itself equal
 1. The dimension-only key equals `JacobiMatrix::len` as `f64` and does not read
-Green values.
+Green values. Distinct finite values in reverse order yield Spearman =
+Kendall = −1.
+
+## EXACT claim 6 — GreenBands wiring identity
+
+For each `CandidateResponseObservable` variant, `evaluate(matrix, shift)` equals
+`from_green_bands(GreenBands::compute(matrix, shift)?)` and equals the
+corresponding public TDI-10 `GreenBands` extractor (mid-diagonal entry, diagonal
+trace, or mean absolute off-diagonal). Empty operators fail closed. On 1×1
+operators the mean-abs off-diagonal observable is exactly 0. Identifiers match
+the Stage-0 template `non_authorizing_candidates` list and do **not** freeze
+`response_observable_registry`.
+
+## EXACT claim 7 — coefficient-only control keys
+
+`coefficient_frobenius_norm_key` is `sqrt(∑ a_i² + ∑ b_j²)` from Jacobi
+coefficients only. `gershgorin_dominance_margin_key` is
+`min_i (a_i − |b_{i−1}| − |b_i|)` (missing edges 0). Both ignore Green values
+and do **not** freeze `control_battery`.
+
+## EXACT claim 8 — deterministic shuffle control
+
+`deterministic_shuffle` is a fixed-seed in-place Knuth shuffle. On a strictly
+increasing length≥3 sample, shuffling one side with a fixed seed yields
+Spearman/Kendall strictly less than 1, and the same seed reproduces the same
+permutation. This scaffolds `shuffled_family` without freezing split discipline.
 
 ## REFUTED (Stage-0 boundary)
 

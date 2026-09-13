@@ -83,7 +83,7 @@ TDI-11.0 is an active bootstrap/scope stage and is **not frozen**. TDI-11.1 eval
 
 [`TDI-12.x`](docs/TDI-12-PROGRAMME.md) asks whether rank/order information among finite Jacobi / resolvent / Green response observables is a more transportable object than absolute calibration.
 
-TDI-12.0 is an **active Stage-0 bootstrap** and is **not frozen**. It lands exact average-rank / Spearman / Kendall τ-b primitives, candidate Green-band response extractors over generic TDI-10 primitives, Stage-0 controls (identity, dimension-only, monotone affine, full-tie fail-closed), and a machine-readable freeze template whose scientific fields remain `unresolved_blocking` with confirmatory/final execution flags **false**. See [`docs/TDI-12.0-SCOPE.md`](docs/TDI-12.0-SCOPE.md) and [`docs/TDI-12.0-STATUS.md`](docs/TDI-12.0-STATUS.md).
+TDI-12.0 is an **active Stage-0 bootstrap** and is **not frozen**. It lands exact average-rank / Spearman / Kendall τ-b primitives, candidate Green-band response extractors with EXACT `GreenBands` wiring tests, Stage-0 controls (identity, dimension-only, monotone affine, full-tie fail-closed, reverse-order, coefficient-norm / Gershgorin-margin, deterministic shuffle), a machine-readable freeze template whose scientific fields remain `unresolved_blocking` with confirmatory/final execution flags **false**, and a fail-closed freeze-template validator that refuses invented pins. See [`docs/TDI-12.0-SCOPE.md`](docs/TDI-12.0-SCOPE.md) and [`docs/TDI-12.0-STATUS.md`](docs/TDI-12.0-STATUS.md).
 
 Stage 0 does not authorize confirmatory populations, does not invent TDI-8.1 / TDI-9.1 / TDI-11.2 freeze pins, and does not contact TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces.
 

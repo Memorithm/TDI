@@ -4,8 +4,11 @@
 //! average-rank assignment, Spearman ρ, and Kendall τ-b on finite real
 //! sequences. Candidate Green-band response observables are exposed only as
 //! non-frozen Stage-0 calibration helpers that consume generic TDI-10
-//! primitives. No confirmatory TDI-12 population, split, or execution is
-//! authorized by this module.
+//! primitives. Coefficient-only control keys (Frobenius norm, Gershgorin
+//! dominance margin) and a deterministic shuffle helper support Stage-0
+//! control-battery scaffolding without freezing the control_battery field.
+//! No confirmatory TDI-12 population, split, or execution is authorized by
+//! this module.
 
 use core::fmt;
 
@@ -238,17 +241,28 @@ pub enum CandidateResponseObservable {
 }
 
 impl CandidateResponseObservable {
-    pub fn evaluate(self, matrix: &JacobiMatrix, shift: f64) -> Result<f64, OrdinalError> {
-        if matrix.is_empty() {
+    /// Stable identifier matching the Stage-0 freeze-template
+    /// `non_authorizing_candidates` list. Not a freeze pin.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::MidDiagonalGreen => "MidDiagonalGreen",
+            Self::GreenTrace => "GreenTrace",
+            Self::MeanAbsOffDiagonalGreen => "MeanAbsOffDiagonalGreen",
+        }
+    }
+
+    /// Evaluate from already-computed public TDI-10 [`GreenBands`].
+    ///
+    /// EXACT wiring identity: [`Self::evaluate`] equals
+    /// `from_green_bands(GreenBands::compute(...))` on the same operator/shift.
+    pub fn from_green_bands(self, bands: &GreenBands) -> Result<f64, OrdinalError> {
+        let diagonal = bands.diagonal();
+        if diagonal.is_empty() {
             return Err(OrdinalError::EmptyOperator);
         }
-        let bands = GreenBands::compute(matrix, shift)?;
         match self {
-            Self::MidDiagonalGreen => {
-                let index = matrix.len() / 2;
-                Ok(bands.diagonal()[index])
-            }
-            Self::GreenTrace => Ok(bands.diagonal().iter().sum()),
+            Self::MidDiagonalGreen => Ok(diagonal[diagonal.len() / 2]),
+            Self::GreenTrace => Ok(diagonal.iter().sum()),
             Self::MeanAbsOffDiagonalGreen => {
                 let off = bands.off_diagonal();
                 if off.is_empty() {
@@ -258,6 +272,14 @@ impl CandidateResponseObservable {
                 }
             }
         }
+    }
+
+    pub fn evaluate(self, matrix: &JacobiMatrix, shift: f64) -> Result<f64, OrdinalError> {
+        if matrix.is_empty() {
+            return Err(OrdinalError::EmptyOperator);
+        }
+        let bands = GreenBands::compute(matrix, shift)?;
+        self.from_green_bands(&bands)
     }
 }
 
@@ -277,9 +299,92 @@ pub fn identity_ordering_key(response: f64) -> f64 {
     response
 }
 
+/// Coefficient Frobenius-norm control key (Stage-0 `norm_baseline` scaffolding).
+///
+/// Computes `sqrt(sum_i a_i^2 + sum_j b_j^2)` from the Jacobi diagonal and
+/// off-diagonal only. Does **not** consult Green / resolvent values and does
+/// **not** freeze the `control_battery` field.
+pub fn coefficient_frobenius_norm_key(matrix: &JacobiMatrix) -> Result<f64, OrdinalError> {
+    if matrix.is_empty() {
+        return Err(OrdinalError::EmptyOperator);
+    }
+    let mut sum_sq = 0.0;
+    for (index, value) in matrix.diagonal().iter().enumerate() {
+        if !value.is_finite() {
+            return Err(OrdinalError::NonFiniteValue { index });
+        }
+        sum_sq += value * value;
+    }
+    for (index, value) in matrix.off_diagonal().iter().enumerate() {
+        if !value.is_finite() {
+            return Err(OrdinalError::NonFiniteValue { index });
+        }
+        sum_sq += value * value;
+    }
+    let norm = sum_sq.sqrt();
+    if !norm.is_finite() {
+        return Err(OrdinalError::NonFiniteValue { index: 0 });
+    }
+    Ok(norm)
+}
+
+/// Gershgorin diagonal-dominance margin (Stage-0 `spectral_gap_baseline` proxy).
+///
+/// For each row `i`, the margin is `a_i - |b_{i-1}| - |b_i|` (missing edges 0).
+/// The key is the minimum margin across rows. Exact coefficient algebra; does
+/// not consult Green values and does not freeze `control_battery`.
+pub fn gershgorin_dominance_margin_key(matrix: &JacobiMatrix) -> Result<f64, OrdinalError> {
+    if matrix.is_empty() {
+        return Err(OrdinalError::EmptyOperator);
+    }
+    let diagonal = matrix.diagonal();
+    let off = matrix.off_diagonal();
+    let mut min_margin = f64::INFINITY;
+    for (index, &a) in diagonal.iter().enumerate() {
+        if !a.is_finite() {
+            return Err(OrdinalError::NonFiniteValue { index });
+        }
+        let left = if index > 0 { off[index - 1].abs() } else { 0.0 };
+        let right = if index < off.len() {
+            off[index].abs()
+        } else {
+            0.0
+        };
+        if !left.is_finite() || !right.is_finite() {
+            return Err(OrdinalError::NonFiniteValue { index });
+        }
+        let margin = a - left - right;
+        if !margin.is_finite() {
+            return Err(OrdinalError::NonFiniteValue { index });
+        }
+        if margin < min_margin {
+            min_margin = margin;
+        }
+    }
+    Ok(min_margin)
+}
+
+/// Deterministic in-place Knuth shuffle with a fixed LCG seed stream.
+///
+/// Stage-0 `shuffled_family` scaffolding: applying this permutation to one side
+/// of a perfectly ordered pair destroys ρ = 1 for nondegenerate length ≥ 3
+/// samples. Not a freeze of split/population discipline.
+pub fn deterministic_shuffle(values: &mut [f64], seed: u64) {
+    let mut state = seed | 1;
+    for i in (1..values.len()).rev() {
+        // Numerical Recipes LCG; deterministic across platforms for Stage-0.
+        state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+        let j = (state as usize) % (i + 1);
+        values.swap(i, j);
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{average_ranks, kendall_tau_b, spearman_rho, strictly_increasing_affine};
+    use super::{
+        average_ranks, deterministic_shuffle, kendall_tau_b, spearman_rho,
+        strictly_increasing_affine,
+    };
 
     #[test]
     fn average_ranks_assign_midranks_for_ties() {
@@ -312,5 +417,24 @@ mod tests {
         let tau = kendall_tau_b(&left, &right).unwrap();
         assert!((spearman_rho(&mapped, &right).unwrap() - rho).abs() < 1.0e-14);
         assert!((kendall_tau_b(&mapped, &right).unwrap() - tau).abs() < 1.0e-14);
+    }
+
+    #[test]
+    fn reverse_ordering_yields_exact_negative_unit_correlations() {
+        let ascending = [1.0, 2.0, 3.0, 4.0, 5.0];
+        let descending = [5.0, 4.0, 3.0, 2.0, 1.0];
+        assert!((spearman_rho(&ascending, &descending).unwrap() + 1.0).abs() < 1.0e-15);
+        assert!((kendall_tau_b(&ascending, &descending).unwrap() + 1.0).abs() < 1.0e-15);
+    }
+
+    #[test]
+    fn deterministic_shuffle_destroys_perfect_spearman_for_length_ge_3() {
+        let original = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        let mut shuffled = original;
+        deterministic_shuffle(&mut shuffled, 0x07d1_1200_u64);
+        assert_ne!(shuffled.to_vec(), original.to_vec());
+        let rho = spearman_rho(&original, &shuffled).unwrap();
+        assert!(rho.is_finite());
+        assert!((rho - 1.0).abs() > 1.0e-12);
     }
 }

@@ -11,6 +11,7 @@ SCOPE="docs/TDI-12.0-SCOPE.md"
 STATUS="docs/TDI-12.0-STATUS.md"
 ORDINAL_DOC="docs/tdi12/TDI-12.0-ORDINAL-RANKING.md"
 FREEZE_TEMPLATE="docs/tdi12/tdi12.0-stage0-freeze.template.json"
+FREEZE_VALIDATOR="scripts/check-tdi12.0-freeze-template.py"
 ORDINAL_SRC="tdi-operator/src/ordinal.rs"
 ORDINAL_TEST="tdi-operator/tests/ordinal_stage0_bootstrap.rs"
 
@@ -20,6 +21,7 @@ for file in \
     "$STATUS" \
     "$ORDINAL_DOC" \
     "$FREEZE_TEMPLATE" \
+    "$FREEZE_VALIDATOR" \
     "$ORDINAL_SRC" \
     "$ORDINAL_TEST" \
     AGENTS.md \
@@ -41,43 +43,15 @@ grep -Fq 'EXACT claim 1 — average ranks for ties' "$ORDINAL_DOC" \
     || fail "ordinal doc missing EXACT claim 1"
 grep -Fq 'EXACT claim 4 — strictly increasing affine invariance' "$ORDINAL_DOC" \
     || fail "ordinal doc missing EXACT claim 4"
+grep -Fq 'EXACT claim 6 — GreenBands wiring identity' "$ORDINAL_DOC" \
+    || fail "ordinal doc missing EXACT claim 6 wiring"
+grep -Fq 'EXACT claim 7 — coefficient-only control keys' "$ORDINAL_DOC" \
+    || fail "ordinal doc missing EXACT claim 7 controls"
 grep -Fq 'No soft-edge / double-scaling statement' "$ORDINAL_DOC" \
     || fail "ordinal doc missing soft-edge non-claim"
 
-# Freeze template must keep execution flags false and fields unresolved.
-python3 - <<'PY'
-import json
-import sys
-from pathlib import Path
-
-path = Path("docs/tdi12/tdi12.0-stage0-freeze.template.json")
-data = json.loads(path.read_text())
-errors = []
-if data.get("status") != "template_unfrozen":
-    errors.append(f"status={data.get('status')!r}")
-if data.get("confirmatory_execution_authorized") is not False:
-    errors.append("confirmatory_execution_authorized must be false")
-if data.get("final_execution_authorized") is not False:
-    errors.append("final_execution_authorized must be false")
-freeze = data.get("freeze")
-if not isinstance(freeze, dict) or not freeze:
-    errors.append("freeze object missing")
-else:
-    for name, field in freeze.items():
-        if not isinstance(field, dict):
-            errors.append(f"{name}: not an object")
-            continue
-        if field.get("status") != "unresolved_blocking":
-            errors.append(f"{name}: status={field.get('status')!r}")
-        if field.get("value") is not None:
-            errors.append(f"{name}: value must be null in Stage-0 template")
-if errors:
-    print("TDI-12 Stage-0 freeze template rejected:", file=sys.stderr)
-    for err in errors:
-        print(f"  - {err}", file=sys.stderr)
-    sys.exit(1)
-print("TDI-12 Stage-0 freeze template: all fields unresolved_blocking; execution flags false")
-PY
+# Freeze template: dedicated fail-closed validator (no invented pins).
+python3 "$FREEZE_VALIDATOR" "$FREEZE_TEMPLATE" --self-test
 
 # Agent contracts must encode the Stage-0 gate.
 grep -Fq '## TDI-12.x Stage-0 bootstrap and stage gate' AGENTS.md \

@@ -12,9 +12,12 @@ It lands:
 - the programme map and Stage-0 status/scope surfaces;
 - a machine-readable freeze **template** whose fields remain
   `unresolved_blocking` until separately evidenced;
+- a dedicated Stage-0 freeze-template validator that refuses invented pins and
+  keeps both execution flags false;
 - exact finite ordinal ranking primitives in `tdi-operator`;
 - candidate Green-band response extractors that consume only generic TDI-10
-  primitives;
+  primitives, with EXACT wiring tests to public `GreenBands`;
+- coefficient-only Stage-0 control keys (norm / Gershgorin margin / shuffle);
 - integrity CI that refuses confirmatory/final execution flags and forbidden
   holdout contact.
 
@@ -28,7 +31,12 @@ It lands:
 | Strictly increasing affine maps preserve Spearman and Kendall | **EXACT** |
 | Identity ordering of a nondegenerate sample against itself yields ρ = τ = 1 | **EXACT** |
 | Dimension-only keys equal operator length and ignore Green values | **EXACT** |
+| Reverse order of distinct values yields Spearman = Kendall = −1 | **EXACT** |
+| Candidate observables wire identically to public TDI-10 `GreenBands` extractors | **EXACT** |
+| Coefficient Frobenius-norm and Gershgorin-margin keys ignore Green values | **EXACT** |
+| Fixed-seed shuffle destroys ρ = τ = 1 on a nondegenerate length≥3 sample | **EXACT** |
 | Candidate Green observables are finite on declared positive Toeplitz tests | **EXACT** finite evaluation under TDI-10 pivot conditions |
+| Stage-0 freeze-template validator refuses invented pins / execution flags | **EXACT** integrity (engineering) |
 
 ## Non-claims / still forbidden
 
@@ -50,7 +58,8 @@ TDI-12.1 non-final synthetic evaluator work may expand only when:
    `docs/TDI-12.0-STATUS.md` are merged;
 2. `docs/tdi12/tdi12.0-stage0-freeze.template.json` remains present with both
    execution flags `false` until a later explicit authorization change;
-3. `scripts/check-tdi12-stage0-bootstrap.sh` passes;
+3. `scripts/check-tdi12.0-freeze-template.py` and
+   `scripts/check-tdi12-stage0-bootstrap.sh` pass;
 4. any evaluator-required freeze fields are resolved by an explicit later PR
    (no silent upgrades).
 
@@ -59,6 +68,11 @@ TDI-12.1 non-final synthetic evaluator work may expand only when:
 - identity ordering;
 - dimension-only ordering;
 - monotone rescaling (strictly increasing affine);
-- tie-heavy full-tie fail-closed rejection.
+- tie-heavy full-tie fail-closed rejection;
+- reverse-order unit anticorrelation;
+- coefficient Frobenius-norm baseline (`norm_baseline` scaffolding);
+- Gershgorin dominance-margin baseline (`spectral_gap_baseline` scaffolding);
+- deterministic shuffled-family control (`shuffled_family` scaffolding).
 
-Spectral-gap / norm / shuffled-family controls remain listed for later stages.
+These control keys do **not** resolve or freeze the `control_battery` template
+field. Confirmatory ordinal-transport comparison remains unauthorized.

@@ -110,7 +110,7 @@ TDI-12.1 synthetic evaluator expansion is forbidden until `bash scripts/check-td
 
 TDI-12 must not invent TDI-8.1 / TDI-9.1 / TDI-11.2 freeze pins, must not contact TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces, and must not treat TDI-9.3.0 as authorization for TDI-9.1 / TDI-9.2. TDI-10.19 remains skipped unless a genuine new EXACT claim is documented.
 
-Before a TDI-12 PR or merge decision, run `bash scripts/check-tdi12-stage0-bootstrap.sh` when that script exists on the branch.
+Before a TDI-12 PR or merge decision, run `bash scripts/check-tdi12-stage0-bootstrap.sh` (which invokes `scripts/check-tdi12.0-freeze-template.py --self-test`) when that script exists on the branch.
 
 ## Scientific boundary
 
