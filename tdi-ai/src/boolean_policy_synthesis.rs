@@ -2,8 +2,10 @@
 //!
 //! This module is deliberately non-final and is exposed only through the
 //! `experimental` feature. It provides a deterministic representation and
-//! evaluator for Boolean action rules without selecting TDI-9.1 predicates,
-//! thresholds, search algorithms, final seeds, or confirmatory material.
+//! evaluator for Boolean action rules, plus pre-search synthesis envelopes,
+//! fail-closed IR mutation, C2↔C3 joint invariants, and complexity dominance
+//! helpers, without selecting TDI-9.1 predicates, thresholds, search
+//! algorithms, final seeds, or confirmatory material.
 
 use core::fmt;
 
@@ -114,6 +116,29 @@ impl BooleanComplexity {
     #[must_use]
     pub const fn depth(self) -> u32 {
         self.depth
+    }
+
+    /// Componentwise weak dominance for multi-objective complexity accounting.
+    ///
+    /// `self` weakly dominates `other` when every component is ≤ the matching
+    /// component of `other` (smaller is better). This is the Pareto preference
+    /// direction used by later TDI-9.3.3 complexity reporting; it does not
+    /// collapse the vector into a scalar score.
+    #[must_use]
+    pub const fn weakly_dominates(self, other: Self) -> bool {
+        self.predicate_reads <= other.predicate_reads
+            && self.logical_ops <= other.logical_ops
+            && self.depth <= other.depth
+    }
+
+    /// Strict Pareto dominance: weakly dominates and differs in at least one
+    /// component.
+    #[must_use]
+    pub const fn strictly_dominates(self, other: Self) -> bool {
+        self.weakly_dominates(other)
+            && (self.predicate_reads < other.predicate_reads
+                || self.logical_ops < other.logical_ops
+                || self.depth < other.depth)
     }
 }
 
@@ -536,6 +561,346 @@ pub fn reference_c3_policy() -> Result<BooleanPolicy, BooleanPolicyError> {
     )
 }
 
+/// Declared pre-search synthesis envelope for TDI-9.3 Boolean candidates.
+///
+/// An envelope bounds predicate arity, rule cardinality, structural complexity
+/// and allowed Boolean connectives before any search method runs. It is an
+/// exact representation/search-boundary object for TDI-9.3.0: it does **not**
+/// freeze observation-to-predicate mappings, thresholds,
+/// `permitted_observation_vector`, or `agent_search_safe_policy_mutation_contract`,
+/// and it does **not** authorize TDI-9.1 pins, TDI-9.2, or a search algorithm.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SynthesisSearchEnvelope {
+    arm: PolicyArm,
+    predicate_count: usize,
+    max_rules: usize,
+    max_predicate_reads: u64,
+    max_logical_ops: u64,
+    max_depth: u32,
+    allow_not: bool,
+    allow_and: bool,
+    allow_or: bool,
+    allow_xor: bool,
+}
+
+impl SynthesisSearchEnvelope {
+    /// Envelope that exactly admits the calibrated C2 reference STOP policy.
+    ///
+    /// Bounds match the documented C2 STOP shape (`5` reads, `4` ops, depth `4`,
+    /// one STOP rule, CONTINUE fallback). `Not`/`Xor` remain disallowed because
+    /// the reference formula uses only `And`/`Or`.
+    #[must_use]
+    pub const fn reference_c2() -> Self {
+        Self {
+            arm: PolicyArm::C2AdaptiveStopping,
+            predicate_count: REFERENCE_C2_PREDICATE_COUNT,
+            max_rules: 1,
+            max_predicate_reads: 5,
+            max_logical_ops: 4,
+            max_depth: 4,
+            allow_not: false,
+            allow_and: true,
+            allow_or: true,
+            allow_xor: false,
+        }
+    }
+
+    /// Envelope that exactly admits the calibrated C3 ordered multi-action policy.
+    ///
+    /// Bounds match the documented C3 rule set (`13` reads, `6` ops, depth `2`,
+    /// seven rules). Only `And` appears in the reference rule expressions.
+    #[must_use]
+    pub const fn reference_c3() -> Self {
+        Self {
+            arm: PolicyArm::C3VerificationRecovery,
+            predicate_count: REFERENCE_C3_PREDICATE_COUNT,
+            max_rules: 7,
+            max_predicate_reads: 13,
+            max_logical_ops: 6,
+            max_depth: 2,
+            allow_not: false,
+            allow_and: true,
+            allow_or: false,
+            allow_xor: false,
+        }
+    }
+
+    #[must_use]
+    pub const fn arm(self) -> PolicyArm {
+        self.arm
+    }
+
+    #[must_use]
+    pub const fn predicate_count(self) -> usize {
+        self.predicate_count
+    }
+
+    #[must_use]
+    pub const fn max_rules(self) -> usize {
+        self.max_rules
+    }
+
+    #[must_use]
+    pub const fn max_predicate_reads(self) -> u64 {
+        self.max_predicate_reads
+    }
+
+    #[must_use]
+    pub const fn max_logical_ops(self) -> u64 {
+        self.max_logical_ops
+    }
+
+    #[must_use]
+    pub const fn max_depth(self) -> u32 {
+        self.max_depth
+    }
+
+    fn admits_connectives(&self, expression: &BooleanExpr) -> Result<(), BooleanPolicyError> {
+        match expression {
+            BooleanExpr::Predicate(index) => {
+                if *index >= self.predicate_count {
+                    return Err(BooleanPolicyError::PredicateOutOfRange {
+                        index: *index,
+                        predicate_count: self.predicate_count,
+                    });
+                }
+                Ok(())
+            }
+            BooleanExpr::Not(inner) => {
+                if !self.allow_not {
+                    return Err(BooleanPolicyError::EnvelopeGrammarForbidden { connective: "not" });
+                }
+                self.admits_connectives(inner)
+            }
+            BooleanExpr::And(left, right) => {
+                if !self.allow_and {
+                    return Err(BooleanPolicyError::EnvelopeGrammarForbidden { connective: "and" });
+                }
+                self.admits_connectives(left)?;
+                self.admits_connectives(right)
+            }
+            BooleanExpr::Or(left, right) => {
+                if !self.allow_or {
+                    return Err(BooleanPolicyError::EnvelopeGrammarForbidden { connective: "or" });
+                }
+                self.admits_connectives(left)?;
+                self.admits_connectives(right)
+            }
+            BooleanExpr::Xor(left, right) => {
+                if !self.allow_xor {
+                    return Err(BooleanPolicyError::EnvelopeGrammarForbidden { connective: "xor" });
+                }
+                self.admits_connectives(left)?;
+                self.admits_connectives(right)
+            }
+        }
+    }
+
+    /// Fail-closed admission of one expression under this envelope.
+    pub fn admits_expression(&self, expression: &BooleanExpr) -> Result<(), BooleanPolicyError> {
+        self.admits_connectives(expression)?;
+        let complexity = expression.complexity();
+        if complexity.predicate_reads() > self.max_predicate_reads
+            || complexity.logical_ops() > self.max_logical_ops
+            || complexity.depth() > self.max_depth
+        {
+            return Err(BooleanPolicyError::EnvelopeComplexityExceeded);
+        }
+        Ok(())
+    }
+
+    /// Fail-closed admission of a full ordered policy under this envelope.
+    pub fn admits_policy(&self, policy: &BooleanPolicy) -> Result<(), BooleanPolicyError> {
+        if policy.arm() != self.arm {
+            return Err(BooleanPolicyError::EnvelopeArmMismatch {
+                expected: self.arm,
+                actual: policy.arm(),
+            });
+        }
+        if policy.rules().len() > self.max_rules {
+            return Err(BooleanPolicyError::EnvelopeRuleCountExceeded {
+                rule_count: policy.rules().len(),
+                max_rules: self.max_rules,
+            });
+        }
+        for rule in policy.rules() {
+            self.admits_expression(rule.expression())?;
+        }
+        let worst = policy.worst_case_complexity()?;
+        if worst.predicate_reads() > self.max_predicate_reads
+            || worst.logical_ops() > self.max_logical_ops
+            || worst.depth() > self.max_depth
+        {
+            return Err(BooleanPolicyError::EnvelopeComplexityExceeded);
+        }
+        Ok(())
+    }
+}
+
+/// Fail-closed structural mutations for TDI-9.3 Boolean policies.
+///
+/// Mutations are exact IR rewrites. Applying one must re-validate arm action
+/// legality and the declared [`SynthesisSearchEnvelope`]. This surface does
+/// **not** pin TDI-9.1 `agent_search_safe_policy_mutation_contract` and does
+/// not authorize TDI-9.2 or empirical policy search.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BooleanPolicyMutation {
+    /// Wrap the selected rule expression in `Not`.
+    NegateRule { rule_index: usize },
+    /// Swap a root `And` with `Or`, or a root `Or` with `And`.
+    SwapRootAndOr { rule_index: usize },
+    /// Remap every occurrence of predicate `from` to `to` inside one rule.
+    RemapPredicate {
+        rule_index: usize,
+        from: usize,
+        to: usize,
+    },
+    /// Drop one ordered rule (order of survivors is preserved).
+    DropRule { rule_index: usize },
+    /// Exchange two rule positions; order is part of policy identity.
+    SwapRules { left: usize, right: usize },
+    /// Replace the fallback action (must remain arm-legal).
+    SetFallback { action: InferenceAction },
+}
+
+fn remap_predicate_indices(expression: &BooleanExpr, from: usize, to: usize) -> BooleanExpr {
+    match expression {
+        BooleanExpr::Predicate(index) if *index == from => BooleanExpr::Predicate(to),
+        BooleanExpr::Predicate(index) => BooleanExpr::Predicate(*index),
+        BooleanExpr::Not(inner) => {
+            BooleanExpr::Not(Box::new(remap_predicate_indices(inner, from, to)))
+        }
+        BooleanExpr::And(left, right) => BooleanExpr::And(
+            Box::new(remap_predicate_indices(left, from, to)),
+            Box::new(remap_predicate_indices(right, from, to)),
+        ),
+        BooleanExpr::Or(left, right) => BooleanExpr::Or(
+            Box::new(remap_predicate_indices(left, from, to)),
+            Box::new(remap_predicate_indices(right, from, to)),
+        ),
+        BooleanExpr::Xor(left, right) => BooleanExpr::Xor(
+            Box::new(remap_predicate_indices(left, from, to)),
+            Box::new(remap_predicate_indices(right, from, to)),
+        ),
+    }
+}
+
+fn swap_root_and_or(expression: &BooleanExpr) -> Result<BooleanExpr, BooleanPolicyError> {
+    match expression {
+        BooleanExpr::And(left, right) => Ok(BooleanExpr::Or(left.clone(), right.clone())),
+        BooleanExpr::Or(left, right) => Ok(BooleanExpr::And(left.clone(), right.clone())),
+        _ => Err(BooleanPolicyError::MutationNotApplicable),
+    }
+}
+
+/// Apply one fail-closed mutation and re-admit the result under `envelope`.
+pub fn mutate_boolean_policy(
+    policy: &BooleanPolicy,
+    envelope: &SynthesisSearchEnvelope,
+    mutation: &BooleanPolicyMutation,
+) -> Result<BooleanPolicy, BooleanPolicyError> {
+    envelope.admits_policy(policy)?;
+    let mut rules = policy.rules().to_vec();
+    let mut fallback = policy.fallback();
+    let rule_count = rules.len();
+    match mutation {
+        BooleanPolicyMutation::NegateRule { rule_index } => {
+            let rule =
+                rules
+                    .get_mut(*rule_index)
+                    .ok_or(BooleanPolicyError::MutationRuleOutOfRange {
+                        rule_index: *rule_index,
+                        rule_count,
+                    })?;
+            *rule = BooleanActionRule::new(
+                BooleanExpr::Not(Box::new(rule.expression().clone())),
+                rule.action(),
+            );
+        }
+        BooleanPolicyMutation::SwapRootAndOr { rule_index } => {
+            let rule =
+                rules
+                    .get_mut(*rule_index)
+                    .ok_or(BooleanPolicyError::MutationRuleOutOfRange {
+                        rule_index: *rule_index,
+                        rule_count,
+                    })?;
+            *rule = BooleanActionRule::new(swap_root_and_or(rule.expression())?, rule.action());
+        }
+        BooleanPolicyMutation::RemapPredicate {
+            rule_index,
+            from,
+            to,
+        } => {
+            let rule =
+                rules
+                    .get_mut(*rule_index)
+                    .ok_or(BooleanPolicyError::MutationRuleOutOfRange {
+                        rule_index: *rule_index,
+                        rule_count,
+                    })?;
+            *rule = BooleanActionRule::new(
+                remap_predicate_indices(rule.expression(), *from, *to),
+                rule.action(),
+            );
+        }
+        BooleanPolicyMutation::DropRule { rule_index } => {
+            if *rule_index >= rules.len() {
+                return Err(BooleanPolicyError::MutationRuleOutOfRange {
+                    rule_index: *rule_index,
+                    rule_count: rules.len(),
+                });
+            }
+            rules.remove(*rule_index);
+        }
+        BooleanPolicyMutation::SwapRules { left, right } => {
+            if *left >= rules.len() || *right >= rules.len() {
+                return Err(BooleanPolicyError::MutationRuleOutOfRange {
+                    rule_index: (*left).max(*right),
+                    rule_count: rules.len(),
+                });
+            }
+            rules.swap(*left, *right);
+        }
+        BooleanPolicyMutation::SetFallback { action } => {
+            fallback = *action;
+        }
+    }
+    let mutated = BooleanPolicy::new(policy.arm(), rules, fallback)?;
+    envelope.admits_policy(&mutated)?;
+    Ok(mutated)
+}
+
+/// C2↔C3 joint invariant helper: embed a C2 STOP bit as C3 `BASE_STOP` under a
+/// well-formed ABSENT verifier row with no cadence and no verify-before-stop.
+///
+/// Returns the C3 action the reference policy must take. Exact claim: the
+/// action is `STOP` iff `base_stop` is true, otherwise `CONTINUE`. This links
+/// the already-calibrated C2 STOP Boolean to C3's ordered ABSENT dispatch
+/// without freezing observation vectors or thresholds.
+#[must_use]
+pub fn reference_c3_absent_action_from_base_stop(base_stop: bool) -> InferenceAction {
+    let mut predicates = [false; REFERENCE_C3_PREDICATE_COUNT];
+    use reference_c3_predicates::{BASE_STOP, VERIFIER_ABSENT};
+    predicates[BASE_STOP] = base_stop;
+    predicates[VERIFIER_ABSENT] = true;
+    debug_assert!(reference_c3_verifier_encoding_well_formed(&predicates));
+    reference_c3_hand_action(&predicates).expect("ABSENT rows with no cadence are actions")
+}
+
+/// Exact joint projection: every C2 predicate vector induces a C3 ABSENT action
+/// equal to STOP iff the C2 hand STOP Boolean is true.
+#[must_use]
+pub fn reference_c2_stop_projects_to_c3_absent_stop(
+    c2_predicates: &[bool; REFERENCE_C2_PREDICATE_COUNT],
+) -> bool {
+    let base_stop = reference_c2_hand_stop(c2_predicates);
+    matches!(
+        reference_c3_absent_action_from_base_stop(base_stop),
+        InferenceAction::Stop
+    ) == base_stop
+}
+
 /// Fail-closed errors for the TDI-9.3 experimental Boolean-policy IR.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BooleanPolicyError {
@@ -551,6 +916,23 @@ pub enum BooleanPolicyError {
         action: InferenceAction,
     },
     ComplexityOverflow,
+    EnvelopeArmMismatch {
+        expected: PolicyArm,
+        actual: PolicyArm,
+    },
+    EnvelopeRuleCountExceeded {
+        rule_count: usize,
+        max_rules: usize,
+    },
+    EnvelopeComplexityExceeded,
+    EnvelopeGrammarForbidden {
+        connective: &'static str,
+    },
+    MutationRuleOutOfRange {
+        rule_index: usize,
+        rule_count: usize,
+    },
+    MutationNotApplicable,
 }
 
 impl fmt::Display for BooleanPolicyError {
@@ -564,10 +946,12 @@ impl std::error::Error for BooleanPolicyError {}
 #[cfg(test)]
 mod tests {
     use super::{
-        BooleanActionRule, BooleanExpr, BooleanPolicy, BooleanPolicyError,
-        REFERENCE_C2_PREDICATE_COUNT, REFERENCE_C3_PREDICATE_COUNT, reference_c2_hand_stop,
-        reference_c2_stop_expression, reference_c2_stop_policy, reference_c3_hand_action,
-        reference_c3_policy, reference_c3_verifier_encoding_well_formed,
+        mutate_boolean_policy, reference_c2_hand_stop, reference_c2_stop_expression,
+        reference_c2_stop_policy, reference_c2_stop_projects_to_c3_absent_stop,
+        reference_c3_absent_action_from_base_stop, reference_c3_hand_action, reference_c3_policy,
+        reference_c3_verifier_encoding_well_formed, BooleanActionRule, BooleanExpr, BooleanPolicy,
+        BooleanPolicyError, BooleanPolicyMutation, SynthesisSearchEnvelope,
+        REFERENCE_C2_PREDICATE_COUNT, REFERENCE_C3_PREDICATE_COUNT,
     };
     use crate::experimental::adaptive_inference::{InferenceAction, PolicyArm};
 
@@ -827,5 +1211,210 @@ mod tests {
         assert_eq!(policy.rules().len(), 7);
         assert_eq!(policy.fallback(), InferenceAction::Continue);
         assert_eq!(policy.arm(), PolicyArm::C3VerificationRecovery);
+    }
+
+    #[test]
+    fn reference_envelopes_admit_calibrated_policies() {
+        let c2 = reference_c2_stop_policy().expect("valid reference C2 policy");
+        let c3 = reference_c3_policy().expect("valid reference C3 policy");
+        SynthesisSearchEnvelope::reference_c2()
+            .admits_policy(&c2)
+            .expect("C2 envelope admits calibrated C2 policy");
+        SynthesisSearchEnvelope::reference_c3()
+            .admits_policy(&c3)
+            .expect("C3 envelope admits calibrated C3 policy");
+    }
+
+    #[test]
+    fn reference_c2_envelope_rejects_xor_and_foreign_arm() {
+        let envelope = SynthesisSearchEnvelope::reference_c2();
+        let xor = BooleanExpr::Xor(
+            Box::new(BooleanExpr::Predicate(0)),
+            Box::new(BooleanExpr::Predicate(1)),
+        );
+        assert!(matches!(
+            envelope.admits_expression(&xor),
+            Err(BooleanPolicyError::EnvelopeGrammarForbidden { connective: "xor" })
+        ));
+        let c3 = reference_c3_policy().expect("valid reference C3 policy");
+        assert!(matches!(
+            envelope.admits_policy(&c3),
+            Err(BooleanPolicyError::EnvelopeArmMismatch {
+                expected: PolicyArm::C2AdaptiveStopping,
+                actual: PolicyArm::C3VerificationRecovery,
+            })
+        ));
+    }
+
+    #[test]
+    fn fail_closed_mutation_drop_rule_stays_inside_c3_envelope() {
+        let policy = reference_c3_policy().expect("valid reference C3 policy");
+        let envelope = SynthesisSearchEnvelope::reference_c3();
+        let mutated = mutate_boolean_policy(
+            &policy,
+            &envelope,
+            &BooleanPolicyMutation::DropRule { rule_index: 0 },
+        )
+        .expect("dropping one C3 rule stays inside envelope bounds");
+        assert_eq!(mutated.rules().len(), 6);
+        envelope
+            .admits_policy(&mutated)
+            .expect("mutated policy remains admitted");
+    }
+
+    #[test]
+    fn fail_closed_mutation_negate_rejected_by_c2_envelope_grammar() {
+        let policy = reference_c2_stop_policy().expect("valid reference C2 policy");
+        let envelope = SynthesisSearchEnvelope::reference_c2();
+        assert!(matches!(
+            mutate_boolean_policy(
+                &policy,
+                &envelope,
+                &BooleanPolicyMutation::NegateRule { rule_index: 0 },
+            ),
+            Err(BooleanPolicyError::EnvelopeGrammarForbidden { connective: "not" })
+        ));
+    }
+
+    #[test]
+    fn fail_closed_mutation_swap_and_or_rejected_by_c3_envelope_grammar() {
+        let policy = reference_c3_policy().expect("valid reference C3 policy");
+        let envelope = SynthesisSearchEnvelope::reference_c3();
+        // Rule 0 is And(Violated, Checkpoint); swapping to Or is outside C3 grammar.
+        assert!(matches!(
+            mutate_boolean_policy(
+                &policy,
+                &envelope,
+                &BooleanPolicyMutation::SwapRootAndOr { rule_index: 0 },
+            ),
+            Err(BooleanPolicyError::EnvelopeGrammarForbidden { connective: "or" })
+        ));
+    }
+
+    #[test]
+    fn fail_closed_mutation_out_of_range_rule_index() {
+        let policy = reference_c2_stop_policy().expect("valid reference C2 policy");
+        let envelope = SynthesisSearchEnvelope::reference_c2();
+        assert!(matches!(
+            mutate_boolean_policy(
+                &policy,
+                &envelope,
+                &BooleanPolicyMutation::DropRule { rule_index: 3 },
+            ),
+            Err(BooleanPolicyError::MutationRuleOutOfRange {
+                rule_index: 3,
+                rule_count: 1,
+            })
+        ));
+    }
+
+    #[test]
+    fn fail_closed_mutation_forbidden_fallback_rejected_by_arm() {
+        let policy = reference_c2_stop_policy().expect("valid reference C2 policy");
+        let envelope = SynthesisSearchEnvelope::reference_c2();
+        assert!(matches!(
+            mutate_boolean_policy(
+                &policy,
+                &envelope,
+                &BooleanPolicyMutation::SetFallback {
+                    action: InferenceAction::Verify,
+                },
+            ),
+            Err(BooleanPolicyError::ActionForbidden {
+                arm: PolicyArm::C2AdaptiveStopping,
+                action: InferenceAction::Verify,
+            })
+        ));
+    }
+
+    #[test]
+    fn c2_c3_joint_absent_projection_holds_on_exhaustive_c2_table() {
+        let mut rows = 0usize;
+        for predicates in every_predicate_vector() {
+            rows += 1;
+            assert!(
+                reference_c2_stop_projects_to_c3_absent_stop(&predicates),
+                "joint projection failed for predicates={predicates:?}"
+            );
+            let base_stop = reference_c2_hand_stop(&predicates);
+            assert_eq!(
+                reference_c3_absent_action_from_base_stop(base_stop),
+                if base_stop {
+                    InferenceAction::Stop
+                } else {
+                    InferenceAction::Continue
+                }
+            );
+        }
+        assert_eq!(rows, 1usize << REFERENCE_C2_PREDICATE_COUNT);
+    }
+
+    #[test]
+    fn c2_c3_joint_complexity_components_are_pareto_incomparable() {
+        let c2 = reference_c2_stop_policy()
+            .expect("valid reference C2 policy")
+            .worst_case_complexity()
+            .expect("finite");
+        let c3 = reference_c3_policy()
+            .expect("valid reference C3 policy")
+            .worst_case_complexity()
+            .expect("finite");
+        // C2: (5,4,4); C3: (13,6,2). Neither weakly dominates the other:
+        // C2 wins on reads/ops, C3 wins on depth.
+        assert!(!c2.weakly_dominates(c3));
+        assert!(!c3.weakly_dominates(c2));
+        assert!(!c2.strictly_dominates(c3));
+        assert!(!c3.strictly_dominates(c2));
+        assert!(c2.predicate_reads() < c3.predicate_reads());
+        assert!(c2.logical_ops() < c3.logical_ops());
+        assert!(c2.depth() > c3.depth());
+    }
+
+    #[test]
+    fn complexity_dominance_is_reflexive_and_monotone_under_rule_append_cost() {
+        let c2 = reference_c2_stop_expression().complexity();
+        assert!(c2.weakly_dominates(c2));
+        assert!(!c2.strictly_dominates(c2));
+
+        let single = BooleanExpr::Predicate(0).complexity();
+        assert!(single.strictly_dominates(c2));
+
+        // Appending an extra rule weakly increases worst-case structural cost.
+        let base = reference_c2_stop_policy().expect("valid");
+        let richer = BooleanPolicy::new(
+            PolicyArm::C2AdaptiveStopping,
+            vec![
+                BooleanActionRule::new(reference_c2_stop_expression(), InferenceAction::Stop),
+                BooleanActionRule::new(BooleanExpr::Predicate(0), InferenceAction::Continue),
+            ],
+            InferenceAction::Continue,
+        )
+        .expect("valid richer C2 policy");
+        let base_cost = base.worst_case_complexity().expect("finite");
+        let richer_cost = richer.worst_case_complexity().expect("finite");
+        assert!(base_cost.strictly_dominates(richer_cost) || base_cost == richer_cost);
+        assert!(base_cost.predicate_reads() <= richer_cost.predicate_reads());
+        assert!(base_cost.logical_ops() <= richer_cost.logical_ops());
+        // Richer has an extra rule, so total reads strictly increase.
+        assert!(base_cost.predicate_reads() < richer_cost.predicate_reads());
+        assert!(base_cost.strictly_dominates(richer_cost));
+    }
+
+    #[test]
+    fn remap_predicate_mutation_inside_c2_envelope_preserves_admission() {
+        let policy = reference_c2_stop_policy().expect("valid reference C2 policy");
+        let envelope = SynthesisSearchEnvelope::reference_c2();
+        // Remap unused identity: TERMINAL (1) -> TERMINAL (1) is a no-op rewrite.
+        let mutated = mutate_boolean_policy(
+            &policy,
+            &envelope,
+            &BooleanPolicyMutation::RemapPredicate {
+                rule_index: 0,
+                from: 1,
+                to: 1,
+            },
+        )
+        .expect("identity remap stays inside envelope");
+        assert_eq!(mutated, policy);
     }
 }
