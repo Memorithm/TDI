@@ -38,4 +38,4 @@ TDI-8.2 remains future human-only. No autonomous confirmation token or confirmat
 
 ## Series orthogonality
 
-TDI-10.x (including TDI-10.12) is orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces.
+TDI-10.x (including TDI-10.13) is orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces.
