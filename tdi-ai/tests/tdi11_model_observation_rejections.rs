@@ -223,6 +223,44 @@ fn rejection_numeric_codes_are_exact_unique_and_stable() {
             ModelObservationRejectionCode::AccountingEnvelopeExceeded,
             0x0602,
         ),
+        (ModelObservationRejectionCode::RegistryEmpty, 0x0701),
+        (
+            ModelObservationRejectionCode::RegistryEmptyChannelName,
+            0x0702,
+        ),
+        (
+            ModelObservationRejectionCode::RegistryDuplicateChannel,
+            0x0703,
+        ),
+        (
+            ModelObservationRejectionCode::RegistryUnknownSourceClass,
+            0x0704,
+        ),
+        (
+            ModelObservationRejectionCode::RegistryUndeclaredChannel,
+            0x0705,
+        ),
+        (ModelObservationRejectionCode::TimingContractEmpty, 0x0706),
+        (
+            ModelObservationRejectionCode::TimingContractChannelCoverageIncomplete,
+            0x0707,
+        ),
+        (
+            ModelObservationRejectionCode::TimingContractUnknownChannel,
+            0x0708,
+        ),
+        (
+            ModelObservationRejectionCode::TimingContractPolicyConflict,
+            0x0709,
+        ),
+        (
+            ModelObservationRejectionCode::EligibilityAssertionBoundaryUnknown,
+            0x070A,
+        ),
+        (
+            ModelObservationRejectionCode::EligibilityPrimaryRequiresStrictPreAssertion,
+            0x070B,
+        ),
     ];
     assert_eq!(ALL_MODEL_OBSERVATION_REJECTION_CODES.len(), expected.len());
     let mut seen = std::collections::BTreeSet::new();

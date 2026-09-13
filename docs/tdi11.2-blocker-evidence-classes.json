@@ -46,22 +46,37 @@
       "status": "unresolved_blocking",
       "required_evidence_class": "exact_observation_channel_registry",
       "evidence_class_definition": "Exact observation channel registry (pre-arm lists source *classes* only).",
-      "blocking_until": "exact channel registry selection",
-      "citations": []
+      "blocking_until": "reviewed pin of ModelObservationChannelRegistry (scaffolding alone is non-authorizing)",
+      "citations": [
+        "docs/TDI-11.2-MODEL-OBSERVATION-REGISTRY.md",
+        "tdi-ai/src/hallucination_model_observation_registry.rs",
+        "scripts/check-tdi11.2-model-observation-registry.sh"
+      ],
+      "non_authorizing_note": "Candidate schema ModelObservationChannelRegistry is present but does not pin this field; channel names remain caller-supplied"
     },
     "exact_observation_timing": {
       "status": "unresolved_blocking",
       "required_evidence_class": "per_channel_event_timing",
       "evidence_class_definition": "Event timing contract per observation channel.",
-      "blocking_until": "per-channel timing contract",
-      "citations": []
+      "blocking_until": "reviewed pin of ModelObservationTimingContract (scaffolding alone is non-authorizing)",
+      "citations": [
+        "docs/TDI-11.2-MODEL-OBSERVATION-REGISTRY.md",
+        "tdi-ai/src/hallucination_model_observation_registry.rs",
+        "scripts/check-tdi11.2-model-observation-registry.sh"
+      ],
+      "non_authorizing_note": "Candidate schema ModelObservationTimingContract is present but does not pin this field"
     },
     "primary_pre_assertion_eligibility": {
       "status": "unresolved_blocking",
       "required_evidence_class": "h11a_pre_assertion_eligibility_rule",
       "evidence_class_definition": "Executable H11-A pre-assertion eligibility rule.",
-      "blocking_until": "H11-A eligibility rule freeze",
-      "citations": []
+      "blocking_until": "reviewed pin of ModelObservationH11AEligibilityRule (scaffolding alone is non-authorizing)",
+      "citations": [
+        "docs/TDI-11.2-MODEL-OBSERVATION-REGISTRY.md",
+        "tdi-ai/src/hallucination_model_observation_registry.rs",
+        "scripts/check-tdi11.2-model-observation-registry.sh"
+      ],
+      "non_authorizing_note": "Candidate classifier ModelObservationH11AEligibilityRule is present but does not pin this field"
     },
     "development_validation_population_derivation": {
       "status": "unresolved_blocking",
@@ -115,7 +130,10 @@
     "TDI-11.2 ModelObservationRejectionCode scaffolding (non-pinning)",
     "TDI-11.2 ModelObservationTraceProvenance scaffolding (non-pinning)",
     "TDI-11.2 ModelObservationResourceAccountingContract scaffolding (non-pinning)",
-    "TDI-12.0 Stage-0 ordinal bootstrap"
+    "TDI-12.0 Stage-0 ordinal bootstrap",
+    "TDI-11.2 ModelObservationChannelRegistry scaffolding (non-pinning)",
+    "TDI-11.2 ModelObservationTimingContract scaffolding (non-pinning)",
+    "TDI-11.2 ModelObservationH11AEligibilityRule scaffolding (non-pinning)"
   ],
   "holdout_boundary": {
     "tdi7_2": "forbidden",

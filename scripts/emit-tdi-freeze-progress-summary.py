@@ -226,18 +226,19 @@ def build_summary() -> dict[str, Any]:
 
     # Cross-series scout verdict (no invented pins this slice).
     scout = {
-        "after_merge": "TDI-11.2 resource accounting / #216 (6af4171)",
+        "after_merge": "TDI-10.20 three-block/interleave / #217 (b543060)",
         "new_8_1_pins": [],
         "new_9_1_pins": [],
         "new_11_2_pins": [],
         "verdict": (
-            "Post-#216 diversification lands TDI-10.20 EXACT three-block "
-            "named-family concatenation and interleaved pair-schedules "
-            "(mixed {U,D,S} permutation closed forms, index-restart "
-            "same-family products, (UD)^k/(US)^k/(DS)^k). Invents no "
-            "TDI-8.1 / 9.1 / 11.2 freeze pins. Existing authorized pins "
-            "stay 3/17, 1/14, 0/12. Execution flags remain hard-false. No "
-            "holdout 7.2/8.2/9.2 contact."
+            "Post-#217 diversification lands TDI-11.2 non-executing "
+            "observation registry / timing / H11-A eligibility scaffolding "
+            "(exact inherited 8-class taxonomy, caller-supplied channel "
+            "registry, per-channel timing contract, exact PrimaryEligible "
+            "iff event<assertion classifier; 0x07xx codes). Distinct from "
+            "#213/#216. Invents no TDI-8.1 / 9.1 / 11.2 freeze pins. "
+            "Existing authorized pins stay 3/17, 1/14, 0/12. Execution "
+            "flags remain hard-false. No holdout 7.2/8.2/9.2 contact."
         ),
     }
 
@@ -252,8 +253,9 @@ def build_summary() -> dict[str, Any]:
         "series": series_out,
         "tdi10_note": (
             "TDI-10.x through 10.20 / TDI-12.0 Stage-0 remain orthogonal. "
-            "TDI-10.20 three-block / interleave does not invent freeze pins "
-            "from operator lemmas or from TDI-11.1 unlimited envelopes."
+            "TDI-11.2 registry/timing/H11-A scaffolding and TDI-10.20 "
+            "three-block / interleave invent no freeze pins from operator "
+            "lemmas or from TDI-11.1 unlimited envelopes."
         ),
     }
 

@@ -26,10 +26,11 @@ Recompute with `sha256sum docs/tdi11.2-model-observation-freeze.json`.
 ## Unresolved field registry (12/12)
 
 All fields remain `unresolved_blocking` with `value: null` and
-`pin_provenance: null`. Non-executing rejection/provenance *candidates* (#213) and
-resource-accounting *candidates* (post-#215) do not supply a reviewed freeze pin.
+`pin_provenance: null`. Non-executing rejection/provenance *candidates* (#213),
+resource-accounting *candidates* (#216), and registry/timing/H11-A eligibility
+*candidates* (post-#217) do not supply a reviewed freeze pin.
 No identifier closed by TDI-10.13/#198, TDI-10.14/#200, TDI-10.15–10.19/#214,
-TDI-10.20 three-block / interleave, TDI-12.0/#210–#215, TDI-11.2/#216, or earlier
+TDI-10.20/#217, TDI-12.0/#210–#215, TDI-11.2/#213/#216, or earlier
 merged tranches supplies a reviewable exact freeze value.
 Required evidence *classes* (not values) are inventoried in
 `docs/tdi11.2-blocker-evidence-classes.json` and rolled into
@@ -42,9 +43,9 @@ Required evidence *classes* (not values) are inventoried in
 | `tokenizer_and_template_identity` | unresolved_blocking | No tokenizer/chat-template identity has been frozen. |
 | `decoding_configuration` | unresolved_blocking | No complete decoding/generation settings have been chosen. |
 | `prompt_serializer_version` | unresolved_blocking | No serializer revision is pinned. |
-| `exact_observation_registry` | unresolved_blocking | Inherited source *classes* are listed in the pre-arm; the exact channel registry is not selected. |
-| `exact_observation_timing` | unresolved_blocking | Event timing per channel is unspecified. |
-| `primary_pre_assertion_eligibility` | unresolved_blocking | H11-A pre-assertion eligibility rule is not frozen as an executable contract. |
+| `exact_observation_registry` | unresolved_blocking | Non-executing candidate `ModelObservationChannelRegistry` now exists (`docs/TDI-11.2-MODEL-OBSERVATION-REGISTRY.md`) but is **not** pinned. Channel names remain caller-supplied; inherited source *classes* alone are not a registry pin. |
+| `exact_observation_timing` | unresolved_blocking | Non-executing candidate `ModelObservationTimingContract` now exists (`docs/TDI-11.2-MODEL-OBSERVATION-REGISTRY.md`) but is **not** pinned. |
+| `primary_pre_assertion_eligibility` | unresolved_blocking | Non-executing candidate `ModelObservationH11AEligibilityRule` now exists (`docs/TDI-11.2-MODEL-OBSERVATION-REGISTRY.md`) but is **not** pinned. |
 | `development_validation_population_derivation` | unresolved_blocking | Dev/Val derivation is not a closed deterministic map. |
 | `resource_accounting_contract` | unresolved_blocking | Non-executing candidate taxonomy `ModelObservationResourceAccountingContract` now exists (`docs/TDI-11.2-MODEL-OBSERVATION-RESOURCE-ACCOUNTING.md`) but is **not** pinned. Numeric envelopes remain caller- or later-freeze items; TDI-11.1 `unlimited_for_development` does not transfer. |
 | `typed_rejection_contract` | unresolved_blocking | Non-executing candidate vocabulary `ModelObservationRejectionCode` now exists (`docs/TDI-11.2-MODEL-OBSERVATION-REJECTIONS.md`) but is **not** pinned. TDI-8.1 / TDI-9.1 rejection pins do not transfer. |
