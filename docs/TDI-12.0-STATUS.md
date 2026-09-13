@@ -63,8 +63,8 @@ Primary surfaces:
 
 Stage 0 invents **no** TDI-8.1 / TDI-9.1 / TDI-11.2 freeze pins. Existing
 authorized pins stay 3/17, 1/14, 0/12. No TDI-7.2 / TDI-8.2 / TDI-9.2 contact.
-TDI-9.3.0 does not authorize TDI-9.1 / TDI-9.2. TDI-10.19 remains skipped
-(no new EXACT claim beyond 10.14–10.18).
+TDI-9.3.0 does not authorize TDI-9.1 / TDI-9.2. TDI-10.19 reverse/cross family
+composition is orthogonal Stage-10 EXACT work and invents no TDI-12.0 pins.
 
 ## Next engineering slice after Stage-0 candidate declarations / Toeplitz controls
 
