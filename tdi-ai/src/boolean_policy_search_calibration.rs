@@ -54,8 +54,8 @@ pub fn reference_c2_search_cases() -> Vec<BooleanPolicySearchCase> {
 /// # Errors
 ///
 /// Propagates fail-closed search/envelope/evaluation errors.
-pub fn evaluate_reference_c2_simple_baselines(
-) -> Result<Vec<BooleanPolicySearchEvidence>, BooleanPolicySearchError> {
+pub fn evaluate_reference_c2_simple_baselines()
+-> Result<Vec<BooleanPolicySearchEvidence>, BooleanPolicySearchError> {
     let envelope = SynthesisSearchEnvelope::reference_c2();
     let candidates = generate_c2_baseline_candidates(&envelope)?;
     evaluate_policy_candidates(&candidates, &reference_c2_search_cases(), &envelope)
@@ -67,16 +67,19 @@ pub fn evaluate_reference_c2_simple_baselines(
 /// # Errors
 ///
 /// Propagates policy construction or search evaluation errors.
-pub fn evaluate_reference_c2_full_policy(
-) -> Result<BooleanPolicySearchEvidence, BooleanPolicySearchError> {
+pub fn evaluate_reference_c2_full_policy()
+-> Result<BooleanPolicySearchEvidence, BooleanPolicySearchError> {
     let envelope = SynthesisSearchEnvelope::reference_c2();
     let policy = reference_c2_stop_policy().map_err(BooleanPolicySearchError::Policy)?;
     let candidates = [BooleanPolicySearchCandidate {
         candidate_id: "tdi9.3-c2-reference-full".to_owned(),
         policy,
     }];
-    let mut evidence = evaluate_policy_candidates(&candidates, &reference_c2_search_cases(), &envelope)?;
-    evidence.pop().ok_or(BooleanPolicySearchError::EmptyCandidateSet)
+    let mut evidence =
+        evaluate_policy_candidates(&candidates, &reference_c2_search_cases(), &envelope)?;
+    evidence
+        .pop()
+        .ok_or(BooleanPolicySearchError::EmptyCandidateSet)
 }
 
 #[cfg(test)]
