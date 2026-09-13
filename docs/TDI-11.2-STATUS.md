@@ -16,6 +16,8 @@ At this status, authorized work is limited to:
 - machine-readable pre-arm state;
 - integrity/CI checks;
 - non-executing adapter/schema scaffolding;
+- non-executing model-observation rejection vocabulary + provenance scaffolding
+  (candidates only; does not pin freeze fields);
 - deterministic tests proving that unresolved model-observation fields keep execution blocked.
 
 ## Current blocking fields
@@ -77,10 +79,16 @@ appears (#199 floors + #202-style cross-check parity with 8.1/9.1).
 
 Machine-readable companions (CI-verified; not pins):
 
+- non-executing rejection + provenance scaffolding (candidate only; **not a pin**):
+  `docs/TDI-11.2-MODEL-OBSERVATION-REJECTIONS.md`,
+  `tdi-ai/src/hallucination_model_observation_rejections.rs`,
+  `scripts/check-tdi11.2-model-observation-rejections.sh`
 - blocker evidence-class inventory: `docs/tdi11.2-blocker-evidence-classes.json`
 - freeze progress summary: `docs/tdi-freeze-progress-summary.json` (includes
   verified ledger digest `dec8bd504a903b0125fdb88f66821940d286358eec6d59ee1a194fc6c63e9421`)
 
-Orthogonal TDI-10.x through TDI-10.18 must not invent those pins or contact
-TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces. TDI-10.19 was skipped.
+Orthogonal TDI-10.x through TDI-10.18 / TDI-12.0 Stage-0 must not invent those
+pins or contact TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces. TDI-10.19 was skipped.
+Post-#212 diversification: rejection/provenance scaffolding remains
+non-authorizing; pins stay **0/12**.
 

@@ -226,15 +226,17 @@ def build_summary() -> dict[str, Any]:
 
     # Cross-series scout verdict (no invented pins this slice).
     scout = {
-        "after_merge": "TDI-10.18 / #204 (460970a)",
+        "after_merge": "TDI-12.0 / #212 (fba5e79)",
         "new_8_1_pins": [],
         "new_9_1_pins": [],
         "new_11_2_pins": [],
         "verdict": (
-            "No newly closed Dev/Val identifier can pin a remaining 8.1, 9.1, "
-            "or 11.2 freeze field. Existing authorized pins stay 3/17, 1/14, "
-            "0/12. TDI-9.3 (#195) remains non-authorizing for 9.1 pins. "
-            "TDI-10.19 skipped (no new EXACT claim beyond 10.14–10.18)."
+            "Post-#212 diversification lands non-executing TDI-11.2 "
+            "ModelObservationRejectionCode + ModelObservationTraceProvenance "
+            "scaffolding only. Candidates do not pin typed_rejection_contract "
+            "or provenance_contract. Existing authorized pins stay 3/17, 1/14, "
+            "0/12. Execution flags remain hard-false. TDI-10.19 skipped; no "
+            "holdout 7.2/8.2/9.2 contact."
         ),
     }
 

@@ -81,27 +81,43 @@
       "status": "unresolved_blocking",
       "required_evidence_class": "model_observation_rejection_vocabulary",
       "evidence_class_definition": "Closed TDI-11.2 model-observation rejection vocabulary. TDI-8.1 / TDI-9.1 rejection pins do not transfer.",
-      "blocking_until": "11.2-specific rejection vocabulary",
-      "citations": []
+      "blocking_until": "reviewed pin of ModelObservationRejectionCode (scaffolding alone is non-authorizing)",
+      "citations": [
+        "docs/TDI-11.2-MODEL-OBSERVATION-REJECTIONS.md",
+        "tdi-ai/src/hallucination_model_observation_rejections.rs",
+        "scripts/check-tdi11.2-model-observation-rejections.sh"
+      ],
+      "non_authorizing_note": "Candidate vocabulary ModelObservationRejectionCode is present but does not pin this field"
     },
     "provenance_contract": {
       "status": "unresolved_blocking",
       "required_evidence_class": "machine_readable_model_trace_provenance",
       "evidence_class_definition": "Machine-readable provenance schema for model traces.",
-      "blocking_until": "model-trace provenance schema",
-      "citations": []
+      "blocking_until": "reviewed pin of ModelObservationTraceProvenance (scaffolding alone is non-authorizing)",
+      "citations": [
+        "docs/TDI-11.2-MODEL-OBSERVATION-REJECTIONS.md",
+        "tdi-ai/src/hallucination_model_observation_rejections.rs",
+        "scripts/check-tdi11.2-model-observation-rejections.sh"
+      ],
+      "non_authorizing_note": "Candidate schema ModelObservationTraceProvenance is present but does not pin this field"
     }
   },
   "non_authorizing_surfaces": [
     "TDI-10.x operator lemmas",
     "TDI-8.1 SymbolicRejectionCode pin",
     "TDI-9.1 ReferenceRejectionCode pin",
-    "TDI-9.3 Boolean policy synthesis"
+    "TDI-9.3 Boolean policy synthesis",
+    "TDI-11.2 ModelObservationRejectionCode scaffolding (non-pinning)",
+    "TDI-11.2 ModelObservationTraceProvenance scaffolding (non-pinning)",
+    "TDI-12.0 Stage-0 ordinal bootstrap"
   ],
   "holdout_boundary": {
     "tdi7_2": "forbidden",
     "tdi8_2": "forbidden",
     "tdi9_2": "forbidden",
-    "execution_flags": ["model_execution_authorized must remain false", "final_execution_authorized must remain false"]
+    "execution_flags": [
+      "model_execution_authorized must remain false",
+      "final_execution_authorized must remain false"
+    ]
   }
 }
