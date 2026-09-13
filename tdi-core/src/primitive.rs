@@ -1,5 +1,6 @@
 use crate::{
-    Action, ExploreError, SignatureError, State, StateError, TdiSignature, TransitionSystem, explore,
+    Action, ExploreError, SignatureError, State, StateError, TdiSignature, TransitionSystem,
+    explore,
 };
 
 /// Erreurs produites par l'API de primitive prospective TDI.
@@ -150,12 +151,9 @@ mod tests {
     #[test]
     fn exposes_the_canonical_prospective_signature() {
         let zero = State::new(0b00, 2).expect("valid state");
-        let signature = prospective_signature(
-            &branching_system(),
-            zero,
-            &[Action::Noop, Action::Noop],
-        )
-        .expect("signature succeeds");
+        let signature =
+            prospective_signature(&branching_system(), zero, &[Action::Noop, Action::Noop])
+                .expect("signature succeeds");
 
         assert_eq!(signature.reachable_profile(), &[2, 1]);
         assert_eq!(signature.path_profile(), &[2, 2]);
@@ -183,8 +181,14 @@ mod tests {
 
         assert_eq!(comparison.reference_initial(), zero);
         assert_eq!(comparison.intervened_initial(), one);
-        assert_eq!(comparison.reference_signature().reachable_profile(), &[2, 1]);
-        assert_eq!(comparison.intervened_signature().reachable_profile(), &[1, 2]);
+        assert_eq!(
+            comparison.reference_signature().reachable_profile(),
+            &[2, 1]
+        );
+        assert_eq!(
+            comparison.intervened_signature().reachable_profile(),
+            &[1, 2]
+        );
         assert_eq!(
             comparison.intervened_signature().return_profile()[1],
             ExactRatio::new(1, 2).expect("valid ratio")
