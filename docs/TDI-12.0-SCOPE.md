@@ -58,7 +58,7 @@ Stage 0 does **not**:
 - pin any TDI-8.1 / TDI-9.1 / TDI-11.2 freeze field;
 - contact TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces;
 - claim ordinal universality, soft-edge theorems, or Riemann consequences;
-- invent a TDI-10.19 EXACT claim.
+- treat TDI-10.19 reverse/cross composition as a TDI-12 pin or confirmatory authorization.
 
 ## Stage gate toward TDI-12.1
 
