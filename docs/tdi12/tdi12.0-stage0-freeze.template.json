@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "kind": "tdi12_0_stage0_freeze",
+  "status": "template_unfrozen",
+  "confirmatory_execution_authorized": false,
+  "final_execution_authorized": false,
+  "allowed_domains": [
+    "Development",
+    "Validation"
+  ],
+  "notes": [
+    "Stage-0 template only. Every scientific field stays unresolved_blocking.",
+    "Merging this template does not freeze TDI-12.0 and does not authorize 12.4.",
+    "Do not invent pins for TDI-8.1 / TDI-9.1 / TDI-11.2 from this surface.",
+    "Holdouts TDI-7.2 / TDI-8.2 / TDI-9.2 remain forbidden contact."
+  ],
+  "freeze": {
+    "operator_population_families": {
+      "status": "unresolved_blocking",
+      "value": null
+    },
+    "response_observable_registry": {
+      "status": "unresolved_blocking",
+      "value": null,
+      "non_authorizing_candidates": [
+        "MidDiagonalGreen",
+        "GreenTrace",
+        "MeanAbsOffDiagonalGreen"
+      ]
+    },
+    "ranking_metric": {
+      "status": "unresolved_blocking",
+      "value": null,
+      "non_authorizing_candidates": [
+        "spearman_average_ranks",
+        "kendall_tau_b_companion"
+      ]
+    },
+    "tie_policy": {
+      "status": "unresolved_blocking",
+      "value": null,
+      "non_authorizing_candidates": [
+        "average_ranks_midranks",
+        "fail_closed_full_ties"
+      ]
+    },
+    "normalization_contract": {
+      "status": "unresolved_blocking",
+      "value": null
+    },
+    "split_discipline": {
+      "status": "unresolved_blocking",
+      "value": null
+    },
+    "development_validation_population_derivation": {
+      "status": "unresolved_blocking",
+      "value": null
+    },
+    "control_battery": {
+      "status": "unresolved_blocking",
+      "value": null,
+      "required_named_controls": [
+        "identity_ordering",
+        "dimension_only_ordering",
+        "monotone_rescaling",
+        "tie_heavy_adversarial",
+        "spectral_gap_baseline",
+        "norm_baseline",
+        "shuffled_family"
+      ]
+    },
+    "typed_rejection_contract": {
+      "status": "unresolved_blocking",
+      "value": null
+    },
+    "provenance_contract": {
+      "status": "unresolved_blocking",
+      "value": null
+    }
+  }
+}

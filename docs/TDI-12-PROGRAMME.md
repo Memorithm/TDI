@@ -14,8 +14,8 @@ After competent normalization and uncertainty accounting, ordinal transport is n
 
 ## Stage map
 
-- **TDI-12.0** — freeze operator populations, response observables, ranking metric, ties, normalization and split discipline.
-- **TDI-12.1** — deterministic exact/synthetic operator evaluator using generic TDI-10 primitives only.
+- **TDI-12.0** — Stage-0 bootstrap: declare freeze-template fields (populations, response observables, ranking metric, ties, normalization, split discipline) without pinning scientific values; land exact ordinal ranking primitives and candidate Green-band response extractors over generic TDI-10 primitives; keep confirmatory execution flags false.
+- **TDI-12.1** — deterministic exact/synthetic operator evaluator using generic TDI-10 primitives only (authorized only after TDI-12.0 bootstrap integrity passes and any required freeze fields for that evaluator slice are explicitly resolved).
 - **TDI-12.2** — development/validation comparison of calibration transport vs ordinal transport.
 - **TDI-12.3** — perturbation and counterexample search.
 - **TDI-12.4** — separately gated confirmatory population if earlier stages justify it.
@@ -31,6 +31,10 @@ Support requires materially stronger held-out ordinal stability than calibrated-
 ## Ecosystem boundary
 
 TDI-10 supplies generic operator/resolvent primitives. RiemannBench may provide non-final source populations only after Riemann-specific semantics are stripped. No TDI-12 result implies anything about the Riemann hypothesis.
+
+## Holdout / execution boundary
+
+TDI-12 Stage 0 must not contact TDI-7.2, TDI-8.2, or TDI-9.2 surfaces. Confirmatory and final execution flags in the Stage-0 freeze template remain `false`. Merging Stage-0 code does **not** invent freeze pins for TDI-8.1 / TDI-9.1 / TDI-11.2.
 
 ## Non-claims
 

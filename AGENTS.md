@@ -94,18 +94,37 @@ TDI-11.0/11.1/11.2 may not contain a final runner, final seed list, final datase
 
 Before a TDI-11 PR or merge decision, run `bash scripts/check-tdi11-bootstrap.sh` when that script exists on the branch. For TDI-11.2 work, also run `bash scripts/check-tdi11.2-prearm.sh` when that script exists. For TDI-11.2 readiness, also run `bash scripts/check-tdi11.2-readiness.sh` when that script exists.
 
+## TDI-12.x Stage-0 bootstrap and stage gate
+
+TDI-12.x is the distinct ordinal-universality-of-operator-responses research line. Before TDI-12 work, read in order:
+
+1. `docs/TDI-12-PROGRAMME.md`;
+2. `docs/TDI-12.0-SCOPE.md`;
+3. `docs/TDI-12.0-STATUS.md`;
+4. `docs/tdi12/TDI-12.0-ORDINAL-RANKING.md`;
+5. `docs/tdi12/tdi12.0-stage0-freeze.template.json`.
+
+TDI-12.0 is an active Stage-0 bootstrap and is **not frozen**. Confirmatory and final execution flags in the Stage-0 freeze template must remain `false`. Agents may land exact ordinal ranking primitives, candidate Green-band response extractors over generic TDI-10 primitives, freeze-template/schema integrity, and deterministic Stage-0 controls only.
+
+TDI-12.1 synthetic evaluator expansion is forbidden until `bash scripts/check-tdi12-stage0-bootstrap.sh` passes on the relevant branch/main state and any evaluator-required freeze fields are explicitly resolved by a later gated change. No TDI-12 confirmatory population, final seed list, final dataset, or final result payload may exist during Stage 0.
+
+TDI-12 must not invent TDI-8.1 / TDI-9.1 / TDI-11.2 freeze pins, must not contact TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces, and must not treat TDI-9.3.0 as authorization for TDI-9.1 / TDI-9.2. TDI-10.19 remains skipped unless a genuine new EXACT claim is documented.
+
+Before a TDI-12 PR or merge decision, run `bash scripts/check-tdi12-stage0-bootstrap.sh` when that script exists on the branch.
+
 ## Scientific boundary
 
-Frozen TDI-1 through TDI-6.x results remain scoped to their original finite-state experiments. They are not Transformer/attention results. TDI-7.x is the distinct attention/memory research programme. TDI-8.x is a separate recurrent/associative architecture programme. TDI-9.x is a separate adaptive-inference dynamics programme. TDI-10.x is a separate generic operator/resolvent programme. TDI-11.x is a separate hallucination-dynamics and control programme.
+Frozen TDI-1 through TDI-6.x results remain scoped to their original finite-state experiments. They are not Transformer/attention results. TDI-7.x is the distinct attention/memory research programme. TDI-8.x is a separate recurrent/associative architecture programme. TDI-9.x is a separate adaptive-inference dynamics programme. TDI-10.x is a separate generic operator/resolvent programme. TDI-11.x is a separate hallucination-dynamics and control programme. TDI-12.x is a separate ordinal-universality-of-operator-responses programme (Stage-0 bootstrap; not frozen).
 
 Preserve preregistration, untouched or future-derived final-evaluation lineage, frozen negative/null results, calibration limitations, and explicit boundaries between scientific reference evidence and downstream optimization.
 
 ADA is a semantic discovery/falsification partner, ITD Simulator is a comparative structural-diagnostics harness, Forge is a downstream candidate-search engine only after leak-safe bounded contracts exist, SciRust is a promotion target for reusable general primitives, NNIS owns later NVIDIA execution evidence, ElasticXxx owns production runtime/resource actuation, FLAT-ATTENTION remains an execution/comparison target, and SLHAv2 remains the primary owner of DA-LUC-like KV representation work. TDI remains the source of truth for its frozen experimental lineage.
 
-No TDI-8, TDI-9, or TDI-11 result may be described as a proprietary architecture reconstruction, Transformer replacement, superiority to a named commercial model, strict end-to-end O(N), constant total memory, tokenizer elimination, cognitive transparency, universal hallucination elimination, guaranteed factuality, production safety, or GPU/Jetson speedup without separate direct evidence.
+No TDI-8, TDI-9, TDI-11, or TDI-12 result may be described as a proprietary architecture reconstruction, Transformer replacement, superiority to a named commercial model, strict end-to-end O(N), constant total memory, tokenizer elimination, cognitive transparency, universal hallucination elimination, guaranteed factuality, production safety, or GPU/Jetson speedup without separate direct evidence.
 
 Required CI must be green on the exact PR head before merge.
 
 Reread the roadmap at every session start, before preregistration/evaluator/final-evaluation changes, before cross-repository scientific work, after scientific-strategy changes, and before relevant PR/merge decisions.
 
 Do not merge the roadmap itself into `main` unless the user explicitly requests it.
+
