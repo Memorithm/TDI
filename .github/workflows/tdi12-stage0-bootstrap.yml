@@ -1,0 +1,52 @@
+name: TDI-12 Stage-0 ordinal bootstrap
+
+on:
+  pull_request:
+    paths:
+      - "tdi-operator/src/lib.rs"
+      - "tdi-operator/src/ordinal.rs"
+      - "tdi-operator/src/green.rs"
+      - "tdi-operator/src/jacobi.rs"
+      - "tdi-operator/tests/ordinal_stage0_bootstrap.rs"
+      - "docs/TDI-12-PROGRAMME.md"
+      - "docs/TDI-12.0-SCOPE.md"
+      - "docs/TDI-12.0-STATUS.md"
+      - "docs/tdi12/**"
+      - "scripts/check-tdi12-stage0-bootstrap.sh"
+      - ".github/workflows/tdi12-stage0-bootstrap.yml"
+      - "AGENTS.md"
+      - ".github/copilot-instructions.md"
+  push:
+    branches:
+      - main
+    paths:
+      - "tdi-operator/src/lib.rs"
+      - "tdi-operator/src/ordinal.rs"
+      - "tdi-operator/src/green.rs"
+      - "tdi-operator/src/jacobi.rs"
+      - "tdi-operator/tests/ordinal_stage0_bootstrap.rs"
+      - "docs/TDI-12-PROGRAMME.md"
+      - "docs/TDI-12.0-SCOPE.md"
+      - "docs/TDI-12.0-STATUS.md"
+      - "docs/tdi12/**"
+      - "scripts/check-tdi12-stage0-bootstrap.sh"
+      - ".github/workflows/tdi12-stage0-bootstrap.yml"
+      - "AGENTS.md"
+      - ".github/copilot-instructions.md"
+
+permissions:
+  contents: read
+
+jobs:
+  stage0-bootstrap:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+      - name: Qualify TDI-12 Stage-0 ordinal bootstrap
+        run: bash scripts/check-tdi12-stage0-bootstrap.sh

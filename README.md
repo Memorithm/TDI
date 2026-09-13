@@ -6,7 +6,7 @@
 
 **A deterministic Rust research programme studying which structural and dynamical descriptions of a system retain predictive information beyond simple scalar summaries.**
 
-TDI develops falsifiable experiments, preregistered decision rules, deterministic evaluators and reproducible evidence. The programme started with exact finite-state dynamics and has expanded into attention / memory, bounded recurrent-associative architectures, adaptive inference dynamics, generic operator / resolvent research, and hallucination dynamics / control.
+TDI develops falsifiable experiments, preregistered decision rules, deterministic evaluators and reproducible evidence. The programme started with exact finite-state dynamics and has expanded into attention / memory, bounded recurrent-associative architectures, adaptive inference dynamics, generic operator / resolvent research, hallucination dynamics / control, and ordinal universality of operator responses.
 
 > The illustration above is a visual introduction. The status table below is the authoritative research map for the repository.
 
@@ -34,6 +34,7 @@ The result is a growing body of **code + preregistration + evaluator + provenanc
 | **TDI-9.x** | **Autonomous Adaptive Inference Dynamics Research Programme** | 🟠 Active | C0/C1/C2/C3 policy ladder plus **TDI-9.3 Boolean Policy Synthesis**, which represents and later searches explicit Boolean action policies over frozen leakage-safe trajectory predicates. |
 | **TDI-10.x** | **Operator / Resolvent Research** | 🟠 Active | Generic Jacobi / tridiagonal operator work on shifted resolvents, Schur cavities, Green functions, finite transport and explicitly classified asymptotic claims. |
 | **TDI-11.x** | **Hallucination Dynamics & Control Research Programme** | 🟠 Active bootstrap | Studies supported vs unsupported generation in fully specified worlds, measurable precursors, causal perturbations, risk estimation and bounded adaptive verification / recovery / abstention. |
+| **TDI-12.x** | **Ordinal Universality of Operator Responses** | 🟠 Active Stage-0 bootstrap | Tests whether ordinal/rank relations among resolvent and Green response observables transport more stably than absolute calibration across dimension, coefficient family and perturbation regime. |
 
 ## Current research frontier
 
@@ -77,6 +78,15 @@ The latest `main` state includes TDI-10.5 (**REFUTED** pointwise-subunit decay),
 TDI-11 deliberately separates **detection**, **localization**, **diagnosis**, **intervention** and **decision**. Its working controller label is **HAC — Hallucination Adaptive Controller**, with candidate bounded actions such as `CONTINUE`, `VERIFY`, `BACKTRACK`, `RECOVER`, `EMIT` and `ABSTAIN`. HAC is a working label, not a novelty or universality claim.
 
 TDI-11.0 is an active bootstrap/scope stage and is **not frozen**. TDI-11.1 evaluator implementation is not authorised until an explicit preregistration and implementation gate freeze the taxonomy, controlled-world oracle, allowed observables, interventions, resource accounting, split discipline, metrics and provenance rules. See [`TDI-11.0 — Hallucination Dynamics Scope and Stage Gate`](docs/TDI-11.0-HALLUCINATION-DYNAMICS-SCOPE.md).
+
+### TDI-12.x — Ordinal Universality of Operator Responses
+
+[`TDI-12.x`](docs/TDI-12-PROGRAMME.md) asks whether rank/order information among finite Jacobi / resolvent / Green response observables is a more transportable object than absolute calibration.
+
+TDI-12.0 is an **active Stage-0 bootstrap** and is **not frozen**. It lands exact average-rank / Spearman / Kendall τ-b primitives, candidate Green-band response extractors over generic TDI-10 primitives, Stage-0 controls (identity, dimension-only, monotone affine, full-tie fail-closed), and a machine-readable freeze template whose scientific fields remain `unresolved_blocking` with confirmatory/final execution flags **false**. See [`docs/TDI-12.0-SCOPE.md`](docs/TDI-12.0-SCOPE.md) and [`docs/TDI-12.0-STATUS.md`](docs/TDI-12.0-STATUS.md).
+
+Stage 0 does not authorize confirmatory populations, does not invent TDI-8.1 / TDI-9.1 / TDI-11.2 freeze pins, and does not contact TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces.
+
 
 ## What the completed programme has taught us
 

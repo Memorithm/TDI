@@ -41,6 +41,13 @@ TDI-11.0/11.1/11.2 may not create a final runner, final seed list, final dataset
 
 When `scripts/check-tdi11-bootstrap.sh` exists, run it before a TDI-11 pull request or merge decision. For TDI-11.2 work, also run `bash scripts/check-tdi11.2-prearm.sh` when available. For TDI-11.2 readiness, also run `bash scripts/check-tdi11.2-readiness.sh` when available.
 
+For TDI-12.x work, read `docs/TDI-12-PROGRAMME.md`, `docs/TDI-12.0-SCOPE.md`, `docs/TDI-12.0-STATUS.md`, `docs/tdi12/TDI-12.0-ORDINAL-RANKING.md`, and `docs/tdi12/tdi12.0-stage0-freeze.template.json` before ordinal-ranking, response-observable, freeze-template, or scientific changes.
+
+TDI-12.0 is Stage-0 bootstrap and is not frozen. Keep `confirmatory_execution_authorized` and `final_execution_authorized` false. Do not invent TDI-8.1 / TDI-9.1 / TDI-11.2 pins, do not contact TDI-7.2 / TDI-8.2 / TDI-9.2, and do not treat TDI-9.3.0 as authorization for TDI-9.1 / TDI-9.2.
+
+When `scripts/check-tdi12-stage0-bootstrap.sh` exists, run it before a TDI-12 pull request or merge decision.
+
+
 Preserve preregistration, untouched or future-derived final-evaluation lineage, frozen negative/null results, calibration limitations, explicit matched-resource controls, and the separation between scientific reference evidence and downstream optimization. Architecture and policy labels are hypotheses, not novelty or performance claims.
 
 Do not claim proprietary architecture reconstruction, Transformer replacement, superiority to a named commercial model, strict end-to-end O(N), constant total memory, tokenizer elimination, cognitive transparency, universal hallucination elimination, guaranteed factuality, production safety, or GPU/Jetson speedup without separate direct evidence.
