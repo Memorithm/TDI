@@ -156,6 +156,23 @@ def validate_readiness(
     if re.search(r"^- Status:.*\*\*(frozen|complete|authorized)", status_text, re.M):
         fail("STATUS silently upgraded while TDI-11.2 remains pre-arm")
 
+    # Cross-check STATUS-reported N/M pinned against freeze JSON (parity with 8.1/9.1).
+    json_pinned = sum(
+        1 for name in REQUIRED_FIELDS if fields[name].get("status") == "pinned"
+    )
+    json_total = len(REQUIRED_FIELDS)
+    matches = re.findall(r"(\d+)/(\d+)\s+pinned", status_text)
+    if not matches:
+        fail("STATUS must report an N/M pinned count (expected 0/12 while unresolved)")
+    status_pinned, status_total = map(int, matches[-1])
+    if status_pinned != json_pinned or status_total != json_total:
+        fail(
+            f"STATUS pin count {status_pinned}/{status_total} disagrees with freeze "
+            f"JSON {json_pinned}/{json_total}"
+        )
+    if json_pinned != 0:
+        fail("invented pins reached STATUS/JSON cross-check unexpectedly")
+
 
 def find_forbidden_surfaces(root: Path) -> list[str]:
     matches: list[str] = []
@@ -246,6 +263,7 @@ def main() -> int:
 
     print(f"TDI-11.2 unresolved ledger digest: {digest}")
     print("TDI-11.2 unresolved fields: 12/12")
+    print("TDI-11.2 STATUS↔JSON pin-count cross-check: 0/12")
     print("TDI-11.2 invented pins: NONE")
     print("TDI-11.2 model_execution_authorized: false")
     print("TDI-11.2 forbidden surfaces: ABSENT")
