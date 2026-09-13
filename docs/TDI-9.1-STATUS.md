@@ -39,4 +39,4 @@ No item authorizes TDI-9.2 execution.
 
 ## Series orthogonality
 
-TDI-10.x (including TDI-10.9) is orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces.
+TDI-10.x (including TDI-10.10) is orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces.
