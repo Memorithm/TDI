@@ -7,7 +7,16 @@ git fetch origin agent/ecosystem-roadmap && \
 git show origin/agent/ecosystem-roadmap:.agent/TDI_ECOSYSTEM_ROADMAP.yaml
 ```
 
-If the roadmap cannot be fetched or read, fail closed for major scientific-promotion, final-evaluation, preregistration, cross-repository, or merge decisions. Read-only diagnosis is allowed.
+For TDI-9.3 Boolean-policy representation, Boolean synthesis/search, BooleanLab comparison, or ElasticXxx Boolean-policy integration work, also read:
+
+```bash
+git fetch origin agent/ecosystem-roadmap && \
+git show origin/agent/ecosystem-roadmap:.agent/BOOLEAN_ELASTICITY_INTEGRATION.yaml
+```
+
+The canonical production-runtime Boolean roadmap is owned by `Memorithm/ElasticXxx` at `agent/ecosystem-roadmap:.agent/BOOLEAN_ELASTICITY_ROADMAP.yaml`. TDI owns scientific policy semantics and lineage; ElasticXxx owns generic production guard/runtime semantics. Cross-repository reuse must use versioned adapters/contracts rather than silently copying implementations.
+
+If the roadmap or an applicable integration overlay cannot be fetched or read, fail closed for major scientific-promotion, final-evaluation, preregistration, Boolean cross-repository integration, or merge decisions. Read-only diagnosis is allowed.
 
 The roadmap is persistent coordination state, not permission to override merged repository evidence. If it conflicts with a merged protocol, immutable manifest, frozen result record, or current default-branch state, fail closed for the affected scientific decision and repair the roadmap separately. Do not inspect a forbidden historical holdout merely to resolve a roadmap inconsistency.
 
@@ -62,6 +71,8 @@ TDI-9 development is agent-first: agents may autonomously propose, implement, mu
 Before a TDI-9 PR or merge decision, run `bash scripts/check-tdi9-bootstrap.sh` when that script exists on the branch.
 
 For TDI-9.3 Boolean-policy representation work, also run `bash scripts/check-tdi9.3-representation-calibration.sh` when that script exists. That gate covers C2 STOP and C3 ordered multi-action representation calibration, plus synthesis envelopes, fail-closed mutation, C2↔C3 joint invariants, and complexity dominance. TDI-9.3 surfaces must not pin TDI-9.1 freeze fields or authorize TDI-9.2.
+
+TDI-9.3 agents must additionally follow the Boolean elasticity integration overlay. The implementation sequence is: inventory native TDI Boolean surfaces; define a versioned adapter to the ElasticXxx representation when that public API is qualified; differential-test TDI-native versus Elastic semantics including explicit `Unknown`; benchmark only on permitted non-final surfaces; then promote only genuinely generic evidence-backed primitives. TDI-specific ordered actions, synthesis constraints, preregistration semantics, and final-evaluation boundaries remain in TDI. Runtime integration never counts as scientific confirmation.
 
 ## TDI-11.x bootstrap and stage gate
 
@@ -124,7 +135,6 @@ No TDI-8, TDI-9, TDI-11, or TDI-12 result may be described as a proprietary arch
 
 Required CI must be green on the exact PR head before merge.
 
-Reread the roadmap at every session start, before preregistration/evaluator/final-evaluation changes, before cross-repository scientific work, after scientific-strategy changes, and before relevant PR/merge decisions.
+Reread the roadmap and applicable overlays at every session start, before preregistration/evaluator/final-evaluation changes, before cross-repository scientific or Boolean integration work, after scientific-strategy changes, and before relevant PR/merge decisions.
 
-Do not merge the roadmap itself into `main` unless the user explicitly requests it.
-
+Do not merge the roadmap or integration overlays themselves into `main` unless the user explicitly requests it.
