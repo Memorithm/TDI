@@ -29,8 +29,8 @@ All fields remain `unresolved_blocking` with `value: null` and
 `pin_provenance: null`. Non-executing rejection/provenance *candidates* (#213) and
 resource-accounting *candidates* (post-#215) do not supply a reviewed freeze pin.
 No identifier closed by TDI-10.13/#198, TDI-10.14/#200, TDI-10.15–10.19/#214,
-TDI-12.0/#210–#215, or earlier merged tranches supplies a reviewable exact freeze
-value.
+TDI-10.20 three-block / interleave, TDI-12.0/#210–#215, TDI-11.2/#216, or earlier
+merged tranches supplies a reviewable exact freeze value.
 Required evidence *classes* (not values) are inventoried in
 `docs/tdi11.2-blocker-evidence-classes.json` and rolled into
 `docs/tdi-freeze-progress-summary.json`.
