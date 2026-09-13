@@ -9,7 +9,6 @@ use super::adaptive_inference::InferenceAction;
 use super::boolean_policy_search::{
     BooleanPolicySearchCandidate, BooleanPolicySearchCase, BooleanPolicySearchError,
     BooleanPolicySearchEvidence, evaluate_policy_candidates, generate_c2_baseline_candidates,
-    policy_search_pareto_indices,
 };
 use super::boolean_policy_synthesis::{
     REFERENCE_C2_PREDICATE_COUNT, SynthesisSearchEnvelope, reference_c2_hand_stop,
@@ -85,6 +84,7 @@ pub fn evaluate_reference_c2_full_policy()
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::experimental::boolean_policy_search::policy_search_pareto_indices;
 
     #[test]
     fn calibration_table_is_complete_and_independently_labelled() {
