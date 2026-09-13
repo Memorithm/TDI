@@ -19,6 +19,8 @@ for file in \
     "$FREEZE" \
     "$STATUS" \
     "$PLAN" \
+    docs/tdi8.1-blocker-evidence-classes.json \
+    docs/tdi-freeze-progress-summary.json \
     docs/TDI-8.1-A3-ADAPTER-PREFLIGHT.md \
     docs/TDI-8.1-SYMBOLIC-REJECTIONS.md \
     docs/TDI-8.1-PERCENTILE-INTERVAL-PREFLIGHT.md \
@@ -193,4 +195,11 @@ else
     printf 'TDI-8.1 confirmatory readiness: NOT READY (freeze incomplete)\n'
 fi
 printf 'TDI-8.2 executable/token/result surface: ABSENT\n'
+
+printf '\n===== FREEZE PROGRESS SUMMARY + EVIDENCE-CLASS INVENTORY =====\n'
+test -s docs/tdi8.1-blocker-evidence-classes.json || fail "missing blocker evidence-class inventory"
+test -s docs/tdi-freeze-progress-summary.json || fail "missing freeze progress summary"
+python3 scripts/emit-tdi-freeze-progress-summary.py --check
+grep -Fq 'required_evidence_class' docs/tdi8.1-blocker-evidence-classes.json \
+    || fail "evidence-class inventory must declare required_evidence_class entries"
 printf 'TDI-8.1 readiness integrity gate: PASS\n'

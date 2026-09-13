@@ -67,14 +67,20 @@ already enforce this fail-closed posture.
 
 Fail-closed reminder (unchanged authorizations): both execution flags remain
 **false** until a separately reviewed freeze pins all twelve blocking fields.
-Post-#203 scout found no model/adapter/tokenizer identifier that can be pinned;
+Post-#204 scout found no model/adapter/tokenizer identifier that can be pinned;
 **0/12 pinned** (STATUS↔freeze JSON pin-count cross-check in readiness). All
 12 fields stay `unresolved_blocking`. The readiness gate fail-closes if
 `model_execution_authorized` is true while any field is `unresolved_blocking`,
 if any of the 12 fields is invented as pinned, if STATUS↔JSON pin counts
-diverge, or if a forbidden surface appears (#199 floors + #202-style
-cross-check parity with 8.1/9.1). Orthogonal TDI-10.x operator-family work
-through TDI-10.18 (finite hypothesis checklist Item D/Item T after 10.17
-family↔affine-unrolling) must not invent those pins or contact TDI-7.2 /
-TDI-8.2 / TDI-9.2 surfaces.
+diverge, if the unresolved-ledger digest drifts, or if a forbidden surface
+appears (#199 floors + #202-style cross-check parity with 8.1/9.1).
+
+Machine-readable companions (CI-verified; not pins):
+
+- blocker evidence-class inventory: `docs/tdi11.2-blocker-evidence-classes.json`
+- freeze progress summary: `docs/tdi-freeze-progress-summary.json` (includes
+  verified ledger digest `dec8bd504a903b0125fdb88f66821940d286358eec6d59ee1a194fc6c63e9421`)
+
+Orthogonal TDI-10.x through TDI-10.18 must not invent those pins or contact
+TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces. TDI-10.19 was skipped.
 

@@ -19,6 +19,8 @@ for file in \
     "$FREEZE" \
     "$STATUS" \
     "$PLAN" \
+    docs/tdi9.1-blocker-evidence-classes.json \
+    docs/tdi-freeze-progress-summary.json \
     docs/TDI-9.1-REFERENCE-REJECTIONS.md \
     docs/TDI-9.1-REFERENCE-POLICIES.md \
     scripts/check-tdi9.1-configuration-freeze.py \
@@ -202,4 +204,18 @@ else
     printf 'TDI-9.1 confirmatory readiness: NOT READY (freeze incomplete)\n'
 fi
 printf 'TDI-9.2 executable/token/result surface: ABSENT\n'
+
+printf '\n===== FREEZE PROGRESS SUMMARY + EVIDENCE-CLASS INVENTORY =====\n'
+test -s docs/tdi9.1-blocker-evidence-classes.json || fail "missing blocker evidence-class inventory"
+test -s docs/tdi-freeze-progress-summary.json || fail "missing freeze progress summary"
+python3 scripts/emit-tdi-freeze-progress-summary.py --check
+
+grep -Fq 'docs/TDI-9.3-BOOLEAN-POLICY-SYNTHESIS.md' docs/tdi9.1-blocker-evidence-classes.json \
+    || fail "9.1 evidence-class inventory must list TDI-9.3 as a non-authorizing surface"
+grep -Fq 'non_authorizing_rule' docs/tdi9.1-blocker-evidence-classes.json \
+    || fail "9.1 evidence-class inventory must declare non_authorizing_rule"
+grep -Fq 'experimental_observation_subset_selection' docs/tdi9.1-blocker-evidence-classes.json \
+    || fail "9.1 inventory must keep permitted_observation_vector evidence class"
+grep -Fq 'required_evidence_class' docs/tdi9.1-blocker-evidence-classes.json \
+    || fail "evidence-class inventory must declare required_evidence_class entries"
 printf 'TDI-9.1 readiness integrity gate: PASS\n'

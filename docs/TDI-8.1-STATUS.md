@@ -8,6 +8,8 @@
 - Frozen TDI-8.0 preregistration blob: `fe80e7053d89824a77ef6790794f6930d1b424e2`
 - Configuration freeze contract: `docs/tdi8.1-configuration-freeze.json` (schema `tdi8.1-configuration-freeze-v1`)
 - Freeze resolution ledger: `docs/TDI-8.1-FREEZE-RESOLUTION-PLAN.md`
+- Blocker evidence-class inventory: `docs/tdi8.1-blocker-evidence-classes.json`
+- Freeze progress summary: `docs/tdi-freeze-progress-summary.json`
 - Integrity readiness gate: `scripts/check-tdi8.1-readiness.sh` (workflow `tdi8-readiness.yml`)
 - Final holdout / confirmatory runner / human token / TDI-8.2 surfaces: **absent**
 - `tdi8_2_execution_authorized`: **false** (hard)
@@ -28,7 +30,12 @@ The readiness gate fail-closes if any field outside the three authorized pins is
 
 ## Integrity (this slice)
 
-Post-#203 scout (after TDI-10.17 on `main`, with TDI-10.18 family hypothesis checklist in flight) found **no** newly closed identifier that can pin a remaining field. Existing authorized pins stay 3/17. Readiness continues to fail-close on a pinned-count floor of **≥3**, STATUS↔freeze JSON pin-count cross-check, missing pin-evidence blocks, unauthorized pins, and silent STATUS / `scientific_status` upgrades (#199).
+Post-#204 scout (after TDI-10.18 on `main` at `460970a`) found **no** newly closed identifier that can pin a remaining field. Existing authorized pins stay **3/17**. Readiness continues to fail-close on a pinned-count floor of **≥3**, STATUS↔freeze JSON pin-count cross-check, missing pin-evidence blocks, unauthorized pins, and silent STATUS / `scientific_status` upgrades (#199).
+
+Machine-readable companions (CI-verified; not pin sources):
+
+- blocker evidence-class inventory: `docs/tdi8.1-blocker-evidence-classes.json`
+- cross-series freeze progress summary: `docs/tdi-freeze-progress-summary.json` (`scripts/emit-tdi-freeze-progress-summary.py`)
 
 ## Remaining TDI-8.1 work
 
@@ -42,4 +49,4 @@ TDI-8.2 remains future human-only. No autonomous confirmation token or confirmat
 
 ## Series orthogonality
 
-TDI-10.x through TDI-10.18 (operator-family chapter: 10.13–10.15 families/composition + 10.16 κ domain/monotonicity + 10.17 family↔10.4 affine-unrolling / constant-drift closed forms + 10.18 finite hypothesis checklist Item D/Item T) remains orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces. #199 readiness floors are unchanged; STATUS↔JSON pin-count cross-check is additive.
+TDI-10.x through TDI-10.18 remains orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces. TDI-10.19 was skipped (no new EXACT claim beyond 10.14–10.18). #199 readiness floors are unchanged; STATUS↔JSON pin-count cross-check and the freeze-progress summary are additive.

@@ -30,6 +30,9 @@ for file in \
     scripts/check-tdi11.2-readiness.py \
     scripts/check-tdi11.2-model-observation-freeze.py \
     scripts/check-tdi11.2-freeze-schema.py \
+    docs/tdi11.2-blocker-evidence-classes.json \
+    docs/tdi-freeze-progress-summary.json \
+    scripts/emit-tdi-freeze-progress-summary.py \
     scripts/check-tdi11.2-prearm.sh; do
     test -s "$file" || fail "missing required readiness surface: $file"
 done
@@ -46,4 +49,16 @@ python3 scripts/check-tdi11.2-freeze-schema.py "$TEMPLATE" --self-test
 printf '\n===== TDI-11.2 FAIL-CLOSED READINESS =====\n'
 python3 scripts/check-tdi11.2-readiness.py
 
+
+printf '\n===== FREEZE PROGRESS SUMMARY + LEDGER DIGEST =====\n'
+python3 scripts/emit-tdi-freeze-progress-summary.py --check
+DIGEST="$(python3 -c 'import hashlib; from pathlib import Path; print(hashlib.sha256(Path("docs/tdi11.2-model-observation-freeze.json").read_bytes()).hexdigest())')"
+grep -Fq "$DIGEST" docs/TDI-11.2-UNRESOLVED-LEDGER.md \
+    || fail "unresolved ledger lost freeze digest"
+grep -Fq "$DIGEST" docs/tdi11.2-model-observation-freeze.sha256 \
+    || fail "digest sidecar lost freeze digest"
+grep -Fq "$DIGEST" docs/tdi-freeze-progress-summary.json \
+    || fail "freeze progress summary must carry verified 11.2 ledger digest"
+grep -Fq 'required_evidence_class' docs/tdi11.2-blocker-evidence-classes.json \
+    || fail "11.2 evidence-class inventory must declare required_evidence_class entries"
 printf 'TDI-11.2 readiness integrity gate: PASS\n'

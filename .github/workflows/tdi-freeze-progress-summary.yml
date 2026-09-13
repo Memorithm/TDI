@@ -1,0 +1,22 @@
+name: TDI freeze progress summary
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  summary:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Emit and verify freeze-progress summary
+        run: |
+          python3 scripts/emit-tdi-freeze-progress-summary.py --write --check
+          python3 scripts/test-tdi-freeze-progress-summary.py

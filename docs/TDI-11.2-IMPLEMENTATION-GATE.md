@@ -18,7 +18,8 @@ The repository may merge this pre-arm only if all of the following are true:
 8. no protected TDI-7.2 or TDI-8.2 material is introduced.
 9. `scripts/check-tdi11.2-readiness.sh` passes on the exact head (armed
    execution with any `unresolved_blocking` field is rejected; forbidden
-   surfaces are absent; the unresolved ledger digest matches the freeze file).
+   surfaces are absent; the unresolved ledger digest matches the freeze file;
+   `docs/tdi-freeze-progress-summary.json` carries the verified digest).
 
 Passing the pre-arm gate authorizes only contract/schema/gate work. It does not authorize a model invocation.
 

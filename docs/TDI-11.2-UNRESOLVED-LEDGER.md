@@ -27,7 +27,10 @@ Recompute with `sha256sum docs/tdi11.2-model-observation-freeze.json`.
 
 All fields remain `unresolved_blocking` with `value: null` and
 `pin_provenance: null`. No identifier closed by TDI-10.13/#198, TDI-10.14/#200, TDI-10.15,
-TDI-10.16, TDI-10.17, TDI-10.18, or any earlier merged tranche supplies a reviewable exact value.
+TDI-10.16, TDI-10.17, TDI-10.18/#204, or any earlier merged tranche supplies a reviewable exact value.
+Required evidence *classes* (not values) are inventoried in
+`docs/tdi11.2-blocker-evidence-classes.json` and rolled into
+`docs/tdi-freeze-progress-summary.json`.
 
 | Field | Status | Why still blocked |
 | --- | --- | --- |

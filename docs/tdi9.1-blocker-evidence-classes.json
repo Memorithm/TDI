@@ -1,0 +1,121 @@
+{
+  "schema": "tdi9.1-blocker-evidence-classes-v1",
+  "stage": "TDI-9.1",
+  "freeze_contract": "docs/tdi9.1-configuration-freeze.json",
+  "resolution_plan": "docs/TDI-9.1-FREEZE-RESOLUTION-PLAN.md",
+  "note": "Inventory of required evidence *classes* for each freeze field. Does not invent schedules, thresholds, difficulty values, envelopes, or sample counts. Not H9 evidence and not a TDI-9.2 authorization. TDI-9.3 (#195) Boolean IR is explicitly non-authorizing for every 9.1 pin.",
+  "authorized_pin_count": 1,
+  "fields": {
+    "closed_rejection_taxonomy": {
+      "status": "pinned",
+      "required_evidence_class": "closed_rejection_vocabulary",
+      "evidence_class_definition": "Closed ReferenceRejectionCode vocabulary with machine-readable rejection records, without freezing rejection-rate thresholds or populations.",
+      "blocking_until": null,
+      "citations": ["PR #140", "docs/TDI-9.1-REFERENCE-REJECTIONS.md"]
+    },
+    "p1_p2_p3_difficulty_parameters": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "nonfinal_dev_val_difficulty_selection",
+      "evidence_class_definition": "Non-final Dev/Val selection of P1/P2/P3 difficulty parameters.",
+      "blocking_until": "non-final Dev/Val difficulty selection",
+      "citations": []
+    },
+    "c0_c1_schedules": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "nonfinal_dev_val_schedule_selection",
+      "evidence_class_definition": "Non-final Dev/Val selection of C0/C1 schedules.",
+      "blocking_until": "non-final Dev/Val schedule selection",
+      "citations": []
+    },
+    "c2_c3_thresholds_and_verification_cadence": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "nonfinal_dev_val_threshold_cadence_selection",
+      "evidence_class_definition": "Non-final Dev/Val selection of C2/C3 thresholds and verification cadence.",
+      "blocking_until": "non-final Dev/Val threshold/cadence selection",
+      "citations": []
+    },
+    "permitted_observation_vector": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "experimental_observation_subset_selection",
+      "evidence_class_definition": "Explicit experimental subset of PolicyObservation fields for scientific freeze. PolicyObservation as an 8-field carrier type (#123) and TDI-9.3 Boolean IR (#195) are NOT this evidence class.",
+      "blocking_until": "explicit experimental observation-subset selection (not Boolean IR)",
+      "citations": ["PR #123", "PR #135", "PR #195"],
+      "non_authorizing_note": "TDI-9.3 Boolean policy synthesis surfaces must not be treated as authorizing this pin."
+    },
+    "common_max_compute_memory_envelopes": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "numeric_resource_envelope_constants",
+      "evidence_class_definition": "Frozen numeric ResourceEnvelope constants. The caller-supplied ResourceEnvelope *type* is insufficient.",
+      "blocking_until": "numeric envelope constants",
+      "citations": []
+    },
+    "paired_interval_method": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "family_wise_coverage_under_frozen_alpha",
+      "evidence_class_definition": "Family-wise coverage evidence under frozen TDI-9.0 alpha rules selecting the interval method.",
+      "blocking_until": "family-wise coverage selection under frozen alpha",
+      "citations": []
+    },
+    "paired_resampling_replicate_count": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "family_wise_coverage_under_frozen_alpha",
+      "evidence_class_definition": "Family-wise coverage evidence selecting replicate count under frozen TDI-9.0 alpha rules.",
+      "blocking_until": "family-wise coverage replicate-count selection",
+      "citations": []
+    },
+    "paired_resampling_seed": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "explicit_domains_seed_declaration",
+      "evidence_class_definition": "Explicit Domains seed declaration for paired resampling.",
+      "blocking_until": "explicit Domains seed declaration",
+      "citations": []
+    },
+    "development_validation_population_domains": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "disjoint_population_domains",
+      "evidence_class_definition": "Disjoint development/validation domains; no final seeds.",
+      "blocking_until": "disjoint Dev/Val domain selection",
+      "citations": []
+    },
+    "future_public_entropy_source_event_encoding": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "pre_public_entropy_freeze",
+      "evidence_class_definition": "Entropy source/event/encoding frozen before the public value is knowable.",
+      "blocking_until": "pre-public entropy freeze",
+      "citations": []
+    },
+    "final_seed_derivation_contract": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "deterministic_final_seed_map",
+      "evidence_class_definition": "Deterministic map from future public entropy to final seeds.",
+      "blocking_until": "deterministic final-seed derivation contract",
+      "citations": []
+    },
+    "agent_search_safe_policy_mutation_contract": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "closed_agent_search_mutation_contract",
+      "evidence_class_definition": "Closed agent-search-safe policy mutation/evaluation contract for Dev/Val only. TDI-9.3 Boolean search design is non-authorizing.",
+      "blocking_until": "closed agent-search mutation contract",
+      "citations": ["PR #195"],
+      "non_authorizing_note": "TDI-9.3 (#195) does not authorize this pin."
+    },
+    "h9_classifier_aggregation_plumbing": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "h9_classifier_software_transcription",
+      "evidence_class_definition": "Software transcription plumbing of H9 classifier/aggregation rules from the frozen TDI-9.0 preregistration. Preregistration text alone is insufficient.",
+      "blocking_until": "H9 classifier software transcription plumbing",
+      "citations": []
+    }
+  },
+  "non_authorizing_surfaces": [
+    "docs/TDI-9.3-BOOLEAN-POLICY-SYNTHESIS.md",
+    "PR #195"
+  ],
+  "non_authorizing_rule": "TDI-9.3 Boolean policy synthesis (#195) is ACTIVE DESIGN / NON-FINAL. Citing those surfaces must never authorize a TDI-9.1 freeze pin (including permitted_observation_vector and agent_search_safe_policy_mutation_contract).",
+  "holdout_boundary": {
+    "tdi7_2": "forbidden",
+    "tdi8_2": "forbidden",
+    "tdi9_2": "absent",
+    "execution_flag": "tdi9_2_execution_authorized must remain false"
+  }
+}
