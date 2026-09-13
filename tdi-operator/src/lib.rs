@@ -31,7 +31,9 @@ pub use green::GreenBands;
 pub use jacobi::{JacobiError, JacobiMatrix};
 pub use ordinal::{
     CandidateNormalization, CandidateOperatorPopulation, CandidateResponseObservable, OrdinalError,
-    average_ranks, coefficient_frobenius_norm_key, constant_toeplitz_frobenius_norm,
+    average_ranks, coefficient_frobenius_norm_key, constant_diagonal_only_frobenius_norm,
+    constant_diagonal_only_gershgorin_margin, constant_diagonal_only_green_trace,
+    constant_diagonal_only_mid_diagonal_green, constant_toeplitz_frobenius_norm,
     constant_toeplitz_gershgorin_margin, deterministic_shuffle, dimension_only_key,
     evaluate_observable_ladder, gershgorin_dominance_margin_key, identity_ordering_key,
     kendall_tau_b, negate_values, rank_normalize, spearman_rho, strictly_increasing_affine,

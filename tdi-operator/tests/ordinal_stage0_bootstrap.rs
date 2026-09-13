@@ -14,6 +14,10 @@
 //! - EXACT Gershgorin width-invariance (n≥3) REFUTES covert dimension keying;
 //! - EXACT rank-normalize / negate-response Stage-0 normalization scaffolding;
 //! - EXACT tie-heavy adversarial midranks with non-degenerate Spearman;
+//! - EXACT diagonal-only Frobenius / Gershgorin closed forms (edge-zero case);
+//! - EXACT diagonal-only Green closed forms; MidDiagonalGreen width-invariant REFUTE;
+//! - EXACT GreenTrace↔dimension concordance on DiagonalOnlyWidthLadder;
+//! - EXACT MeanAbsOffDiagonalGreen ≡ 0 REFUTES dimension keying on diagonal-only;
 //! - candidate Green response observables from TDI-10 primitives only;
 //! - dimension-only control ranking does not consult Green values;
 //! - no confirmatory TDI-12 execution is authorized.
@@ -21,6 +25,8 @@
 use tdi_operator::{
     CandidateNormalization, CandidateOperatorPopulation, CandidateResponseObservable, GreenBands,
     JacobiMatrix, OrdinalError, average_ranks, coefficient_frobenius_norm_key,
+    constant_diagonal_only_frobenius_norm, constant_diagonal_only_gershgorin_margin,
+    constant_diagonal_only_green_trace, constant_diagonal_only_mid_diagonal_green,
     constant_toeplitz_frobenius_norm, constant_toeplitz_gershgorin_margin, deterministic_shuffle,
     dimension_only_key, evaluate_observable_ladder, gershgorin_dominance_margin_key,
     identity_ordering_key, kendall_tau_b, negate_values, rank_normalize, spearman_rho,
@@ -45,6 +51,10 @@ fn toeplitz(n: usize, diagonal: f64, edge: f64) -> JacobiMatrix {
         vec![edge; n - 1]
     };
     JacobiMatrix::new(diag, off).expect("synthetic Toeplitz must be admissible")
+}
+
+fn diagonal_only(n: usize, diagonal: f64) -> JacobiMatrix {
+    toeplitz(n, diagonal, 0.0)
 }
 
 #[test]
@@ -450,6 +460,149 @@ fn exact_observable_ladder_and_population_candidate_ids() {
         CandidateOperatorPopulation::PositiveConstantToeplitzWidthLadder.as_str(),
         "PositiveConstantToeplitzWidthLadder"
     );
+    assert_eq!(
+        CandidateOperatorPopulation::DiagonalOnlyWidthLadder.as_str(),
+        "DiagonalOnlyWidthLadder"
+    );
+}
+
+#[test]
+fn exact_constant_diagonal_only_frobenius_closed_form_matches_key() {
+    let a = 3.0;
+    for n in 1..=8 {
+        let matrix = diagonal_only(n, a);
+        let key = coefficient_frobenius_norm_key(&matrix).unwrap();
+        let closed = constant_diagonal_only_frobenius_norm(n, a).unwrap();
+        assert_close(key, closed, 1.0e-15);
+        assert_close(closed, a * (n as f64).sqrt(), 1.0e-15);
+        // Edge-zero specialization of the Toeplitz closed form.
+        assert_close(
+            closed,
+            constant_toeplitz_frobenius_norm(n, a, 0.0).unwrap(),
+            1.0e-15,
+        );
+    }
+}
+
+#[test]
+fn exact_diagonal_only_frobenius_width_ladder_concordant_with_dimension() {
+    let a = 3.0;
+    let widths = [1usize, 2, 3, 4, 5, 6];
+    let mut frobenius = Vec::new();
+    let mut dimensions = Vec::new();
+    for &n in &widths {
+        let matrix = diagonal_only(n, a);
+        frobenius.push(coefficient_frobenius_norm_key(&matrix).unwrap());
+        dimensions.push(dimension_only_key(&matrix));
+        if n >= 2 {
+            assert!(frobenius[frobenius.len() - 1] > frobenius[frobenius.len() - 2]);
+        }
+    }
+    assert_close(spearman_rho(&frobenius, &dimensions).unwrap(), 1.0, 1.0e-15);
+    assert_close(
+        kendall_tau_b(&frobenius, &dimensions).unwrap(),
+        1.0,
+        1.0e-15,
+    );
+}
+
+#[test]
+fn exact_diagonal_only_gershgorin_width_invariant_refutes_dimension_key() {
+    let a: f64 = 5.0;
+    // Stronger than Toeplitz: invariant for ALL n ≥ 1, not merely n ≥ 3.
+    let widths = [1usize, 2, 3, 4, 5, 6, 7];
+    let mut margins = Vec::new();
+    let mut dimensions = Vec::new();
+    for &n in &widths {
+        let matrix = diagonal_only(n, a);
+        let key = gershgorin_dominance_margin_key(&matrix).unwrap();
+        let closed = constant_diagonal_only_gershgorin_margin(n, a).unwrap();
+        assert_close(key, closed, 1.0e-15);
+        assert_close(closed, a, 1.0e-15);
+        margins.push(key);
+        dimensions.push(dimension_only_key(&matrix));
+    }
+    assert!(matches!(
+        spearman_rho(&margins, &dimensions),
+        Err(OrdinalError::DegenerateRanks)
+    ));
+    assert!(matches!(
+        kendall_tau_b(&margins, &dimensions),
+        Err(OrdinalError::DegenerateRanks)
+    ));
+}
+
+#[test]
+fn exact_diagonal_only_green_closed_forms_and_width_invariance() {
+    let a = 4.0;
+    let shift = 1.0;
+    let closed_mid = constant_diagonal_only_mid_diagonal_green(a, shift).unwrap();
+    assert_close(closed_mid, 1.0 / (a + shift), 1.0e-15);
+
+    let widths = [1usize, 2, 3, 4, 5, 6];
+    let mut mids = Vec::new();
+    let mut traces = Vec::new();
+    let mut offs = Vec::new();
+    let mut dimensions = Vec::new();
+    for &n in &widths {
+        let matrix = diagonal_only(n, a);
+        let bands = GreenBands::compute(&matrix, shift).unwrap();
+        // Every diagonal Green entry equals 1/(a+shift); off-diagonals vanish.
+        for entry in bands.diagonal() {
+            assert_close(*entry, closed_mid, 1.0e-15);
+        }
+        for entry in bands.off_diagonal() {
+            assert_close(*entry, 0.0, 1.0e-15);
+        }
+
+        let mid = CandidateResponseObservable::MidDiagonalGreen
+            .evaluate(&matrix, shift)
+            .unwrap();
+        let trace = CandidateResponseObservable::GreenTrace
+            .evaluate(&matrix, shift)
+            .unwrap();
+        let off = CandidateResponseObservable::MeanAbsOffDiagonalGreen
+            .evaluate(&matrix, shift)
+            .unwrap();
+        assert_close(mid, closed_mid, 1.0e-15);
+        assert_close(
+            trace,
+            constant_diagonal_only_green_trace(n, a, shift).unwrap(),
+            1.0e-15,
+        );
+        assert_close(trace, (n as f64) * closed_mid, 1.0e-15);
+        assert_close(off, 0.0, 1.0e-15);
+
+        mids.push(mid);
+        traces.push(trace);
+        offs.push(off);
+        dimensions.push(dimension_only_key(&matrix));
+    }
+
+    // MidDiagonalGreen is width-invariant ⇒ REFUTES covert dimension keying.
+    assert!(matches!(
+        spearman_rho(&mids, &dimensions),
+        Err(OrdinalError::DegenerateRanks)
+    ));
+    assert!(matches!(
+        kendall_tau_b(&mids, &dimensions),
+        Err(OrdinalError::DegenerateRanks)
+    ));
+
+    // GreenTrace is strictly monotone in width ⇒ ρ = τ = 1 vs dimension.
+    assert_close(spearman_rho(&traces, &dimensions).unwrap(), 1.0, 1.0e-15);
+    assert_close(kendall_tau_b(&traces, &dimensions).unwrap(), 1.0, 1.0e-15);
+
+    // MeanAbsOffDiagonalGreen ≡ 0 ⇒ REFUTES covert dimension keying.
+    assert!(matches!(
+        spearman_rho(&offs, &dimensions),
+        Err(OrdinalError::DegenerateRanks)
+    ));
+    assert!(matches!(
+        kendall_tau_b(&offs, &dimensions),
+        Err(OrdinalError::DegenerateRanks)
+    ));
+
     assert_eq!(
         CandidateOperatorPopulation::DiagonalOnlyWidthLadder.as_str(),
         "DiagonalOnlyWidthLadder"

@@ -226,16 +226,17 @@ def build_summary() -> dict[str, Any]:
 
     # Cross-series scout verdict (no invented pins this slice).
     scout = {
-        "after_merge": "TDI-11.2 / #213 (38c2054)",
+        "after_merge": "TDI-10.19 / #214 (8c819ee)",
         "new_8_1_pins": [],
         "new_9_1_pins": [],
         "new_11_2_pins": [],
         "verdict": (
-            "Post-#213 diversification lands TDI-10.19 EXACT reverse/cross "
-            "operator-family composition (F_D/F_S then F_U; F_D↔F_S) as the "
-            "complement to TDI-10.15. Invents no TDI-8.1 / 9.1 / 11.2 freeze "
-            "pins. Existing authorized pins stay 3/17, 1/14, 0/12. Execution "
-            "flags remain hard-false. No holdout 7.2/8.2/9.2 contact."
+            "Post-#214 diversification lands TDI-12.0 Stage-0 EXACT "
+            "DiagonalOnlyWidthLadder Frobenius/Gershgorin/Green closed forms "
+            "(MidDiagonalGreen width-invariance REFUTE; GreenTrace "
+            "concordance). Invents no TDI-8.1 / 9.1 / 11.2 freeze pins. "
+            "Existing authorized pins stay 3/17, 1/14, 0/12. Execution flags "
+            "remain hard-false. No holdout 7.2/8.2/9.2 contact."
         ),
     }
 
@@ -249,8 +250,9 @@ def build_summary() -> dict[str, Any]:
         "scout": scout,
         "series": series_out,
         "tdi10_note": (
-            "TDI-10.x through 10.19 remains orthogonal. Reverse/cross family "
-            "composition does not invent freeze pins from operator lemmas."
+            "TDI-10.x through 10.19 remains orthogonal. TDI-12.0 "
+            "DiagonalOnlyWidthLadder Stage-0 EXACT work does not invent freeze "
+            "pins from operator lemmas."
         ),
     }
 

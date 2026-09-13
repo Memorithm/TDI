@@ -53,6 +53,12 @@ grep -Fq 'EXACT claim 10 — constant-Toeplitz Gershgorin width invariance' "$OR
     || fail "ordinal doc missing EXACT claim 10 Gershgorin invariance"
 grep -Fq 'EXACT claim 11 — rank-normalize and negate-response scaffolding' "$ORDINAL_DOC" \
     || fail "ordinal doc missing EXACT claim 11 normalization"
+grep -Fq 'EXACT claim 14 — constant diagonal-only Frobenius closed form' "$ORDINAL_DOC" \
+    || fail "ordinal doc missing EXACT claim 14 diagonal-only Frobenius"
+grep -Fq 'EXACT claim 15 — constant diagonal-only Gershgorin width invariance' "$ORDINAL_DOC" \
+    || fail "ordinal doc missing EXACT claim 15 diagonal-only Gershgorin"
+grep -Fq 'EXACT claim 16 — constant diagonal-only Green closed forms' "$ORDINAL_DOC" \
+    || fail "ordinal doc missing EXACT claim 16 diagonal-only Green"
 grep -Fq 'No soft-edge / double-scaling statement' "$ORDINAL_DOC" \
     || fail "ordinal doc missing soft-edge non-claim"
 

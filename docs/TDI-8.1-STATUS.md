@@ -30,7 +30,7 @@ The readiness gate fail-closes if any field outside the three authorized pins is
 
 ## Integrity (this slice)
 
-Post-#213 scout (after TDI-11.2 model-observation scaffolding on `main` at `38c2054`) found **no** newly closed identifier that can pin a remaining field. Existing authorized pins stay **3/17**. Readiness continues to fail-close on a pinned-count floor of **≥3**, STATUS↔freeze JSON pin-count cross-check, missing pin-evidence blocks, unauthorized pins, and silent STATUS / `scientific_status` upgrades (#199).
+Post-#214 scout (after TDI-10.19 reverse/cross composition on `main` at `8c819ee`) found **no** newly closed identifier that can pin a remaining field. Existing authorized pins stay **3/17**. Readiness continues to fail-close on a pinned-count floor of **≥3**, STATUS↔freeze JSON pin-count cross-check, missing pin-evidence blocks, unauthorized pins, and silent STATUS / `scientific_status` upgrades (#199).
 
 Machine-readable companions (CI-verified; not pin sources):
 
@@ -49,4 +49,4 @@ TDI-8.2 remains future human-only. No autonomous confirmation token or confirmat
 
 ## Series orthogonality
 
-TDI-10.x through TDI-10.19 remains orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces. TDI-10.19 lands genuine reverse/cross family composition EXACT claims (complement to 10.15) without touching freeze fields. #199 readiness floors are unchanged; STATUS↔JSON pin-count cross-check and the freeze-progress summary are additive.
+TDI-10.x through TDI-10.19 / TDI-12.0 Stage-0 remains orthogonal: operator-research and Stage-0 ordinal advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces. TDI-12.0 DiagonalOnlyWidthLadder closed forms invent no TDI-8.1 pins. #199 readiness floors are unchanged; STATUS↔JSON pin-count cross-check and the freeze-progress summary are additive.

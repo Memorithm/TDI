@@ -536,6 +536,86 @@ pub fn constant_toeplitz_gershgorin_margin(
     Ok(margin)
 }
 
+/// Closed-form coefficient Frobenius norm for a constant diagonal-only Jacobi symbol.
+///
+/// For width `n ≥ 1` with diagonal `a` and **zero** off-diagonals:
+/// `sqrt(n a²) = |a| √n`. This is the edge=`0` specialization of
+/// [`constant_toeplitz_frobenius_norm`]. When `a ≠ 0` the key is strictly
+/// increasing in `n`, so Spearman / Kendall against dimension equal 1 on any
+/// strictly increasing width ladder. Does **not** freeze
+/// `operator_population_families` (scaffolds `DiagonalOnlyWidthLadder` only).
+pub fn constant_diagonal_only_frobenius_norm(
+    width: usize,
+    diagonal: f64,
+) -> Result<f64, OrdinalError> {
+    constant_toeplitz_frobenius_norm(width, diagonal, 0.0)
+}
+
+/// Closed-form Gershgorin dominance margin for a constant diagonal-only symbol.
+///
+/// With zero edges every row margin equals `a`, so the key is **width-invariant
+/// for all n ≥ 1** (stronger than the constant-Toeplitz n≥3 case). Correlating
+/// it against dimension on any ladder of length ≥ 2 fails closed with
+/// [`OrdinalError::DegenerateRanks`]. This REFUTES treating the Stage-0
+/// Gershgorin control as a covert dimension key on `DiagonalOnlyWidthLadder`.
+pub fn constant_diagonal_only_gershgorin_margin(
+    width: usize,
+    diagonal: f64,
+) -> Result<f64, OrdinalError> {
+    constant_toeplitz_gershgorin_margin(width, diagonal, 0.0)
+}
+
+/// Closed-form mid-diagonal Green entry for a constant diagonal-only symbol.
+///
+/// Under the TDI-10 positive-pivot regime `a + shift > 0`, every diagonal Green
+/// entry of `(K + t I)^{-1}` equals `1/(a + t)`, so the mid-diagonal observable
+/// is **width-invariant**. Spearman / Kendall against dimension therefore fail
+/// closed on any multi-width ladder — REFUTING MidDiagonalGreen as a covert
+/// dimension key on `DiagonalOnlyWidthLadder`. Does **not** freeze
+/// `response_observable_registry`.
+pub fn constant_diagonal_only_mid_diagonal_green(
+    diagonal: f64,
+    shift: f64,
+) -> Result<f64, OrdinalError> {
+    if !diagonal.is_finite() {
+        return Err(OrdinalError::NonFiniteValue { index: 0 });
+    }
+    if !shift.is_finite() {
+        return Err(OrdinalError::NonFiniteValue { index: 1 });
+    }
+    let denom = diagonal + shift;
+    if !(denom.is_finite() && denom > 0.0) {
+        return Err(OrdinalError::NonFiniteValue { index: 0 });
+    }
+    let value = 1.0 / denom;
+    if !value.is_finite() {
+        return Err(OrdinalError::NonFiniteValue { index: 0 });
+    }
+    Ok(value)
+}
+
+/// Closed-form Green-trace observable for a constant diagonal-only symbol.
+///
+/// Under `a + shift > 0`, `GreenTrace = n / (a + shift)`. On any strictly
+/// increasing width ladder this is strictly monotone in `n`, so Spearman /
+/// Kendall against dimension equal 1. Matches
+/// [`CandidateResponseObservable::GreenTrace`] on the corresponding matrix.
+pub fn constant_diagonal_only_green_trace(
+    width: usize,
+    diagonal: f64,
+    shift: f64,
+) -> Result<f64, OrdinalError> {
+    if width == 0 {
+        return Err(OrdinalError::EmptyOperator);
+    }
+    let unit = constant_diagonal_only_mid_diagonal_green(diagonal, shift)?;
+    let trace = (width as f64) * unit;
+    if !trace.is_finite() {
+        return Err(OrdinalError::NonFiniteValue { index: 0 });
+    }
+    Ok(trace)
+}
+
 /// Evaluate one candidate response observable on each matrix of a finite ladder.
 ///
 /// Fail-closed: empty ladder → [`OrdinalError::EmptySample`]; any per-matrix
@@ -577,9 +657,11 @@ pub fn tie_heavy_adversarial_sample(n: usize) -> Result<Vec<f64>, OrdinalError> 
 #[cfg(test)]
 mod tests {
     use super::{
-        average_ranks, constant_toeplitz_frobenius_norm, constant_toeplitz_gershgorin_margin,
-        deterministic_shuffle, kendall_tau_b, negate_values, rank_normalize, spearman_rho,
-        strictly_increasing_affine, tie_heavy_adversarial_sample,
+        average_ranks, constant_diagonal_only_frobenius_norm,
+        constant_diagonal_only_gershgorin_margin, constant_diagonal_only_green_trace,
+        constant_diagonal_only_mid_diagonal_green, constant_toeplitz_frobenius_norm,
+        constant_toeplitz_gershgorin_margin, deterministic_shuffle, kendall_tau_b, negate_values,
+        rank_normalize, spearman_rho, strictly_increasing_affine, tie_heavy_adversarial_sample,
     };
 
     #[test]
@@ -679,5 +761,41 @@ mod tests {
             vec![1.0, 3.0, 3.0, 3.0, 5.0]
         );
         assert!((spearman_rho(&sample, &sample).unwrap() - 1.0).abs() < 1.0e-15);
+    }
+
+    #[test]
+    fn constant_diagonal_only_frobenius_closed_form_and_width_monotone() {
+        let a = 3.0;
+        let n3 = constant_diagonal_only_frobenius_norm(3, a).unwrap();
+        let n5 = constant_diagonal_only_frobenius_norm(5, a).unwrap();
+        assert!((n3 - a * (3.0_f64).sqrt()).abs() < 1.0e-15);
+        assert!(n5 > n3);
+        // Edge-zero specialization of the Toeplitz closed form.
+        assert_eq!(n3, constant_toeplitz_frobenius_norm(3, a, 0.0).unwrap());
+    }
+
+    #[test]
+    fn constant_diagonal_only_gershgorin_width_invariant_for_all_n() {
+        let a = 4.5;
+        let m1 = constant_diagonal_only_gershgorin_margin(1, a).unwrap();
+        let m9 = constant_diagonal_only_gershgorin_margin(9, a).unwrap();
+        assert_eq!(m1, a);
+        assert_eq!(m9, a);
+        assert_eq!(m1, constant_toeplitz_gershgorin_margin(1, a, 0.0).unwrap());
+    }
+
+    #[test]
+    fn constant_diagonal_only_green_closed_forms() {
+        let a = 4.0;
+        let shift = 1.0;
+        let mid = constant_diagonal_only_mid_diagonal_green(a, shift).unwrap();
+        assert!((mid - 1.0 / (a + shift)).abs() < 1.0e-15);
+        let trace = constant_diagonal_only_green_trace(7, a, shift).unwrap();
+        assert!((trace - 7.0 / (a + shift)).abs() < 1.0e-15);
+        // Non-positive pivot regime fail-closes.
+        assert!(matches!(
+            constant_diagonal_only_mid_diagonal_green(1.0, -1.0),
+            Err(super::OrdinalError::NonFiniteValue { .. })
+        ));
     }
 }

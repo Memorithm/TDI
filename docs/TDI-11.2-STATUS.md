@@ -88,8 +88,8 @@ Machine-readable companions (CI-verified; not pins):
   verified ledger digest `dec8bd504a903b0125fdb88f66821940d286358eec6d59ee1a194fc6c63e9421`)
 
 Orthogonal TDI-10.x through TDI-10.19 / TDI-12.0 Stage-0 must not invent those
-pins or contact TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces. TDI-10.19 reverse/cross
-family composition does not pin typed_rejection_contract / provenance_contract.
-Post-#212 diversification: rejection/provenance scaffolding remains
-non-authorizing; pins stay **0/12**.
+pins or contact TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces. TDI-12.0
+DiagonalOnlyWidthLadder closed forms do not pin typed_rejection_contract /
+provenance_contract. Rejection/provenance scaffolding remains non-authorizing;
+pins stay **0/12**.
 
