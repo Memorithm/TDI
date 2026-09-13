@@ -36,6 +36,7 @@ A numerical fit is never proof. A formal asymptotic is never promoted to a unifo
 - **TDI-10.8** — **EXACT** witness trichotomy: Type S (summable remainder; product ↛ 0), Type U (uniform geometric; product → 0), Type D (divergent remainder; product → 0); **REFUTED** that `alpha_k -> 1` implies Type S; **REFUTED** that divergent remainder is automatic for every `0 < alpha_k < 1` family
 - **TDI-10.9** — **EXACT** harmonic remainder-rate lemma: `1 - alpha_k >= c/k` eventually forces divergent remainder hence product → 0 (Type D sufficient rate); closed-form witness calculus for Types S/U/D; **REFUTED** that a superharmonic lower bound `1 - alpha_k >= c/k^{1+epsilon}` is sufficient for decay
 - **TDI-10.10** — **EXACT** remainder / product / log-sum equivalence under `0 < alpha_k <= 1`: `sum (1 - alpha_k) = infinity` iff `product -> 0` iff `sum (-log alpha_k) = infinity`; **REFUTED** necessity of divergent remainder once `alpha_k = 0` is allowed; **REFUTED** that `alpha_k -> 1` is required for the equivalence
+- **TDI-10.11** — **EXACT** quantitative product / exponential bounds: `product <= exp(-sum x)` from `log(1-x) <= -x`; declared-cutoff lower bound `product >= exp(-C_K - 2 sum_{k>=K} x)` once `x_k <= 1/2`; Type D sandwich `exp(-2(H_{n+1}-1)) <= 1/(n+1) <= exp(-(H_{n+1}-1))`; **REFUTED** that the upper bound is equality-sharp for all sequences
 
 ## Next frontiers (not yet authorized by numbering alone)
 
