@@ -82,8 +82,13 @@
       "status": "unresolved_blocking",
       "required_evidence_class": "deterministic_dev_val_population_map",
       "evidence_class_definition": "Closed deterministic Development/Validation population derivation map.",
-      "blocking_until": "deterministic Dev/Val population derivation",
-      "citations": []
+      "blocking_until": "reviewed pin of ModelObservationPopulationDerivationContract (scaffolding alone is non-authorizing)",
+      "citations": [
+        "docs/TDI-11.2-MODEL-OBSERVATION-POPULATION.md",
+        "tdi-ai/src/hallucination_model_observation_population.rs",
+        "scripts/check-tdi11.2-model-observation-population.sh"
+      ],
+      "non_authorizing_note": "Candidate schema ModelObservationPopulationDerivationContract is present but does not pin this field; scientific strata/sizes/seeds remain caller-supplied"
     },
     "resource_accounting_contract": {
       "status": "unresolved_blocking",
@@ -133,7 +138,8 @@
     "TDI-12.0 Stage-0 ordinal bootstrap",
     "TDI-11.2 ModelObservationChannelRegistry scaffolding (non-pinning)",
     "TDI-11.2 ModelObservationTimingContract scaffolding (non-pinning)",
-    "TDI-11.2 ModelObservationH11AEligibilityRule scaffolding (non-pinning)"
+    "TDI-11.2 ModelObservationH11AEligibilityRule scaffolding (non-pinning)",
+    "TDI-11.2 ModelObservationPopulationDerivationContract scaffolding (non-pinning)"
   ],
   "holdout_boundary": {
     "tdi7_2": "forbidden",

@@ -36,6 +36,8 @@ numeric code:
 | `0x04xx` | prospective timing / observation contract |
 | `0x05xx` | provenance scaffolding failures |
 | `0x06xx` | resource accounting scaffolding failures |
+| `0x07xx` | registry / timing-contract / H11-A eligibility scaffolding failures |
+| `0x08xx` | Development/Validation population-derivation scaffolding failures |
 
 `ModelObservationRejectionRecord` retains the original typed adapter error plus
 adapter name/version provenance. Technical rejection is never mapped to a
@@ -71,7 +73,9 @@ The rejection module is intentionally **not** promoted into the stable
 - exact observation registry / timing / H11-A eligibility scientific pins
   (non-executing candidates exist separately in
   `docs/TDI-11.2-MODEL-OBSERVATION-REGISTRY.md` with `0x07xx` codes; still unpinned);
-- Dev/Val population derivation;
+- Dev/Val population derivation scientific pin
+  (non-executing candidate exists separately in
+  `docs/TDI-11.2-MODEL-OBSERVATION-POPULATION.md` with `0x08xx` codes; still unpinned);
 - numeric resource envelopes;
 - `typed_rejection_contract` and `provenance_contract` freeze fields;
 - any concrete model runner or final surface.

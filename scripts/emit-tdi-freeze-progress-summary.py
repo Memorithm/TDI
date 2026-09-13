@@ -226,19 +226,19 @@ def build_summary() -> dict[str, Any]:
 
     # Cross-series scout verdict (no invented pins this slice).
     scout = {
-        "after_merge": "TDI-10.20 three-block/interleave / #217 (b543060)",
+        "after_merge": "TDI-11.2 registry/timing/H11-A / #218 (6ec59c1)",
         "new_8_1_pins": [],
         "new_9_1_pins": [],
         "new_11_2_pins": [],
         "verdict": (
-            "Post-#217 diversification lands TDI-11.2 non-executing "
-            "observation registry / timing / H11-A eligibility scaffolding "
-            "(exact inherited 8-class taxonomy, caller-supplied channel "
-            "registry, per-channel timing contract, exact PrimaryEligible "
-            "iff event<assertion classifier; 0x07xx codes). Distinct from "
-            "#213/#216. Invents no TDI-8.1 / 9.1 / 11.2 freeze pins. "
-            "Existing authorized pins stay 3/17, 1/14, 0/12. Execution "
-            "flags remain hard-false. No holdout 7.2/8.2/9.2 contact."
+            "Post-#218 diversification lands TDI-11.2 non-executing "
+            "Development/Validation population-derivation scaffolding "
+            "(exact authorized Dev/Val domain taxonomy, caller-supplied "
+            "stratum/seed-space contract, deterministic domain-separated "
+            "seed-commitment framing, Final/holdout leakage guards; 0x08xx "
+            "codes). Distinct from #213/#216/#218. Invents no TDI-8.1 / 9.1 / "
+            "11.2 freeze pins. Existing authorized pins stay 3/17, 1/14, 0/12. "
+            "Execution flags remain hard-false. No holdout 7.2/8.2/9.2 contact."
         ),
     }
 
@@ -253,9 +253,10 @@ def build_summary() -> dict[str, Any]:
         "series": series_out,
         "tdi10_note": (
             "TDI-10.x through 10.20 / TDI-12.0 Stage-0 remain orthogonal. "
-            "TDI-11.2 registry/timing/H11-A scaffolding and TDI-10.20 "
-            "three-block / interleave invent no freeze pins from operator "
-            "lemmas or from TDI-11.1 unlimited envelopes."
+            "TDI-11.2 population-derivation scaffolding and prior "
+            "registry/timing/H11-A / accounting / rejection scaffolds invent "
+            "no freeze pins from operator lemmas or from TDI-11.1 unlimited "
+            "envelopes."
         ),
     }
 

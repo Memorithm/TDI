@@ -3,11 +3,11 @@
   "purpose": "Machine-readable freeze progress + blocker evidence-class summary for TDI-8.1 / TDI-9.1 / TDI-11.2. CI-verified; not a pin source.",
   "schema": "tdi-freeze-progress-summary-v1",
   "scout": {
-    "after_merge": "TDI-10.20 three-block/interleave / #217 (b543060)",
+    "after_merge": "TDI-11.2 registry/timing/H11-A / #218 (6ec59c1)",
     "new_11_2_pins": [],
     "new_8_1_pins": [],
     "new_9_1_pins": [],
-    "verdict": "Post-#217 diversification lands TDI-11.2 non-executing observation registry / timing / H11-A eligibility scaffolding (exact inherited 8-class taxonomy, caller-supplied channel registry, per-channel timing contract, exact PrimaryEligible iff event<assertion classifier; 0x07xx codes). Distinct from #213/#216. Invents no TDI-8.1 / 9.1 / 11.2 freeze pins. Existing authorized pins stay 3/17, 1/14, 0/12. Execution flags remain hard-false. No holdout 7.2/8.2/9.2 contact."
+    "verdict": "Post-#218 diversification lands TDI-11.2 non-executing Development/Validation population-derivation scaffolding (exact authorized Dev/Val domain taxonomy, caller-supplied stratum/seed-space contract, deterministic domain-separated seed-commitment framing, Final/holdout leakage guards; 0x08xx codes). Distinct from #213/#216/#218. Invents no TDI-8.1 / 9.1 / 11.2 freeze pins. Existing authorized pins stay 3/17, 1/14, 0/12. Execution flags remain hard-false. No holdout 7.2/8.2/9.2 contact."
   },
   "series": {
     "tdi11.2": {
@@ -25,9 +25,9 @@
           "required_evidence_class": "complete_decoding_generation_settings"
         },
         {
-          "blocking_until": "deterministic Dev/Val population derivation",
+          "blocking_until": "reviewed pin of ModelObservationPopulationDerivationContract (scaffolding alone is non-authorizing)",
           "field": "development_validation_population_derivation",
-          "non_authorizing_note": null,
+          "non_authorizing_note": "Candidate schema ModelObservationPopulationDerivationContract is present but does not pin this field; scientific strata/sizes/seeds remain caller-supplied",
           "required_evidence_class": "deterministic_dev_val_population_map"
         },
         {
@@ -115,7 +115,8 @@
         "TDI-12.0 Stage-0 ordinal bootstrap",
         "TDI-11.2 ModelObservationChannelRegistry scaffolding (non-pinning)",
         "TDI-11.2 ModelObservationTimingContract scaffolding (non-pinning)",
-        "TDI-11.2 ModelObservationH11AEligibilityRule scaffolding (non-pinning)"
+        "TDI-11.2 ModelObservationH11AEligibilityRule scaffolding (non-pinning)",
+        "TDI-11.2 ModelObservationPopulationDerivationContract scaffolding (non-pinning)"
       ],
       "pinned_count": 0,
       "pinned_count_floor": 0,
@@ -381,5 +382,5 @@
       "unresolved_count": 13
     }
   },
-  "tdi10_note": "TDI-10.x through 10.20 / TDI-12.0 Stage-0 remain orthogonal. TDI-11.2 registry/timing/H11-A scaffolding and TDI-10.20 three-block / interleave invent no freeze pins from operator lemmas or from TDI-11.1 unlimited envelopes."
+  "tdi10_note": "TDI-10.x through 10.20 / TDI-12.0 Stage-0 remain orthogonal. TDI-11.2 population-derivation scaffolding and prior registry/timing/H11-A / accounting / rejection scaffolds invent no freeze pins from operator lemmas or from TDI-11.1 unlimited envelopes."
 }
