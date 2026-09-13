@@ -16,6 +16,8 @@ pub mod adaptive_task_generators;
 pub mod boolean_policy_search;
 #[path = "boolean_policy_search_c3.rs"]
 pub mod boolean_policy_search_c3;
+#[path = "boolean_policy_search_calibration.rs"]
+pub mod boolean_policy_search_calibration;
 #[path = "boolean_policy_synthesis.rs"]
 pub mod boolean_policy_synthesis;
 #[path = "development_campaign.rs"]
