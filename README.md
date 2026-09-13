@@ -31,7 +31,7 @@ The result is a growing body of **code + preregistration + evaluator + provenanc
 | **TDI-6.8** | **Transportable Ordering Across Generator Families** | 🟠 Preregistered / research line | Tests whether rank ordering — rather than absolute calibration — transports across fresh generator-family populations under a frozen per-block criterion. |
 | **TDI-7.x** | **Attention / Memory research programme** | 🟠 Active | Moves the intervention-conditioned recovery question into deterministic attention / memory tasks, then studies heterogeneity, long-horizon joint information and successor semantic questions. |
 | **TDI-8.x** | **Recurrent Associative Architecture Research Programme** | 🟠 Active | Matched-budget A0/A1/A2/A3 programme comparing full-history reference, bounded recurrent state, associative memory, and a bounded VSA / holographic workspace. |
-| **TDI-9.x** | **Autonomous Adaptive Inference Dynamics Research Programme** | 🟠 Active | C0/C1/C2/C3 policy ladder: fixed compute, static preallocation, adaptive stopping, then explicit verification / recovery under a declared compute envelope. |
+| **TDI-9.x** | **Autonomous Adaptive Inference Dynamics Research Programme** | 🟠 Active | C0/C1/C2/C3 policy ladder plus **TDI-9.3 Boolean Policy Synthesis**, which represents and later searches explicit Boolean action policies over frozen leakage-safe trajectory predicates. |
 | **TDI-10.x** | **Operator / Resolvent Research** | 🟠 Active | Generic Jacobi / tridiagonal operator work on shifted resolvents, Schur cavities, Green functions, finite transport and explicitly classified asymptotic claims. |
 | **TDI-11.x** | **Hallucination Dynamics & Control Research Programme** | 🟠 Active bootstrap | Studies supported vs unsupported generation in fully specified worlds, measurable precursors, causal perturbations, risk estimation and bounded adaptive verification / recovery / abstention. |
 
@@ -61,6 +61,8 @@ TDI-8.0 is frozen. TDI-8.1 builds the deterministic evaluator. TDI-8.2 remains a
 [`TDI-9.x`](docs/TDI-9-PROGRAMME.md) studies how much computation to spend and when to continue, stop, verify or recover.
 
 Its policy ladder deliberately separates **fixed compute**, **static preallocation**, **adaptive stopping**, and **adaptive verification / recovery**. The final confirmation design uses a frozen derivation from future public entropy rather than a discretionary post-hoc seed choice.
+
+**TDI-9.3 — Boolean Policy Synthesis** is now the explicit Boolean-policy extension of that line. It starts from the observation that the current hand-written C2 stopping policy is already a Boolean composition of trajectory predicates, then generalizes this into a deterministic Boolean-expression IR and a future bounded search programme. The initial implementation remains non-final and available only through the `tdi-ai` `experimental` feature; it does not alter C2/C3 reference semantics or create a TDI-9.2 final-evaluation surface. See [`docs/TDI-9.3-BOOLEAN-POLICY-SYNTHESIS.md`](docs/TDI-9.3-BOOLEAN-POLICY-SYNTHESIS.md).
 
 ### TDI-10.x — Operator / Resolvent Research
 

@@ -14,7 +14,8 @@ systems. It does not claim knowledge of any proprietary model architecture.
 | TDI-9.0 | Freeze adaptive-inference questions, policy ladder, evidence rules and autonomous-confirmation contract | active |
 | TDI-9.1 | Build bounded deterministic policy/evaluator stack and run agent-driven development/validation | active — freeze 1/14 pinned; remaining scientific fields `unresolved_blocking` |
 | TDI-9.2 | Execute autonomous sealed confirmation from future-derived entropy | future, does not yet exist |
-| TDI-9.3+ | Ablation, transfer, tool interleaving, routing and ecosystem extensions | conditional on evidence |
+| **TDI-9.3** | **Boolean Policy Synthesis: represent, calibrate and later search explicit Boolean action policies over frozen leakage-safe trajectory predicates** | **active design / non-final** |
+| TDI-9.4+ | Ablation, transfer, tool interleaving, routing and further ecosystem extensions | conditional on evidence |
 
 ## Policy ladder
 
@@ -73,16 +74,51 @@ derive the final seeds and execute exactly the frozen evaluator. No discretionar
 policy, metric, task, seed, retry or entropy-source change is allowed after the
 entropy reveal.
 
+## TDI-9.3 — Boolean Policy Synthesis
+
+[`TDI-9.3`](TDI-9.3-BOOLEAN-POLICY-SYNTHESIS.md) is the explicit Boolean-policy extension of the adaptive-inference programme.
+
+Its generic contract is:
+
+```text
+p_t = P(observation_t)
+a_t = F_bool(p_t)
+```
+
+where `P` may use only observables authorized by the relevant TDI stage and `F_bool` selects an action allowed by the existing C2 or C3 vocabulary.
+
+The current hand-written C2 stopping rule is already Boolean in structure:
+
+```text
+STOP = enough_steps
+       AND (
+           terminal
+           OR (
+               residual_small
+               AND delta_small
+               AND margin_large
+           )
+       )
+```
+
+TDI-9.3 therefore tests a narrower and falsifiable extension: whether explicit Boolean-policy representation and, later, bounded policy synthesis can improve the quality/compute frontier relative to the hand-written reference under matched resource accounting.
+
+The first implementation is intentionally isolated behind the `tdi-ai` `experimental` feature. It provides a Boolean-expression IR, ordered action rules, policy-arm action validation and deterministic rule-complexity accounting. It does not choose the final predicate schema, alter C2/C3 reference semantics, implement TDI-9.2 confirmation, or access protected/final material.
+
+TDI-9.3 shares generic Boolean-rule machinery with BooleanLab BL-14, but the scientific ownership remains separate: BooleanLab studies Boolean control/synthesis mechanisms, while TDI measures their value as trajectory-dependent adaptive-inference policies. Evidence-qualified generic primitives may later be promoted to SciRust.
+
 ## Ecosystem sequence
 
 1. TDI-9.0 preregistration and bootstrap;
 2. TDI-9.1 deterministic reference evaluator and agent-driven falsification;
 3. TDI-9.2 autonomous sealed confirmation if TDI-9.1 reaches its readiness gate;
-4. ADA may propose semantic mechanisms and observables, but final material never enters candidate generation;
-5. Forge may search policies only after a leak-safe TDI-9 search contract exists;
-6. ITD may contribute versioned structural trajectory diagnostics through explicit adapters;
-7. reusable primitives may move to SciRust;
-8. NNIS and ElasticXxx may receive evidence-qualified policies for real execution/runtime work.
+4. TDI-9.3 may represent and search Boolean policy candidates only on stage-authorized non-final surfaces and under explicit observation/resource contracts;
+5. BooleanLab BL-14 may contribute generic Boolean-rule representation/search ideas, never TDI final evidence or an automatic superiority claim;
+6. ADA may propose semantic mechanisms and observables, but final material never enters candidate generation;
+7. Forge may search policies only after a leak-safe TDI-9 search contract exists;
+8. ITD may contribute versioned structural trajectory diagnostics through explicit adapters;
+9. reusable primitives may move to SciRust;
+10. NNIS and ElasticXxx may receive evidence-qualified policies for real execution/runtime work.
 
 ## Mandatory isolation
 
@@ -91,6 +127,8 @@ TDI-9 must not create, access or reinterpret a TDI-8.2 surface. TDI-8 and TDI-9
 may coexist because they answer different scientific questions and maintain
 separate final-evaluation lineage.
 
+TDI-9.3 must additionally remain isolated from TDI-9.2 final material during candidate representation, search, tuning and validation. A Boolean-policy candidate may reach a future final confirmation only through the same frozen, non-discretionary TDI-9 confirmation contract as any other candidate policy.
+
 ## Scientific interpretation rule
 
 A positive TDI-9 result would establish only the bounded tested claim. It would
@@ -98,3 +136,5 @@ not establish that a named commercial model uses the same mechanism, that the
 policy generalizes to language modelling, that tool use is solved, or that a
 particular GPU/runtime implementation is faster. Those require separate direct
 evidence.
+
+A positive TDI-9.3 result would likewise establish only that the tested Boolean policy achieved a declared adaptive-inference trade-off in the tested regime. It would not establish that Boolean policies are universally optimal.
