@@ -23,6 +23,8 @@ At this status, authorized work is limited to:
 - non-executing model-observation registry / timing / H11-A eligibility scaffolding
   (candidates only; does not pin `exact_observation_registry`,
   `exact_observation_timing`, or `primary_pre_assertion_eligibility`);
+- non-executing Development/Validation population-derivation scaffolding
+  (candidate only; does not pin `development_validation_population_derivation`);
 - deterministic tests proving that unresolved model-observation fields keep execution blocked.
 
 ## Current blocking fields
@@ -74,7 +76,7 @@ already enforce this fail-closed posture.
 
 Fail-closed reminder (unchanged authorizations): both execution flags remain
 **false** until a separately reviewed freeze pins all twelve blocking fields.
-Post-#217 scout found no model/adapter/tokenizer identifier that can be pinned;
+Post-#218 scout found no model/adapter/tokenizer identifier that can be pinned;
 **0/12 pinned** (STATUS↔freeze JSON pin-count cross-check in readiness). All
 12 fields stay `unresolved_blocking`. The readiness gate fail-closes if
 `model_execution_authorized` is true while any field is `unresolved_blocking`,
@@ -97,6 +99,11 @@ Machine-readable companions (CI-verified; not pins):
   `docs/TDI-11.2-MODEL-OBSERVATION-REGISTRY.md`,
   `tdi-ai/src/hallucination_model_observation_registry.rs`,
   `scripts/check-tdi11.2-model-observation-registry.sh`
+- non-executing Dev/Val population-derivation scaffolding (candidate only;
+  **not a pin**):
+  `docs/TDI-11.2-MODEL-OBSERVATION-POPULATION.md`,
+  `tdi-ai/src/hallucination_model_observation_population.rs`,
+  `scripts/check-tdi11.2-model-observation-population.sh`
 - blocker evidence-class inventory: `docs/tdi11.2-blocker-evidence-classes.json`
 - freeze progress summary: `docs/tdi-freeze-progress-summary.json` (includes
   verified ledger digest `dec8bd504a903b0125fdb88f66821940d286358eec6d59ee1a194fc6c63e9421`)
@@ -104,7 +111,7 @@ Machine-readable companions (CI-verified; not pins):
 Orthogonal TDI-10.x through TDI-10.20 / TDI-12.0 Stage-0 must not invent those
 pins or contact TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces. TDI-12.0
 DiagonalOnlyWidthLadder closed forms do not pin registry / timing / eligibility /
-resource_accounting_contract / typed_rejection_contract / provenance_contract.
-Rejection/provenance/accounting/registry scaffolding remains non-authorizing;
-pins stay **0/12**.
+population derivation / resource_accounting_contract / typed_rejection_contract /
+provenance_contract. Rejection/provenance/accounting/registry/population
+scaffolding remains non-authorizing; pins stay **0/12**.
 

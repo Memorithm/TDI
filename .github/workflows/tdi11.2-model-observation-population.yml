@@ -1,0 +1,60 @@
+name: TDI-11.2 model-observation population scaffold
+
+on:
+  pull_request:
+    paths:
+      - 'tdi-ai/src/hallucination_model_observation_population.rs'
+      - 'tdi-ai/src/hallucination_model_observation_rejections.rs'
+      - 'tdi-ai/tests/tdi11_model_observation_population.rs'
+      - 'tdi-ai/tests/tdi11_model_observation_rejections.rs'
+      - 'tdi-ai/tests/tdi11_model_observation_accounting.rs'
+      - 'tdi-ai/tests/tdi11_model_observation_registry.rs'
+      - 'docs/TDI-11.2-MODEL-OBSERVATION-POPULATION.md'
+      - 'docs/TDI-11.2-MODEL-OBSERVATION-REJECTIONS.md'
+      - 'docs/TDI-11.2-STATUS.md'
+      - 'docs/TDI-11.2-UNRESOLVED-LEDGER.md'
+      - 'docs/tdi11.2-model-observation-freeze.json'
+      - 'scripts/check-tdi11.2-model-observation-population.sh'
+      - '.github/workflows/tdi11.2-model-observation-population.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tdi-ai/src/hallucination_model_observation_population.rs'
+      - 'tdi-ai/src/hallucination_model_observation_rejections.rs'
+      - 'tdi-ai/tests/tdi11_model_observation_population.rs'
+      - 'tdi-ai/tests/tdi11_model_observation_rejections.rs'
+      - 'tdi-ai/tests/tdi11_model_observation_accounting.rs'
+      - 'tdi-ai/tests/tdi11_model_observation_registry.rs'
+      - 'docs/TDI-11.2-MODEL-OBSERVATION-POPULATION.md'
+      - 'docs/TDI-11.2-MODEL-OBSERVATION-REJECTIONS.md'
+      - 'docs/TDI-11.2-STATUS.md'
+      - 'docs/TDI-11.2-UNRESOLVED-LEDGER.md'
+      - 'docs/tdi11.2-model-observation-freeze.json'
+      - 'scripts/check-tdi11.2-model-observation-population.sh'
+      - '.github/workflows/tdi11.2-model-observation-population.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  model-observation-population:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+
+      - name: Qualify non-executing population-derivation scaffold
+        shell: bash
+        run: bash scripts/check-tdi11.2-model-observation-population.sh
+
+      - name: Keep TDI-11.2 readiness fail-closed at 0/12
+        shell: bash
+        run: bash scripts/check-tdi11.2-readiness.sh

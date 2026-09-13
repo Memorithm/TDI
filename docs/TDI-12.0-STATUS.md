@@ -77,8 +77,9 @@ authorized pins stay 3/17, 1/14, 0/12. No TDI-7.2 / TDI-8.2 / TDI-9.2 contact.
 TDI-9.3.0 does not authorize TDI-9.1 / TDI-9.2. TDI-10.19 reverse/cross family
 composition and TDI-10.20 three-block / interleaved schedules are orthogonal
 Stage-10 EXACT work and invent no TDI-12.0 pins. DiagonalOnlyWidthLadder
-closed forms remain non-authorizing candidates. Post-#217 TDI-11.2
-registry/timing/H11-A scaffolding (and prior #216 accounting) is orthogonal and
+closed forms remain non-authorizing candidates. Post-#218 TDI-11.2
+population-derivation scaffolding (and prior #218 registry/timing/H11-A /
+#216 accounting) is orthogonal and
 likewise invents no Stage-0 freeze pins.
 
 ## Next engineering slice after DiagonalOnly / Toeplitz Stage-0 controls

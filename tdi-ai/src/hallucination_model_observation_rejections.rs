@@ -9,8 +9,8 @@
 //! - transfer TDI-8.1 `SymbolicRejectionCode` or TDI-9.1 `ReferenceRejectionCode`;
 //! - invent model/adapter/tokenizer/decoding identities.
 //!
-//! Technical adapter / timing / accounting / registry / eligibility failures remain typed
-//! rejections and are never reinterpreted as hallucination-quality outcomes.
+//! Technical adapter / timing / accounting / registry / eligibility / population
+//! failures remain typed rejections and are never reinterpreted as hallucination-quality outcomes.
 
 use core::fmt;
 
@@ -91,6 +91,19 @@ pub enum ModelObservationRejectionCode {
     TimingContractPolicyConflict = 0x0709,
     EligibilityAssertionBoundaryUnknown = 0x070A,
     EligibilityPrimaryRequiresStrictPreAssertion = 0x070B,
+
+    // 0x08xx — Development/Validation population-derivation scaffolding failures
+    PopulationEmpty = 0x0801,
+    PopulationEmptyStratumId = 0x0802,
+    PopulationEmptySeedSpaceKey = 0x0803,
+    PopulationDuplicateStratum = 0x0804,
+    PopulationDuplicateSeedSpace = 0x0805,
+    PopulationDomainCoverageIncomplete = 0x0806,
+    PopulationForbiddenDomain = 0x0807,
+    PopulationForbiddenSurfaceToken = 0x0808,
+    PopulationUnknownStratum = 0x0809,
+    PopulationDomainMismatch = 0x080A,
+    PopulationFinalMaterialLeak = 0x080B,
 }
 
 impl ModelObservationRejectionCode {
@@ -147,6 +160,17 @@ impl ModelObservationRejectionCode {
             Self::EligibilityPrimaryRequiresStrictPreAssertion => {
                 "eligibility_primary_requires_strict_pre_assertion"
             }
+            Self::PopulationEmpty => "population_empty",
+            Self::PopulationEmptyStratumId => "population_empty_stratum_id",
+            Self::PopulationEmptySeedSpaceKey => "population_empty_seed_space_key",
+            Self::PopulationDuplicateStratum => "population_duplicate_stratum",
+            Self::PopulationDuplicateSeedSpace => "population_duplicate_seed_space",
+            Self::PopulationDomainCoverageIncomplete => "population_domain_coverage_incomplete",
+            Self::PopulationForbiddenDomain => "population_forbidden_domain",
+            Self::PopulationForbiddenSurfaceToken => "population_forbidden_surface_token",
+            Self::PopulationUnknownStratum => "population_unknown_stratum",
+            Self::PopulationDomainMismatch => "population_domain_mismatch",
+            Self::PopulationFinalMaterialLeak => "population_final_material_leak",
         }
     }
 
@@ -482,4 +506,15 @@ pub const ALL_MODEL_OBSERVATION_REJECTION_CODES: &[ModelObservationRejectionCode
     ModelObservationRejectionCode::TimingContractPolicyConflict,
     ModelObservationRejectionCode::EligibilityAssertionBoundaryUnknown,
     ModelObservationRejectionCode::EligibilityPrimaryRequiresStrictPreAssertion,
+    ModelObservationRejectionCode::PopulationEmpty,
+    ModelObservationRejectionCode::PopulationEmptyStratumId,
+    ModelObservationRejectionCode::PopulationEmptySeedSpaceKey,
+    ModelObservationRejectionCode::PopulationDuplicateStratum,
+    ModelObservationRejectionCode::PopulationDuplicateSeedSpace,
+    ModelObservationRejectionCode::PopulationDomainCoverageIncomplete,
+    ModelObservationRejectionCode::PopulationForbiddenDomain,
+    ModelObservationRejectionCode::PopulationForbiddenSurfaceToken,
+    ModelObservationRejectionCode::PopulationUnknownStratum,
+    ModelObservationRejectionCode::PopulationDomainMismatch,
+    ModelObservationRejectionCode::PopulationFinalMaterialLeak,
 ];

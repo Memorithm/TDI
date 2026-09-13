@@ -32,7 +32,7 @@
 
 ## Integrity (this slice)
 
-Post-#204 scout (after TDI-10.18 on `main` at `460970a`, including TDI-9.3 Boolean policy synthesis #195) found **no** newly closed identifier that can pin a remaining 9.1 field. `PolicyObservation` / Boolean IR remain types, not an experimental observation-vector pin. Existing authorized pin stays **1/14**. Readiness continues to fail-close on a pinned-count floor of **≥1**, STATUS↔freeze JSON pin-count cross-check, missing pin-evidence blocks, unauthorized pins, silent STATUS / `scientific_status` upgrades (#199), and any pin evidence citing `docs/TDI-9.3-BOOLEAN-POLICY-SYNTHESIS.md`.
+Post-#218 scout (after TDI-11.2 registry/timing/H11-A on `main` at `6ec59c1`, plus population-derivation scaffolding on this slice; TDI-9.3 Boolean policy synthesis remains orthogonal) found **no** newly closed identifier that can pin a remaining 9.1 field. `PolicyObservation` / Boolean IR remain types, not an experimental observation-vector pin. Existing authorized pin stays **1/14**. Readiness continues to fail-close on a pinned-count floor of **≥1**, STATUS↔freeze JSON pin-count cross-check, missing pin-evidence blocks, unauthorized pins, silent STATUS / `scientific_status` upgrades (#199), and any pin evidence citing `docs/TDI-9.3-BOOLEAN-POLICY-SYNTHESIS.md`.
 
 Machine-readable companions (CI-verified; not pin sources):
 
@@ -60,4 +60,4 @@ No item authorizes TDI-9.2 execution.
 
 ## Series orthogonality
 
-TDI-10.x through TDI-10.20 / TDI-12.0 Stage-0 remains orthogonal: operator-research and Stage-0 ordinal advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces. TDI-12.0 DiagonalOnlyWidthLadder closed forms, TDI-11.2 resource-accounting / registry / timing / H11-A scaffolding, and TDI-10.20 three-block / interleave invent no TDI-9.1 pins (9.3 ≠ 9.1/9.2 auth). #199 readiness floors are unchanged; STATUS↔JSON pin-count cross-check and the freeze-progress summary are additive.
+TDI-10.x through TDI-10.20 / TDI-12.0 Stage-0 remains orthogonal: operator-research and Stage-0 ordinal advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces. TDI-12.0 DiagonalOnlyWidthLadder closed forms, TDI-11.2 resource-accounting / registry / timing / H11-A / population-derivation scaffolding, and TDI-10.20 three-block / interleave invent no TDI-9.1 pins (9.3 ≠ 9.1/9.2 auth). #199 readiness floors are unchanged; STATUS↔JSON pin-count cross-check and the freeze-progress summary are additive.

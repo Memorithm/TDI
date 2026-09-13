@@ -261,6 +261,47 @@ fn rejection_numeric_codes_are_exact_unique_and_stable() {
             ModelObservationRejectionCode::EligibilityPrimaryRequiresStrictPreAssertion,
             0x070B,
         ),
+        (ModelObservationRejectionCode::PopulationEmpty, 0x0801),
+        (
+            ModelObservationRejectionCode::PopulationEmptyStratumId,
+            0x0802,
+        ),
+        (
+            ModelObservationRejectionCode::PopulationEmptySeedSpaceKey,
+            0x0803,
+        ),
+        (
+            ModelObservationRejectionCode::PopulationDuplicateStratum,
+            0x0804,
+        ),
+        (
+            ModelObservationRejectionCode::PopulationDuplicateSeedSpace,
+            0x0805,
+        ),
+        (
+            ModelObservationRejectionCode::PopulationDomainCoverageIncomplete,
+            0x0806,
+        ),
+        (
+            ModelObservationRejectionCode::PopulationForbiddenDomain,
+            0x0807,
+        ),
+        (
+            ModelObservationRejectionCode::PopulationForbiddenSurfaceToken,
+            0x0808,
+        ),
+        (
+            ModelObservationRejectionCode::PopulationUnknownStratum,
+            0x0809,
+        ),
+        (
+            ModelObservationRejectionCode::PopulationDomainMismatch,
+            0x080A,
+        ),
+        (
+            ModelObservationRejectionCode::PopulationFinalMaterialLeak,
+            0x080B,
+        ),
     ];
     assert_eq!(ALL_MODEL_OBSERVATION_REJECTION_CODES.len(), expected.len());
     let mut seen = std::collections::BTreeSet::new();
