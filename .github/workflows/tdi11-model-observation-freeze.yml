@@ -21,3 +21,7 @@ jobs:
 
       - name: Test immutable pin provenance contract
         run: python3 scripts/test-tdi11.2-model-observation-freeze.py
+
+      - name: Fail-closed TDI-11.2 readiness tests
+        run: python3 scripts/test-tdi11.2-readiness.py
+

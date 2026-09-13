@@ -29,7 +29,7 @@ When `scripts/check-tdi9-bootstrap.sh` exists, run it before a TDI-9 pull reques
 
 For TDI-11.x work, read `docs/TDI-11-PROGRAMME.md`, `docs/TDI-11.0-HALLUCINATION-DYNAMICS-SCOPE.md`, `docs/TDI-11.0-HALLUCINATION-DYNAMICS-PREREGISTRATION.md`, `docs/TDI-11.0-IMPLEMENTATION-GATE.md`, and `docs/TDI-11.0-STATUS.md` before evaluator, model-adapter, detector, controller, or scientific changes.
 
-For TDI-11.2 work, also read `docs/TDI-11.2-PROSPECTIVE-INSTRUMENTATION-PREARM.md`, `docs/TDI-11.2-IMPLEMENTATION-GATE.md`, `docs/TDI-11.2-STATUS.md`, and `docs/tdi11.2-prearm.yaml`.
+For TDI-11.2 work, also read `docs/TDI-11.2-PROSPECTIVE-INSTRUMENTATION-PREARM.md`, `docs/TDI-11.2-IMPLEMENTATION-GATE.md`, `docs/TDI-11.2-STATUS.md`, `docs/TDI-11.2-UNRESOLVED-LEDGER.md`, and `docs/tdi11.2-prearm.yaml`.
 
 TDI-11.1 implementation is forbidden until TDI-11.0 is merged, blob-pinned and `scripts/check-tdi11-bootstrap.sh` passes. Primary TDI-11 controlled-world scoring must use the deterministic evaluator-owned oracle and the frozen `ASSERT <subject_id> <relation_id> <object_id>` / `ABSTAIN` grammar; do not substitute an LLM judge.
 
@@ -39,7 +39,7 @@ TDI-11.2 begins fail-closed. While `docs/tdi11.2-prearm.yaml` contains any `unre
 
 TDI-11.0/11.1/11.2 may not create a final runner, final seed list, final dataset, or final result payload. A future autonomous final confirmation is allowed only if a later merged protocol freezes a non-discretionary future-derived entropy contract before the value is knowable and forbids result-conditioned retry/replacement.
 
-When `scripts/check-tdi11-bootstrap.sh` exists, run it before a TDI-11 pull request or merge decision. For TDI-11.2 work, also run `bash scripts/check-tdi11.2-prearm.sh` when available.
+When `scripts/check-tdi11-bootstrap.sh` exists, run it before a TDI-11 pull request or merge decision. For TDI-11.2 work, also run `bash scripts/check-tdi11.2-prearm.sh` when available. For TDI-11.2 readiness, also run `bash scripts/check-tdi11.2-readiness.sh` when available.
 
 Preserve preregistration, untouched or future-derived final-evaluation lineage, frozen negative/null results, calibration limitations, explicit matched-resource controls, and the separation between scientific reference evidence and downstream optimization. Architecture and policy labels are hypotheses, not novelty or performance claims.
 

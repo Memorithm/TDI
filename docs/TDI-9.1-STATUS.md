@@ -15,6 +15,7 @@
 - Freeze resolution ledger: `docs/TDI-9.1-FREEZE-RESOLUTION-PLAN.md`
 - Integrity readiness gate: `scripts/check-tdi9.1-readiness.sh` (workflow `tdi9-readiness.yml`)
 - TDI-9.2 runner / final seed list / dataset / result payload: **absent**
+- `tdi9_2_execution_authorized`: **false** (hard)
 - Human confirmation token: intentionally absent from TDI-9
 - TDI-7.2 / TDI-8.2 interaction: **forbidden**
 
@@ -26,6 +27,10 @@
 - Bounded C0/C1/C2/C3 reference policies (#129)
 - Composed `adaptive_evaluator` non-final integration (#135)
 - `evaluate_generated_task_recorded` + `ReferenceRejectionCode` vocabulary (#140)
+
+## Integrity (this slice)
+
+Post-#198 scout of merged code/docs/PRs (including TDI-9.3 Boolean policy synthesis, #195) found **no** newly closed identifier that can pin a remaining 9.1 field. `PolicyObservation` / Boolean IR remain types, not an experimental observation-vector pin. Existing authorized pin stays 1/14. Readiness now fail-closes on a pinned-count floor of **≥1**, missing pin-evidence blocks, unauthorized pins, and silent STATUS / `scientific_status` upgrades.
 
 ## Remaining TDI-9.1 work
 
@@ -39,4 +44,4 @@ No item authorizes TDI-9.2 execution.
 
 ## Series orthogonality
 
-TDI-10.x (including TDI-10.13) is orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces.
+TDI-10.x through TDI-10.13 (`ecca754`, #198) is merged on `main` and remains orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces.

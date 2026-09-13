@@ -36,6 +36,9 @@ Concrete model execution remains blocked until the repository freezes exact valu
 - provenance.
 
 The machine-readable source of this pre-arm state is `docs/tdi11.2-prearm.yaml`.
+The content-addressed unresolved ledger (not a pin) is `docs/TDI-11.2-UNRESOLVED-LEDGER.md`
+with sidecar `docs/tdi11.2-model-observation-freeze.sha256`.
+Always-on readiness: `scripts/check-tdi11.2-readiness.sh` (workflow `tdi11.2-readiness.yml`).
 
 ## Forbidden state transitions
 
@@ -64,6 +67,10 @@ already enforce this fail-closed posture.
 
 Fail-closed reminder (unchanged authorizations): both execution flags remain
 **false** until a separately reviewed freeze pins all twelve blocking fields.
-Orthogonal TDI-10.x operator-family work (including TDI-10.13) must not invent
-those pins or contact TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces.
+Post-#198 scout found no model/adapter/tokenizer identifier that can be pinned.
+The readiness gate fail-closes if `model_execution_authorized` is true while any
+field is `unresolved_blocking`, if any of the 12 fields is invented as pinned,
+or if a forbidden surface appears. Orthogonal TDI-10.x operator-family work
+through TDI-10.13 (`ecca754`, #198) must not invent those pins or contact
+TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces.
 

@@ -90,7 +90,7 @@ TDI-11.2 starts in a fail-closed pre-arm state. While `docs/tdi11.2-prearm.yaml`
 
 TDI-11.0/11.1/11.2 may not contain a final runner, final seed list, final dataset, or final result payload. A future final confirmation requires a separately frozen non-discretionary final derivation contract and explicit authorization.
 
-Before a TDI-11 PR or merge decision, run `bash scripts/check-tdi11-bootstrap.sh` when that script exists on the branch. For TDI-11.2 work, also run `bash scripts/check-tdi11.2-prearm.sh` when that script exists.
+Before a TDI-11 PR or merge decision, run `bash scripts/check-tdi11-bootstrap.sh` when that script exists on the branch. For TDI-11.2 work, also run `bash scripts/check-tdi11.2-prearm.sh` when that script exists. For TDI-11.2 readiness, also run `bash scripts/check-tdi11.2-readiness.sh` when that script exists.
 
 ## Scientific boundary
 

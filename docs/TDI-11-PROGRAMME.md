@@ -169,7 +169,7 @@ TDI-11 does not currently claim:
 
 ## Current gate
 
-TDI-11.1 non-final reference foundations are integrated on `main` through PR #157. TDI-11.2 is now in **pre-arm**.
+TDI-11.1 non-final reference foundations are integrated on `main` through PR #157. TDI-11.2 is now in **pre-arm**. Always-on readiness (`scripts/check-tdi11.2-readiness.sh`) fail-closes if model execution is armed while any of the 12 fields remains `unresolved_blocking`, if a pin is invented, or if a forbidden surface appears. The unresolved ledger is content-addressed in `docs/TDI-11.2-UNRESOLVED-LEDGER.md` and is not a pin.
 
 A concrete model must not be implemented or executed through a TDI-11.2 runner until the exact non-final model/observation contract is frozen, content-addressed, CI-verified on the exact PR head, merged to `main`, and the TDI-11.2 implementation gate passes there.
 

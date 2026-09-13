@@ -100,10 +100,30 @@ if unauthorized:
 print("unauthorized fields remain unresolved_blocking: YES")
 PY
 
+if (( pinned_count < 3 )); then
+    fail "pinned-count floor is 3; found $pinned_count"
+fi
+
 grep -Fq '3/17 pinned' "$STATUS" \
     || fail "STATUS must keep the current 3/17 freeze-progress count until a new authorized pin is added"
 grep -Fq 'paired_interval_method' "$PLAN" \
     || fail "resolution plan must still list paired_interval_method"
+grep -Fq '`tdi8_2_execution_authorized`: **false**' "$STATUS" \
+    || fail "STATUS must keep tdi8_2_execution_authorized hard-false"
+
+# Refuse silent STATUS upgrades while the freeze remains incomplete.
+if [[ "$scientific_status" == "unresolved_blocking" ]]; then
+    if grep -E '^- Status:[[:space:]]+\*\*(frozen_nonfinal|frozen|complete|authorized)' "$STATUS"; then
+        fail "STATUS silently upgraded while scientific_status is unresolved_blocking"
+    fi
+    if grep -Fq 'scientific_status` is `frozen_nonfinal' "$STATUS" \
+        || grep -Fq 'scientific_status` remains `frozen_nonfinal' "$STATUS"; then
+        fail "STATUS claims frozen_nonfinal while the freeze is still unresolved_blocking"
+    fi
+    if grep -Eqi 'TDI-8\.2[^[:space:]]* (is |now )?(authorized|ready|armed)' "$STATUS"; then
+        fail "STATUS must not claim TDI-8.2 authorization while freeze is incomplete"
+    fi
+fi
 
 printf '\n===== TDI-8.2 / TDI-7.2 SURFACE EXCLUSION =====\n'
 mapfile -t forbidden < <(

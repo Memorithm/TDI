@@ -21,3 +21,7 @@ jobs:
 
       - name: Validate non-executing configuration freeze
         run: python3 scripts/check-tdi8.1-configuration-freeze.py
+
+      - name: Fail-closed freeze validator tests
+        run: python3 scripts/test-tdi8.1-configuration-freeze.py
+
