@@ -9,8 +9,8 @@
 //! - transfer TDI-8.1 `SymbolicRejectionCode` or TDI-9.1 `ReferenceRejectionCode`;
 //! - invent model/adapter/tokenizer/decoding identities.
 //!
-//! Technical adapter / timing / accounting failures remain typed rejections and are never
-//! reinterpreted as hallucination-quality outcomes.
+//! Technical adapter / timing / accounting / registry / eligibility failures remain typed
+//! rejections and are never reinterpreted as hallucination-quality outcomes.
 
 use core::fmt;
 
@@ -78,6 +78,19 @@ pub enum ModelObservationRejectionCode {
     // 0x06xx — resource accounting scaffolding failures
     AccountingOverflow = 0x0601,
     AccountingEnvelopeExceeded = 0x0602,
+
+    // 0x07xx — registry / timing-contract / H11-A eligibility scaffolding failures
+    RegistryEmpty = 0x0701,
+    RegistryEmptyChannelName = 0x0702,
+    RegistryDuplicateChannel = 0x0703,
+    RegistryUnknownSourceClass = 0x0704,
+    RegistryUndeclaredChannel = 0x0705,
+    TimingContractEmpty = 0x0706,
+    TimingContractChannelCoverageIncomplete = 0x0707,
+    TimingContractUnknownChannel = 0x0708,
+    TimingContractPolicyConflict = 0x0709,
+    EligibilityAssertionBoundaryUnknown = 0x070A,
+    EligibilityPrimaryRequiresStrictPreAssertion = 0x070B,
 }
 
 impl ModelObservationRejectionCode {
@@ -119,6 +132,21 @@ impl ModelObservationRejectionCode {
             Self::ProvenanceForbiddenSurfaceToken => "provenance_forbidden_surface_token",
             Self::AccountingOverflow => "accounting_overflow",
             Self::AccountingEnvelopeExceeded => "accounting_envelope_exceeded",
+            Self::RegistryEmpty => "registry_empty",
+            Self::RegistryEmptyChannelName => "registry_empty_channel_name",
+            Self::RegistryDuplicateChannel => "registry_duplicate_channel",
+            Self::RegistryUnknownSourceClass => "registry_unknown_source_class",
+            Self::RegistryUndeclaredChannel => "registry_undeclared_channel",
+            Self::TimingContractEmpty => "timing_contract_empty",
+            Self::TimingContractChannelCoverageIncomplete => {
+                "timing_contract_channel_coverage_incomplete"
+            }
+            Self::TimingContractUnknownChannel => "timing_contract_unknown_channel",
+            Self::TimingContractPolicyConflict => "timing_contract_policy_conflict",
+            Self::EligibilityAssertionBoundaryUnknown => "eligibility_assertion_boundary_unknown",
+            Self::EligibilityPrimaryRequiresStrictPreAssertion => {
+                "eligibility_primary_requires_strict_pre_assertion"
+            }
         }
     }
 
@@ -443,4 +471,15 @@ pub const ALL_MODEL_OBSERVATION_REJECTION_CODES: &[ModelObservationRejectionCode
     ModelObservationRejectionCode::ProvenanceForbiddenSurfaceToken,
     ModelObservationRejectionCode::AccountingOverflow,
     ModelObservationRejectionCode::AccountingEnvelopeExceeded,
+    ModelObservationRejectionCode::RegistryEmpty,
+    ModelObservationRejectionCode::RegistryEmptyChannelName,
+    ModelObservationRejectionCode::RegistryDuplicateChannel,
+    ModelObservationRejectionCode::RegistryUnknownSourceClass,
+    ModelObservationRejectionCode::RegistryUndeclaredChannel,
+    ModelObservationRejectionCode::TimingContractEmpty,
+    ModelObservationRejectionCode::TimingContractChannelCoverageIncomplete,
+    ModelObservationRejectionCode::TimingContractUnknownChannel,
+    ModelObservationRejectionCode::TimingContractPolicyConflict,
+    ModelObservationRejectionCode::EligibilityAssertionBoundaryUnknown,
+    ModelObservationRejectionCode::EligibilityPrimaryRequiresStrictPreAssertion,
 ];

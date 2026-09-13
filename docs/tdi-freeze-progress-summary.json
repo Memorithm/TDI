@@ -3,11 +3,11 @@
   "purpose": "Machine-readable freeze progress + blocker evidence-class summary for TDI-8.1 / TDI-9.1 / TDI-11.2. CI-verified; not a pin source.",
   "schema": "tdi-freeze-progress-summary-v1",
   "scout": {
-    "after_merge": "TDI-11.2 resource accounting / #216 (6af4171)",
+    "after_merge": "TDI-10.20 three-block/interleave / #217 (b543060)",
     "new_11_2_pins": [],
     "new_8_1_pins": [],
     "new_9_1_pins": [],
-    "verdict": "Post-#216 diversification lands TDI-10.20 EXACT three-block named-family concatenation and interleaved pair-schedules (mixed {U,D,S} permutation closed forms, index-restart same-family products, (UD)^k/(US)^k/(DS)^k). Invents no TDI-8.1 / 9.1 / 11.2 freeze pins. Existing authorized pins stay 3/17, 1/14, 0/12. Execution flags remain hard-false. No holdout 7.2/8.2/9.2 contact."
+    "verdict": "Post-#217 diversification lands TDI-11.2 non-executing observation registry / timing / H11-A eligibility scaffolding (exact inherited 8-class taxonomy, caller-supplied channel registry, per-channel timing contract, exact PrimaryEligible iff event<assertion classifier; 0x07xx codes). Distinct from #213/#216. Invents no TDI-8.1 / 9.1 / 11.2 freeze pins. Existing authorized pins stay 3/17, 1/14, 0/12. Execution flags remain hard-false. No holdout 7.2/8.2/9.2 contact."
   },
   "series": {
     "tdi11.2": {
@@ -31,15 +31,15 @@
           "required_evidence_class": "deterministic_dev_val_population_map"
         },
         {
-          "blocking_until": "exact channel registry selection",
+          "blocking_until": "reviewed pin of ModelObservationChannelRegistry (scaffolding alone is non-authorizing)",
           "field": "exact_observation_registry",
-          "non_authorizing_note": null,
+          "non_authorizing_note": "Candidate schema ModelObservationChannelRegistry is present but does not pin this field; channel names remain caller-supplied",
           "required_evidence_class": "exact_observation_channel_registry"
         },
         {
-          "blocking_until": "per-channel timing contract",
+          "blocking_until": "reviewed pin of ModelObservationTimingContract (scaffolding alone is non-authorizing)",
           "field": "exact_observation_timing",
-          "non_authorizing_note": null,
+          "non_authorizing_note": "Candidate schema ModelObservationTimingContract is present but does not pin this field",
           "required_evidence_class": "per_channel_event_timing"
         },
         {
@@ -49,9 +49,9 @@
           "required_evidence_class": "immutable_local_open_model_artifact"
         },
         {
-          "blocking_until": "H11-A eligibility rule freeze",
+          "blocking_until": "reviewed pin of ModelObservationH11AEligibilityRule (scaffolding alone is non-authorizing)",
           "field": "primary_pre_assertion_eligibility",
-          "non_authorizing_note": null,
+          "non_authorizing_note": "Candidate classifier ModelObservationH11AEligibilityRule is present but does not pin this field",
           "required_evidence_class": "h11a_pre_assertion_eligibility_rule"
         },
         {
@@ -112,7 +112,10 @@
         "TDI-11.2 ModelObservationRejectionCode scaffolding (non-pinning)",
         "TDI-11.2 ModelObservationTraceProvenance scaffolding (non-pinning)",
         "TDI-11.2 ModelObservationResourceAccountingContract scaffolding (non-pinning)",
-        "TDI-12.0 Stage-0 ordinal bootstrap"
+        "TDI-12.0 Stage-0 ordinal bootstrap",
+        "TDI-11.2 ModelObservationChannelRegistry scaffolding (non-pinning)",
+        "TDI-11.2 ModelObservationTimingContract scaffolding (non-pinning)",
+        "TDI-11.2 ModelObservationH11AEligibilityRule scaffolding (non-pinning)"
       ],
       "pinned_count": 0,
       "pinned_count_floor": 0,
@@ -378,5 +381,5 @@
       "unresolved_count": 13
     }
   },
-  "tdi10_note": "TDI-10.x through 10.20 / TDI-12.0 Stage-0 remain orthogonal. TDI-10.20 three-block / interleave does not invent freeze pins from operator lemmas or from TDI-11.1 unlimited envelopes."
+  "tdi10_note": "TDI-10.x through 10.20 / TDI-12.0 Stage-0 remain orthogonal. TDI-11.2 registry/timing/H11-A scaffolding and TDI-10.20 three-block / interleave invent no freeze pins from operator lemmas or from TDI-11.1 unlimited envelopes."
 }

@@ -68,7 +68,9 @@ The rejection module is intentionally **not** promoted into the stable
 ## Explicitly not frozen / not authorized
 
 - model artifact, adapter, tokenizer/template, decoding, prompt serializer;
-- exact observation registry / timing / H11-A eligibility;
+- exact observation registry / timing / H11-A eligibility scientific pins
+  (non-executing candidates exist separately in
+  `docs/TDI-11.2-MODEL-OBSERVATION-REGISTRY.md` with `0x07xx` codes; still unpinned);
 - Dev/Val population derivation;
 - numeric resource envelopes;
 - `typed_rejection_contract` and `provenance_contract` freeze fields;
