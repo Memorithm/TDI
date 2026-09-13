@@ -3,11 +3,11 @@
   "purpose": "Machine-readable freeze progress + blocker evidence-class summary for TDI-8.1 / TDI-9.1 / TDI-11.2. CI-verified; not a pin source.",
   "schema": "tdi-freeze-progress-summary-v1",
   "scout": {
-    "after_merge": "TDI-10.18 / #204 (460970a)",
+    "after_merge": "TDI-12.0 / #212 (fba5e79)",
     "new_11_2_pins": [],
     "new_8_1_pins": [],
     "new_9_1_pins": [],
-    "verdict": "No newly closed Dev/Val identifier can pin a remaining 8.1, 9.1, or 11.2 freeze field. Existing authorized pins stay 3/17, 1/14, 0/12. TDI-9.3 (#195) remains non-authorizing for 9.1 pins. TDI-10.19 skipped (no new EXACT claim beyond 10.14\u201310.18)."
+    "verdict": "Post-#212 diversification lands non-executing TDI-11.2 ModelObservationRejectionCode + ModelObservationTraceProvenance scaffolding only. Candidates do not pin typed_rejection_contract or provenance_contract. Existing authorized pins stay 3/17, 1/14, 0/12. Execution flags remain hard-false. TDI-10.19 skipped; no holdout 7.2/8.2/9.2 contact."
   },
   "series": {
     "tdi11.2": {
@@ -61,9 +61,9 @@
           "required_evidence_class": "prompt_serializer_revision"
         },
         {
-          "blocking_until": "model-trace provenance schema",
+          "blocking_until": "reviewed pin of ModelObservationTraceProvenance (scaffolding alone is non-authorizing)",
           "field": "provenance_contract",
-          "non_authorizing_note": null,
+          "non_authorizing_note": "Candidate schema ModelObservationTraceProvenance is present but does not pin this field",
           "required_evidence_class": "machine_readable_model_trace_provenance"
         },
         {
@@ -79,9 +79,9 @@
           "required_evidence_class": "tokenizer_chat_template_identity"
         },
         {
-          "blocking_until": "11.2-specific rejection vocabulary",
+          "blocking_until": "reviewed pin of ModelObservationRejectionCode (scaffolding alone is non-authorizing)",
           "field": "typed_rejection_contract",
-          "non_authorizing_note": null,
+          "non_authorizing_note": "Candidate vocabulary ModelObservationRejectionCode is present but does not pin this field",
           "required_evidence_class": "model_observation_rejection_vocabulary"
         }
       ],
@@ -108,7 +108,10 @@
         "TDI-10.x operator lemmas",
         "TDI-8.1 SymbolicRejectionCode pin",
         "TDI-9.1 ReferenceRejectionCode pin",
-        "TDI-9.3 Boolean policy synthesis"
+        "TDI-9.3 Boolean policy synthesis",
+        "TDI-11.2 ModelObservationRejectionCode scaffolding (non-pinning)",
+        "TDI-11.2 ModelObservationTraceProvenance scaffolding (non-pinning)",
+        "TDI-12.0 Stage-0 ordinal bootstrap"
       ],
       "pinned_count": 0,
       "pinned_count_floor": 0,
