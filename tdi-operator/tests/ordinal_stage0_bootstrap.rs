@@ -5,13 +5,19 @@
 //! - EXACT strictly-increasing affine invariance of both rank correlations;
 //! - EXACT identity ordering on nondegenerate samples;
 //! - EXACT fail-closed full-tie rejection;
+//! - EXACT reverse-order Spearman/Kendall = −1 on distinct samples;
+//! - EXACT wiring of candidate observables to public TDI-10 `GreenBands`;
+//! - EXACT coefficient-only Frobenius-norm and Gershgorin-margin controls;
+//! - EXACT deterministic shuffle destroys ρ = 1 on a nondegenerate length≥3 sample;
 //! - candidate Green response observables from TDI-10 primitives only;
 //! - dimension-only control ranking does not consult Green values;
 //! - no confirmatory TDI-12 execution is authorized.
 
 use tdi_operator::{
-    CandidateResponseObservable, JacobiMatrix, OrdinalError, average_ranks, dimension_only_key,
-    identity_ordering_key, kendall_tau_b, spearman_rho, strictly_increasing_affine,
+    CandidateResponseObservable, GreenBands, JacobiMatrix, OrdinalError, average_ranks,
+    coefficient_frobenius_norm_key, deterministic_shuffle, dimension_only_key,
+    gershgorin_dominance_margin_key, identity_ordering_key, kendall_tau_b, spearman_rho,
+    strictly_increasing_affine,
 };
 
 fn assert_close(left: f64, right: f64, tol: f64) {
@@ -76,6 +82,22 @@ fn exact_full_tie_fail_closed() {
 }
 
 #[test]
+fn exact_reverse_order_unit_anticorrelation() {
+    let ascending = [0.0, 1.0, 2.0, 3.0, 4.0];
+    let descending = [4.0, 3.0, 2.0, 1.0, 0.0];
+    assert_close(
+        spearman_rho(&ascending, &descending).unwrap(),
+        -1.0,
+        1.0e-15,
+    );
+    assert_close(
+        kendall_tau_b(&ascending, &descending).unwrap(),
+        -1.0,
+        1.0e-15,
+    );
+}
+
+#[test]
 fn candidate_green_observables_are_finite_on_positive_toeplitz() {
     let matrix = toeplitz(5, 3.0, 1.0);
     let shift = 1.0;
@@ -90,6 +112,60 @@ fn candidate_green_observables_are_finite_on_positive_toeplitz() {
             "{observable:?} produced non-finite {value}"
         );
     }
+}
+
+#[test]
+fn candidate_observables_wire_exactly_to_public_green_bands() {
+    // EXACT wiring: CandidateResponseObservable equals the public TDI-10
+    // GreenBands extractors already allowed by Stage-0. No new operator
+    // semantics and no freeze of response_observable_registry.
+    let matrix = toeplitz(6, 4.0, 1.25);
+    let shift = 0.75;
+    let bands = GreenBands::compute(&matrix, shift).expect("positive Toeplitz admits GreenBands");
+
+    for observable in [
+        CandidateResponseObservable::MidDiagonalGreen,
+        CandidateResponseObservable::GreenTrace,
+        CandidateResponseObservable::MeanAbsOffDiagonalGreen,
+    ] {
+        let via_evaluate = observable.evaluate(&matrix, shift).unwrap();
+        let via_bands = observable.from_green_bands(&bands).unwrap();
+        assert_close(via_evaluate, via_bands, 0.0);
+
+        let expected = match observable {
+            CandidateResponseObservable::MidDiagonalGreen => bands.diagonal()[matrix.len() / 2],
+            CandidateResponseObservable::GreenTrace => bands.diagonal().iter().sum::<f64>(),
+            CandidateResponseObservable::MeanAbsOffDiagonalGreen => {
+                let off = bands.off_diagonal();
+                off.iter().map(|v| v.abs()).sum::<f64>() / (off.len() as f64)
+            }
+        };
+        assert_close(via_evaluate, expected, 0.0);
+        assert_eq!(
+            observable.as_str(),
+            match observable {
+                CandidateResponseObservable::MidDiagonalGreen => "MidDiagonalGreen",
+                CandidateResponseObservable::GreenTrace => "GreenTrace",
+                CandidateResponseObservable::MeanAbsOffDiagonalGreen => {
+                    "MeanAbsOffDiagonalGreen"
+                }
+            }
+        );
+    }
+
+    // 1×1 operator: off-diagonal observable is exactly 0.
+    let singleton = toeplitz(1, 5.0, 0.0);
+    let off = CandidateResponseObservable::MeanAbsOffDiagonalGreen
+        .evaluate(&singleton, 1.0)
+        .unwrap();
+    assert_eq!(off, 0.0);
+
+    // Empty operator fails closed.
+    let empty = JacobiMatrix::new(Vec::new(), Vec::new()).unwrap();
+    assert!(matches!(
+        CandidateResponseObservable::GreenTrace.evaluate(&empty, 1.0),
+        Err(OrdinalError::EmptyOperator)
+    ));
 }
 
 #[test]
@@ -112,6 +188,58 @@ fn dimension_only_control_ignores_green_values() {
     assert_ne!(small_response, large_response);
     assert_eq!(dimension_only_key(&small), 3.0);
     assert_eq!(dimension_only_key(&large), 6.0);
+}
+
+#[test]
+fn coefficient_norm_and_gershgorin_controls_ignore_green() {
+    let weak = toeplitz(4, 3.0, 1.0); // margin = 3 - 1 - 1 = 1
+    let strong = toeplitz(4, 6.0, 1.0); // margin = 6 - 1 - 1 = 4
+    let shift = 0.5;
+
+    let weak_norm = coefficient_frobenius_norm_key(&weak).unwrap();
+    let strong_norm = coefficient_frobenius_norm_key(&strong).unwrap();
+    assert!(strong_norm > weak_norm);
+
+    let weak_margin = gershgorin_dominance_margin_key(&weak).unwrap();
+    let strong_margin = gershgorin_dominance_margin_key(&strong).unwrap();
+    assert_close(weak_margin, 1.0, 0.0);
+    assert_close(strong_margin, 4.0, 0.0);
+
+    // Distinct Green traces must not enter the coefficient-only keys.
+    let weak_trace = CandidateResponseObservable::GreenTrace
+        .evaluate(&weak, shift)
+        .unwrap();
+    let strong_trace = CandidateResponseObservable::GreenTrace
+        .evaluate(&strong, shift)
+        .unwrap();
+    assert_ne!(weak_trace, strong_trace);
+
+    // Same coefficients ⇒ same keys even if we never call Green.
+    assert_eq!(coefficient_frobenius_norm_key(&weak).unwrap(), weak_norm);
+    assert_eq!(
+        gershgorin_dominance_margin_key(&strong).unwrap(),
+        strong_margin
+    );
+}
+
+#[test]
+fn shuffled_family_control_destroys_perfect_correlation() {
+    let original = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
+    assert_close(spearman_rho(&original, &original).unwrap(), 1.0, 1.0e-15);
+
+    let mut shuffled = original;
+    deterministic_shuffle(&mut shuffled, 0x07d1_1200);
+    assert_ne!(shuffled.as_slice(), original.as_slice());
+    let rho = spearman_rho(&original, &shuffled).unwrap();
+    let tau = kendall_tau_b(&original, &shuffled).unwrap();
+    assert!(rho.is_finite() && tau.is_finite());
+    assert!((rho - 1.0).abs() > 1.0e-12);
+    assert!((tau - 1.0).abs() > 1.0e-12);
+
+    // Re-running with the same seed is deterministic.
+    let mut again = original;
+    deterministic_shuffle(&mut again, 0x07d1_1200);
+    assert_eq!(again.as_slice(), shuffled.as_slice());
 }
 
 #[test]

@@ -30,7 +30,8 @@ pub use frozen::{FrozenToeplitzCavity, FrozenToeplitzError};
 pub use green::GreenBands;
 pub use jacobi::{JacobiError, JacobiMatrix};
 pub use ordinal::{
-    CandidateResponseObservable, OrdinalError, average_ranks, dimension_only_key,
+    CandidateResponseObservable, OrdinalError, average_ranks, coefficient_frobenius_norm_key,
+    deterministic_shuffle, dimension_only_key, gershgorin_dominance_margin_key,
     identity_ordering_key, kendall_tau_b, spearman_rho, strictly_increasing_affine,
 };
 pub use resolvent::{ResolventError, ShiftedLdl};
