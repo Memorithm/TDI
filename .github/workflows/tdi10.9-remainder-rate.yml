@@ -1,0 +1,38 @@
+name: TDI-10.9 remainder rate lemma
+
+on:
+  pull_request:
+    paths:
+      - "tdi-operator/src/chain.rs"
+      - "tdi-operator/src/transport.rs"
+      - "tdi-operator/tests/cavity_remainder_rate.rs"
+      - "docs/tdi10/TDI-10.9-HARMONIC-RATE-LEMMA.md"
+      - "scripts/check-tdi10.9-remainder-rate.sh"
+      - ".github/workflows/tdi10.9-remainder-rate.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "tdi-operator/src/chain.rs"
+      - "tdi-operator/src/transport.rs"
+      - "tdi-operator/tests/cavity_remainder_rate.rs"
+      - "docs/tdi10/TDI-10.9-HARMONIC-RATE-LEMMA.md"
+      - "scripts/check-tdi10.9-remainder-rate.sh"
+      - ".github/workflows/tdi10.9-remainder-rate.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  remainder-rate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+      - name: Qualify TDI-10.9 remainder rate lemma
+        run: bash scripts/check-tdi10.9-remainder-rate.sh
