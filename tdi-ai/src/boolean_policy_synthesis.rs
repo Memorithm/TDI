@@ -946,12 +946,12 @@ impl std::error::Error for BooleanPolicyError {}
 #[cfg(test)]
 mod tests {
     use super::{
+        BooleanActionRule, BooleanExpr, BooleanPolicy, BooleanPolicyError, BooleanPolicyMutation,
+        REFERENCE_C2_PREDICATE_COUNT, REFERENCE_C3_PREDICATE_COUNT, SynthesisSearchEnvelope,
         mutate_boolean_policy, reference_c2_hand_stop, reference_c2_stop_expression,
         reference_c2_stop_policy, reference_c2_stop_projects_to_c3_absent_stop,
         reference_c3_absent_action_from_base_stop, reference_c3_hand_action, reference_c3_policy,
-        reference_c3_verifier_encoding_well_formed, BooleanActionRule, BooleanExpr, BooleanPolicy,
-        BooleanPolicyError, BooleanPolicyMutation, SynthesisSearchEnvelope,
-        REFERENCE_C2_PREDICATE_COUNT, REFERENCE_C3_PREDICATE_COUNT,
+        reference_c3_verifier_encoding_well_formed,
     };
     use crate::experimental::adaptive_inference::{InferenceAction, PolicyArm};
 
