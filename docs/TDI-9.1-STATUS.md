@@ -30,7 +30,7 @@
 
 ## Integrity (this slice)
 
-Post-#202 scout (after TDI-10.16 on `main`, including TDI-9.3 Boolean policy synthesis #195, with TDI-10.17 family↔affine-unrolling in flight) found **no** newly closed identifier that can pin a remaining 9.1 field. `PolicyObservation` / Boolean IR remain types, not an experimental observation-vector pin. Existing authorized pin stays 1/14. Readiness continues to fail-close on a pinned-count floor of **≥1**, STATUS↔freeze JSON pin-count cross-check, missing pin-evidence blocks, unauthorized pins, and silent STATUS / `scientific_status` upgrades (#199).
+Post-#203 scout (after TDI-10.17 on `main`, including TDI-9.3 Boolean policy synthesis #195, with TDI-10.18 family hypothesis checklist in flight) found **no** newly closed identifier that can pin a remaining 9.1 field. `PolicyObservation` / Boolean IR remain types, not an experimental observation-vector pin. Existing authorized pin stays 1/14. Readiness continues to fail-close on a pinned-count floor of **≥1**, STATUS↔freeze JSON pin-count cross-check, missing pin-evidence blocks, unauthorized pins, and silent STATUS / `scientific_status` upgrades (#199).
 
 ## TDI-9.3 boundary (non-pinning)
 
@@ -53,4 +53,4 @@ No item authorizes TDI-9.2 execution.
 
 ## Series orthogonality
 
-TDI-10.x through TDI-10.17 (operator-family chapter: 10.13–10.15 families/composition + 10.16 κ domain/monotonicity + 10.17 family↔10.4 affine-unrolling / constant-drift closed forms) remains orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces. #199 readiness floors are unchanged; STATUS↔JSON pin-count cross-check is additive.
+TDI-10.x through TDI-10.18 (operator-family chapter: 10.13–10.15 families/composition + 10.16 κ domain/monotonicity + 10.17 family↔10.4 affine-unrolling / constant-drift closed forms + 10.18 finite hypothesis checklist Item D/Item T) remains orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces. #199 readiness floors are unchanged; STATUS↔JSON pin-count cross-check is additive.
