@@ -27,13 +27,15 @@ impl BooleanExpr {
     /// Evaluate the expression fail-closed against a predicate vector.
     pub fn evaluate(&self, predicates: &[bool]) -> Result<bool, BooleanPolicyError> {
         match self {
-            Self::Predicate(index) => predicates
-                .get(*index)
-                .copied()
-                .ok_or(BooleanPolicyError::PredicateOutOfRange {
-                    index: *index,
-                    predicate_count: predicates.len(),
-                }),
+            Self::Predicate(index) => {
+                predicates
+                    .get(*index)
+                    .copied()
+                    .ok_or(BooleanPolicyError::PredicateOutOfRange {
+                        index: *index,
+                        predicate_count: predicates.len(),
+                    })
+            }
             Self::Not(inner) => Ok(!inner.evaluate(predicates)?),
             Self::And(left, right) => Ok(left.evaluate(predicates)? & right.evaluate(predicates)?),
             Self::Or(left, right) => Ok(left.evaluate(predicates)? | right.evaluate(predicates)?),
