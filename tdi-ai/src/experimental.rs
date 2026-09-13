@@ -12,5 +12,7 @@ pub mod adaptive_policies;
 pub mod adaptive_rejections;
 #[path = "adaptive_task_generators.rs"]
 pub mod adaptive_task_generators;
+#[path = "boolean_policy_synthesis.rs"]
+pub mod boolean_policy_synthesis;
 #[path = "development_campaign.rs"]
 pub mod development_campaign;
