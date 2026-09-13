@@ -218,6 +218,11 @@ fn rejection_numeric_codes_are_exact_unique_and_stable() {
             ModelObservationRejectionCode::ProvenanceForbiddenSurfaceToken,
             0x0504,
         ),
+        (ModelObservationRejectionCode::AccountingOverflow, 0x0601),
+        (
+            ModelObservationRejectionCode::AccountingEnvelopeExceeded,
+            0x0602,
+        ),
     ];
     assert_eq!(ALL_MODEL_OBSERVATION_REJECTION_CODES.len(), expected.len());
     let mut seen = std::collections::BTreeSet::new();

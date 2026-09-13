@@ -26,10 +26,11 @@ Recompute with `sha256sum docs/tdi11.2-model-observation-freeze.json`.
 ## Unresolved field registry (12/12)
 
 All fields remain `unresolved_blocking` with `value: null` and
-`pin_provenance: null`. Non-executing rejection/provenance *candidates* landed after
-#212 do not supply a reviewed freeze pin. No identifier closed by TDI-10.13/#198,
-TDI-10.14/#200, TDI-10.15–10.18/#204, TDI-12.0/#210–#212, or earlier merged tranches
-supplies a reviewable exact freeze value.
+`pin_provenance: null`. Non-executing rejection/provenance *candidates* (#213) and
+resource-accounting *candidates* (post-#215) do not supply a reviewed freeze pin.
+No identifier closed by TDI-10.13/#198, TDI-10.14/#200, TDI-10.15–10.19/#214,
+TDI-12.0/#210–#215, or earlier merged tranches supplies a reviewable exact freeze
+value.
 Required evidence *classes* (not values) are inventoried in
 `docs/tdi11.2-blocker-evidence-classes.json` and rolled into
 `docs/tdi-freeze-progress-summary.json`.
@@ -45,7 +46,7 @@ Required evidence *classes* (not values) are inventoried in
 | `exact_observation_timing` | unresolved_blocking | Event timing per channel is unspecified. |
 | `primary_pre_assertion_eligibility` | unresolved_blocking | H11-A pre-assertion eligibility rule is not frozen as an executable contract. |
 | `development_validation_population_derivation` | unresolved_blocking | Dev/Val derivation is not a closed deterministic map. |
-| `resource_accounting_contract` | unresolved_blocking | Numeric envelopes / accounting rules are caller- or later-freeze items. |
+| `resource_accounting_contract` | unresolved_blocking | Non-executing candidate taxonomy `ModelObservationResourceAccountingContract` now exists (`docs/TDI-11.2-MODEL-OBSERVATION-RESOURCE-ACCOUNTING.md`) but is **not** pinned. Numeric envelopes remain caller- or later-freeze items; TDI-11.1 `unlimited_for_development` does not transfer. |
 | `typed_rejection_contract` | unresolved_blocking | Non-executing candidate vocabulary `ModelObservationRejectionCode` now exists (`docs/TDI-11.2-MODEL-OBSERVATION-REJECTIONS.md`) but is **not** pinned. TDI-8.1 / TDI-9.1 rejection pins do not transfer. |
 | `provenance_contract` | unresolved_blocking | Non-executing candidate schema `ModelObservationTraceProvenance` now exists (`docs/TDI-11.2-MODEL-OBSERVATION-REJECTIONS.md`) but is **not** pinned. |
 

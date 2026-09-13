@@ -18,6 +18,8 @@ At this status, authorized work is limited to:
 - non-executing adapter/schema scaffolding;
 - non-executing model-observation rejection vocabulary + provenance scaffolding
   (candidates only; does not pin freeze fields);
+- non-executing model-observation resource accounting taxonomy + envelope admission
+  (candidate only; does not pin numeric envelopes or `resource_accounting_contract`);
 - deterministic tests proving that unresolved model-observation fields keep execution blocked.
 
 ## Current blocking fields
@@ -69,7 +71,7 @@ already enforce this fail-closed posture.
 
 Fail-closed reminder (unchanged authorizations): both execution flags remain
 **false** until a separately reviewed freeze pins all twelve blocking fields.
-Post-#204 scout found no model/adapter/tokenizer identifier that can be pinned;
+Post-#215 scout found no model/adapter/tokenizer identifier that can be pinned;
 **0/12 pinned** (STATUS↔freeze JSON pin-count cross-check in readiness). All
 12 fields stay `unresolved_blocking`. The readiness gate fail-closes if
 `model_execution_authorized` is true while any field is `unresolved_blocking`,
@@ -83,13 +85,17 @@ Machine-readable companions (CI-verified; not pins):
   `docs/TDI-11.2-MODEL-OBSERVATION-REJECTIONS.md`,
   `tdi-ai/src/hallucination_model_observation_rejections.rs`,
   `scripts/check-tdi11.2-model-observation-rejections.sh`
+- non-executing resource accounting scaffolding (candidate only; **not a pin**):
+  `docs/TDI-11.2-MODEL-OBSERVATION-RESOURCE-ACCOUNTING.md`,
+  `tdi-ai/src/hallucination_model_observation_accounting.rs`,
+  `scripts/check-tdi11.2-model-observation-accounting.sh`
 - blocker evidence-class inventory: `docs/tdi11.2-blocker-evidence-classes.json`
 - freeze progress summary: `docs/tdi-freeze-progress-summary.json` (includes
   verified ledger digest `dec8bd504a903b0125fdb88f66821940d286358eec6d59ee1a194fc6c63e9421`)
 
 Orthogonal TDI-10.x through TDI-10.19 / TDI-12.0 Stage-0 must not invent those
 pins or contact TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces. TDI-12.0
-DiagonalOnlyWidthLadder closed forms do not pin typed_rejection_contract /
-provenance_contract. Rejection/provenance scaffolding remains non-authorizing;
-pins stay **0/12**.
+DiagonalOnlyWidthLadder closed forms do not pin resource_accounting_contract /
+typed_rejection_contract / provenance_contract. Rejection/provenance/accounting
+scaffolding remains non-authorizing; pins stay **0/12**.
 
