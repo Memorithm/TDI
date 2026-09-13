@@ -46,11 +46,17 @@ pub struct BooleanPolicySearchEvidence {
 /// Fail-closed errors for the non-final TDI-9.3.1 search layer.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BooleanPolicySearchError {
-    C2EnvelopeRequired { actual: PolicyArm },
+    C2EnvelopeRequired {
+        actual: PolicyArm,
+    },
     EmptyCandidateSet,
     EmptyCaseSet,
-    EmptyCandidateId { index: usize },
-    DuplicateCandidateId { candidate_id: String },
+    EmptyCandidateId {
+        index: usize,
+    },
+    DuplicateCandidateId {
+        candidate_id: String,
+    },
     PredicateArityMismatch {
         case_index: usize,
         expected: usize,
@@ -356,12 +362,9 @@ mod tests {
     fn search_evidence_finds_exact_single_predicate_rule_without_scalar_score() {
         let envelope = SynthesisSearchEnvelope::reference_c2();
         let candidates = generate_c2_baseline_candidates(&envelope).unwrap();
-        let evidence = evaluate_policy_candidates(
-            &candidates,
-            &every_five_predicate_case(),
-            &envelope,
-        )
-        .unwrap();
+        let evidence =
+            evaluate_policy_candidates(&candidates, &every_five_predicate_case(), &envelope)
+                .unwrap();
 
         assert_eq!(evidence[0].candidate_id, "tdi9.3-c2-single-p0");
         assert_eq!(evidence[0].action_mismatches, 0);
