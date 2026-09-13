@@ -14,6 +14,8 @@ pub mod adaptive_rejections;
 pub mod adaptive_task_generators;
 #[path = "boolean_policy_search.rs"]
 pub mod boolean_policy_search;
+#[path = "boolean_policy_search_calibration.rs"]
+pub mod boolean_policy_search_calibration;
 #[path = "boolean_policy_synthesis.rs"]
 pub mod boolean_policy_synthesis;
 #[path = "development_campaign.rs"]
