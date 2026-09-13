@@ -39,6 +39,12 @@ FORBIDDEN_TOP_LEVEL = {
     "human_token",
 }
 PR_CITATION = re.compile(r"PR #\d+")
+# TDI-9.3 Boolean policy synthesis (#195) is ACTIVE DESIGN / NON-FINAL and must
+# never appear as authorizing evidence for a TDI-9.1 freeze pin.
+NON_AUTHORIZING_PIN_EVIDENCE = {
+    "docs/TDI-9.3-BOOLEAN-POLICY-SYNTHESIS.md",
+}
+
 
 
 def fail(message: str) -> None:
@@ -56,6 +62,11 @@ def require_pin_evidence(name: str, value: object, *, repo_root: Path) -> None:
     for item in evidence:
         if not isinstance(item, str) or not item.strip():
             fail(f"{name} evidence items must be non-empty strings")
+        if item in NON_AUTHORIZING_PIN_EVIDENCE:
+            fail(
+                f"{name} pin evidence cites non-authorizing TDI-9.3 surface "
+                f"{item} (Boolean IR does not authorize 9.1 pins)"
+            )
         if PR_CITATION.search(item):
             has_pr = True
         candidate = repo_root / item

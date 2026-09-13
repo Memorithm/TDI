@@ -84,6 +84,20 @@ class FreezeValidatorTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("not an authorized evidence-backed pin", result.stderr + result.stdout)
 
+
+    def test_tdi93_surface_cannot_appear_in_pin_evidence(self) -> None:
+        data = self.base()
+        value = data["fields"]["closed_rejection_taxonomy"]["value"]
+        value = dict(value)
+        value["evidence"] = list(value["evidence"]) + [
+            "docs/TDI-9.3-BOOLEAN-POLICY-SYNTHESIS.md"
+        ]
+        data["fields"]["closed_rejection_taxonomy"]["value"] = value
+        result = self.run_contract(data)
+        self.assertNotEqual(result.returncode, 0)
+        combined = result.stderr + result.stdout
+        self.assertIn("non-authorizing TDI-9.3 surface", combined)
+
     def test_execution_flag_cannot_be_armed(self) -> None:
         data = self.base()
         data["tdi9_2_execution_authorized"] = True

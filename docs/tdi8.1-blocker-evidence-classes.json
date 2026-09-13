@@ -1,0 +1,135 @@
+{
+  "schema": "tdi8.1-blocker-evidence-classes-v1",
+  "stage": "TDI-8.1",
+  "freeze_contract": "docs/tdi8.1-configuration-freeze.json",
+  "resolution_plan": "docs/TDI-8.1-FREEZE-RESOLUTION-PLAN.md",
+  "note": "Inventory of required evidence *classes* for each freeze field. Does not invent scientific values, dimensions, seeds, budgets, horizons, or sample counts. Not H8 evidence and not a TDI-8.2 authorization.",
+  "authorized_pin_count": 3,
+  "fields": {
+    "a3_event_store_read_cleanup_policy": {
+      "status": "pinned",
+      "required_evidence_class": "qualified_software_policy",
+      "evidence_class_definition": "Closed software-oracle event policy already qualified by merged adapter preflight + CI, without freezing VSA width/role/fusion/budgets/horizons.",
+      "blocking_until": null,
+      "citations": ["PR #138", "PR #172", "docs/TDI-8.1-A3-ADAPTER-PREFLIGHT.md"]
+    },
+    "closed_rejection_taxonomy": {
+      "status": "pinned",
+      "required_evidence_class": "closed_rejection_vocabulary",
+      "evidence_class_definition": "Closed technical-rejection vocabulary with provenance API, without freezing populations/deficits/interval parameters.",
+      "blocking_until": null,
+      "citations": ["PR #162", "PR #175", "docs/TDI-8.1-SYMBOLIC-REJECTIONS.md"]
+    },
+    "degenerate_replicate_policy": {
+      "status": "pinned",
+      "required_evidence_class": "qualified_software_policy",
+      "evidence_class_definition": "Fail-closed degenerate-replicate rule from the qualified percentile candidate, without freezing the final interval method/count/seed.",
+      "blocking_until": null,
+      "citations": ["PR #113", "docs/TDI-8.1-PERCENTILE-INTERVAL-PREFLIGHT.md"]
+    },
+    "paired_interval_method": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "comparative_estimator_selection",
+      "evidence_class_definition": "Merged Dev/Val tranche that compares admissible interval constructions and selects one as the closed final estimator. A percentile *candidate* (#113) is insufficient.",
+      "blocking_until": "comparative Dev/Val selection among admissible constructions",
+      "citations": ["PR #113", "docs/TDI-8.1-PERCENTILE-INTERVAL-PREFLIGHT.md"]
+    },
+    "paired_resampling_replicate_count": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "alpha_powered_dev_val_simulation",
+      "evidence_class_definition": "Dev/Val simulation under frozen family-wise alpha = 0.05/9 that selects a replicate count.",
+      "blocking_until": "alpha-powered Dev/Val replicate-count selection",
+      "citations": []
+    },
+    "paired_resampling_seed": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "explicit_domains_seed_declaration",
+      "evidence_class_definition": "Explicit Domains seed declaration for paired resampling; must not be invented or result-conditioned.",
+      "blocking_until": "explicit Domains seed declaration",
+      "citations": []
+    },
+    "recurrent_dimension_and_parameters": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "matched_budget_dev_val_selection",
+      "evidence_class_definition": "Matched-budget Dev/Val selection of recurrent dimension/parameters.",
+      "blocking_until": "matched-budget Dev/Val selection",
+      "citations": []
+    },
+    "readout_coordinates": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "target_blind_coordinate_selection",
+      "evidence_class_definition": "Target-blind coordinate selection without label leakage.",
+      "blocking_until": "target-blind coordinate selection",
+      "citations": []
+    },
+    "a2_capacity_and_projection": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "occupancy_collision_under_concrete_projection",
+      "evidence_class_definition": "Occupancy/collision evidence under a concrete projection choice.",
+      "blocking_until": "concrete projection Dev/Val evidence",
+      "citations": []
+    },
+    "a3_vsa_width_role_seed_and_fusion": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "independent_vsa_parameter_selection",
+      "evidence_class_definition": "VSA width/role/seed/fusion selection independent of the already-pinned event policy.",
+      "blocking_until": "independent VSA parameter Dev/Val selection",
+      "citations": []
+    },
+    "matched_dynamic_memory_budget": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "exact_arm_accounting_equality",
+      "evidence_class_definition": "Exact A1/A2/A3 dynamic-memory accounting equality under a concrete budget.",
+      "blocking_until": "exact accounting-equality evidence",
+      "citations": []
+    },
+    "short_medium_long_numeric_horizons": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "numeric_horizon_plan",
+      "evidence_class_definition": "Numeric HorizonPlan with explicit short/medium/long values.",
+      "blocking_until": "numeric HorizonPlan",
+      "citations": []
+    },
+    "late_retrieval_deficit_definition": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "pre_target_observable_deficit",
+      "evidence_class_definition": "Pre-target observable deficit definition that does not leak holdout labels.",
+      "blocking_until": "pre-target observable deficit definition",
+      "citations": []
+    },
+    "intervention_sites_and_recovery_observable": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "task_label_preserving_interventions",
+      "evidence_class_definition": "Task-label-preserving intervention sites plus recovery observable.",
+      "blocking_until": "label-preserving intervention contract",
+      "citations": []
+    },
+    "development_population_domain_and_sample_count": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "disjoint_population_domain_and_n",
+      "evidence_class_definition": "Development domain + N with no final seeds.",
+      "blocking_until": "development domain + N selection",
+      "citations": []
+    },
+    "validation_population_domain_and_sample_count": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "disjoint_population_domain_and_n",
+      "evidence_class_definition": "Validation domain + N disjoint from development; no final seeds.",
+      "blocking_until": "validation domain + N selection disjoint from development",
+      "citations": []
+    },
+    "final_population_domain_and_sample_count": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "final_domain_rules_only",
+      "evidence_class_definition": "Domain *rules* only for the future final population; no seed list or result surface.",
+      "blocking_until": "final domain rules (no seeds/results)",
+      "citations": []
+    }
+  },
+  "non_authorizing_surfaces": [],
+  "holdout_boundary": {
+    "tdi7_2": "forbidden",
+    "tdi8_2": "absent",
+    "execution_flag": "tdi8_2_execution_authorized must remain false"
+  }
+}

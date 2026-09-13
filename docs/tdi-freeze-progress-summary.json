@@ -1,0 +1,378 @@
+{
+  "generated_by": "scripts/emit-tdi-freeze-progress-summary.py",
+  "purpose": "Machine-readable freeze progress + blocker evidence-class summary for TDI-8.1 / TDI-9.1 / TDI-11.2. CI-verified; not a pin source.",
+  "schema": "tdi-freeze-progress-summary-v1",
+  "scout": {
+    "after_merge": "TDI-10.18 / #204 (460970a)",
+    "new_11_2_pins": [],
+    "new_8_1_pins": [],
+    "new_9_1_pins": [],
+    "verdict": "No newly closed Dev/Val identifier can pin a remaining 8.1, 9.1, or 11.2 freeze field. Existing authorized pins stay 3/17, 1/14, 0/12. TDI-9.3 (#195) remains non-authorizing for 9.1 pins. TDI-10.19 skipped (no new EXACT claim beyond 10.14\u201310.18)."
+  },
+  "series": {
+    "tdi11.2": {
+      "blockers": [
+        {
+          "blocking_until": "reviewed adapter identity/version",
+          "field": "adapter_identity_and_version",
+          "non_authorizing_note": null,
+          "required_evidence_class": "reviewed_adapter_implementation_identity"
+        },
+        {
+          "blocking_until": "complete decoding configuration",
+          "field": "decoding_configuration",
+          "non_authorizing_note": null,
+          "required_evidence_class": "complete_decoding_generation_settings"
+        },
+        {
+          "blocking_until": "deterministic Dev/Val population derivation",
+          "field": "development_validation_population_derivation",
+          "non_authorizing_note": null,
+          "required_evidence_class": "deterministic_dev_val_population_map"
+        },
+        {
+          "blocking_until": "exact channel registry selection",
+          "field": "exact_observation_registry",
+          "non_authorizing_note": null,
+          "required_evidence_class": "exact_observation_channel_registry"
+        },
+        {
+          "blocking_until": "per-channel timing contract",
+          "field": "exact_observation_timing",
+          "non_authorizing_note": null,
+          "required_evidence_class": "per_channel_event_timing"
+        },
+        {
+          "blocking_until": "reviewed immutable model artifact identity",
+          "field": "model_artifact_identity",
+          "non_authorizing_note": null,
+          "required_evidence_class": "immutable_local_open_model_artifact"
+        },
+        {
+          "blocking_until": "H11-A eligibility rule freeze",
+          "field": "primary_pre_assertion_eligibility",
+          "non_authorizing_note": null,
+          "required_evidence_class": "h11a_pre_assertion_eligibility_rule"
+        },
+        {
+          "blocking_until": "serializer revision pin",
+          "field": "prompt_serializer_version",
+          "non_authorizing_note": null,
+          "required_evidence_class": "prompt_serializer_revision"
+        },
+        {
+          "blocking_until": "model-trace provenance schema",
+          "field": "provenance_contract",
+          "non_authorizing_note": null,
+          "required_evidence_class": "machine_readable_model_trace_provenance"
+        },
+        {
+          "blocking_until": "resource accounting contract",
+          "field": "resource_accounting_contract",
+          "non_authorizing_note": null,
+          "required_evidence_class": "numeric_resource_accounting_rules"
+        },
+        {
+          "blocking_until": "tokenizer/chat-template freeze",
+          "field": "tokenizer_and_template_identity",
+          "non_authorizing_note": null,
+          "required_evidence_class": "tokenizer_chat_template_identity"
+        },
+        {
+          "blocking_until": "11.2-specific rejection vocabulary",
+          "field": "typed_rejection_contract",
+          "non_authorizing_note": null,
+          "required_evidence_class": "model_observation_rejection_vocabulary"
+        }
+      ],
+      "digest_sidecar": "docs/tdi11.2-model-observation-freeze.sha256",
+      "execution_flags": {
+        "final_execution_authorized": false,
+        "model_execution_authorized": false
+      },
+      "field_total": 12,
+      "freeze_contract": "docs/tdi11.2-model-observation-freeze.json",
+      "holdout_boundary": {
+        "execution_flags": [
+          "model_execution_authorized must remain false",
+          "final_execution_authorized must remain false"
+        ],
+        "tdi7_2": "forbidden",
+        "tdi8_2": "forbidden",
+        "tdi9_2": "forbidden"
+      },
+      "inventory": "docs/tdi11.2-blocker-evidence-classes.json",
+      "ledger_digest_sha256": "dec8bd504a903b0125fdb88f66821940d286358eec6d59ee1a194fc6c63e9421",
+      "ledger_digest_verified": true,
+      "non_authorizing_surfaces": [
+        "TDI-10.x operator lemmas",
+        "TDI-8.1 SymbolicRejectionCode pin",
+        "TDI-9.1 ReferenceRejectionCode pin",
+        "TDI-9.3 Boolean policy synthesis"
+      ],
+      "pinned_count": 0,
+      "pinned_count_floor": 0,
+      "pinned_progress": "0/12",
+      "pins": [],
+      "plan_doc": "docs/TDI-11.2-UNRESOLVED-LEDGER.md",
+      "scientific_status": "unresolved_blocking",
+      "stage": "TDI-11.2",
+      "status_doc": "docs/TDI-11.2-STATUS.md",
+      "unresolved_count": 12,
+      "unresolved_ledger": "docs/TDI-11.2-UNRESOLVED-LEDGER.md"
+    },
+    "tdi8.1": {
+      "blockers": [
+        {
+          "blocking_until": "concrete projection Dev/Val evidence",
+          "field": "a2_capacity_and_projection",
+          "non_authorizing_note": null,
+          "required_evidence_class": "occupancy_collision_under_concrete_projection"
+        },
+        {
+          "blocking_until": "independent VSA parameter Dev/Val selection",
+          "field": "a3_vsa_width_role_seed_and_fusion",
+          "non_authorizing_note": null,
+          "required_evidence_class": "independent_vsa_parameter_selection"
+        },
+        {
+          "blocking_until": "development domain + N selection",
+          "field": "development_population_domain_and_sample_count",
+          "non_authorizing_note": null,
+          "required_evidence_class": "disjoint_population_domain_and_n"
+        },
+        {
+          "blocking_until": "final domain rules (no seeds/results)",
+          "field": "final_population_domain_and_sample_count",
+          "non_authorizing_note": null,
+          "required_evidence_class": "final_domain_rules_only"
+        },
+        {
+          "blocking_until": "label-preserving intervention contract",
+          "field": "intervention_sites_and_recovery_observable",
+          "non_authorizing_note": null,
+          "required_evidence_class": "task_label_preserving_interventions"
+        },
+        {
+          "blocking_until": "pre-target observable deficit definition",
+          "field": "late_retrieval_deficit_definition",
+          "non_authorizing_note": null,
+          "required_evidence_class": "pre_target_observable_deficit"
+        },
+        {
+          "blocking_until": "exact accounting-equality evidence",
+          "field": "matched_dynamic_memory_budget",
+          "non_authorizing_note": null,
+          "required_evidence_class": "exact_arm_accounting_equality"
+        },
+        {
+          "blocking_until": "comparative Dev/Val selection among admissible constructions",
+          "field": "paired_interval_method",
+          "non_authorizing_note": null,
+          "required_evidence_class": "comparative_estimator_selection"
+        },
+        {
+          "blocking_until": "alpha-powered Dev/Val replicate-count selection",
+          "field": "paired_resampling_replicate_count",
+          "non_authorizing_note": null,
+          "required_evidence_class": "alpha_powered_dev_val_simulation"
+        },
+        {
+          "blocking_until": "explicit Domains seed declaration",
+          "field": "paired_resampling_seed",
+          "non_authorizing_note": null,
+          "required_evidence_class": "explicit_domains_seed_declaration"
+        },
+        {
+          "blocking_until": "target-blind coordinate selection",
+          "field": "readout_coordinates",
+          "non_authorizing_note": null,
+          "required_evidence_class": "target_blind_coordinate_selection"
+        },
+        {
+          "blocking_until": "matched-budget Dev/Val selection",
+          "field": "recurrent_dimension_and_parameters",
+          "non_authorizing_note": null,
+          "required_evidence_class": "matched_budget_dev_val_selection"
+        },
+        {
+          "blocking_until": "numeric HorizonPlan",
+          "field": "short_medium_long_numeric_horizons",
+          "non_authorizing_note": null,
+          "required_evidence_class": "numeric_horizon_plan"
+        },
+        {
+          "blocking_until": "validation domain + N selection disjoint from development",
+          "field": "validation_population_domain_and_sample_count",
+          "non_authorizing_note": null,
+          "required_evidence_class": "disjoint_population_domain_and_n"
+        }
+      ],
+      "execution_flags": {
+        "tdi8_2_execution_authorized": false
+      },
+      "field_total": 17,
+      "freeze_contract": "docs/tdi8.1-configuration-freeze.json",
+      "holdout_boundary": {
+        "execution_flag": "tdi8_2_execution_authorized must remain false",
+        "tdi7_2": "forbidden",
+        "tdi8_2": "absent"
+      },
+      "inventory": "docs/tdi8.1-blocker-evidence-classes.json",
+      "non_authorizing_surfaces": [],
+      "pinned_count": 3,
+      "pinned_count_floor": 3,
+      "pinned_progress": "3/17",
+      "pins": [
+        {
+          "citations": [
+            "PR #138",
+            "PR #172",
+            "docs/TDI-8.1-A3-ADAPTER-PREFLIGHT.md"
+          ],
+          "field": "a3_event_store_read_cleanup_policy",
+          "required_evidence_class": "qualified_software_policy"
+        },
+        {
+          "citations": [
+            "PR #162",
+            "PR #175",
+            "docs/TDI-8.1-SYMBOLIC-REJECTIONS.md"
+          ],
+          "field": "closed_rejection_taxonomy",
+          "required_evidence_class": "closed_rejection_vocabulary"
+        },
+        {
+          "citations": [
+            "PR #113",
+            "docs/TDI-8.1-PERCENTILE-INTERVAL-PREFLIGHT.md"
+          ],
+          "field": "degenerate_replicate_policy",
+          "required_evidence_class": "qualified_software_policy"
+        }
+      ],
+      "plan_doc": "docs/TDI-8.1-FREEZE-RESOLUTION-PLAN.md",
+      "scientific_status": "unresolved_blocking",
+      "stage": "TDI-8.1",
+      "status_doc": "docs/TDI-8.1-STATUS.md",
+      "unresolved_count": 14
+    },
+    "tdi9.1": {
+      "blockers": [
+        {
+          "blocking_until": "closed agent-search mutation contract",
+          "field": "agent_search_safe_policy_mutation_contract",
+          "non_authorizing_note": "TDI-9.3 (#195) does not authorize this pin.",
+          "required_evidence_class": "closed_agent_search_mutation_contract"
+        },
+        {
+          "blocking_until": "non-final Dev/Val schedule selection",
+          "field": "c0_c1_schedules",
+          "non_authorizing_note": null,
+          "required_evidence_class": "nonfinal_dev_val_schedule_selection"
+        },
+        {
+          "blocking_until": "non-final Dev/Val threshold/cadence selection",
+          "field": "c2_c3_thresholds_and_verification_cadence",
+          "non_authorizing_note": null,
+          "required_evidence_class": "nonfinal_dev_val_threshold_cadence_selection"
+        },
+        {
+          "blocking_until": "numeric envelope constants",
+          "field": "common_max_compute_memory_envelopes",
+          "non_authorizing_note": null,
+          "required_evidence_class": "numeric_resource_envelope_constants"
+        },
+        {
+          "blocking_until": "disjoint Dev/Val domain selection",
+          "field": "development_validation_population_domains",
+          "non_authorizing_note": null,
+          "required_evidence_class": "disjoint_population_domains"
+        },
+        {
+          "blocking_until": "deterministic final-seed derivation contract",
+          "field": "final_seed_derivation_contract",
+          "non_authorizing_note": null,
+          "required_evidence_class": "deterministic_final_seed_map"
+        },
+        {
+          "blocking_until": "pre-public entropy freeze",
+          "field": "future_public_entropy_source_event_encoding",
+          "non_authorizing_note": null,
+          "required_evidence_class": "pre_public_entropy_freeze"
+        },
+        {
+          "blocking_until": "H9 classifier software transcription plumbing",
+          "field": "h9_classifier_aggregation_plumbing",
+          "non_authorizing_note": null,
+          "required_evidence_class": "h9_classifier_software_transcription"
+        },
+        {
+          "blocking_until": "non-final Dev/Val difficulty selection",
+          "field": "p1_p2_p3_difficulty_parameters",
+          "non_authorizing_note": null,
+          "required_evidence_class": "nonfinal_dev_val_difficulty_selection"
+        },
+        {
+          "blocking_until": "family-wise coverage selection under frozen alpha",
+          "field": "paired_interval_method",
+          "non_authorizing_note": null,
+          "required_evidence_class": "family_wise_coverage_under_frozen_alpha"
+        },
+        {
+          "blocking_until": "family-wise coverage replicate-count selection",
+          "field": "paired_resampling_replicate_count",
+          "non_authorizing_note": null,
+          "required_evidence_class": "family_wise_coverage_under_frozen_alpha"
+        },
+        {
+          "blocking_until": "explicit Domains seed declaration",
+          "field": "paired_resampling_seed",
+          "non_authorizing_note": null,
+          "required_evidence_class": "explicit_domains_seed_declaration"
+        },
+        {
+          "blocking_until": "explicit experimental observation-subset selection (not Boolean IR)",
+          "field": "permitted_observation_vector",
+          "non_authorizing_note": "TDI-9.3 Boolean policy synthesis surfaces must not be treated as authorizing this pin.",
+          "required_evidence_class": "experimental_observation_subset_selection"
+        }
+      ],
+      "execution_flags": {
+        "tdi9_2_execution_authorized": false
+      },
+      "field_total": 14,
+      "freeze_contract": "docs/tdi9.1-configuration-freeze.json",
+      "holdout_boundary": {
+        "execution_flag": "tdi9_2_execution_authorized must remain false",
+        "tdi7_2": "forbidden",
+        "tdi8_2": "forbidden",
+        "tdi9_2": "absent"
+      },
+      "inventory": "docs/tdi9.1-blocker-evidence-classes.json",
+      "non_authorizing_surfaces": [
+        "docs/TDI-9.3-BOOLEAN-POLICY-SYNTHESIS.md",
+        "PR #195"
+      ],
+      "pinned_count": 1,
+      "pinned_count_floor": 1,
+      "pinned_progress": "1/14",
+      "pins": [
+        {
+          "citations": [
+            "PR #140",
+            "docs/TDI-9.1-REFERENCE-REJECTIONS.md"
+          ],
+          "field": "closed_rejection_taxonomy",
+          "required_evidence_class": "closed_rejection_vocabulary"
+        }
+      ],
+      "plan_doc": "docs/TDI-9.1-FREEZE-RESOLUTION-PLAN.md",
+      "scientific_status": "unresolved_blocking",
+      "stage": "TDI-9.1",
+      "status_doc": "docs/TDI-9.1-STATUS.md",
+      "unresolved_count": 13
+    }
+  },
+  "tdi10_note": "TDI-10.x through 10.18 remains orthogonal. This artifact does not advance operator lemmas and does not invent freeze pins from them."
+}

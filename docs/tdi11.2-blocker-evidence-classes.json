@@ -1,0 +1,107 @@
+{
+  "schema": "tdi11.2-blocker-evidence-classes-v1",
+  "stage": "TDI-11.2",
+  "freeze_contract": "docs/tdi11.2-model-observation-freeze.json",
+  "unresolved_ledger": "docs/TDI-11.2-UNRESOLVED-LEDGER.md",
+  "ledger_digest_sidecar": "docs/tdi11.2-model-observation-freeze.sha256",
+  "note": "Inventory of required evidence *classes* for each of the 12 model/observation freeze fields. Does not invent model/adapter/tokenizer/decoding pins. Not a model-execution authorization. Ledger digest must match the freeze file.",
+  "authorized_pin_count": 0,
+  "fields": {
+    "model_artifact_identity": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "immutable_local_open_model_artifact",
+      "evidence_class_definition": "Immutable local/open model artifact identity with content address; no invented path or mutable tag.",
+      "blocking_until": "reviewed immutable model artifact identity",
+      "citations": []
+    },
+    "adapter_identity_and_version": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "reviewed_adapter_implementation_identity",
+      "evidence_class_definition": "Reviewed adapter implementation identity and version.",
+      "blocking_until": "reviewed adapter identity/version",
+      "citations": []
+    },
+    "tokenizer_and_template_identity": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "tokenizer_chat_template_identity",
+      "evidence_class_definition": "Exact tokenizer and chat-template identity.",
+      "blocking_until": "tokenizer/chat-template freeze",
+      "citations": []
+    },
+    "decoding_configuration": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "complete_decoding_generation_settings",
+      "evidence_class_definition": "Complete decoding/generation settings object.",
+      "blocking_until": "complete decoding configuration",
+      "citations": []
+    },
+    "prompt_serializer_version": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "prompt_serializer_revision",
+      "evidence_class_definition": "Pinned prompt serializer revision.",
+      "blocking_until": "serializer revision pin",
+      "citations": []
+    },
+    "exact_observation_registry": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "exact_observation_channel_registry",
+      "evidence_class_definition": "Exact observation channel registry (pre-arm lists source *classes* only).",
+      "blocking_until": "exact channel registry selection",
+      "citations": []
+    },
+    "exact_observation_timing": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "per_channel_event_timing",
+      "evidence_class_definition": "Event timing contract per observation channel.",
+      "blocking_until": "per-channel timing contract",
+      "citations": []
+    },
+    "primary_pre_assertion_eligibility": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "h11a_pre_assertion_eligibility_rule",
+      "evidence_class_definition": "Executable H11-A pre-assertion eligibility rule.",
+      "blocking_until": "H11-A eligibility rule freeze",
+      "citations": []
+    },
+    "development_validation_population_derivation": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "deterministic_dev_val_population_map",
+      "evidence_class_definition": "Closed deterministic Development/Validation population derivation map.",
+      "blocking_until": "deterministic Dev/Val population derivation",
+      "citations": []
+    },
+    "resource_accounting_contract": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "numeric_resource_accounting_rules",
+      "evidence_class_definition": "Numeric envelopes / accounting rules for model instrumentation.",
+      "blocking_until": "resource accounting contract",
+      "citations": []
+    },
+    "typed_rejection_contract": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "model_observation_rejection_vocabulary",
+      "evidence_class_definition": "Closed TDI-11.2 model-observation rejection vocabulary. TDI-8.1 / TDI-9.1 rejection pins do not transfer.",
+      "blocking_until": "11.2-specific rejection vocabulary",
+      "citations": []
+    },
+    "provenance_contract": {
+      "status": "unresolved_blocking",
+      "required_evidence_class": "machine_readable_model_trace_provenance",
+      "evidence_class_definition": "Machine-readable provenance schema for model traces.",
+      "blocking_until": "model-trace provenance schema",
+      "citations": []
+    }
+  },
+  "non_authorizing_surfaces": [
+    "TDI-10.x operator lemmas",
+    "TDI-8.1 SymbolicRejectionCode pin",
+    "TDI-9.1 ReferenceRejectionCode pin",
+    "TDI-9.3 Boolean policy synthesis"
+  ],
+  "holdout_boundary": {
+    "tdi7_2": "forbidden",
+    "tdi8_2": "forbidden",
+    "tdi9_2": "forbidden",
+    "execution_flags": ["model_execution_authorized must remain false", "final_execution_authorized must remain false"]
+  }
+}
