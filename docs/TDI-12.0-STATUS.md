@@ -36,6 +36,17 @@ Primary surfaces:
 10. Machine-readable Stage-0 freeze **template** with every scientific field
     `unresolved_blocking` and both execution flags `false`, plus a dedicated
     fail-closed freeze-template validator that refuses invented pins.
+11. **EXACT** constant-Toeplitz Frobenius closed form
+    `sqrt(n a²+(n−1)b²)` with width monotonicity and ρ = τ = 1 vs dimension on
+    a positive width ladder (`norm_baseline` / population scaffolding).
+12. **EXACT** constant-Toeplitz Gershgorin margin `a−2|b|` for all `n≥3`
+    (width-invariant); Spearman/Kendall vs dimension fail closed — REFUTES
+    covert dimension keying (`spectral_gap_baseline` scaffolding).
+13. **EXACT** `rank_normalize` / `negate_values` normalization scaffolding and
+    `tie_heavy_adversarial_sample` midranks; observable-ladder evaluation;
+    non-authorizing candidate ids for populations / normalization / split /
+    typed rejection / provenance / derivation — fields remain
+    `unresolved_blocking`.
 
 ## Authorization state
 
@@ -55,10 +66,11 @@ authorized pins stay 3/17, 1/14, 0/12. No TDI-7.2 / TDI-8.2 / TDI-9.2 contact.
 TDI-9.3.0 does not authorize TDI-9.1 / TDI-9.2. TDI-10.19 remains skipped
 (no new EXACT claim beyond 10.14–10.18).
 
-## Next engineering slice after Stage-0 integrity / wiring
+## Next engineering slice after Stage-0 candidate declarations / Toeplitz controls
 
-Still Stage-0 / non-confirmatory: declare and review candidate freeze
-resolutions for operator populations, ranking metric, tie policy, normalization
-and split discipline **without** authorizing confirmatory execution or setting
-execution flags true. Only after explicit field resolutions may TDI-12.1
-synthetic evaluator fixtures expand under those resolutions.
+Still Stage-0 / non-confirmatory: review and (only with explicit evidence)
+resolve freeze fields among the declared non-authorizing candidates for
+operator populations, ranking metric, tie policy, normalization, and split
+discipline **without** authorizing confirmatory execution or setting execution
+flags true. Only after explicit field resolutions may TDI-12.1 synthetic
+evaluator fixtures expand under those resolutions.

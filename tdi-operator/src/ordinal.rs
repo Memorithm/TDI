@@ -5,10 +5,11 @@
 //! sequences. Candidate Green-band response observables are exposed only as
 //! non-frozen Stage-0 calibration helpers that consume generic TDI-10
 //! primitives. Coefficient-only control keys (Frobenius norm, Gershgorin
-//! dominance margin) and a deterministic shuffle helper support Stage-0
-//! control-battery scaffolding without freezing the control_battery field.
-//! No confirmatory TDI-12 population, split, or execution is authorized by
-//! this module.
+//! dominance margin), closed-form constant-Toeplitz control identities,
+//! rank-normalization / negate-response scaffolding, observable ladders, and a
+//! deterministic shuffle helper support Stage-0 control-battery and candidate
+//! freeze-field declarations without freezing those fields. No confirmatory
+//! TDI-12 population, split, or execution is authorized by this module.
 
 use core::fmt;
 
@@ -379,11 +380,206 @@ pub fn deterministic_shuffle(values: &mut [f64], seed: u64) {
     }
 }
 
+/// Non-frozen Stage-0 candidate operator-population identifiers.
+///
+/// These match `operator_population_families.non_authorizing_candidates` in the
+/// Stage-0 freeze template and do **not** pin that field.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CandidateOperatorPopulation {
+    /// Constant positive Toeplitz Jacobi matrices across a declared width ladder.
+    PositiveConstantToeplitzWidthLadder,
+    /// Diagonal-only Jacobi matrices across a declared width ladder.
+    DiagonalOnlyWidthLadder,
+}
+
+impl CandidateOperatorPopulation {
+    /// Stable identifier matching the Stage-0 freeze-template candidate list.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::PositiveConstantToeplitzWidthLadder => "PositiveConstantToeplitzWidthLadder",
+            Self::DiagonalOnlyWidthLadder => "DiagonalOnlyWidthLadder",
+        }
+    }
+}
+
+/// Non-frozen Stage-0 candidate normalization identifiers.
+///
+/// These match `normalization_contract.non_authorizing_candidates` and do
+/// **not** pin that field.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CandidateNormalization {
+    /// Leave response values unchanged.
+    IdentityResponse,
+    /// Replace values by their average ranks (midranks).
+    RankNormalizeToAverageRanks,
+    /// Multiply every finite response by −1.
+    NegateResponse,
+}
+
+impl CandidateNormalization {
+    /// Stable identifier matching the Stage-0 freeze-template candidate list.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::IdentityResponse => "identity_response",
+            Self::RankNormalizeToAverageRanks => "rank_normalize_to_average_ranks",
+            Self::NegateResponse => "negate_response",
+        }
+    }
+}
+
+/// Replace each finite value by its average rank (Stage-0 rank-normalization).
+///
+/// EXACT: for a nondegenerate sample, Spearman / Kendall of the rank-normalized
+/// vector against the original equal 1, because average ranks are a strictly
+/// increasing function of the distinct order statistics and midranks preserve
+/// the ordinal multiset used by both correlations.
+pub fn rank_normalize(values: &[f64]) -> Result<Vec<f64>, OrdinalError> {
+    average_ranks(values)
+}
+
+/// Pointwise negation of a finite sample (`negate_response` scaffolding).
+///
+/// EXACT: on a sample of pairwise-distinct finite values, Spearman / Kendall
+/// against the negated sample equal −1.
+pub fn negate_values(values: &[f64]) -> Result<Vec<f64>, OrdinalError> {
+    if values.is_empty() {
+        return Err(OrdinalError::EmptySample);
+    }
+    let mut out = Vec::with_capacity(values.len());
+    for (index, value) in values.iter().enumerate() {
+        if !value.is_finite() {
+            return Err(OrdinalError::NonFiniteValue { index });
+        }
+        let negated = -*value;
+        if !negated.is_finite() {
+            return Err(OrdinalError::NonFiniteValue { index });
+        }
+        out.push(negated);
+    }
+    Ok(out)
+}
+
+/// Closed-form coefficient Frobenius norm for a constant Toeplitz Jacobi symbol.
+///
+/// For width `n ≥ 1` with diagonal `a` and off-diagonal `b`:
+/// `sqrt(n a² + (n − 1) b²)` (the `n = 1` case has no off-diagonal term).
+///
+/// EXACT elementary algebra; matches [`coefficient_frobenius_norm_key`] on the
+/// corresponding constant Toeplitz matrix. Does not freeze populations.
+pub fn constant_toeplitz_frobenius_norm(
+    width: usize,
+    diagonal: f64,
+    edge: f64,
+) -> Result<f64, OrdinalError> {
+    if width == 0 {
+        return Err(OrdinalError::EmptyOperator);
+    }
+    if !diagonal.is_finite() {
+        return Err(OrdinalError::NonFiniteValue { index: 0 });
+    }
+    if !edge.is_finite() {
+        return Err(OrdinalError::NonFiniteValue { index: 1 });
+    }
+    let n = width as f64;
+    let sum_sq = if width == 1 {
+        n * diagonal * diagonal
+    } else {
+        n * diagonal * diagonal + (n - 1.0) * edge * edge
+    };
+    if !sum_sq.is_finite() || sum_sq < 0.0 {
+        return Err(OrdinalError::NonFiniteValue { index: 0 });
+    }
+    let norm = sum_sq.sqrt();
+    if !norm.is_finite() {
+        return Err(OrdinalError::NonFiniteValue { index: 0 });
+    }
+    Ok(norm)
+}
+
+/// Closed-form Gershgorin dominance margin for a constant Toeplitz Jacobi symbol.
+///
+/// EXACT row-margin algebra:
+/// - width 1: `a`
+/// - width 2: `a − |b|`
+/// - width ≥ 3: `a − 2|b|` (interior rows dominate the minimum)
+///
+/// Consequently the margin is **width-invariant for all n ≥ 3**. Correlating it
+/// against dimension on a ladder contained in `{n : n ≥ 3}` fails closed with
+/// [`OrdinalError::DegenerateRanks`]. This REFUTES treating the Stage-0
+/// Gershgorin control as a covert dimension key on constant Toeplitz families.
+pub fn constant_toeplitz_gershgorin_margin(
+    width: usize,
+    diagonal: f64,
+    edge: f64,
+) -> Result<f64, OrdinalError> {
+    if width == 0 {
+        return Err(OrdinalError::EmptyOperator);
+    }
+    if !diagonal.is_finite() {
+        return Err(OrdinalError::NonFiniteValue { index: 0 });
+    }
+    if !edge.is_finite() {
+        return Err(OrdinalError::NonFiniteValue { index: 1 });
+    }
+    let abs_edge = edge.abs();
+    if !abs_edge.is_finite() {
+        return Err(OrdinalError::NonFiniteValue { index: 1 });
+    }
+    let margin = match width {
+        1 => diagonal,
+        2 => diagonal - abs_edge,
+        _ => diagonal - 2.0 * abs_edge,
+    };
+    if !margin.is_finite() {
+        return Err(OrdinalError::NonFiniteValue { index: 0 });
+    }
+    Ok(margin)
+}
+
+/// Evaluate one candidate response observable on each matrix of a finite ladder.
+///
+/// Fail-closed: empty ladder → [`OrdinalError::EmptySample`]; any per-matrix
+/// Green / resolvent failure propagates. Does **not** freeze
+/// `operator_population_families` or `response_observable_registry`.
+pub fn evaluate_observable_ladder(
+    matrices: &[JacobiMatrix],
+    shift: f64,
+    observable: CandidateResponseObservable,
+) -> Result<Vec<f64>, OrdinalError> {
+    if matrices.is_empty() {
+        return Err(OrdinalError::EmptySample);
+    }
+    let mut out = Vec::with_capacity(matrices.len());
+    for matrix in matrices {
+        out.push(observable.evaluate(matrix, shift)?);
+    }
+    Ok(out)
+}
+
+/// Stage-0 `tie_heavy_adversarial` scaffolding sample.
+///
+/// Returns a length-`n` (`n ≥ 3`) sequence with a single large interior tied
+/// block and two distinct endpoints so ranks are non-constant (Spearman /
+/// Kendall remain defined). EXACT midranks: endpoints occupy positions 1 and
+/// `n`; the interior block of size `n − 2` occupies positions `2..=(n − 1)`
+/// and therefore receives midrank `(n + 1) / 2`.
+pub fn tie_heavy_adversarial_sample(n: usize) -> Result<Vec<f64>, OrdinalError> {
+    if n < 3 {
+        return Err(OrdinalError::EmptySample);
+    }
+    let mut values = Vec::with_capacity(n);
+    values.push(0.0);
+    values.extend(std::iter::repeat_n(1.0, n - 2));
+    values.push(2.0);
+    Ok(values)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        average_ranks, deterministic_shuffle, kendall_tau_b, spearman_rho,
-        strictly_increasing_affine,
+        average_ranks, constant_toeplitz_frobenius_norm, constant_toeplitz_gershgorin_margin,
+        deterministic_shuffle, kendall_tau_b, negate_values, rank_normalize, spearman_rho,
+        strictly_increasing_affine, tie_heavy_adversarial_sample,
     };
 
     #[test]
@@ -436,5 +632,52 @@ mod tests {
         let rho = spearman_rho(&original, &shuffled).unwrap();
         assert!(rho.is_finite());
         assert!((rho - 1.0).abs() > 1.0e-12);
+    }
+
+    #[test]
+    fn constant_toeplitz_frobenius_closed_form_and_width_monotone() {
+        let a = 4.0;
+        let b = 1.0;
+        let n3 = constant_toeplitz_frobenius_norm(3, a, b).unwrap();
+        let n4 = constant_toeplitz_frobenius_norm(4, a, b).unwrap();
+        assert!((n3 - (3.0 * a * a + 2.0 * b * b).sqrt()).abs() < 1.0e-15);
+        assert!(n4 > n3);
+    }
+
+    #[test]
+    fn constant_toeplitz_gershgorin_width_invariant_for_n_ge_3() {
+        let a = 5.0;
+        let b = 1.5;
+        let m3 = constant_toeplitz_gershgorin_margin(3, a, b).unwrap();
+        let m7 = constant_toeplitz_gershgorin_margin(7, a, b).unwrap();
+        assert!((m3 - (a - 2.0 * b)).abs() < 1.0e-15);
+        assert_eq!(m3, m7);
+    }
+
+    #[test]
+    fn rank_normalize_preserves_unit_spearman_on_nondegenerate() {
+        let values = [3.0, -1.0, 2.0, 2.0, 8.0];
+        let ranks = rank_normalize(&values).unwrap();
+        assert!((spearman_rho(&values, &ranks).unwrap() - 1.0).abs() < 1.0e-15);
+        assert!((kendall_tau_b(&values, &ranks).unwrap() - 1.0).abs() < 1.0e-15);
+    }
+
+    #[test]
+    fn negate_values_yields_exact_negative_unit_correlations() {
+        let values = [1.0, 2.0, 3.0, 4.0];
+        let negated = negate_values(&values).unwrap();
+        assert!((spearman_rho(&values, &negated).unwrap() + 1.0).abs() < 1.0e-15);
+        assert!((kendall_tau_b(&values, &negated).unwrap() + 1.0).abs() < 1.0e-15);
+    }
+
+    #[test]
+    fn tie_heavy_adversarial_midranks_are_exact() {
+        let sample = tie_heavy_adversarial_sample(5).unwrap();
+        assert_eq!(sample, vec![0.0, 1.0, 1.0, 1.0, 2.0]);
+        assert_eq!(
+            average_ranks(&sample).unwrap(),
+            vec![1.0, 3.0, 3.0, 3.0, 5.0]
+        );
+        assert!((spearman_rho(&sample, &sample).unwrap() - 1.0).abs() < 1.0e-15);
     }
 }

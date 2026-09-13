@@ -64,6 +64,52 @@ increasing length≥3 sample, shuffling one side with a fixed seed yields
 Spearman/Kendall strictly less than 1, and the same seed reproduces the same
 permutation. This scaffolds `shuffled_family` without freezing split discipline.
 
+
+## EXACT claim 9 — constant-Toeplitz Frobenius closed form
+
+For a constant Jacobi symbol with diagonal `a`, edge `b`, and width `n ≥ 1`,
+the coefficient Frobenius key equals
+`sqrt(n a² + (n − 1) b²)` (no off-diagonal term when `n = 1`). When
+`a² + b² > 0` the key is strictly increasing in `n`. On any strictly increasing
+width ladder the Frobenius keys therefore have Spearman = Kendall = 1 against
+the dimension-only keys.
+
+## EXACT claim 10 — constant-Toeplitz Gershgorin width invariance
+
+For the same constant symbol the Gershgorin dominance margin equals `a` when
+`n = 1`, `a − |b|` when `n = 2`, and `a − 2|b|` when `n ≥ 3`. In particular the
+margin is width-invariant on every ladder contained in `{n : n ≥ 3}`, so
+Spearman / Kendall against dimension fail closed with degenerate ranks. This
+**REFUTES** treating the Stage-0 Gershgorin control as a covert dimension key
+on constant Toeplitz families. It does **not** freeze `control_battery` or
+`operator_population_families`.
+
+## EXACT claim 11 — rank-normalize and negate-response scaffolding
+
+`rank_normalize` replaces values by average ranks. On a nondegenerate sample,
+Spearman / Kendall of the rank-normalized vector against the original equal 1.
+`negate_values` multiplies by −1; on pairwise-distinct finite values, Spearman /
+Kendall against the negated sample equal −1. These implement the Stage-0
+`normalization_contract` non-authorizing candidates and do **not** pin that
+field.
+
+## EXACT claim 12 — tie-heavy adversarial midranks
+
+`tie_heavy_adversarial_sample(n)` (`n ≥ 3`) yields endpoints `{0, 2}` with an
+interior tied block of `1`s of length `n − 2`. Endpoints receive midranks `1`
+and `n`; the interior block occupies positions `2..=(n − 1)` and receives
+midrank `(n + 1) / 2`. Ranks are non-constant, so identity Spearman / Kendall
+equal 1. This scaffolds `tie_heavy_adversarial` without freezing
+`control_battery`.
+
+## EXACT claim 13 — observable ladder evaluation
+
+`evaluate_observable_ladder` maps a non-empty finite matrix list through one
+`CandidateResponseObservable` at a fixed shift, fail-closed on empty ladders or
+Green / resolvent failure. Candidate population identifiers
+`PositiveConstantToeplitzWidthLadder` and `DiagonalOnlyWidthLadder` match the
+Stage-0 template and do **not** pin `operator_population_families`.
+
 ## REFUTED (Stage-0 boundary)
 
 The existence of these ranking primitives does **not** imply that ordinal

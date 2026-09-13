@@ -58,6 +58,34 @@ EXPECTED_TIE_CANDIDATES = [
     "fail_closed_full_ties",
 ]
 
+EXPECTED_POPULATION_CANDIDATES = [
+    "PositiveConstantToeplitzWidthLadder",
+    "DiagonalOnlyWidthLadder",
+]
+
+EXPECTED_NORMALIZATION_CANDIDATES = [
+    "identity_response",
+    "rank_normalize_to_average_ranks",
+    "negate_response",
+]
+
+EXPECTED_SPLIT_CANDIDATES = [
+    "single_development_pool_no_split",
+    "holdout_surfaces_forbidden",
+]
+
+EXPECTED_TYPED_REJECTION_CANDIDATES = [
+    "ordinal_error_variants",
+]
+
+EXPECTED_PROVENANCE_CANDIDATES = [
+    "stage0_bootstrap_markers",
+]
+
+EXPECTED_POPULATION_DERIVATION_CANDIDATES = [
+    "declared_width_ladder_from_candidate_population",
+]
+
 REQUIRED_NAMED_CONTROLS = [
     "identity_ordering",
     "dimension_only_ordering",
@@ -165,6 +193,32 @@ def validate_template(document: Any) -> int:
     if ties.get("non_authorizing_candidates") != EXPECTED_TIE_CANDIDATES:
         fail("tie_policy.non_authorizing_candidates drifted")
 
+    populations = freeze["operator_population_families"]
+    if populations.get("non_authorizing_candidates") != EXPECTED_POPULATION_CANDIDATES:
+        fail("operator_population_families.non_authorizing_candidates drifted")
+
+    normalization = freeze["normalization_contract"]
+    if normalization.get("non_authorizing_candidates") != EXPECTED_NORMALIZATION_CANDIDATES:
+        fail("normalization_contract.non_authorizing_candidates drifted")
+
+    split = freeze["split_discipline"]
+    if split.get("non_authorizing_candidates") != EXPECTED_SPLIT_CANDIDATES:
+        fail("split_discipline.non_authorizing_candidates drifted")
+
+    typed = freeze["typed_rejection_contract"]
+    if typed.get("non_authorizing_candidates") != EXPECTED_TYPED_REJECTION_CANDIDATES:
+        fail("typed_rejection_contract.non_authorizing_candidates drifted")
+
+    provenance = freeze["provenance_contract"]
+    if provenance.get("non_authorizing_candidates") != EXPECTED_PROVENANCE_CANDIDATES:
+        fail("provenance_contract.non_authorizing_candidates drifted")
+
+    derivation = freeze["development_validation_population_derivation"]
+    if derivation.get("non_authorizing_candidates") != EXPECTED_POPULATION_DERIVATION_CANDIDATES:
+        fail(
+            "development_validation_population_derivation.non_authorizing_candidates drifted"
+        )
+
     controls = freeze["control_battery"]
     if controls.get("required_named_controls") != REQUIRED_NAMED_CONTROLS:
         fail("control_battery.required_named_controls drifted")
@@ -250,6 +304,29 @@ def self_test(template: Any) -> None:
         pass
     else:
         fail("self-test: digest-bearing Stage-0 template was accepted")
+
+    drifted = copy.deepcopy(template)
+    drifted["freeze"]["operator_population_families"]["non_authorizing_candidates"] = [
+        "InventedPopulation"
+    ]
+    try:
+        validate_template(drifted)
+    except TemplateError:
+        pass
+    else:
+        fail("self-test: drifted population candidates were accepted")
+
+    pinned_norm = copy.deepcopy(template)
+    pinned_norm["freeze"]["normalization_contract"]["status"] = "pinned"
+    pinned_norm["freeze"]["normalization_contract"]["value"] = (
+        "rank_normalize_to_average_ranks"
+    )
+    try:
+        validate_template(pinned_norm)
+    except TemplateError:
+        pass
+    else:
+        fail("self-test: invented normalization_contract pin was accepted")
 
 
 def main() -> int:
