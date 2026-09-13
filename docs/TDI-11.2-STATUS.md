@@ -62,3 +62,8 @@ the 12 freeze fields remain `unresolved_blocking` (orchestrator holdout / no
 AUTO_MERGE of freeze 11.2: #186). The existing pre-arm and freeze-schema gates
 already enforce this fail-closed posture.
 
+Fail-closed reminder (unchanged authorizations): both execution flags remain
+**false** until a separately reviewed freeze pins all twelve blocking fields.
+Orthogonal TDI-10.x operator-family work (including TDI-10.13) must not invent
+those pins or contact TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces.
+
