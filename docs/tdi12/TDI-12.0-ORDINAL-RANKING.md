@@ -110,6 +110,42 @@ Green / resolvent failure. Candidate population identifiers
 `PositiveConstantToeplitzWidthLadder` and `DiagonalOnlyWidthLadder` match the
 Stage-0 template and do **not** pin `operator_population_families`.
 
+## EXACT claim 14 — constant diagonal-only Frobenius closed form
+
+For a constant **diagonal-only** Jacobi symbol (diagonal `a`, edges identically
+0) of width `n ≥ 1`, the coefficient Frobenius key equals `sqrt(n a²) = |a| √n`.
+This is the edge-`0` specialization of claim 9. When `a ≠ 0` the key is strictly
+increasing in `n`, so Spearman = Kendall = 1 against dimension on any strictly
+increasing width ladder. Scaffolds `DiagonalOnlyWidthLadder` without freezing
+`operator_population_families`.
+
+## EXACT claim 15 — constant diagonal-only Gershgorin width invariance (all n)
+
+For the same diagonal-only symbol the Gershgorin dominance margin equals `a` for
+**every** `n ≥ 1` (stronger than the constant-Toeplitz n≥3 invariance of claim
+10). Spearman / Kendall against dimension therefore fail closed on any
+multi-width ladder. This **REFUTES** treating the Stage-0 Gershgorin control as
+a covert dimension key on `DiagonalOnlyWidthLadder`. It does **not** freeze
+`control_battery` or `operator_population_families`.
+
+## EXACT claim 16 — constant diagonal-only Green closed forms
+
+Under the TDI-10 positive-pivot regime `a + shift > 0`, `(K + t I)^{-1}` is
+diagonal with every entry `1/(a + t)`:
+
+- `MidDiagonalGreen = 1/(a + t)` is **width-invariant** — Spearman / Kendall
+  against dimension fail closed (**REFUTES** MidDiagonalGreen as a covert
+  dimension key on this population);
+- `GreenTrace = n/(a + t)` is strictly monotone in `n` — Spearman = Kendall = 1
+  against dimension on any strictly increasing width ladder;
+- `MeanAbsOffDiagonalGreen = 0` identically — Spearman / Kendall against
+  dimension fail closed (**REFUTES** MeanAbsOffDiagonalGreen as a covert
+  dimension key on this population).
+
+These identities match public `GreenBands` / `CandidateResponseObservable`
+extractors on diagonal-only matrices and do **not** freeze
+`response_observable_registry`.
+
 ## REFUTED (Stage-0 boundary)
 
 The existence of these ranking primitives does **not** imply that ordinal

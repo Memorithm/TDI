@@ -20,6 +20,9 @@ It lands:
 - coefficient-only Stage-0 control keys (norm / Gershgorin margin / shuffle);
 - closed-form constant-Toeplitz Frobenius / Gershgorin identities and
   rank-normalize / negate-response / tie-heavy / observable-ladder scaffolding;
+- closed-form constant **diagonal-only** Frobenius / Gershgorin / Green
+  identities (including MidDiagonalGreen width-invariance and GreenTrace
+  concordance REFUTE/EXACT pair on `DiagonalOnlyWidthLadder`);
 - non-authorizing candidate declarations for remaining freeze-template fields
   (populations, normalization, split, typed rejection, provenance, derivation)
   while every scientific field stays `unresolved_blocking`;
@@ -47,6 +50,9 @@ It lands:
 | Rank-normalize preserves ρ=τ=1; negate-response yields ρ=τ=−1 on distinct values | **EXACT** |
 | Tie-heavy adversarial midranks with non-degenerate identity correlations | **EXACT** |
 | Observable ladder evaluation fail-closed; population candidate ids non-pinning | **EXACT** integrity / scaffolding |
+| Constant diagonal-only Frobenius `√(n a²)`; width-monotone; ρ=τ=1 vs dimension | **EXACT** |
+| Constant diagonal-only Gershgorin `= a` for all n≥1 (degenerate vs dimension) | **EXACT** (REFUTES covert dimension key) |
+| Diagonal-only MidDiagonalGreen width-invariant; GreenTrace ρ=τ=1; off-diag ≡ 0 | **EXACT** (REFUTES MidDiagonal / off-diag as dimension keys) |
 
 ## Non-claims / still forbidden
 
@@ -58,7 +64,9 @@ Stage 0 does **not**:
 - pin any TDI-8.1 / TDI-9.1 / TDI-11.2 freeze field;
 - contact TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces;
 - claim ordinal universality, soft-edge theorems, or Riemann consequences;
-- treat TDI-10.19 reverse/cross composition as a TDI-12 pin or confirmatory authorization.
+- treat TDI-10.19 reverse/cross composition as a TDI-12 pin or confirmatory authorization;
+- treat DiagonalOnlyWidthLadder closed forms as freezing `operator_population_families`
+  or authorizing confirmatory execution.
 
 ## Stage gate toward TDI-12.1
 

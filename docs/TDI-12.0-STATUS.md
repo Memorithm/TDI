@@ -47,6 +47,17 @@ Primary surfaces:
     non-authorizing candidate ids for populations / normalization / split /
     typed rejection / provenance / derivation — fields remain
     `unresolved_blocking`.
+14. **EXACT** constant diagonal-only Frobenius `√(n a²)` with width monotonicity
+    and ρ = τ = 1 vs dimension (`DiagonalOnlyWidthLadder` / `norm_baseline`
+    scaffolding; edge-zero specialization of item 11).
+15. **EXACT** constant diagonal-only Gershgorin margin `= a` for **all** `n ≥ 1`
+    (stronger width-invariance than Toeplitz n≥3); Spearman/Kendall vs dimension
+    fail closed — REFUTES covert dimension keying.
+16. **EXACT** diagonal-only Green closed forms under `a + shift > 0`:
+    MidDiagonalGreen `= 1/(a+t)` width-invariant (REFUTES as dimension key);
+    GreenTrace `= n/(a+t)` with ρ = τ = 1 vs dimension; MeanAbsOffDiagonalGreen
+    `≡ 0` (REFUTES as dimension key). Does not freeze
+    `response_observable_registry`.
 
 ## Authorization state
 
@@ -65,8 +76,9 @@ Stage 0 invents **no** TDI-8.1 / TDI-9.1 / TDI-11.2 freeze pins. Existing
 authorized pins stay 3/17, 1/14, 0/12. No TDI-7.2 / TDI-8.2 / TDI-9.2 contact.
 TDI-9.3.0 does not authorize TDI-9.1 / TDI-9.2. TDI-10.19 reverse/cross family
 composition is orthogonal Stage-10 EXACT work and invents no TDI-12.0 pins.
+DiagonalOnlyWidthLadder closed forms remain non-authorizing candidates.
 
-## Next engineering slice after Stage-0 candidate declarations / Toeplitz controls
+## Next engineering slice after DiagonalOnly / Toeplitz Stage-0 controls
 
 Still Stage-0 / non-confirmatory: review and (only with explicit evidence)
 resolve freeze fields among the declared non-authorizing candidates for

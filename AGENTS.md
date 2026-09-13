@@ -108,7 +108,7 @@ TDI-12.0 is an active Stage-0 bootstrap and is **not frozen**. Confirmatory and 
 
 TDI-12.1 synthetic evaluator expansion is forbidden until `bash scripts/check-tdi12-stage0-bootstrap.sh` passes on the relevant branch/main state and any evaluator-required freeze fields are explicitly resolved by a later gated change. No TDI-12 confirmatory population, final seed list, final dataset, or final result payload may exist during Stage 0.
 
-TDI-12 must not invent TDI-8.1 / TDI-9.1 / TDI-11.2 freeze pins, must not contact TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces, and must not treat TDI-9.3.0 as authorization for TDI-9.1 / TDI-9.2. TDI-10.19 reverse/cross family composition is a genuine EXACT claim (complement to 10.15) and remains orthogonal to TDI-12 freeze fields.
+TDI-12 must not invent TDI-8.1 / TDI-9.1 / TDI-11.2 freeze pins, must not contact TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces, and must not treat TDI-9.3.0 as authorization for TDI-9.1 / TDI-9.2. TDI-10.19 reverse/cross family composition is a genuine EXACT claim (complement to 10.15) and remains orthogonal to TDI-12 freeze fields. DiagonalOnlyWidthLadder closed forms are Stage-0 EXACT scaffolding and do not freeze operator populations or authorize confirmatory execution.
 
 Before a TDI-12 PR or merge decision, run `bash scripts/check-tdi12-stage0-bootstrap.sh` (which invokes `scripts/check-tdi12.0-freeze-template.py --self-test`) when that script exists on the branch.
 
