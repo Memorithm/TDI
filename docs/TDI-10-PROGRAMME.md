@@ -35,6 +35,7 @@ A numerical fit is never proof. A formal asymptotic is never promoted to a unifo
 - **TDI-10.7** — **EXACT** remainder criterion: `sum (1 - alpha_k) = infinity` with `0 < alpha_k <= 1` forces product → 0; `alpha_k -> 1` alone is **REFUTED** as a decay-prevention criterion
 - **TDI-10.8** — **EXACT** witness trichotomy: Type S (summable remainder; product ↛ 0), Type U (uniform geometric; product → 0), Type D (divergent remainder; product → 0); **REFUTED** that `alpha_k -> 1` implies Type S; **REFUTED** that divergent remainder is automatic for every `0 < alpha_k < 1` family
 - **TDI-10.9** — **EXACT** harmonic remainder-rate lemma: `1 - alpha_k >= c/k` eventually forces divergent remainder hence product → 0 (Type D sufficient rate); closed-form witness calculus for Types S/U/D; **REFUTED** that a superharmonic lower bound `1 - alpha_k >= c/k^{1+epsilon}` is sufficient for decay
+- **TDI-10.10** — **EXACT** remainder / product / log-sum equivalence under `0 < alpha_k <= 1`: `sum (1 - alpha_k) = infinity` iff `product -> 0` iff `sum (-log alpha_k) = infinity`; **REFUTED** necessity of divergent remainder once `alpha_k = 0` is allowed; **REFUTED** that `alpha_k -> 1` is required for the equivalence
 
 ## Next frontiers (not yet authorized by numbering alone)
 
