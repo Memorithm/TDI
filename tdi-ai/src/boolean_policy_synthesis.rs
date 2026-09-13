@@ -296,6 +296,82 @@ impl BooleanDecision {
     }
 }
 
+/// Declared predicate arity for the hand-written C2 reference Boolean shape.
+///
+/// Index meanings are documentation labels for representation calibration only.
+/// They do **not** freeze `permitted_observation_vector` or any other TDI-9.1
+/// field, and they do not authorize TDI-9.2.
+pub const REFERENCE_C2_PREDICATE_COUNT: usize = 5;
+
+/// Predicate indices used by [`reference_c2_stop_expression`].
+///
+/// These names mirror the hand-written C2 comments in
+/// `adaptive_policies::base_should_stop`. They are representation labels for
+/// TDI-9.3.0 calibration, not an experimental observation-vector pin.
+pub mod reference_c2_predicates {
+    pub const ENOUGH_STEPS: usize = 0;
+    pub const TERMINAL: usize = 1;
+    pub const RESIDUAL_SMALL: usize = 2;
+    pub const DELTA_SMALL: usize = 3;
+    pub const MARGIN_LARGE: usize = 4;
+}
+
+/// Exact hand-written C2 STOP Boolean (documentation formula).
+///
+/// `STOP = enough_steps AND (terminal OR (residual_small AND delta_small AND margin_large))`
+///
+/// This is the independent oracle used by TDI-9.3.0 exhaustive truth-table
+/// calibration. It does not read trajectory observations or freeze thresholds.
+#[must_use]
+pub fn reference_c2_hand_stop(predicates: &[bool; REFERENCE_C2_PREDICATE_COUNT]) -> bool {
+    use reference_c2_predicates::{
+        DELTA_SMALL, ENOUGH_STEPS, MARGIN_LARGE, RESIDUAL_SMALL, TERMINAL,
+    };
+    let enough_steps = predicates[ENOUGH_STEPS];
+    let terminal = predicates[TERMINAL];
+    let residual_small = predicates[RESIDUAL_SMALL];
+    let delta_small = predicates[DELTA_SMALL];
+    let margin_large = predicates[MARGIN_LARGE];
+    enough_steps & (terminal | (residual_small & delta_small & margin_large))
+}
+
+/// Compact Boolean IR encoding of the hand-written C2 STOP rule.
+#[must_use]
+pub fn reference_c2_stop_expression() -> BooleanExpr {
+    use reference_c2_predicates::{
+        DELTA_SMALL, ENOUGH_STEPS, MARGIN_LARGE, RESIDUAL_SMALL, TERMINAL,
+    };
+    // enough_steps AND (terminal OR (residual_small AND delta_small AND margin_large))
+    BooleanExpr::And(
+        Box::new(BooleanExpr::Predicate(ENOUGH_STEPS)),
+        Box::new(BooleanExpr::Or(
+            Box::new(BooleanExpr::Predicate(TERMINAL)),
+            Box::new(BooleanExpr::And(
+                Box::new(BooleanExpr::And(
+                    Box::new(BooleanExpr::Predicate(RESIDUAL_SMALL)),
+                    Box::new(BooleanExpr::Predicate(DELTA_SMALL)),
+                )),
+                Box::new(BooleanExpr::Predicate(MARGIN_LARGE)),
+            )),
+        )),
+    )
+}
+
+/// C2 BooleanPolicy that STOPs exactly when [`reference_c2_stop_expression`] is true.
+///
+/// Fallback is CONTINUE. This is a representation-calibration fixture only: it
+/// does not integrate into the C2 reference evaluator and does not pin TDI-9.1.
+pub fn reference_c2_stop_policy() -> Result<BooleanPolicy, BooleanPolicyError> {
+    BooleanPolicy::new(
+        PolicyArm::C2AdaptiveStopping,
+        vec![BooleanActionRule::new(
+            reference_c2_stop_expression(),
+            InferenceAction::Stop,
+        )],
+        InferenceAction::Continue,
+    )
+}
+
 /// Fail-closed errors for the TDI-9.3 experimental Boolean-policy IR.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BooleanPolicyError {
@@ -323,44 +399,67 @@ impl std::error::Error for BooleanPolicyError {}
 
 #[cfg(test)]
 mod tests {
-    use super::{BooleanActionRule, BooleanExpr, BooleanPolicy, BooleanPolicyError};
+    use super::{
+        BooleanActionRule, BooleanExpr, BooleanPolicy, BooleanPolicyError,
+        REFERENCE_C2_PREDICATE_COUNT, reference_c2_hand_stop, reference_c2_stop_expression,
+        reference_c2_stop_policy,
+    };
     use crate::experimental::adaptive_inference::{InferenceAction, PolicyArm};
 
-    fn stop_expression() -> BooleanExpr {
-        // enough_steps AND (terminal OR (residual_small AND delta_small AND margin_large))
-        BooleanExpr::And(
-            Box::new(BooleanExpr::Predicate(0)),
-            Box::new(BooleanExpr::Or(
-                Box::new(BooleanExpr::Predicate(1)),
-                Box::new(BooleanExpr::And(
-                    Box::new(BooleanExpr::And(
-                        Box::new(BooleanExpr::Predicate(2)),
-                        Box::new(BooleanExpr::Predicate(3)),
-                    )),
-                    Box::new(BooleanExpr::Predicate(4)),
-                )),
-            )),
-        )
+    fn every_predicate_vector() -> impl Iterator<Item = [bool; REFERENCE_C2_PREDICATE_COUNT]> {
+        (0..(1usize << REFERENCE_C2_PREDICATE_COUNT)).map(|mask| {
+            let mut predicates = [false; REFERENCE_C2_PREDICATE_COUNT];
+            for (index, slot) in predicates.iter_mut().enumerate() {
+                *slot = ((mask >> index) & 1) == 1;
+            }
+            predicates
+        })
     }
 
     #[test]
-    fn reproduces_reference_c2_boolean_shape() {
-        let expression = stop_expression();
-        assert!(
-            expression
-                .evaluate(&[true, false, true, true, true])
-                .expect("valid predicates")
+    fn reference_c2_expression_matches_hand_formula_on_exhaustive_table() {
+        let expression = reference_c2_stop_expression();
+        let mut rows = 0usize;
+        for predicates in every_predicate_vector() {
+            rows += 1;
+            let ir = expression
+                .evaluate(&predicates)
+                .expect("reference C2 expression uses only declared indices");
+            assert_eq!(
+                ir,
+                reference_c2_hand_stop(&predicates),
+                "truth-table mismatch for predicates={predicates:?}"
+            );
+        }
+        assert_eq!(rows, 1usize << REFERENCE_C2_PREDICATE_COUNT);
+    }
+
+    #[test]
+    fn reference_c2_policy_decides_stop_continue_on_exhaustive_table() {
+        let policy = reference_c2_stop_policy().expect("valid reference C2 policy");
+        let mut stop_rows = 0usize;
+        let mut continue_rows = 0usize;
+        for predicates in every_predicate_vector() {
+            let decision = policy
+                .decide(&predicates)
+                .expect("reference C2 policy evaluates on declared arity");
+            let expect_stop = reference_c2_hand_stop(&predicates);
+            if expect_stop {
+                assert_eq!(decision.action(), InferenceAction::Stop);
+                assert_eq!(decision.matched_rule(), Some(0));
+                stop_rows += 1;
+            } else {
+                assert_eq!(decision.action(), InferenceAction::Continue);
+                assert_eq!(decision.matched_rule(), None);
+                continue_rows += 1;
+            }
+        }
+        assert_eq!(
+            stop_rows + continue_rows,
+            1usize << REFERENCE_C2_PREDICATE_COUNT
         );
-        assert!(
-            !expression
-                .evaluate(&[true, false, true, false, true])
-                .expect("valid predicates")
-        );
-        assert!(
-            !expression
-                .evaluate(&[false, true, true, true, true])
-                .expect("valid predicates")
-        );
+        // Sanity: both outcomes exist on the finite table.
+        assert!(stop_rows > 0 && continue_rows > 0);
     }
 
     #[test]
@@ -460,7 +559,18 @@ mod tests {
 
     #[test]
     fn complexity_is_exact_for_reference_expression() {
-        let complexity = stop_expression().complexity();
+        let complexity = reference_c2_stop_expression().complexity();
+        assert_eq!(complexity.predicate_reads(), 5);
+        assert_eq!(complexity.logical_ops(), 4);
+        assert_eq!(complexity.depth(), 4);
+    }
+
+    #[test]
+    fn reference_c2_policy_worst_case_complexity_is_deterministic() {
+        let policy = reference_c2_stop_policy().expect("valid reference C2 policy");
+        let complexity = policy
+            .worst_case_complexity()
+            .expect("reference expression complexity is finite");
         assert_eq!(complexity.predicate_reads(), 5);
         assert_eq!(complexity.logical_ops(), 4);
         assert_eq!(complexity.depth(), 4);

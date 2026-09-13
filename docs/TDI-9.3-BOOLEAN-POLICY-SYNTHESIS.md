@@ -1,6 +1,6 @@
 # TDI-9.3 — Boolean Policy Synthesis
 
-Status: **ACTIVE DESIGN / NON-FINAL**
+Status: **ACTIVE DESIGN / NON-FINAL** (TDI-9.3.0 representation calibration partially landed)
 
 ## Purpose
 
@@ -88,12 +88,24 @@ TDI must not silently import BL-14 empirical claims. Only generic mechanisms or 
 
 Goal: verify that the Boolean IR can exactly reproduce declared hand-written reference rules and account for predicate reads, logical operations and expression depth deterministically.
 
+**Landed (exact / engineering, non-pinning):** the experimental module now exposes
+`reference_c2_hand_stop`, `reference_c2_stop_expression`, and
+`reference_c2_stop_policy`, and CI-covered unit tests exhaustively compare the IR
+against the hand Boolean on all `2^5` predicate vectors. Complexity for the
+reference C2 STOP shape remains exact (`5` predicate reads, `4` logical ops,
+depth `4`). Fail-closed missing-predicate / forbidden-action behavior remains
+covered.
+
 Acceptance criteria:
 
-- exact output equivalence on exhaustive bounded predicate tables for the target rule;
-- fail-closed behavior for missing predicates or forbidden actions;
-- deterministic complexity accounting;
-- no access to final-evaluation data.
+- exact output equivalence on exhaustive bounded predicate tables for the target rule (**met for the documented C2 STOP shape**);
+- fail-closed behavior for missing predicates or forbidden actions (**met**);
+- deterministic complexity accounting (**met for the reference C2 STOP shape**);
+- no access to final-evaluation data (**met**; experimental feature only).
+
+TDI-9.3.0 calibration does **not** freeze observation-to-predicate mappings,
+thresholds, or `permitted_observation_vector`, and does **not** authorize
+TDI-9.1 pins or TDI-9.2.
 
 ### TDI-9.3.1 — C2 Boolean stopping-rule search
 
@@ -173,11 +185,13 @@ The initial module provides:
 - ordered Boolean action rules;
 - TDI policy-arm action validation;
 - exact reference counts for predicate reads, logical operations and expression depth;
-- fail-closed handling of malformed predicate vectors.
+- fail-closed handling of malformed predicate vectors;
+- TDI-9.3.0 representation-calibration fixtures for the hand-written C2 STOP
+  Boolean (`reference_c2_*`), including exhaustive truth-table equivalence tests.
 
 It deliberately does **not** yet provide:
 
-- a chosen TDI-9 predicate schema;
+- a chosen TDI-9 predicate schema or observation-vector pin;
 - thresholds derived from evidence;
 - a search algorithm;
 - integration into the C2/C3 reference evaluator;
