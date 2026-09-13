@@ -28,7 +28,7 @@ The readiness gate fail-closes if any field outside the three authorized pins is
 
 ## Integrity (this slice)
 
-Post-#201 scout (after TDI-10.15 family composition on `main`, with TDI-10.16 κ-monotonicity / matched-factorization in flight) found **no** newly closed identifier that can pin a remaining field. Existing authorized pins stay 3/17. Readiness continues to fail-close on a pinned-count floor of **≥3**, STATUS↔freeze JSON pin-count cross-check, missing pin-evidence blocks, unauthorized pins, and silent STATUS / `scientific_status` upgrades (#199).
+Post-#202 scout (after TDI-10.16 κ-monotonicity on `main`, with TDI-10.17 family↔affine-unrolling in flight) found **no** newly closed identifier that can pin a remaining field. Existing authorized pins stay 3/17. Readiness continues to fail-close on a pinned-count floor of **≥3**, STATUS↔freeze JSON pin-count cross-check, missing pin-evidence blocks, unauthorized pins, and silent STATUS / `scientific_status` upgrades (#199).
 
 ## Remaining TDI-8.1 work
 
@@ -42,4 +42,4 @@ TDI-8.2 remains future human-only. No autonomous confirmation token or confirmat
 
 ## Series orthogonality
 
-TDI-10.x through TDI-10.16 (operator-family chapter: 10.13–10.15 families/composition + 10.16 κ(a,b) domain/monotonicity and matched TDI-10.3 → Type-U link) remains orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces. #199 readiness floors are unchanged; STATUS↔JSON pin-count cross-check is additive.
+TDI-10.x through TDI-10.17 (operator-family chapter: 10.13–10.15 families/composition + 10.16 κ domain/monotonicity + 10.17 family↔10.4 affine-unrolling / constant-drift closed forms) remains orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces. #199 readiness floors are unchanged; STATUS↔JSON pin-count cross-check is additive.

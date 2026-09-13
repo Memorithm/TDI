@@ -20,7 +20,7 @@ STATUS = ROOT / "docs/TDI-11.2-STATUS.md"
 
 
 class ReadinessTests(unittest.TestCase):
-    def run_bundle(self, freeze: dict | None = None, *, extra_file: str | None = None) -> subprocess.CompletedProcess[str]:
+    def run_bundle(self, freeze: dict | None = None, *, extra_file: str | None = None, status_text: str | None = None) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             (root / "docs").mkdir()
@@ -36,7 +36,10 @@ class ReadinessTests(unittest.TestCase):
             digest = root / "docs/tdi11.2-model-observation-freeze.sha256"
             digest.write_text(DIGEST.read_text(encoding="utf-8"), encoding="utf-8")
             status = root / "docs/TDI-11.2-STATUS.md"
-            status.write_text(STATUS.read_text(encoding="utf-8"), encoding="utf-8")
+            status.write_text(
+                status_text if status_text is not None else STATUS.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
             if extra_file:
                 extra = root / extra_file
                 extra.parent.mkdir(parents=True, exist_ok=True)
@@ -72,6 +75,7 @@ class ReadinessTests(unittest.TestCase):
         result = self.run_bundle()
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertIn("unresolved fields: 12/12", result.stdout)
+        self.assertIn("STATUS↔JSON pin-count cross-check: 0/12", result.stdout)
 
     def test_armed_execution_with_unresolved_fields_fails_closed(self) -> None:
         data = self.base()
@@ -114,6 +118,13 @@ class ReadinessTests(unittest.TestCase):
         result = self.run_bundle(data)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("sha256 sidecar does not match", result.stderr + result.stdout)
+
+    def test_status_pin_count_mismatch_fails_closed(self) -> None:
+        bad_status = STATUS.read_text(encoding="utf-8").replace("0/12 pinned", "1/12 pinned", 1)
+        self.assertIn("1/12 pinned", bad_status)
+        result = self.run_bundle(status_text=bad_status)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("STATUS pin count", result.stderr + result.stdout)
 
     def test_forbidden_surface_fails_closed(self) -> None:
         result = self.run_bundle(extra_file="tdi-ai/tdi11.2_concrete_model_runner.py")
