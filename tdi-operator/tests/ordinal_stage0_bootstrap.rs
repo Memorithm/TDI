@@ -9,15 +9,22 @@
 //! - EXACT wiring of candidate observables to public TDI-10 `GreenBands`;
 //! - EXACT coefficient-only Frobenius-norm and Gershgorin-margin controls;
 //! - EXACT deterministic shuffle destroys ρ = 1 on a nondegenerate length≥3 sample;
+//! - EXACT closed-form constant-Toeplitz Frobenius / Gershgorin controls;
+//! - EXACT Frobenius↔dimension concordance on a positive Toeplitz width ladder;
+//! - EXACT Gershgorin width-invariance (n≥3) REFUTES covert dimension keying;
+//! - EXACT rank-normalize / negate-response Stage-0 normalization scaffolding;
+//! - EXACT tie-heavy adversarial midranks with non-degenerate Spearman;
 //! - candidate Green response observables from TDI-10 primitives only;
 //! - dimension-only control ranking does not consult Green values;
 //! - no confirmatory TDI-12 execution is authorized.
 
 use tdi_operator::{
-    CandidateResponseObservable, GreenBands, JacobiMatrix, OrdinalError, average_ranks,
-    coefficient_frobenius_norm_key, deterministic_shuffle, dimension_only_key,
-    gershgorin_dominance_margin_key, identity_ordering_key, kendall_tau_b, spearman_rho,
-    strictly_increasing_affine,
+    CandidateNormalization, CandidateOperatorPopulation, CandidateResponseObservable, GreenBands,
+    JacobiMatrix, OrdinalError, average_ranks, coefficient_frobenius_norm_key,
+    constant_toeplitz_frobenius_norm, constant_toeplitz_gershgorin_margin, deterministic_shuffle,
+    dimension_only_key, evaluate_observable_ladder, gershgorin_dominance_margin_key,
+    identity_ordering_key, kendall_tau_b, negate_values, rank_normalize, spearman_rho,
+    strictly_increasing_affine, tie_heavy_adversarial_sample,
 };
 
 fn assert_close(left: f64, right: f64, tol: f64) {
@@ -305,4 +312,146 @@ fn synthetic_population_rank_correlation_is_deterministic() {
     assert!(rho_mid.is_finite());
     let tau_mid = kendall_tau_b(&dimensions, &mids).unwrap();
     assert!(tau_mid.is_finite());
+}
+
+#[test]
+fn exact_constant_toeplitz_frobenius_closed_form_matches_key() {
+    let a = 4.0;
+    let b = 1.0;
+    for n in 1..=8 {
+        let matrix = toeplitz(n, a, b);
+        let key = coefficient_frobenius_norm_key(&matrix).unwrap();
+        let closed = constant_toeplitz_frobenius_norm(n, a, b).unwrap();
+        assert_close(key, closed, 1.0e-15);
+    }
+}
+
+#[test]
+fn exact_frobenius_width_ladder_concordant_with_dimension() {
+    let a = 4.0;
+    let b = 1.0;
+    let widths = [1usize, 2, 3, 4, 5, 6];
+    let mut frobenius = Vec::new();
+    let mut dimensions = Vec::new();
+    for &n in &widths {
+        let matrix = toeplitz(n, a, b);
+        frobenius.push(coefficient_frobenius_norm_key(&matrix).unwrap());
+        dimensions.push(dimension_only_key(&matrix));
+        if n >= 2 {
+            assert!(frobenius[frobenius.len() - 1] > frobenius[frobenius.len() - 2]);
+        }
+    }
+    assert_close(spearman_rho(&frobenius, &dimensions).unwrap(), 1.0, 1.0e-15);
+    assert_close(
+        kendall_tau_b(&frobenius, &dimensions).unwrap(),
+        1.0,
+        1.0e-15,
+    );
+}
+
+#[test]
+fn exact_gershgorin_constant_toeplitz_width_invariant_refutes_dimension_key() {
+    let a: f64 = 5.0;
+    let b: f64 = 1.0;
+    // Require a > 2|b| so the symbol is strictly positive in the TDI-10 sense.
+    assert!(a > 2.0 * b.abs());
+    let widths = [3usize, 4, 5, 6, 7];
+    let mut margins = Vec::new();
+    let mut dimensions = Vec::new();
+    for &n in &widths {
+        let matrix = toeplitz(n, a, b);
+        let key = gershgorin_dominance_margin_key(&matrix).unwrap();
+        let closed = constant_toeplitz_gershgorin_margin(n, a, b).unwrap();
+        assert_close(key, closed, 1.0e-15);
+        assert_close(closed, a - 2.0 * b.abs(), 1.0e-15);
+        margins.push(key);
+        dimensions.push(dimension_only_key(&matrix));
+    }
+    // All margins equal ⇒ rank correlation fail-closed (not a covert width key).
+    assert!(matches!(
+        spearman_rho(&margins, &dimensions),
+        Err(OrdinalError::DegenerateRanks)
+    ));
+    assert!(matches!(
+        kendall_tau_b(&margins, &dimensions),
+        Err(OrdinalError::DegenerateRanks)
+    ));
+}
+
+#[test]
+fn exact_rank_normalize_and_negate_response_scaffolding() {
+    let values = [-2.0, 0.5, 0.5, 3.0, 9.0];
+    let ranks = rank_normalize(&values).unwrap();
+    assert_close(spearman_rho(&values, &ranks).unwrap(), 1.0, 1.0e-15);
+    assert_close(kendall_tau_b(&values, &ranks).unwrap(), 1.0, 1.0e-15);
+
+    let distinct = [1.0, 2.0, 3.0, 4.0, 5.0];
+    let negated = negate_values(&distinct).unwrap();
+    assert_close(spearman_rho(&distinct, &negated).unwrap(), -1.0, 1.0e-15);
+    assert_close(kendall_tau_b(&distinct, &negated).unwrap(), -1.0, 1.0e-15);
+
+    assert_eq!(
+        CandidateNormalization::IdentityResponse.as_str(),
+        "identity_response"
+    );
+    assert_eq!(
+        CandidateNormalization::RankNormalizeToAverageRanks.as_str(),
+        "rank_normalize_to_average_ranks"
+    );
+    assert_eq!(
+        CandidateNormalization::NegateResponse.as_str(),
+        "negate_response"
+    );
+}
+
+#[test]
+fn exact_tie_heavy_adversarial_control_nondegenerate() {
+    let sample = tie_heavy_adversarial_sample(6).unwrap();
+    assert_eq!(sample, vec![0.0, 1.0, 1.0, 1.0, 1.0, 2.0]);
+    // Midranks: 1, then block positions 2..=5 → midrank 3.5, then 6.
+    assert_eq!(
+        average_ranks(&sample).unwrap(),
+        vec![1.0, 3.5, 3.5, 3.5, 3.5, 6.0]
+    );
+    assert_close(spearman_rho(&sample, &sample).unwrap(), 1.0, 1.0e-15);
+    assert_close(kendall_tau_b(&sample, &sample).unwrap(), 1.0, 1.0e-15);
+}
+
+#[test]
+fn exact_observable_ladder_and_population_candidate_ids() {
+    let shift = 1.0;
+    let matrices = vec![
+        toeplitz(2, 4.0, 1.0),
+        toeplitz(3, 4.0, 1.0),
+        toeplitz(4, 4.0, 1.0),
+    ];
+    let ladder = evaluate_observable_ladder(
+        &matrices,
+        shift,
+        CandidateResponseObservable::MidDiagonalGreen,
+    )
+    .unwrap();
+    assert_eq!(ladder.len(), 3);
+    for (matrix, value) in matrices.iter().zip(ladder.iter()) {
+        assert_close(
+            *value,
+            CandidateResponseObservable::MidDiagonalGreen
+                .evaluate(matrix, shift)
+                .unwrap(),
+            1.0e-15,
+        );
+    }
+    assert!(matches!(
+        evaluate_observable_ladder(&[], shift, CandidateResponseObservable::GreenTrace),
+        Err(OrdinalError::EmptySample)
+    ));
+
+    assert_eq!(
+        CandidateOperatorPopulation::PositiveConstantToeplitzWidthLadder.as_str(),
+        "PositiveConstantToeplitzWidthLadder"
+    );
+    assert_eq!(
+        CandidateOperatorPopulation::DiagonalOnlyWidthLadder.as_str(),
+        "DiagonalOnlyWidthLadder"
+    );
 }

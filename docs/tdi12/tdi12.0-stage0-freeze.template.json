@@ -17,7 +17,11 @@
   "freeze": {
     "operator_population_families": {
       "status": "unresolved_blocking",
-      "value": null
+      "value": null,
+      "non_authorizing_candidates": [
+        "PositiveConstantToeplitzWidthLadder",
+        "DiagonalOnlyWidthLadder"
+      ]
     },
     "response_observable_registry": {
       "status": "unresolved_blocking",
@@ -46,15 +50,27 @@
     },
     "normalization_contract": {
       "status": "unresolved_blocking",
-      "value": null
+      "value": null,
+      "non_authorizing_candidates": [
+        "identity_response",
+        "rank_normalize_to_average_ranks",
+        "negate_response"
+      ]
     },
     "split_discipline": {
       "status": "unresolved_blocking",
-      "value": null
+      "value": null,
+      "non_authorizing_candidates": [
+        "single_development_pool_no_split",
+        "holdout_surfaces_forbidden"
+      ]
     },
     "development_validation_population_derivation": {
       "status": "unresolved_blocking",
-      "value": null
+      "value": null,
+      "non_authorizing_candidates": [
+        "declared_width_ladder_from_candidate_population"
+      ]
     },
     "control_battery": {
       "status": "unresolved_blocking",
@@ -71,11 +87,17 @@
     },
     "typed_rejection_contract": {
       "status": "unresolved_blocking",
-      "value": null
+      "value": null,
+      "non_authorizing_candidates": [
+        "ordinal_error_variants"
+      ]
     },
     "provenance_contract": {
       "status": "unresolved_blocking",
-      "value": null
+      "value": null,
+      "non_authorizing_candidates": [
+        "stage0_bootstrap_markers"
+      ]
     }
   }
 }

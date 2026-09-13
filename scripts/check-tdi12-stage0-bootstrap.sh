@@ -47,6 +47,12 @@ grep -Fq 'EXACT claim 6 — GreenBands wiring identity' "$ORDINAL_DOC" \
     || fail "ordinal doc missing EXACT claim 6 wiring"
 grep -Fq 'EXACT claim 7 — coefficient-only control keys' "$ORDINAL_DOC" \
     || fail "ordinal doc missing EXACT claim 7 controls"
+grep -Fq 'EXACT claim 9 — constant-Toeplitz Frobenius closed form' "$ORDINAL_DOC" \
+    || fail "ordinal doc missing EXACT claim 9 Toeplitz Frobenius"
+grep -Fq 'EXACT claim 10 — constant-Toeplitz Gershgorin width invariance' "$ORDINAL_DOC" \
+    || fail "ordinal doc missing EXACT claim 10 Gershgorin invariance"
+grep -Fq 'EXACT claim 11 — rank-normalize and negate-response scaffolding' "$ORDINAL_DOC" \
+    || fail "ordinal doc missing EXACT claim 11 normalization"
 grep -Fq 'No soft-edge / double-scaling statement' "$ORDINAL_DOC" \
     || fail "ordinal doc missing soft-edge non-claim"
 

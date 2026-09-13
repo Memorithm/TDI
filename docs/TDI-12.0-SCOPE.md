@@ -18,6 +18,11 @@ It lands:
 - candidate Green-band response extractors that consume only generic TDI-10
   primitives, with EXACT wiring tests to public `GreenBands`;
 - coefficient-only Stage-0 control keys (norm / Gershgorin margin / shuffle);
+- closed-form constant-Toeplitz Frobenius / Gershgorin identities and
+  rank-normalize / negate-response / tie-heavy / observable-ladder scaffolding;
+- non-authorizing candidate declarations for remaining freeze-template fields
+  (populations, normalization, split, typed rejection, provenance, derivation)
+  while every scientific field stays `unresolved_blocking`;
 - integrity CI that refuses confirmatory/final execution flags and forbidden
   holdout contact.
 
@@ -37,6 +42,11 @@ It lands:
 | Fixed-seed shuffle destroys ρ = τ = 1 on a nondegenerate length≥3 sample | **EXACT** |
 | Candidate Green observables are finite on declared positive Toeplitz tests | **EXACT** finite evaluation under TDI-10 pivot conditions |
 | Stage-0 freeze-template validator refuses invented pins / execution flags | **EXACT** integrity (engineering) |
+| Constant-Toeplitz Frobenius closed form; width-monotone; ρ=τ=1 vs dimension | **EXACT** |
+| Constant-Toeplitz Gershgorin width-invariant for n≥3 (degenerate vs dimension) | **EXACT** (REFUTES covert dimension key) |
+| Rank-normalize preserves ρ=τ=1; negate-response yields ρ=τ=−1 on distinct values | **EXACT** |
+| Tie-heavy adversarial midranks with non-degenerate identity correlations | **EXACT** |
+| Observable ladder evaluation fail-closed; population candidate ids non-pinning | **EXACT** integrity / scaffolding |
 
 ## Non-claims / still forbidden
 
