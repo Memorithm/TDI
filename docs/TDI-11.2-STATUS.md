@@ -67,11 +67,11 @@ already enforce this fail-closed posture.
 
 Fail-closed reminder (unchanged authorizations): both execution flags remain
 **false** until a separately reviewed freeze pins all twelve blocking fields.
-Post-#199 scout found no model/adapter/tokenizer identifier that can be pinned;
+Post-#200 scout found no model/adapter/tokenizer identifier that can be pinned;
 12/12 fields stay `unresolved_blocking`. The readiness gate fail-closes if
 `model_execution_authorized` is true while any field is `unresolved_blocking`,
 if any of the 12 fields is invented as pinned, or if a forbidden surface
 appears (#199 floors). Orthogonal TDI-10.x operator-family work through
-TDI-10.14 (contraction↔Type-U ρ bridge) must not invent those pins or contact
-TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces.
+TDI-10.15 (family composition after 10.14 contraction↔Type-U ρ bridge) must
+not invent those pins or contact TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces.
 

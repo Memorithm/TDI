@@ -30,7 +30,7 @@
 
 ## Integrity (this slice)
 
-Post-#199 scout (after fail-closed readiness floors on `main`, including TDI-9.3 Boolean policy synthesis #195, and with TDI-10.14 in flight) found **no** newly closed identifier that can pin a remaining 9.1 field. `PolicyObservation` / Boolean IR remain types, not an experimental observation-vector pin. Existing authorized pin stays 1/14. Readiness continues to fail-close on a pinned-count floor of **≥1**, missing pin-evidence blocks, unauthorized pins, and silent STATUS / `scientific_status` upgrades (#199).
+Post-#200 scout (after TDI-10.14 merged on `main`, including TDI-9.3 Boolean policy synthesis #195, with TDI-10.15 in flight) found **no** newly closed identifier that can pin a remaining 9.1 field. `PolicyObservation` / Boolean IR remain types, not an experimental observation-vector pin. Existing authorized pin stays 1/14. Readiness continues to fail-close on a pinned-count floor of **≥1**, missing pin-evidence blocks, unauthorized pins, and silent STATUS / `scientific_status` upgrades (#199).
 
 ## Remaining TDI-9.1 work
 
@@ -44,4 +44,4 @@ No item authorizes TDI-9.2 execution.
 
 ## Series orthogonality
 
-TDI-10.x through TDI-10.14 (operator-family chapter: 10.13 families + 10.14 contraction↔Type-U ρ bridge) remains orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces. #199 readiness floors are unchanged.
+TDI-10.x through TDI-10.15 (operator-family chapter: 10.13 families + 10.14 contraction↔Type-U ρ bridge + 10.15 family composition) remains orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces. #199 readiness floors are unchanged.
