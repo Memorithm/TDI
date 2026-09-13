@@ -1,6 +1,6 @@
 # TDI-9.3 — Boolean Policy Synthesis
 
-Status: **ACTIVE DESIGN / NON-FINAL** (TDI-9.3.0 representation calibration partially landed)
+Status: **ACTIVE DESIGN / NON-FINAL** (TDI-9.3.0 representation calibration landed for C2 STOP and C3 ordered multi-action)
 
 ## Purpose
 
@@ -70,6 +70,22 @@ STOP = enough_steps
        )
 ```
 
+The present non-final C3 reference policy is an ordered first-match state machine
+over the same adaptive-stop Boolean plus verifier/cadence/checkpoint predicates
+(documented in `docs/TDI-9.1-REFERENCE-POLICIES.md`):
+
+```text
+Violated ∧ checkpoint          → BACKTRACK
+Violated ∧ remaining_work      → CONTINUE
+Violated (otherwise)           → typed fail-closed rejection (not an action)
+Satisfied                      → STOP
+Indeterminate                  → CONTINUE
+Absent ∧ base_stop ∧ verify_before_stop → VERIFY
+Absent ∧ base_stop             → STOP
+Absent ∧ cadence_due           → VERIFY
+otherwise                      → CONTINUE
+```
+
 TDI-9.3 generalizes the representation and controlled search of such rules. It does not assume that a searched rule is better than the hand-specified reference.
 
 ## Relationship to BooleanLab BL-14
@@ -93,14 +109,26 @@ Goal: verify that the Boolean IR can exactly reproduce declared hand-written ref
 `reference_c2_stop_policy`, and CI-covered unit tests exhaustively compare the IR
 against the hand Boolean on all `2^5` predicate vectors. Complexity for the
 reference C2 STOP shape remains exact (`5` predicate reads, `4` logical ops,
-depth `4`). Fail-closed missing-predicate / forbidden-action behavior remains
-covered.
+depth `4`).
+
+It also exposes `reference_c3_hand_action`, `reference_c3_policy`, and
+`reference_c3_verifier_encoding_well_formed`. CI-covered unit tests equate the
+ordered Boolean IR to the documented C3 reference state machine on every
+well-formed verifier encoding whose hand oracle yields an action in
+`CONTINUE`/`VERIFY`/`BACKTRACK`/`STOP`. Worst-case complexity for the reference
+C3 ordered rule set is exact (`13` predicate reads, `6` logical ops, depth `2`,
+seven rules, CONTINUE fallback). The typed fail-closed unrecoverable `Violated`
+rejection remains outside the Boolean action vocabulary (`reference_c3_hand_action`
+returns `None`) and is not claimed as an IR action. C0/C1 remain non-adaptive
+arms rejected by `BooleanPolicy::new` and have no Boolean trajectory-policy
+calibration surface. Fail-closed missing-predicate / forbidden-action behavior
+remains covered.
 
 Acceptance criteria:
 
-- exact output equivalence on exhaustive bounded predicate tables for the target rule (**met for the documented C2 STOP shape**);
+- exact output equivalence on exhaustive bounded predicate tables for the target rule (**met for the documented C2 STOP shape and the documented C3 ordered multi-action state machine on well-formed action rows**);
 - fail-closed behavior for missing predicates or forbidden actions (**met**);
-- deterministic complexity accounting (**met for the reference C2 STOP shape**);
+- deterministic complexity accounting (**met for the reference C2 STOP shape and the reference C3 ordered rule set**);
 - no access to final-evaluation data (**met**; experimental feature only).
 
 TDI-9.3.0 calibration does **not** freeze observation-to-predicate mappings,
@@ -187,7 +215,9 @@ The initial module provides:
 - exact reference counts for predicate reads, logical operations and expression depth;
 - fail-closed handling of malformed predicate vectors;
 - TDI-9.3.0 representation-calibration fixtures for the hand-written C2 STOP
-  Boolean (`reference_c2_*`), including exhaustive truth-table equivalence tests.
+  Boolean (`reference_c2_*`) and the documented C3 ordered multi-action state
+  machine (`reference_c3_*`), including exhaustive / well-formed truth-table
+  equivalence tests.
 
 It deliberately does **not** yet provide:
 

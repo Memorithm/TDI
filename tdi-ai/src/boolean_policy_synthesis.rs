@@ -372,6 +372,170 @@ pub fn reference_c2_stop_policy() -> Result<BooleanPolicy, BooleanPolicyError> {
     )
 }
 
+/// Declared predicate arity for the hand-written C3 reference Boolean shape.
+///
+/// Index meanings are documentation labels for representation calibration only.
+/// They do **not** freeze `permitted_observation_vector`, thresholds, cadence,
+/// or any other TDI-9.1 field, and they do not authorize TDI-9.2.
+///
+/// `BASE_STOP` is the already C2-calibrated adaptive-stop Boolean treated as one
+/// abstract predicate here so TDI-9.3.0 can calibrate C3's ordered multi-action
+/// dispatch without re-deriving the C2 STOP composition.
+pub const REFERENCE_C3_PREDICATE_COUNT: usize = 9;
+
+/// Predicate indices used by [`reference_c3_policy`].
+///
+/// These names mirror the documented C3 reference state machine in
+/// `docs/TDI-9.1-REFERENCE-POLICIES.md` and the non-final predicates computed by
+/// `C3RecoveryPolicy::decide`. They are representation labels for TDI-9.3.0
+/// calibration, not an experimental observation-vector pin.
+pub mod reference_c3_predicates {
+    pub const BASE_STOP: usize = 0;
+    pub const VERIFY_BEFORE_STOP: usize = 1;
+    pub const CADENCE_DUE: usize = 2;
+    pub const CHECKPOINT_AVAILABLE: usize = 3;
+    pub const REMAINING_WORK: usize = 4;
+    pub const VERIFIER_VIOLATED: usize = 5;
+    pub const VERIFIER_SATISFIED: usize = 6;
+    pub const VERIFIER_INDETERMINATE: usize = 7;
+    pub const VERIFIER_ABSENT: usize = 8;
+}
+
+/// Well-formed C3 verifier encoding: exactly one of the four verifier-state
+/// predicates is true. Inconsistent encodings are outside the reference
+/// observation carrier and are excluded from exhaustive action calibration.
+#[must_use]
+pub fn reference_c3_verifier_encoding_well_formed(
+    predicates: &[bool; REFERENCE_C3_PREDICATE_COUNT],
+) -> bool {
+    use reference_c3_predicates::{
+        VERIFIER_ABSENT, VERIFIER_INDETERMINATE, VERIFIER_SATISFIED, VERIFIER_VIOLATED,
+    };
+    let flags = [
+        predicates[VERIFIER_VIOLATED],
+        predicates[VERIFIER_SATISFIED],
+        predicates[VERIFIER_INDETERMINATE],
+        predicates[VERIFIER_ABSENT],
+    ];
+    flags.iter().filter(|flag| **flag).count() == 1
+}
+
+/// Exact hand-written C3 action oracle (documentation state machine).
+///
+/// Returns `None` for the typed fail-closed unrecoverable verifier violation
+/// (`Violated` with no checkpoint and no remaining work). That rejection is
+/// outside the Boolean action vocabulary (`CONTINUE`/`VERIFY`/`BACKTRACK`/
+/// `STOP`) and is deliberately not encoded as a BooleanPolicy action.
+///
+/// Predicate meanings are representation labels only; this oracle does not read
+/// trajectory observations or freeze thresholds.
+#[must_use]
+pub fn reference_c3_hand_action(
+    predicates: &[bool; REFERENCE_C3_PREDICATE_COUNT],
+) -> Option<InferenceAction> {
+    use reference_c3_predicates::{
+        BASE_STOP, CADENCE_DUE, CHECKPOINT_AVAILABLE, REMAINING_WORK, VERIFIER_ABSENT,
+        VERIFIER_INDETERMINATE, VERIFIER_SATISFIED, VERIFIER_VIOLATED, VERIFY_BEFORE_STOP,
+    };
+    let base_stop = predicates[BASE_STOP];
+    let verify_before_stop = predicates[VERIFY_BEFORE_STOP];
+    let cadence_due = predicates[CADENCE_DUE];
+    let checkpoint_available = predicates[CHECKPOINT_AVAILABLE];
+    let remaining_work = predicates[REMAINING_WORK];
+    let violated = predicates[VERIFIER_VIOLATED];
+    let satisfied = predicates[VERIFIER_SATISFIED];
+    let indeterminate = predicates[VERIFIER_INDETERMINATE];
+    let absent = predicates[VERIFIER_ABSENT];
+
+    if violated && checkpoint_available {
+        Some(InferenceAction::Backtrack)
+    } else if violated && remaining_work {
+        Some(InferenceAction::Continue)
+    } else if violated {
+        None
+    } else if satisfied {
+        Some(InferenceAction::Stop)
+    } else if indeterminate {
+        Some(InferenceAction::Continue)
+    } else if absent && base_stop && verify_before_stop {
+        Some(InferenceAction::Verify)
+    } else if absent && base_stop {
+        Some(InferenceAction::Stop)
+    } else if absent && cadence_due {
+        Some(InferenceAction::Verify)
+    } else if absent {
+        Some(InferenceAction::Continue)
+    } else {
+        // Inconsistent verifier encoding: no unique state bit.
+        None
+    }
+}
+
+/// Ordered Boolean IR encoding of the hand-written C3 multi-action state machine.
+///
+/// Rule order is part of the policy identity (first-match). The unrecoverable
+/// `Violated` rejection remains outside this action IR: those rows are excluded
+/// from action-equivalence calibration via [`reference_c3_hand_action`] returning
+/// `None`.
+pub fn reference_c3_policy() -> Result<BooleanPolicy, BooleanPolicyError> {
+    use reference_c3_predicates::{
+        BASE_STOP, CADENCE_DUE, CHECKPOINT_AVAILABLE, REMAINING_WORK, VERIFIER_ABSENT,
+        VERIFIER_INDETERMINATE, VERIFIER_SATISFIED, VERIFIER_VIOLATED, VERIFY_BEFORE_STOP,
+    };
+    BooleanPolicy::new(
+        PolicyArm::C3VerificationRecovery,
+        vec![
+            BooleanActionRule::new(
+                BooleanExpr::And(
+                    Box::new(BooleanExpr::Predicate(VERIFIER_VIOLATED)),
+                    Box::new(BooleanExpr::Predicate(CHECKPOINT_AVAILABLE)),
+                ),
+                InferenceAction::Backtrack,
+            ),
+            BooleanActionRule::new(
+                BooleanExpr::And(
+                    Box::new(BooleanExpr::Predicate(VERIFIER_VIOLATED)),
+                    Box::new(BooleanExpr::Predicate(REMAINING_WORK)),
+                ),
+                InferenceAction::Continue,
+            ),
+            BooleanActionRule::new(
+                BooleanExpr::Predicate(VERIFIER_SATISFIED),
+                InferenceAction::Stop,
+            ),
+            BooleanActionRule::new(
+                BooleanExpr::Predicate(VERIFIER_INDETERMINATE),
+                InferenceAction::Continue,
+            ),
+            BooleanActionRule::new(
+                BooleanExpr::And(
+                    Box::new(BooleanExpr::And(
+                        Box::new(BooleanExpr::Predicate(VERIFIER_ABSENT)),
+                        Box::new(BooleanExpr::Predicate(BASE_STOP)),
+                    )),
+                    Box::new(BooleanExpr::Predicate(VERIFY_BEFORE_STOP)),
+                ),
+                InferenceAction::Verify,
+            ),
+            BooleanActionRule::new(
+                BooleanExpr::And(
+                    Box::new(BooleanExpr::Predicate(VERIFIER_ABSENT)),
+                    Box::new(BooleanExpr::Predicate(BASE_STOP)),
+                ),
+                InferenceAction::Stop,
+            ),
+            BooleanActionRule::new(
+                BooleanExpr::And(
+                    Box::new(BooleanExpr::Predicate(VERIFIER_ABSENT)),
+                    Box::new(BooleanExpr::Predicate(CADENCE_DUE)),
+                ),
+                InferenceAction::Verify,
+            ),
+        ],
+        InferenceAction::Continue,
+    )
+}
+
 /// Fail-closed errors for the TDI-9.3 experimental Boolean-policy IR.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BooleanPolicyError {
@@ -401,8 +565,9 @@ impl std::error::Error for BooleanPolicyError {}
 mod tests {
     use super::{
         BooleanActionRule, BooleanExpr, BooleanPolicy, BooleanPolicyError,
-        REFERENCE_C2_PREDICATE_COUNT, reference_c2_hand_stop, reference_c2_stop_expression,
-        reference_c2_stop_policy,
+        REFERENCE_C2_PREDICATE_COUNT, REFERENCE_C3_PREDICATE_COUNT, reference_c2_hand_stop,
+        reference_c2_stop_expression, reference_c2_stop_policy, reference_c3_hand_action,
+        reference_c3_policy, reference_c3_verifier_encoding_well_formed,
     };
     use crate::experimental::adaptive_inference::{InferenceAction, PolicyArm};
 
@@ -574,5 +739,93 @@ mod tests {
         assert_eq!(complexity.predicate_reads(), 5);
         assert_eq!(complexity.logical_ops(), 4);
         assert_eq!(complexity.depth(), 4);
+    }
+
+    fn every_c3_predicate_vector() -> impl Iterator<Item = [bool; REFERENCE_C3_PREDICATE_COUNT]> {
+        (0..(1usize << REFERENCE_C3_PREDICATE_COUNT)).map(|mask| {
+            let mut predicates = [false; REFERENCE_C3_PREDICATE_COUNT];
+            for (index, slot) in predicates.iter_mut().enumerate() {
+                *slot = ((mask >> index) & 1) == 1;
+            }
+            predicates
+        })
+    }
+
+    #[test]
+    fn reference_c3_policy_matches_hand_on_well_formed_action_rows() {
+        let policy = reference_c3_policy().expect("valid reference C3 policy");
+        let mut compared = 0usize;
+        let mut unrecoverable = 0usize;
+        let mut malformed = 0usize;
+        let mut seen = [0usize; 4]; // Continue, Verify, Backtrack, Stop counts
+        for predicates in every_c3_predicate_vector() {
+            if !reference_c3_verifier_encoding_well_formed(&predicates) {
+                malformed += 1;
+                continue;
+            }
+            match reference_c3_hand_action(&predicates) {
+                None => {
+                    unrecoverable += 1;
+                }
+                Some(expect) => {
+                    let decision = policy
+                        .decide(&predicates)
+                        .expect("well-formed C3 action rows evaluate");
+                    assert_eq!(
+                        decision.action(),
+                        expect,
+                        "C3 action mismatch for predicates={predicates:?}"
+                    );
+                    compared += 1;
+                    match expect {
+                        InferenceAction::Continue => seen[0] += 1,
+                        InferenceAction::Verify => seen[1] += 1,
+                        InferenceAction::Backtrack => seen[2] += 1,
+                        InferenceAction::Stop => seen[3] += 1,
+                    }
+                }
+            }
+        }
+        assert_eq!(
+            compared + unrecoverable + malformed,
+            1usize << REFERENCE_C3_PREDICATE_COUNT
+        );
+        // Every action in the C3 vocabulary appears on the well-formed table.
+        assert!(seen.iter().all(|&count| count > 0), "seen={seen:?}");
+        // Typed fail-closed unrecoverable rows exist and stay outside action IR.
+        assert!(unrecoverable > 0);
+        assert!(malformed > 0);
+    }
+
+    #[test]
+    fn reference_c3_unrecoverable_violation_is_outside_action_vocabulary() {
+        use super::reference_c3_predicates::{
+            CHECKPOINT_AVAILABLE, REMAINING_WORK, VERIFIER_ABSENT, VERIFIER_INDETERMINATE,
+            VERIFIER_SATISFIED, VERIFIER_VIOLATED,
+        };
+        let mut predicates = [false; REFERENCE_C3_PREDICATE_COUNT];
+        predicates[VERIFIER_VIOLATED] = true;
+        predicates[CHECKPOINT_AVAILABLE] = false;
+        predicates[REMAINING_WORK] = false;
+        predicates[VERIFIER_SATISFIED] = false;
+        predicates[VERIFIER_INDETERMINATE] = false;
+        predicates[VERIFIER_ABSENT] = false;
+        assert!(reference_c3_verifier_encoding_well_formed(&predicates));
+        assert_eq!(reference_c3_hand_action(&predicates), None);
+    }
+
+    #[test]
+    fn reference_c3_policy_worst_case_complexity_is_deterministic() {
+        let policy = reference_c3_policy().expect("valid reference C3 policy");
+        let complexity = policy
+            .worst_case_complexity()
+            .expect("reference C3 complexity is finite");
+        // Seven ordered rules: (2+1)+(2+1)+(1+0)+(1+0)+(3+2)+(2+1)+(2+1)
+        assert_eq!(complexity.predicate_reads(), 13);
+        assert_eq!(complexity.logical_ops(), 6);
+        assert_eq!(complexity.depth(), 2);
+        assert_eq!(policy.rules().len(), 7);
+        assert_eq!(policy.fallback(), InferenceAction::Continue);
+        assert_eq!(policy.arm(), PolicyArm::C3VerificationRecovery);
     }
 }

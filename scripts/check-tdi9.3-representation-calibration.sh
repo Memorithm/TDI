@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fail-closed TDI-9.3.0 representation-calibration gate.
-# Verifies exhaustive C2 truth-table equivalence tests and non-pinning docs.
+# Verifies exhaustive C2 + well-formed C3 truth-table equivalence tests and non-pinning docs.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -20,6 +20,14 @@ grep -Fq 'reference_c2_expression_matches_hand_formula_on_exhaustive_table' \
   || fail "missing exhaustive truth-table unit test"
 grep -Fq 'REFERENCE_C2_PREDICATE_COUNT' tdi-ai/src/boolean_policy_synthesis.rs \
   || fail "missing REFERENCE_C2_PREDICATE_COUNT"
+
+grep -Fq 'reference_c3_policy' tdi-ai/src/boolean_policy_synthesis.rs \
+  || fail "missing reference_c3_policy fixture"
+grep -Fq 'reference_c3_policy_matches_hand_on_well_formed_action_rows' \
+  tdi-ai/src/boolean_policy_synthesis.rs \
+  || fail "missing C3 well-formed action-table unit test"
+grep -Fq 'REFERENCE_C3_PREDICATE_COUNT' tdi-ai/src/boolean_policy_synthesis.rs \
+  || fail "missing REFERENCE_C3_PREDICATE_COUNT"
 
 # Must not invent 9.1 pins or arm 9.2 from this surface.
 python3 scripts/check-tdi9.1-configuration-freeze.py \
