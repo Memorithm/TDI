@@ -43,6 +43,25 @@ impl BooleanExpr {
         }
     }
 
+    fn validate_predicates(&self, predicate_count: usize) -> Result<(), BooleanPolicyError> {
+        match self {
+            Self::Predicate(index) => {
+                if *index >= predicate_count {
+                    return Err(BooleanPolicyError::PredicateOutOfRange {
+                        index: *index,
+                        predicate_count,
+                    });
+                }
+                Ok(())
+            }
+            Self::Not(inner) => inner.validate_predicates(predicate_count),
+            Self::And(left, right) | Self::Or(left, right) | Self::Xor(left, right) => {
+                left.validate_predicates(predicate_count)?;
+                right.validate_predicates(predicate_count)
+            }
+        }
+    }
+
     /// Exact structural complexity of this expression under the reference IR.
     #[must_use]
     pub fn complexity(&self) -> BooleanComplexity {
@@ -140,6 +159,9 @@ impl BooleanPolicy {
         rules: Vec<BooleanActionRule>,
         fallback: InferenceAction,
     ) -> Result<Self, BooleanPolicyError> {
+        if !arm.is_trajectory_adaptive() {
+            return Err(BooleanPolicyError::NonAdaptiveArm { arm });
+        }
         if !arm.allows(fallback) {
             return Err(BooleanPolicyError::ActionForbidden {
                 arm,
@@ -178,6 +200,10 @@ impl BooleanPolicy {
 
     /// Evaluate the candidate and return exact reference decision cost.
     pub fn decide(&self, predicates: &[bool]) -> Result<BooleanDecision, BooleanPolicyError> {
+        for rule in &self.rules {
+            rule.expression.validate_predicates(predicates.len())?;
+        }
+
         let mut predicate_reads = 0u64;
         let mut logical_ops = 0u64;
 
@@ -277,6 +303,9 @@ pub enum BooleanPolicyError {
         index: usize,
         predicate_count: usize,
     },
+    NonAdaptiveArm {
+        arm: PolicyArm,
+    },
     ActionForbidden {
         arm: PolicyArm,
         action: InferenceAction,
@@ -353,6 +382,23 @@ mod tests {
     }
 
     #[test]
+    fn rejects_boolean_policy_for_non_adaptive_arms() {
+        for arm in [PolicyArm::C0FixedCompute, PolicyArm::C1StaticPreallocation] {
+            assert!(matches!(
+                BooleanPolicy::new(
+                    arm,
+                    vec![BooleanActionRule::new(
+                        BooleanExpr::Predicate(0),
+                        InferenceAction::Stop,
+                    )],
+                    InferenceAction::Continue,
+                ),
+                Err(BooleanPolicyError::NonAdaptiveArm { arm: rejected }) if rejected == arm
+            ));
+        }
+    }
+
+    #[test]
     fn c2_rejects_verification_and_backtracking_actions() {
         assert!(matches!(
             BooleanPolicy::new(
@@ -387,6 +433,27 @@ mod tests {
             Err(BooleanPolicyError::PredicateOutOfRange {
                 index: 2,
                 predicate_count: 2,
+            })
+        ));
+    }
+
+    #[test]
+    fn validates_all_predicate_references_before_short_circuiting() {
+        let policy = BooleanPolicy::new(
+            PolicyArm::C2AdaptiveStopping,
+            vec![
+                BooleanActionRule::new(BooleanExpr::Predicate(0), InferenceAction::Stop),
+                BooleanActionRule::new(BooleanExpr::Predicate(2), InferenceAction::Continue),
+            ],
+            InferenceAction::Continue,
+        )
+        .expect("valid C2 policy");
+
+        assert!(matches!(
+            policy.decide(&[true]),
+            Err(BooleanPolicyError::PredicateOutOfRange {
+                index: 2,
+                predicate_count: 1,
             })
         ));
     }
