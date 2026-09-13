@@ -49,5 +49,5 @@ non-empty `evidence` block (PR citation + existing in-repo file), if the
 pinned count drops below 3, or if `scientific_status` / STATUS is silently
 upgraded while fields remain `unresolved_blocking`.
 
-Post-#200 scout (TDI-10.15 orthogonal): no newly closed identifier can pin a remaining
+Post-#201 scout (TDI-10.16 orthogonal): no newly closed identifier can pin a remaining
 field. Holdouts 7.2 / 8.2 stay untouched.

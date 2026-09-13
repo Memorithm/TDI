@@ -35,6 +35,25 @@ STOP
 
 subject to the existing TDI-9 action vocabulary and resource envelope.
 
+## Relationship to TDI-9.1
+
+TDI-9.3 is **not** a TDI-9.1 freeze-resolution vehicle.
+
+| Surface | Owner | May pin TDI-9.1 freeze fields? | May authorize TDI-9.2? |
+| --- | --- | --- | --- |
+| TDI-9.1 configuration freeze / readiness | TDI-9.1 | yes, only with Dev/Val evidence | no (flag stays false) |
+| TDI-9.3 Boolean IR / experimental feature | TDI-9.3 design | **no** | **no** |
+
+In particular:
+
+- merging or extending TDI-9.3 Boolean representation/search does **not** pin
+  `permitted_observation_vector` or any other unresolved 9.1 field;
+- Boolean IR and `PolicyObservation` types are representation surfaces, not an
+  experimental observation-vector pin;
+- TDI-9.3 remains **ACTIVE DESIGN / NON-FINAL** until its own stage ladder
+  (9.3.0+) is separately gated; it never silently upgrades 9.1
+  `scientific_status`.
+
 ## Motivation from the current reference implementation
 
 The present non-final C2 reference policy already has an explicit Boolean structure:

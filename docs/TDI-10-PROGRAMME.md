@@ -41,12 +41,13 @@ A numerical fit is never proof. A formal asymptotic is never promoted to a unifo
 - **TDI-10.13** — **EXACT** operator-family witnesses (pivot): named families `F_S` / `F_U` / `F_D` induce the trichotomy through `CavityTransportStep` / `CavityTransportChain` (and `FrozenToeplitzCavity::contraction` for Type U); **REFUTED** that every cavity family forces product decay; FORMAL pointer only for future slowly-varying Jacobi hypotheses
 - **TDI-10.14** — **EXACT** contraction ↔ Type-U ρ bridge: `FrozenToeplitzCavity::contraction(a,b)` identifies with `F_U` parameter ρ (equality saturation / inequality envelopes); dual-path finite-n product identity (algebraic `ρ^n` and zero-drift cavity chain agree); **REFUTED** that every frozen Toeplitz symbol yields Type D
 - **TDI-10.15** — **EXACT** operator-family composition: finite concatenation `F_U` then `F_D` / `F_S` with closed products `ρ^m/(n+1)` and `ρ^m·(n+2)/(2(n+1))` (Toeplitz-sourced ρ allowed); **REFUTED** that a Type-S suffix erases Type-U prefix decay uniformly in the prefix length `m`
+- **TDI-10.16** — **EXACT** κ(a,b) domain / monotonicity (evenness, homogeneity, ratio reduction, radial monotone); **EXACT** matched TDI-10.3 transport factor = κ = Type-U ρ; **REFUTED** that κ → 0 as `a ↓ 2|b|+`; **REFUTED** that larger diagonal alone forces smaller κ without fixing `|b|`
 
-The elementary subunit-product arc **TDI-10.5–10.12** is closed (pointwise counterexample → uniform geometric → remainder divergence → trichotomy → harmonic rate → equivalence → exp bounds → Cesàro rate). **TDI-10.13** opens the operator-family chapter; **TDI-10.14** bridges the frozen Toeplitz contraction to Type-U `ρ`; **TDI-10.15** records exact concatenation calculus for named families without inventing slowly-varying or soft-edge theorems.
+The elementary subunit-product arc **TDI-10.5–10.12** is closed (pointwise counterexample → uniform geometric → remainder divergence → trichotomy → harmonic rate → equivalence → exp bounds → Cesàro rate). **TDI-10.13** opens the operator-family chapter; **TDI-10.14** bridges the frozen Toeplitz contraction to Type-U `ρ`; **TDI-10.15** records exact concatenation calculus for named families; **TDI-10.16** records exact κ(a,b) domain/monotonicity and the matched TDI-10.3 factorization → Type-U link without inventing slowly-varying or soft-edge theorems.
 
 ## Next frontiers (not yet authorized by numbering alone)
 
-- further operator / coefficient classes that induce `alpha_k` beyond zero-drift cavity maps, frozen contractions, and named-family concatenations;
+- further operator / coefficient classes that induce `alpha_k` beyond zero-drift cavity maps, frozen contractions, named-family concatenations, and the κ(a,b) domain calculus;
 - slowly varying Jacobi hypotheses with explicit remainder windows (see TDI-10.13 FORMAL pointer — not a theorem);
 - soft-edge / double-scaling statements labelled FORMAL ASYMPTOTIC or PROVED UNDER DECLARED ASSUMPTIONS as appropriate.
 

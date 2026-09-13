@@ -99,10 +99,42 @@ if (( pinned_count < 1 )); then
     fail "pinned-count floor is 1; found $pinned_count"
 fi
 
-grep -Fq '1/14 pinned' "$STATUS" \
-    || fail "STATUS must keep the current 1/14 freeze-progress count until a new authorized pin is added"
+# Cross-check STATUS-reported N/M pinned against freeze JSON (fail-closed).
+python3 - "$FREEZE" "$STATUS" "$pinned_count" <<'PY'
+import json, re, sys
+freeze_path, status_path, pinned_s = sys.argv[1], sys.argv[2], sys.argv[3]
+data = json.load(open(freeze_path, encoding="utf-8"))
+fields = data["fields"]
+json_pinned = sum(1 for r in fields.values() if r["status"] == "pinned")
+json_total = len(fields)
+pinned = int(pinned_s)
+if pinned != json_pinned:
+    raise SystemExit(f"internal pinned_count mismatch: shell={pinned} json={json_pinned}")
+status = open(status_path, encoding="utf-8").read()
+matches = re.findall(r"(\d+)/(\d+)\s+pinned", status)
+if not matches:
+    raise SystemExit("STATUS must report an N/M pinned freeze-progress count")
+# Require every reported N/M to agree with the freeze JSON.
+for n_s, m_s in matches:
+    n, m = int(n_s), int(m_s)
+    if n != json_pinned or m != json_total:
+        raise SystemExit(
+            f"STATUS pin-count {n}/{m} disagrees with freeze JSON "
+            f"{json_pinned}/{json_total}"
+        )
+print(
+    f"TDI-9.1 STATUS<->freeze pin-count cross-check: "
+    f"{json_pinned}/{json_total} OK ({len(matches)} STATUS mention(s))"
+)
+PY
 grep -Fq 'permitted_observation_vector' "$PLAN" \
     || fail "resolution plan must still list permitted_observation_vector"
+grep -Fq 'TDI-9.3 boundary (non-pinning)' "$STATUS" \
+    || fail "STATUS must declare the TDI-9.3 non-pinning boundary"
+grep -Fq 'does **not** pin any TDI-9.1 freeze field' "$STATUS" \
+    || fail "STATUS must state that TDI-9.3 does not pin TDI-9.1 freeze fields"
+grep -Fq '## Relationship to TDI-9.1' docs/TDI-9.3-BOOLEAN-POLICY-SYNTHESIS.md \
+    || fail "TDI-9.3 doc must keep the Relationship to TDI-9.1 boundary section"
 grep -Fq '`tdi9_2_execution_authorized`: **false**' "$STATUS" \
     || fail "STATUS must keep tdi9_2_execution_authorized hard-false"
 
