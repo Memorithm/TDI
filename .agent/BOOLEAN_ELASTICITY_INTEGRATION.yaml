@@ -1,0 +1,70 @@
+schema_version: 1
+kind: tdi_boolean_elasticity_integration_overlay
+status: active
+last_updated: "2026-09-13"
+repository: Memorithm/TDI
+canonical_runtime_owner: Memorithm/ElasticXxx
+canonical_runtime_roadmap: Memorithm/ElasticXxx@agent/ecosystem-roadmap:.agent/BOOLEAN_ELASTICITY_ROADMAP.yaml
+merge_policy: never_merge_this_file_to_default_branch_unless_user_explicitly_requests
+
+purpose: >-
+  Coordinate TDI Boolean-policy research, especially TDI-9.3, with the generic
+  Boolean decision representation being built in ElasticXxx. TDI remains the
+  scientific source of truth; ElasticXxx owns production runtime guard semantics.
+
+hard_boundaries:
+  - never_use_this_overlay_to_authorize_TDI_9_2_or_any_final_confirmation
+  - preserve_all_existing_preregistration_holdout_and_future_entropy_rules
+  - never_copy_forbidden_final_material_into_ElasticXxx_BooleanLab_or_other_repositories
+  - never_treat_runtime_integration_as_scientific_confirmation
+  - Unknown_and_missing_evidence_must_remain_explicit
+  - required_CI_must_be_green_on_exact_PR_head_before_merge
+
+required_alignment:
+  - compare_TDI_9_3_policy_atoms_with_ElasticXxx_PredicateId_contract
+  - compare_TDI_9_3_boolean_semantics_with_ElasticXxx_TruthValue_and_BoolExpr
+  - preserve_TDI_specific_action_ordering_and_policy_semantics_in_TDI
+  - add_adapters_instead_of_copying_generic_boolean_core_when_ElasticXxx_API_is_available
+  - use_BooleanLab_only_as_permitted_experimental_oracle_not_as_final_evaluator
+  - record_version_or_commit_identity_for_any_cross_repo_contract
+
+implementation_sequence:
+  - id: TI-BE0
+    status: active
+    work:
+      - bootstrap_this_overlay
+      - bind_AGENTS_to_this_overlay
+      - inventory_TDI_9_3_existing_boolean_types_and_search_surfaces
+      - map_semantic_differences_against_ElasticXxx_without_refactoring_yet
+  - id: TI-BE1
+    status: planned
+    work:
+      - define_versioned_TDI_to_Elastic_boolean_adapter_contract
+      - add_conversion_tests_on_non_final_development_surfaces
+      - prove_round_trip_or_document_irreducible_TDI_specific_fields
+  - id: TI-BE2
+    status: planned
+    work:
+      - differential_evaluate_TDI_native_vs_Elastic_expression_semantics
+      - include_True_False_Unknown_cases
+      - verify_fail_closed_mutation_and_complexity_invariants
+  - id: TI-BE3
+    status: planned
+    work:
+      - benchmark_representation_and_evaluation_overhead_on_permitted_TDI_9_3_workloads
+      - no_speed_claim_without_reproducible_results
+  - id: TI-BE4
+    status: planned
+    work:
+      - promote_only_generic_validated_findings_back_to_ElasticXxx_or_SciRust_as_appropriate
+      - preserve_TDI_scientific_lineage_and_frozen_boundaries
+
+mandatory_checks:
+  - bash_scripts_check_tdi9_bootstrap_when_present
+  - bash_scripts_check_tdi9_3_representation_calibration_when_present
+  - repository_required_CI
+
+current_facts:
+  - TDI_main_contains_TDI_9_3_boolean_policy_representation_work
+  - TDI_main_contains_bounded_C2_Boolean_policy_search_through_PR_220
+  - this_overlay_does_not_authorize_any_new_final_execution
