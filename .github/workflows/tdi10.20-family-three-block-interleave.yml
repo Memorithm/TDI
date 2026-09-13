@@ -1,0 +1,40 @@
+name: TDI-10.20 Family three-block / interleave
+
+on:
+  pull_request:
+    paths:
+      - "tdi-operator/src/transport.rs"
+      - "tdi-operator/src/chain.rs"
+      - "tdi-operator/src/frozen.rs"
+      - "tdi-operator/tests/cavity_family_three_block_interleave.rs"
+      - "docs/tdi10/TDI-10.20-FAMILY-THREE-BLOCK-INTERLEAVE.md"
+      - "scripts/check-tdi10.20-family-three-block-interleave.sh"
+      - ".github/workflows/tdi10.20-family-three-block-interleave.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "tdi-operator/src/transport.rs"
+      - "tdi-operator/src/chain.rs"
+      - "tdi-operator/src/frozen.rs"
+      - "tdi-operator/tests/cavity_family_three_block_interleave.rs"
+      - "docs/tdi10/TDI-10.20-FAMILY-THREE-BLOCK-INTERLEAVE.md"
+      - "scripts/check-tdi10.20-family-three-block-interleave.sh"
+      - ".github/workflows/tdi10.20-family-three-block-interleave.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  family-three-block-interleave:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+      - name: Qualify TDI-10.20 three-block / interleaved family composition
+        run: bash scripts/check-tdi10.20-family-three-block-interleave.sh

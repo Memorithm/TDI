@@ -75,10 +75,11 @@ Primary surfaces:
 Stage 0 invents **no** TDI-8.1 / TDI-9.1 / TDI-11.2 freeze pins. Existing
 authorized pins stay 3/17, 1/14, 0/12. No TDI-7.2 / TDI-8.2 / TDI-9.2 contact.
 TDI-9.3.0 does not authorize TDI-9.1 / TDI-9.2. TDI-10.19 reverse/cross family
-composition is orthogonal Stage-10 EXACT work and invents no TDI-12.0 pins.
-DiagonalOnlyWidthLadder closed forms remain non-authorizing candidates.
-Post-#215 TDI-11.2 resource-accounting scaffolding is orthogonal and likewise
-invents no Stage-0 freeze pins.
+composition and TDI-10.20 three-block / interleaved schedules are orthogonal
+Stage-10 EXACT work and invent no TDI-12.0 pins. DiagonalOnlyWidthLadder
+closed forms remain non-authorizing candidates. Post-#216 TDI-11.2
+resource-accounting scaffolding is orthogonal and likewise invents no Stage-0
+freeze pins.
 
 ## Next engineering slice after DiagonalOnly / Toeplitz Stage-0 controls
 

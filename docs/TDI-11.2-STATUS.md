@@ -93,7 +93,7 @@ Machine-readable companions (CI-verified; not pins):
 - freeze progress summary: `docs/tdi-freeze-progress-summary.json` (includes
   verified ledger digest `dec8bd504a903b0125fdb88f66821940d286358eec6d59ee1a194fc6c63e9421`)
 
-Orthogonal TDI-10.x through TDI-10.19 / TDI-12.0 Stage-0 must not invent those
+Orthogonal TDI-10.x through TDI-10.20 / TDI-12.0 Stage-0 must not invent those
 pins or contact TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces. TDI-12.0
 DiagonalOnlyWidthLadder closed forms do not pin resource_accounting_contract /
 typed_rejection_contract / provenance_contract. Rejection/provenance/accounting
