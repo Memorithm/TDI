@@ -1,0 +1,38 @@
+name: TDI-10.8 witness trichotomy
+
+on:
+  pull_request:
+    paths:
+      - "tdi-operator/src/chain.rs"
+      - "tdi-operator/src/transport.rs"
+      - "tdi-operator/tests/cavity_witness_trichotomy.rs"
+      - "docs/tdi10/TDI-10.8-WITNESS-TRICHOTOMY.md"
+      - "scripts/check-tdi10.8-witness-trichotomy.sh"
+      - ".github/workflows/tdi10.8-witness-trichotomy.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "tdi-operator/src/chain.rs"
+      - "tdi-operator/src/transport.rs"
+      - "tdi-operator/tests/cavity_witness_trichotomy.rs"
+      - "docs/tdi10/TDI-10.8-WITNESS-TRICHOTOMY.md"
+      - "scripts/check-tdi10.8-witness-trichotomy.sh"
+      - ".github/workflows/tdi10.8-witness-trichotomy.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  witness-trichotomy:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+      - name: Qualify TDI-10.8 witness trichotomy
+        run: bash scripts/check-tdi10.8-witness-trichotomy.sh
