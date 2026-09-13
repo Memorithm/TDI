@@ -74,8 +74,13 @@
       "status": "unresolved_blocking",
       "required_evidence_class": "numeric_resource_accounting_rules",
       "evidence_class_definition": "Numeric envelopes / accounting rules for model instrumentation.",
-      "blocking_until": "resource accounting contract",
-      "citations": []
+      "blocking_until": "reviewed pin of ModelObservationResourceAccountingContract (scaffolding alone is non-authorizing)",
+      "citations": [
+        "docs/TDI-11.2-MODEL-OBSERVATION-RESOURCE-ACCOUNTING.md",
+        "tdi-ai/src/hallucination_model_observation_accounting.rs",
+        "scripts/check-tdi11.2-model-observation-accounting.sh"
+      ],
+      "non_authorizing_note": "Candidate taxonomy ModelObservationResourceAccountingContract is present but does not pin this field; numeric maxima remain caller-supplied"
     },
     "typed_rejection_contract": {
       "status": "unresolved_blocking",
@@ -109,6 +114,7 @@
     "TDI-9.3 Boolean policy synthesis",
     "TDI-11.2 ModelObservationRejectionCode scaffolding (non-pinning)",
     "TDI-11.2 ModelObservationTraceProvenance scaffolding (non-pinning)",
+    "TDI-11.2 ModelObservationResourceAccountingContract scaffolding (non-pinning)",
     "TDI-12.0 Stage-0 ordinal bootstrap"
   ],
   "holdout_boundary": {

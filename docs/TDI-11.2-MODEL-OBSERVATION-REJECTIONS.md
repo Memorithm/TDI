@@ -35,6 +35,7 @@ numeric code:
 | `0x03xx` | source-class mismatch |
 | `0x04xx` | prospective timing / observation contract |
 | `0x05xx` | provenance scaffolding failures |
+| `0x06xx` | resource accounting scaffolding failures |
 
 `ModelObservationRejectionRecord` retains the original typed adapter error plus
 adapter name/version provenance. Technical rejection is never mapped to a

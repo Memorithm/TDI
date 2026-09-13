@@ -9,7 +9,7 @@
 //! - transfer TDI-8.1 `SymbolicRejectionCode` or TDI-9.1 `ReferenceRejectionCode`;
 //! - invent model/adapter/tokenizer/decoding identities.
 //!
-//! Technical adapter / timing failures remain typed rejections and are never
+//! Technical adapter / timing / accounting failures remain typed rejections and are never
 //! reinterpreted as hallucination-quality outcomes.
 
 use core::fmt;
@@ -74,6 +74,10 @@ pub enum ModelObservationRejectionCode {
     ProvenanceMissingRequiredField = 0x0502,
     ProvenanceForbiddenDomain = 0x0503,
     ProvenanceForbiddenSurfaceToken = 0x0504,
+
+    // 0x06xx — resource accounting scaffolding failures
+    AccountingOverflow = 0x0601,
+    AccountingEnvelopeExceeded = 0x0602,
 }
 
 impl ModelObservationRejectionCode {
@@ -113,6 +117,8 @@ impl ModelObservationRejectionCode {
             Self::ProvenanceMissingRequiredField => "provenance_missing_required_field",
             Self::ProvenanceForbiddenDomain => "provenance_forbidden_domain",
             Self::ProvenanceForbiddenSurfaceToken => "provenance_forbidden_surface_token",
+            Self::AccountingOverflow => "accounting_overflow",
+            Self::AccountingEnvelopeExceeded => "accounting_envelope_exceeded",
         }
     }
 
@@ -435,4 +441,6 @@ pub const ALL_MODEL_OBSERVATION_REJECTION_CODES: &[ModelObservationRejectionCode
     ModelObservationRejectionCode::ProvenanceMissingRequiredField,
     ModelObservationRejectionCode::ProvenanceForbiddenDomain,
     ModelObservationRejectionCode::ProvenanceForbiddenSurfaceToken,
+    ModelObservationRejectionCode::AccountingOverflow,
+    ModelObservationRejectionCode::AccountingEnvelopeExceeded,
 ];

@@ -49,4 +49,4 @@ TDI-8.2 remains future human-only. No autonomous confirmation token or confirmat
 
 ## Series orthogonality
 
-TDI-10.x through TDI-10.19 / TDI-12.0 Stage-0 remains orthogonal: operator-research and Stage-0 ordinal advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces. TDI-12.0 DiagonalOnlyWidthLadder closed forms invent no TDI-8.1 pins. #199 readiness floors are unchanged; STATUS↔JSON pin-count cross-check and the freeze-progress summary are additive.
+TDI-10.x through TDI-10.19 / TDI-12.0 Stage-0 remains orthogonal: operator-research and Stage-0 ordinal advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces. TDI-12.0 DiagonalOnlyWidthLadder closed forms and TDI-11.2 resource-accounting scaffolding invent no TDI-8.1 pins. #199 readiness floors are unchanged; STATUS↔JSON pin-count cross-check and the freeze-progress summary are additive.
