@@ -45,7 +45,7 @@ block (PR citation + existing in-repo file), if the pinned count drops below
 1, or if `scientific_status` / STATUS is silently upgraded while fields remain
 `unresolved_blocking`. TDI-9.3 (#195) does not authorize a 9.1 pin.
 
-Post-#198 (`ecca754`) scout: no newly closed identifier can pin a remaining
+Post-#199 scout (TDI-10.14 orthogonal): no newly closed identifier can pin a remaining
 field. Holdouts 7.2 / 8.2 / 9.2 stay untouched.
 
 Integrity gate: `scripts/check-tdi9.1-readiness.sh` (workflow `tdi9-readiness.yml`).

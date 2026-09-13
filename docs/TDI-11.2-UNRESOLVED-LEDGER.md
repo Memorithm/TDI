@@ -26,7 +26,7 @@ Recompute with `sha256sum docs/tdi11.2-model-observation-freeze.json`.
 ## Unresolved field registry (12/12)
 
 All fields remain `unresolved_blocking` with `value: null` and
-`pin_provenance: null`. No identifier closed by TDI-10.13 (`ecca754`, #198)
+`pin_provenance: null`. No identifier closed by TDI-10.13/#198 or TDI-10.14
 or any earlier merged tranche supplies a reviewable exact value.
 
 | Field | Status | Why still blocked |

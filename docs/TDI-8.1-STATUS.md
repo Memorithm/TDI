@@ -28,7 +28,7 @@ The readiness gate fail-closes if any field outside the three authorized pins is
 
 ## Integrity (this slice)
 
-Post-#198 scout of merged code/docs/PRs found **no** newly closed identifier that can pin a remaining field. Existing authorized pins stay 3/17. Readiness now fail-closes on a pinned-count floor of **≥3**, missing pin-evidence blocks, unauthorized pins, and silent STATUS / `scientific_status` upgrades.
+Post-#199 scout (after fail-closed readiness floors on `main`, and with TDI-10.14 contraction↔Type-U bridge in flight) found **no** newly closed identifier that can pin a remaining field. Existing authorized pins stay 3/17. Readiness continues to fail-close on a pinned-count floor of **≥3**, missing pin-evidence blocks, unauthorized pins, and silent STATUS / `scientific_status` upgrades (#199).
 
 ## Remaining TDI-8.1 work
 
@@ -42,4 +42,4 @@ TDI-8.2 remains future human-only. No autonomous confirmation token or confirmat
 
 ## Series orthogonality
 
-TDI-10.x through TDI-10.13 (`ecca754`, #198) is merged on `main` and remains orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces.
+TDI-10.x through TDI-10.14 (operator-family chapter: 10.13 families + 10.14 contraction↔Type-U ρ bridge) remains orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces. #199 readiness floors are unchanged.
