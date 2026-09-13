@@ -1,0 +1,40 @@
+name: TDI-10.16 Contraction monotonicity
+
+on:
+  pull_request:
+    paths:
+      - "tdi-operator/src/frozen.rs"
+      - "tdi-operator/src/factorization.rs"
+      - "tdi-operator/src/transport.rs"
+      - "tdi-operator/tests/cavity_contraction_monotonicity.rs"
+      - "docs/tdi10/TDI-10.16-CONTRACTION-MONOTONICITY.md"
+      - "scripts/check-tdi10.16-contraction-monotonicity.sh"
+      - ".github/workflows/tdi10.16-contraction-monotonicity.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "tdi-operator/src/frozen.rs"
+      - "tdi-operator/src/factorization.rs"
+      - "tdi-operator/src/transport.rs"
+      - "tdi-operator/tests/cavity_contraction_monotonicity.rs"
+      - "docs/tdi10/TDI-10.16-CONTRACTION-MONOTONICITY.md"
+      - "scripts/check-tdi10.16-contraction-monotonicity.sh"
+      - ".github/workflows/tdi10.16-contraction-monotonicity.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  contraction-monotonicity:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+      - name: Qualify TDI-10.16 contraction monotonicity
+        run: bash scripts/check-tdi10.16-contraction-monotonicity.sh

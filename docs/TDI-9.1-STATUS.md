@@ -30,7 +30,16 @@
 
 ## Integrity (this slice)
 
-Post-#200 scout (after TDI-10.14 merged on `main`, including TDI-9.3 Boolean policy synthesis #195, with TDI-10.15 in flight) found **no** newly closed identifier that can pin a remaining 9.1 field. `PolicyObservation` / Boolean IR remain types, not an experimental observation-vector pin. Existing authorized pin stays 1/14. Readiness continues to fail-close on a pinned-count floor of **≥1**, missing pin-evidence blocks, unauthorized pins, and silent STATUS / `scientific_status` upgrades (#199).
+Post-#201 scout (after TDI-10.15 on `main`, including TDI-9.3 Boolean policy synthesis #195, with TDI-10.16 in flight) found **no** newly closed identifier that can pin a remaining 9.1 field. `PolicyObservation` / Boolean IR remain types, not an experimental observation-vector pin. Existing authorized pin stays 1/14. Readiness continues to fail-close on a pinned-count floor of **≥1**, STATUS↔freeze JSON pin-count cross-check, missing pin-evidence blocks, unauthorized pins, and silent STATUS / `scientific_status` upgrades (#199).
+
+## TDI-9.3 boundary (non-pinning)
+
+TDI-9.3 Boolean policy synthesis (#195) is an **ACTIVE DESIGN / NON-FINAL** extension.
+It does **not** replace TDI-9.1, does **not** pin any TDI-9.1 freeze field (including
+`permitted_observation_vector`), and does **not** authorize TDI-9.2. Boolean IR /
+`PolicyObservation` types remain representation surfaces only until a separate
+evidence-backed 9.1 freeze resolves the observation-vector contract. See
+`docs/TDI-9.3-BOOLEAN-POLICY-SYNTHESIS.md` § Relationship to TDI-9.1.
 
 ## Remaining TDI-9.1 work
 
@@ -44,4 +53,4 @@ No item authorizes TDI-9.2 execution.
 
 ## Series orthogonality
 
-TDI-10.x through TDI-10.15 (operator-family chapter: 10.13 families + 10.14 contraction↔Type-U ρ bridge + 10.15 family composition) remains orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces. #199 readiness floors are unchanged.
+TDI-10.x through TDI-10.16 (operator-family chapter: 10.13–10.15 families/composition + 10.16 κ(a,b) domain/monotonicity and matched TDI-10.3 → Type-U link) remains orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces. #199 readiness floors are unchanged; STATUS↔JSON pin-count cross-check is additive.
