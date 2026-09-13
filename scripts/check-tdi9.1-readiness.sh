@@ -95,10 +95,30 @@ print("authorized policy pins: PRESENT")
 print("unauthorized fields remain unresolved_blocking: YES")
 PY
 
+if (( pinned_count < 1 )); then
+    fail "pinned-count floor is 1; found $pinned_count"
+fi
+
 grep -Fq '1/14 pinned' "$STATUS" \
     || fail "STATUS must keep the current 1/14 freeze-progress count until a new authorized pin is added"
 grep -Fq 'permitted_observation_vector' "$PLAN" \
     || fail "resolution plan must still list permitted_observation_vector"
+grep -Fq '`tdi9_2_execution_authorized`: **false**' "$STATUS" \
+    || fail "STATUS must keep tdi9_2_execution_authorized hard-false"
+
+# Refuse silent STATUS upgrades while the freeze remains incomplete.
+if [[ "$scientific_status" == "unresolved_blocking" ]]; then
+    if grep -E '^- Status:[[:space:]]+\*\*(frozen_nonfinal|frozen|complete|authorized)' "$STATUS"; then
+        fail "STATUS silently upgraded while scientific_status is unresolved_blocking"
+    fi
+    if grep -Fq 'scientific_status` is `frozen_nonfinal' "$STATUS" \
+        || grep -Fq 'scientific_status` remains `frozen_nonfinal' "$STATUS"; then
+        fail "STATUS claims frozen_nonfinal while the freeze is still unresolved_blocking"
+    fi
+    if grep -Eqi 'TDI-9\.2[^[:space:]]* (is |now )?(authorized|ready|armed)' "$STATUS"; then
+        fail "STATUS must not claim TDI-9.2 authorization while freeze is incomplete"
+    fi
+fi
 
 printf '\n===== TDI-9.2 / HOLDOUT SURFACE EXCLUSION =====\n'
 mapfile -t forbidden < <(

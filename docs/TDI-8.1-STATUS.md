@@ -26,6 +26,10 @@ Still unresolved (must not be guessed): recurrent/A2/A3 dimensions and fusion, m
 `scientific_status` remains `unresolved_blocking` until all 17 fields are `pinned`.
 The readiness gate fail-closes if any field outside the three authorized pins is marked `pinned`.
 
+## Integrity (this slice)
+
+Post-#198 scout of merged code/docs/PRs found **no** newly closed identifier that can pin a remaining field. Existing authorized pins stay 3/17. Readiness now fail-closes on a pinned-count floor of **≥3**, missing pin-evidence blocks, unauthorized pins, and silent STATUS / `scientific_status` upgrades.
+
 ## Remaining TDI-8.1 work
 
 1. Resolve the remaining **14** fields from admissible Development/Validation evidence (`docs/TDI-8.1-FREEZE-RESOLUTION-PLAN.md`).
@@ -38,4 +42,4 @@ TDI-8.2 remains future human-only. No autonomous confirmation token or confirmat
 
 ## Series orthogonality
 
-TDI-10.x (including TDI-10.13) is orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces.
+TDI-10.x through TDI-10.13 (`ecca754`, #198) is merged on `main` and remains orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces.

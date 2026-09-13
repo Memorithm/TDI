@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+import argparse
 import json
+import re
 from pathlib import Path
 
-CONTRACT = Path("docs/tdi9.1-configuration-freeze.json")
+DEFAULT_CONTRACT = Path("docs/tdi9.1-configuration-freeze.json")
 EXPECTED_FIELDS = {
     "p1_p2_p3_difficulty_parameters",
     "c0_c1_schedules",
@@ -27,6 +29,7 @@ ALLOWED_FIELD_STATUS = {"unresolved_blocking", "pinned"}
 AUTHORIZED_PINS = {
     "closed_rejection_taxonomy": "ReferenceRejectionCode",
 }
+PINNED_COUNT_FLOOR = 1
 FORBIDDEN_TOP_LEVEL = {
     "tdi9_2_seed_list",
     "tdi9_2_result",
@@ -35,15 +38,36 @@ FORBIDDEN_TOP_LEVEL = {
     "confirmatory_result",
     "human_token",
 }
+PR_CITATION = re.compile(r"PR #\d+")
 
 
 def fail(message: str) -> None:
     raise SystemExit(f"TDI-9.1 configuration freeze ERROR: {message}")
 
 
-def main() -> None:
-    data = json.loads(CONTRACT.read_text(encoding="utf-8"))
+def require_pin_evidence(name: str, value: object, *, repo_root: Path) -> None:
+    if not isinstance(value, dict):
+        fail(f"{name} pin value must be an object carrying an evidence block")
+    evidence = value.get("evidence")
+    if not isinstance(evidence, list) or not evidence:
+        fail(f"{name} pin missing a non-empty evidence list")
+    has_pr = False
+    has_file = False
+    for item in evidence:
+        if not isinstance(item, str) or not item.strip():
+            fail(f"{name} evidence items must be non-empty strings")
+        if PR_CITATION.search(item):
+            has_pr = True
+        candidate = repo_root / item
+        if candidate.is_file() and candidate.stat().st_size > 0:
+            has_file = True
+    if not has_pr:
+        fail(f"{name} pin evidence must cite at least one PR")
+    if not has_file:
+        fail(f"{name} pin evidence must cite at least one existing in-repo file")
 
+
+def validate_contract(data: dict, *, repo_root: Path) -> tuple[int, int]:
     if data.get("schema") != "tdi9.1-configuration-freeze-v1":
         fail("unexpected schema identity")
     if data.get("stage") != "TDI-9.1":
@@ -73,6 +97,7 @@ def main() -> None:
         fail(f"field registry mismatch; missing={missing}, extra={extra}")
 
     unresolved = []
+    pinned = []
     for name, record in fields.items():
         if not isinstance(record, dict) or set(record) != {"status", "value"}:
             fail(f"{name} must contain exactly status and value")
@@ -86,12 +111,19 @@ def main() -> None:
             unresolved.append(name)
         elif value is None or value == "" or value == {} or value == []:
             fail(f"{name} is pinned without a non-empty explicit value")
+        else:
+            pinned.append(name)
 
     expected_scientific_status = "unresolved_blocking" if unresolved else "frozen_nonfinal"
     if data.get("scientific_status") != expected_scientific_status:
         fail(
             "scientific_status must be unresolved_blocking until every field is pinned, "
             "then frozen_nonfinal"
+        )
+
+    if len(pinned) < PINNED_COUNT_FLOOR:
+        fail(
+            f"pinned-count floor is {PINNED_COUNT_FLOOR}; found {len(pinned)}"
         )
 
     for name, record in fields.items():
@@ -102,15 +134,32 @@ def main() -> None:
             marker = AUTHORIZED_PINS[name]
             if marker not in blob:
                 fail(f"{name} pin missing required marker {marker!r}")
+            require_pin_evidence(name, record["value"], repo_root=repo_root)
         elif record["status"] != "unresolved_blocking":
             fail(
                 f"{name} is not an authorized evidence-backed pin and must "
                 "remain unresolved_blocking"
             )
 
-    print(f"TDI-9.1 configuration fields: {len(fields)}")
-    print(f"TDI-9.1 unresolved blocking fields: {len(unresolved)}")
+    return len(pinned), len(unresolved)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--contract",
+        type=Path,
+        default=DEFAULT_CONTRACT,
+        help="path to the TDI-9.1 configuration freeze JSON",
+    )
+    args = parser.parse_args()
+    repo_root = Path.cwd()
+    data = json.loads(args.contract.read_text(encoding="utf-8"))
+    pinned, unresolved = validate_contract(data, repo_root=repo_root)
+    print(f"TDI-9.1 configuration fields: {len(EXPECTED_FIELDS)}")
+    print(f"TDI-9.1 unresolved blocking fields: {unresolved}")
     print(f"TDI-9.1 authorized pins: {len(AUTHORIZED_PINS)}")
+    print(f"TDI-9.1 pinned-count floor: {PINNED_COUNT_FLOOR} (observed {pinned})")
     print("TDI-9.2 execution authorization: ABSENT")
     print("TDI-9.2 final seed/dataset/runner/result surface: ABSENT")
     print("TDI-9.1 configuration freeze schema: PASS")

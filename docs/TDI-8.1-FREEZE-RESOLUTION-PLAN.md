@@ -44,4 +44,10 @@ Dev/Val surfaces. The remaining fourteen require experimental choices
 (dimensions, seeds, budgets, horizons, sample counts, or a selected interval
 estimator) that do not exist as frozen values in-repo. Inventing them to clear
 `unresolved_blocking` is forbidden. The readiness / freeze validators now
-fail-closed if any unauthorized field is pinned.
+fail-closed if any unauthorized field is pinned, if a pin is missing a
+non-empty `evidence` block (PR citation + existing in-repo file), if the
+pinned count drops below 3, or if `scientific_status` / STATUS is silently
+upgraded while fields remain `unresolved_blocking`.
+
+Post-#198 (`ecca754`) scout: no newly closed identifier can pin a remaining
+field. Holdouts 7.2 / 8.2 stay untouched.
