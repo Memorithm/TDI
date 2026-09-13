@@ -1,9 +1,6 @@
 #![forbid(unsafe_code)]
 
-//! Noyau mathématique et algorithmique de TDI.
-//!
-//! Le crate expose les primitives exactes de dynamique prospective ainsi que
-//! l'API canonique permettant de construire et comparer des signatures TDI.
+//! Noyau mathématique et algorithmique du benchmark TDI-1.
 
 mod action;
 mod baseline;
@@ -12,7 +9,6 @@ mod branching_distribution;
 mod branching_recovery;
 mod dynamics;
 mod explorer;
-mod primitive;
 mod recovery;
 mod signature;
 mod state;
@@ -35,9 +31,6 @@ pub use branching_recovery::{
 };
 pub use dynamics::{OrbitAnalysis, OrbitError, analyze_orbit};
 pub use explorer::{ExploreError, ReachabilityReport, explore};
-pub use primitive::{
-    InterventionComparison, PrimitiveError, compare_intervention, prospective_signature,
-};
 pub use recovery::{RecoveryAnalysis, RecoveryError, analyze_recovery};
 pub use signature::{ExactRatio, SignatureError, TdiSignature};
 pub use state::{State, StateError};
