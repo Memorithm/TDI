@@ -35,3 +35,7 @@ The readiness gate fail-closes if any field outside the three authorized pins is
 ## Holdout boundary
 
 TDI-8.2 remains future human-only. No autonomous confirmation token or confirmatory run. No TDI-7.2 contact.
+
+## Series orthogonality
+
+TDI-10.x (including TDI-10.8) is orthogonal: operator-research advances must not invent freeze pins here or contact TDI-8.2 / TDI-9.2 surfaces.

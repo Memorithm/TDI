@@ -52,3 +52,13 @@ The following are invalid at this stage:
 The next transition is a separately reviewed TDI-11.2 model/observation freeze. That transition must pin exact non-final Development/Validation identities and settings, content-address the frozen contract, pass its integrity gate on the exact PR head, merge to `main`, and update the agent roadmap separately.
 
 Only then may a concrete local/open model instrumentation runner be implemented or executed.
+
+## Agent advance boundary
+
+Autonomous agent advances may strengthen integrity/CI/docs/scaffolding that keep
+execution blocked. They must **not** invent model/adapter/tokenizer pins or set
+`model_execution_authorized` / `final_execution_authorized` true while any of
+the 12 freeze fields remain `unresolved_blocking` (orchestrator holdout / no
+AUTO_MERGE of freeze 11.2: #186). The existing pre-arm and freeze-schema gates
+already enforce this fail-closed posture.
+

@@ -33,10 +33,11 @@ A numerical fit is never proof. A formal asymptotic is never promoted to a unifo
 - **TDI-10.5** — **REFUTED** implication: pointwise `0 < alpha_k < 1` alone forces product → 0
 - **TDI-10.6** — **EXACT** companion: uniform bound `0 < alpha_k <= rho < 1` forces product ≤ `rho^n` → 0
 - **TDI-10.7** — **EXACT** remainder criterion: `sum (1 - alpha_k) = infinity` with `0 < alpha_k <= 1` forces product → 0; `alpha_k -> 1` alone is **REFUTED** as a decay-prevention criterion
+- **TDI-10.8** — **EXACT** witness trichotomy: Type S (summable remainder; product ↛ 0), Type U (uniform geometric; product → 0), Type D (divergent remainder; product → 0); **REFUTED** that `alpha_k -> 1` implies Type S; **REFUTED** that divergent remainder is automatic for every `0 < alpha_k < 1` family
 
 ## Next frontiers (not yet authorized by numbering alone)
 
-- operator families that realize a uniform `rho` or a divergent remainder (or fail to);
+- broader operator families that realize a uniform `rho` or a divergent remainder (or fail to) beyond the Type U/D witnesses;
 - slowly varying Jacobi hypotheses with explicit remainder windows;
 - soft-edge / double-scaling statements labelled FORMAL ASYMPTOTIC or PROVED UNDER DECLARED ASSUMPTIONS as appropriate.
 
