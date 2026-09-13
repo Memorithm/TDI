@@ -14,7 +14,7 @@ systems. It does not claim knowledge of any proprietary model architecture.
 | TDI-9.0 | Freeze adaptive-inference questions, policy ladder, evidence rules and autonomous-confirmation contract | active |
 | TDI-9.1 | Build bounded deterministic policy/evaluator stack and run agent-driven development/validation | active — freeze 1/14 pinned; remaining scientific fields `unresolved_blocking` |
 | TDI-9.2 | Execute autonomous sealed confirmation from future-derived entropy | future, does not yet exist |
-| **TDI-9.3** | **Boolean Policy Synthesis: represent, calibrate and later search explicit Boolean action policies over frozen leakage-safe trajectory predicates** | **active design / non-final** (9.3.0 C2+C3 truth-table calibration landed; non-pinning) |
+| **TDI-9.3** | **Boolean Policy Synthesis: represent, calibrate and later search explicit Boolean action policies over frozen leakage-safe trajectory predicates** | **active design / non-final** (9.3.0 C2+C3 calibration + envelopes/mutation/joint invariants/dominance landed; non-pinning) |
 | TDI-9.4+ | Ablation, transfer, tool interleaving, routing and further ecosystem extensions | conditional on evidence |
 
 ## Policy ladder

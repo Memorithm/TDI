@@ -61,7 +61,7 @@ TDI-9 development is agent-first: agents may autonomously propose, implement, mu
 
 Before a TDI-9 PR or merge decision, run `bash scripts/check-tdi9-bootstrap.sh` when that script exists on the branch.
 
-For TDI-9.3 Boolean-policy representation work, also run `bash scripts/check-tdi9.3-representation-calibration.sh` when that script exists. That gate covers C2 STOP and C3 ordered multi-action representation calibration. TDI-9.3 surfaces must not pin TDI-9.1 freeze fields or authorize TDI-9.2.
+For TDI-9.3 Boolean-policy representation work, also run `bash scripts/check-tdi9.3-representation-calibration.sh` when that script exists. That gate covers C2 STOP and C3 ordered multi-action representation calibration, plus synthesis envelopes, fail-closed mutation, C2↔C3 joint invariants, and complexity dominance. TDI-9.3 surfaces must not pin TDI-9.1 freeze fields or authorize TDI-9.2.
 
 ## TDI-11.x bootstrap and stage gate
 

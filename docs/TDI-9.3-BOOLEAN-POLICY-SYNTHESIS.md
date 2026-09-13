@@ -1,6 +1,6 @@
 # TDI-9.3 — Boolean Policy Synthesis
 
-Status: **ACTIVE DESIGN / NON-FINAL** (TDI-9.3.0 representation calibration landed for C2 STOP and C3 ordered multi-action)
+Status: **ACTIVE DESIGN / NON-FINAL** (TDI-9.3.0 representation calibration landed for C2 STOP, C3 ordered multi-action, synthesis envelopes, fail-closed mutation, C2↔C3 joint invariants, and complexity dominance)
 
 ## Purpose
 
@@ -124,11 +124,31 @@ arms rejected by `BooleanPolicy::new` and have no Boolean trajectory-policy
 calibration surface. Fail-closed missing-predicate / forbidden-action behavior
 remains covered.
 
+**Also landed (exact / engineering, still non-pinning, still pre-search):**
+
+- `SynthesisSearchEnvelope::reference_c2` / `reference_c3` declare the exact
+  pre-search grammar and complexity bounds that admit the calibrated reference
+  policies (predicate arity, max rules, max reads/ops/depth, allowed
+  connectives). Envelopes are representation/search-boundary objects only.
+- `BooleanPolicyMutation` + `mutate_boolean_policy` provide fail-closed IR
+  rewrites (negate, swap root And/Or, remap predicate, drop/swap rules, set
+  fallback) that re-validate arm action legality and envelope admission. This
+  does **not** pin TDI-9.1 `agent_search_safe_policy_mutation_contract`.
+- C2↔C3 joint invariants: every C2 predicate vector projects through
+  `BASE_STOP` into the C3 ABSENT dispatch so the ABSENT action is `STOP` iff
+  the C2 hand STOP Boolean is true (`reference_c2_stop_projects_to_c3_absent_stop`).
+- Complexity dominance lemmas: `BooleanComplexity::{weakly,strictly}_dominates`
+  is the componentwise Pareto order (smaller is better). Exact facts covered by
+  CI: reflexivity; single-predicate expressions strictly dominate the C2
+  reference shape; appending a rule strictly increases worst-case reads; the
+  calibrated C2 `(5,4,4)` and C3 `(13,6,2)` worst-case vectors are Pareto
+  **incomparable** (C2 wins on reads/ops; C3 wins on depth).
+
 Acceptance criteria:
 
 - exact output equivalence on exhaustive bounded predicate tables for the target rule (**met for the documented C2 STOP shape and the documented C3 ordered multi-action state machine on well-formed action rows**);
 - fail-closed behavior for missing predicates or forbidden actions (**met**);
-- deterministic complexity accounting (**met for the reference C2 STOP shape and the reference C3 ordered rule set**);
+- deterministic complexity accounting (**met for the reference C2 STOP shape and the reference C3 ordered rule set**, including Pareto dominance helpers and C2↔C3 incomparability);
 - no access to final-evaluation data (**met**; experimental feature only).
 
 TDI-9.3.0 calibration does **not** freeze observation-to-predicate mappings,
@@ -217,13 +237,19 @@ The initial module provides:
 - TDI-9.3.0 representation-calibration fixtures for the hand-written C2 STOP
   Boolean (`reference_c2_*`) and the documented C3 ordered multi-action state
   machine (`reference_c3_*`), including exhaustive / well-formed truth-table
-  equivalence tests.
+  equivalence tests;
+- declared `SynthesisSearchEnvelope` bounds for the calibrated C2/C3 reference
+  shapes (pre-search grammar/complexity admission only);
+- fail-closed `BooleanPolicyMutation` rewrites under envelope re-admission;
+- C2↔C3 joint ABSENT/`BASE_STOP` projection invariants;
+- componentwise complexity dominance helpers and C2/C3 Pareto-incomparability.
 
 It deliberately does **not** yet provide:
 
 - a chosen TDI-9 predicate schema or observation-vector pin;
 - thresholds derived from evidence;
-- a search algorithm;
+- a search algorithm (envelopes/mutations are pre-search IR only; TDI-9.3.1+);
+- a pin of TDI-9.1 `agent_search_safe_policy_mutation_contract`;
 - integration into the C2/C3 reference evaluator;
 - a confirmatory runner;
 - access to TDI-9.2 final derivation or evidence.
