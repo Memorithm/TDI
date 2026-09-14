@@ -5,8 +5,8 @@
 //! Lookup probes one direct slot or two slots in one bucket, never history.
 
 use super::tdi21::{
-    ArchitectureArm, BooleanState, Clause, Literal, MemoryRead, ResourceCounters,
-    activate_route, counted_route_tag,
+    ArchitectureArm, BooleanState, Clause, Literal, MemoryRead, ResourceCounters, activate_route,
+    counted_route_tag,
 };
 
 pub const STREAM_SEMANTICS: &str = "tdi21-causal-stream-v1";
@@ -124,7 +124,9 @@ pub struct BooleanStream {
 }
 
 fn increment(value: &mut u64) {
-    *value = value.checked_add(1).expect("TDI-21 stream counter overflow");
+    *value = value
+        .checked_add(1)
+        .expect("TDI-21 stream counter overflow");
 }
 
 impl BooleanStream {

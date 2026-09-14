@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use tdi_ai::experimental::tdi21::{BooleanState, EvidenceRecord, MemoryRead, RunManifest};
 use tdi_ai::experimental::tdi21_provenance::canonical_evidence_record;
 use tdi_ai::experimental::tdi21_stream::{
-    BooleanStream, Event, MemoryMode, StepOutput, StreamConfig, STREAM_SEMANTICS,
+    BooleanStream, Event, MemoryMode, STREAM_SEMANTICS, StepOutput, StreamConfig,
 };
 
 fn write(key: u64, payload: u64) -> Event {
@@ -102,7 +102,9 @@ fn main() {
             // These are software regression expectations for three published
             // fixtures, not acceptance thresholds chosen for scientific claims.
             let expected_correct = match (id, mode) {
-                ("delay", _) | ("pair", MemoryMode::Direct) | ("saturated", MemoryMode::Direct) => 1,
+                ("delay", _) | ("pair", MemoryMode::Direct) | ("saturated", MemoryMode::Direct) => {
+                    1
+                }
                 _ => 2,
             };
             assert_eq!(correct_queries, expected_correct);

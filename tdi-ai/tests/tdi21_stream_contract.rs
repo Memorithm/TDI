@@ -152,7 +152,10 @@ fn errors_are_atomic_and_reset_starts_an_independent_episode() {
     let mut machine = BooleanStream::new(cfg).unwrap();
     machine.step(write(1, 7)).unwrap();
     let snapshot = machine.clone();
-    assert_eq!(machine.step(write(1, 256)), Err(StreamError::PayloadOutOfRange));
+    assert_eq!(
+        machine.step(write(1, 256)),
+        Err(StreamError::PayloadOutOfRange)
+    );
     assert_eq!(machine, snapshot);
     let malformed = Event::Write {
         key: 1,
@@ -163,7 +166,10 @@ fn errors_are_atomic_and_reset_starts_an_independent_episode() {
     assert_eq!(machine, snapshot);
     assert_eq!(machine.step(Event::Recall { key: 1 }), Ok(reply(7)));
     let snapshot = machine.clone();
-    assert_eq!(machine.step(Event::Ignore), Err(StreamError::EventBudgetExhausted));
+    assert_eq!(
+        machine.step(Event::Ignore),
+        Err(StreamError::EventBudgetExhausted)
+    );
     assert_eq!(machine, snapshot);
     let footprint = machine.footprint();
     machine.reset();
