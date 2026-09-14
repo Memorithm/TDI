@@ -14,8 +14,12 @@ use super::boolean_policy_synthesis::{
 
 pub const C3_SENSITIVITY_SCHEMA: &str = "tdi9.3.c3-local-sensitivity.v1";
 pub const C3_SENSITIVITY_AXES: [&str; 6] = [
-    "base_stop", "verify_before_stop", "cadence_due", "checkpoint_available",
-    "remaining_work", "verifier_state_substitution",
+    "base_stop",
+    "verify_before_stop",
+    "cadence_due",
+    "checkpoint_available",
+    "remaining_work",
+    "verifier_state_substitution",
 ];
 
 const BOOL_INDICES: [usize; 5] = [
@@ -112,7 +116,10 @@ pub fn c3_policy_sensitivity(
         match ValidatedC3PredicateRow::new(&raw) {
             Ok(row) => {
                 report.valid_anchors += 1;
-                let actual = row.decide(policy).map_err(C3SensitivityError::Carrier)?.action();
+                let actual = row
+                    .decide(policy)
+                    .map_err(C3SensitivityError::Carrier)?
+                    .action();
                 let expected = reference_c3_hand_action(&raw)
                     .ok_or(C3SensitivityError::MissingReferenceAction)?;
                 report.reference_action_mismatches += u64::from(actual != expected);
@@ -126,9 +133,17 @@ pub fn c3_policy_sensitivity(
     for (address, &action) in actions.iter().enumerate() {
         let Some(source) = action else { continue };
         for (axis, &bit) in BOOL_INDICES.iter().enumerate() {
-            record_edge(&mut report, &actions, source, address ^ (1usize << bit), axis);
+            record_edge(
+                &mut report,
+                &actions,
+                source,
+                address ^ (1usize << bit),
+                axis,
+            );
         }
-        let old_state = VERIFIER_INDICES.iter().copied()
+        let old_state = VERIFIER_INDICES
+            .iter()
+            .copied()
             .find(|&bit| address & (1usize << bit) != 0)
             .ok_or(C3SensitivityError::MissingReferenceAction)?;
         for &new_state in &VERIFIER_INDICES {
@@ -164,26 +179,56 @@ mod tests {
         assert_eq!(report.invalid_anchors, 384);
         assert_eq!(report.unrecoverable_anchors, 8);
         assert_eq!(report.reference_action_mismatches, 0);
-        let expected = [(120, 24, 0), (120, 16, 0), (120, 16, 0),
-            (112, 16, 8), (112, 0, 8), (336, 284, 24)];
+        let expected = [
+            (120, 24, 0),
+            (120, 16, 0),
+            (120, 16, 0),
+            (112, 16, 8),
+            (112, 0, 8),
+            (336, 284, 24),
+        ];
         for (axis, &(admitted, changed, rejected)) in report.axes.iter().zip(&expected) {
-            assert_eq!((axis.admitted, axis.action_changes, axis.rejected),
-                (admitted, changed, rejected));
+            assert_eq!(
+                (axis.admitted, axis.action_changes, axis.rejected),
+                (admitted, changed, rejected)
+            );
         }
-        assert_eq!(report.axes.iter().map(|axis| axis.admitted).sum::<u64>(), 920);
-        assert_eq!(report.axes.iter().map(|axis| axis.rejected).sum::<u64>(), 40);
-        assert_eq!(report.axes.iter().map(|axis| axis.action_changes).sum::<u64>(), 356);
+        assert_eq!(
+            report.axes.iter().map(|axis| axis.admitted).sum::<u64>(),
+            920
+        );
+        assert_eq!(
+            report.axes.iter().map(|axis| axis.rejected).sum::<u64>(),
+            40
+        );
+        assert_eq!(
+            report
+                .axes
+                .iter()
+                .map(|axis| axis.action_changes)
+                .sum::<u64>(),
+            356
+        );
     }
 
     #[test]
     fn reference_action_transitions_retain_direction_and_reverse_edges() {
         let report = c3_policy_sensitivity(&reference_c3_policy().unwrap()).unwrap();
-        assert_eq!(report.transitions, [
-            [244, 32, 28, 62], [32, 56, 8, 28], [28, 8, 64, 20], [62, 28, 20, 200],
-        ]);
+        assert_eq!(
+            report.transitions,
+            [
+                [244, 32, 28, 62],
+                [32, 56, 8, 28],
+                [28, 8, 64, 20],
+                [62, 28, 20, 200],
+            ]
+        );
         for row in 0..4 {
             for column in 0..4 {
-                assert_eq!(report.transitions[row][column], report.transitions[column][row]);
+                assert_eq!(
+                    report.transitions[row][column],
+                    report.transitions[column][row]
+                );
             }
         }
         assert_eq!(report.transitions.iter().flatten().sum::<u64>(), 920);
@@ -192,20 +237,29 @@ mod tests {
     #[test]
     fn zero_sensitivity_does_not_imply_correctness_or_absorb_rejected_inputs() {
         let constant = BooleanPolicy::new(
-            PolicyArm::C3VerificationRecovery, Vec::new(), InferenceAction::Continue,
-        ).unwrap();
+            PolicyArm::C3VerificationRecovery,
+            Vec::new(),
+            InferenceAction::Continue,
+        )
+        .unwrap();
         let report = c3_policy_sensitivity(&constant).unwrap();
         assert!(report.axes.iter().all(|axis| axis.action_changes == 0));
         assert_eq!(report.reference_action_mismatches, 72);
         assert_eq!(report.transitions[0][0], 920);
-        assert_eq!(report.axes.iter().map(|axis| axis.rejected).sum::<u64>(), 40);
+        assert_eq!(
+            report.axes.iter().map(|axis| axis.rejected).sum::<u64>(),
+            40
+        );
     }
 
     #[test]
     fn audit_is_deterministic_nonmutating_and_rejects_wrong_policy_arm() {
         let policy = reference_c3_policy().unwrap();
         let before = policy.clone();
-        assert_eq!(c3_policy_sensitivity(&policy), c3_policy_sensitivity(&policy));
+        assert_eq!(
+            c3_policy_sensitivity(&policy),
+            c3_policy_sensitivity(&policy)
+        );
         assert_eq!(policy, before);
         assert!(matches!(
             c3_policy_sensitivity(&reference_c2_stop_policy().unwrap()),
