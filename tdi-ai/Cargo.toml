@@ -23,5 +23,9 @@ name = "boolean_c3_calibration"
 required-features = ["experimental"]
 
 [[example]]
+name = "boolean_c3_sensitivity"
+required-features = ["experimental"]
+
+[[example]]
 name = "tdi21_development"
 required-features = ["experimental"]
