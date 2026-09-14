@@ -59,5 +59,15 @@ cargo test --locked -p tdi-ai --features experimental --example boolean_c3_calib
   || fail "C3 search calibration tests failed"
 cargo run --locked -p tdi-ai --features experimental --example boolean_c3_calibration \
   || fail "C3 search calibration report failed"
+cargo test --locked -p tdi-ai --features experimental --lib boolean_policy_sensitivity \
+  || fail "C3 local sensitivity tests failed"
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+cargo run --locked -p tdi-ai --features experimental --example boolean_c3_sensitivity \
+  > "$TMP/first.tsv" || fail "C3 sensitivity report failed"
+cargo run --locked -p tdi-ai --features experimental --example boolean_c3_sensitivity \
+  > "$TMP/second.tsv" || fail "C3 sensitivity replay failed"
+cmp "$TMP/first.tsv" "$TMP/second.tsv" || fail "C3 sensitivity replay differs"
+cat "$TMP/first.tsv"
 
 echo "TDI-9.3 representation and search calibration: PASS"
