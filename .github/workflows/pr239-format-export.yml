@@ -1,0 +1,39 @@
+name: PR239 format export
+
+on:
+  push:
+    branches:
+      - research/tdi9-c3-local-sensitivity
+    paths:
+      - '.github/workflows/pr239-format-export.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  format-export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.85.0
+          components: rustfmt
+      - name: Apply exact rustfmt output
+        run: |
+          cargo fmt --all
+          mkdir -p target/pr239-format-export/tdi-ai/src target/pr239-format-export/tdi-ai/examples
+          cp tdi-ai/src/boolean_policy_sensitivity.rs target/pr239-format-export/tdi-ai/src/
+          cp tdi-ai/src/experimental.rs target/pr239-format-export/tdi-ai/src/
+          cp tdi-ai/examples/boolean_c3_sensitivity.rs target/pr239-format-export/tdi-ai/examples/
+          cargo fmt --all -- --check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr239-format-export-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/pr239-format-export/
+          if-no-files-found: error
+          retention-days: 1
