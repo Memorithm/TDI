@@ -210,7 +210,9 @@ impl<const N: usize> Clause<N> {
 /// Checked accounting: exhaustion aborts the run instead of wrapping into
 /// apparently valid evidence. No saturated counter is reported as exact.
 fn charge(counter: &mut u64, amount: u64) {
-    *counter = counter.checked_add(amount).expect("TDI-21 counter overflow");
+    *counter = counter
+        .checked_add(amount)
+        .expect("TDI-21 counter overflow");
 }
 
 /// Separate semantic work categories, not a fabricated FLOP or hardware cost.
@@ -329,7 +331,9 @@ impl<const SLOTS: usize> DirectAddressMemory<SLOTS> {
     /// complete architecture-memory claim. Overflow fails in every build mode.
     #[must_use]
     pub const fn peak_semantic_memory_bits() -> usize {
-        SLOTS.checked_mul(129).expect("TDI-21 memory accounting overflow")
+        SLOTS
+            .checked_mul(129)
+            .expect("TDI-21 memory accounting overflow")
     }
 }
 

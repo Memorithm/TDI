@@ -165,7 +165,8 @@ mod tests {
 
     #[test]
     fn missing_capacity_is_not_success_for_a_genuine_marker() {
-        let outcome = copy_after_marker::<0>(BooleanState::from_bits(1), BooleanState::from_bits(0));
+        let outcome =
+            copy_after_marker::<0>(BooleanState::from_bits(1), BooleanState::from_bits(0));
         assert!(!outcome.correct);
     }
 

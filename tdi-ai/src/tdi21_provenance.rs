@@ -134,7 +134,8 @@ mod tests {
     fn sha_case_is_canonical_and_negative_evidence_is_retained() {
         let evidence = delayed_bit_recall::<0>(7, true);
         let lower = canonical_evidence_record("zero-capacity", SHA, &evidence).unwrap();
-        let upper = canonical_evidence_record("zero-capacity", &SHA.to_uppercase(), &evidence).unwrap();
+        let upper =
+            canonical_evidence_record("zero-capacity", &SHA.to_uppercase(), &evidence).unwrap();
         assert_eq!(lower, upper);
         assert!(lower.contains(";correct=false;candidate_declaration_valid=false;"));
     }

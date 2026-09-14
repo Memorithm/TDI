@@ -2,8 +2,8 @@
 
 use tdi_ai::experimental::tdi21::{
     AnfTerm, ArchitectureArm, BooleanState, CandidateConfig, Clause, ClauseValidationError,
-    DirectAddressMemory, ForbiddenMechanisms, Literal, MemoryRead, ResourceCounters, activate_route,
-    counted_evaluate_anf, counted_route_tag, delayed_bit_recall, route_tag,
+    DirectAddressMemory, ForbiddenMechanisms, Literal, MemoryRead, ResourceCounters,
+    activate_route, counted_evaluate_anf, counted_route_tag, delayed_bit_recall, route_tag,
 };
 
 fn old_route(mut value: u64, salt: u64) -> u64 {
@@ -113,10 +113,19 @@ fn full_width_modulo_precedes_pointer_narrowing() {
 fn invalid_literal_is_not_true_after_negation() {
     for bit in 64..=u8::MAX {
         for literal in [Literal::Bit(bit), Literal::NotBit(bit)] {
-            let clause = Clause { literals: [literal] };
+            let clause = Clause {
+                literals: [literal],
+            };
             let mut work = ResourceCounters::default();
-            assert_eq!(clause.validate(64), Err(ClauseValidationError::BitOutOfRange(bit)));
-            assert!(!activate_route(BooleanState::from_bits(0), &clause, &mut work));
+            assert_eq!(
+                clause.validate(64),
+                Err(ClauseValidationError::BitOutOfRange(bit))
+            );
+            assert!(!activate_route(
+                BooleanState::from_bits(0),
+                &clause,
+                &mut work
+            ));
             assert_eq!(work.route_activations, 0);
         }
     }
@@ -127,10 +136,16 @@ fn clause_validation_observes_declared_width_and_short_circuit_tail() {
     let clause = Clause {
         literals: [Literal::Bit(0), Literal::NotBit(8)],
     };
-    assert_eq!(clause.validate(8), Err(ClauseValidationError::BitOutOfRange(8)));
+    assert_eq!(
+        clause.validate(8),
+        Err(ClauseValidationError::BitOutOfRange(8))
+    );
     assert_eq!(clause.validate(9), Ok(()));
     assert_eq!(clause.validate(0), Err(ClauseValidationError::InvalidWidth));
-    assert_eq!(clause.validate(65), Err(ClauseValidationError::InvalidWidth));
+    assert_eq!(
+        clause.validate(65),
+        Err(ClauseValidationError::InvalidWidth)
+    );
 }
 
 #[test]
