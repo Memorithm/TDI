@@ -26,6 +26,8 @@ pub mod boolean_policy_synthesis;
 pub mod development_campaign;
 #[path = "tdi21_boolean_relational.rs"]
 pub mod tdi21;
+#[path = "tdi21_evaluation.rs"]
+pub mod tdi21_evaluation;
 #[path = "tdi21_freeze.rs"]
 pub mod tdi21_freeze;
 #[path = "tdi21_provenance.rs"]

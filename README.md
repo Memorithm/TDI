@@ -109,6 +109,8 @@ TDI-21.0 remains **development-only, not frozen, with no confirmatory execution 
 
 The [causal B2/B3 reference](docs/TDI-21.0-CAUSAL-STREAM.md) processes writes, recalls, conjunctions and delay events without receiving the evaluator's answer. Development tests cover an independent dictionary oracle, all length-four streams over a seven-event alphabet, 4,096-event delays, overwritten facts, absent facts, marker rejection, bounded probes, reset and explicit capacity failures. These hand-written memories are **not trained language models**. B3's replacement metadata is charged separately; equal entry counts are not equal resource budgets. No quality or hardware-speed superiority is claimed. See [current status](docs/TDI-21.0-STATUS.md).
 
+The [shared development evaluator and competence controls](docs/TDI-21.0-EVALUATION-CONTROLS.md) now score evaluator-expected queries, so silence, truncated output and execution errors cannot improve the denominator. An independent prefix-history oracle is separate from both candidate memory and the exact-dictionary control. B2/B3 share an explicit memory-substrate ceiling that includes B3 replacement bits; the dictionary and no-memory controls are not mislabeled attention baselines or matched total-resource competitors. Reports preserve wrong values, false hits, forgotten facts and omitted replies separately.
+
 Reproduce the non-final software fixtures from a clean checkout:
 
 ```bash
