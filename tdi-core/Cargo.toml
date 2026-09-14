@@ -3,6 +3,7 @@ name = "tdi-core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 description = "Exact finite-state primitives for prospective dynamic information analysis"
 
 [lints]
