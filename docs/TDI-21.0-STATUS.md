@@ -6,7 +6,7 @@ Status: **active bootstrap; not frozen; development evidence only**.
 
 - Canonical TDI-21 programme and candidate prohibition set.
 - Architecture ladder B0-B5 with B0/B1 explicitly separated as attention baselines.
-- Experimental-only Rust module exposed through `tdi-ai::experimental::tdi21`.
+- Experimental-only Rust modules exposed through `tdi-ai::experimental::tdi21` and `tdi-ai::experimental::tdi21_tasks`.
 - Fixed-width Boolean state and literal/conjunction evaluation.
 - Deterministic Boolean route activation.
 - Bounded direct-address memory with explicit hit, miss, collision, and replacement semantics.
@@ -15,6 +15,10 @@ Status: **active bootstrap; not frozen; development evidence only**.
 - Pairwise-comparison fail-closed evidence guard for B2-B5.
 - Algebraic normal form / Zhegalkin evaluation over Boolean assignments.
 - Deterministic delayed-bit-recall fixture.
+- Deterministic keyed Boolean fact recall fixture.
+- Deterministic copy-after-marker fixture with explicit false-marker miss behavior.
+- Deterministic two-fact conjunction fixture with complete truth-table tests.
+- Deterministic distractor-rejection fixture driven by Boolean clauses rather than similarity scoring.
 - Unit tests for prohibition validation, direct recall, collision behavior, distractor rejection, ANF truth tables, semantic memory accounting, route determinism, and pairwise-work rejection.
 
 ## Not yet established
@@ -30,7 +34,6 @@ The bootstrap does not yet establish:
 
 ## Required before TDI-21.1 freeze
 
-- Complete deterministic fixtures for keyed Boolean fact recall, copy-after-marker, two-fact conjunction retrieval, and distractor rejection.
 - Define exact sequence-length, state-width, memory-slot, task-count, and development-seed grids.
 - Define B0/B1 baseline adapters without making them callable from B2-B5 candidate code paths.
 - Define matched resource envelopes and separate native counters for unlike mechanisms.
