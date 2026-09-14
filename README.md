@@ -6,7 +6,7 @@
 
 **A deterministic Rust research programme studying which structural and dynamical descriptions of a system retain predictive information beyond simple scalar summaries.**
 
-TDI develops falsifiable experiments, preregistered decision rules, deterministic evaluators and reproducible evidence. The programme started with exact finite-state dynamics and has expanded into attention / memory, bounded recurrent-associative architectures, adaptive inference dynamics, generic operator / resolvent research, hallucination dynamics / control, and ordinal universality of operator responses.
+TDI develops falsifiable experiments, preregistered decision rules, deterministic evaluators and reproducible evidence. The programme started with exact finite-state dynamics and has expanded into attention / memory, bounded recurrent-associative architectures, adaptive inference dynamics, generic operator / resolvent research, hallucination dynamics / control, ordinal universality of operator responses, and Boolean relational architectures that explicitly test whether useful attention functions can be reproduced without attention scoring.
 
 > The illustration above is a visual introduction. The status table below is the authoritative research map for the repository.
 
@@ -35,6 +35,9 @@ The result is a growing body of **code + preregistration + evaluator + provenanc
 | **TDI-10.x** | **Operator / Resolvent Research** | 🟠 Active | Generic Jacobi / tridiagonal operator work on shifted resolvents, Schur cavities, Green functions, finite transport and explicitly classified asymptotic claims. |
 | **TDI-11.x** | **Hallucination Dynamics & Control Research Programme** | 🟠 Active bootstrap | Studies supported vs unsupported generation in fully specified worlds, measurable precursors, causal perturbations, risk estimation and bounded adaptive verification / recovery / abstention. |
 | **TDI-12.x** | **Ordinal Universality of Operator Responses** | 🟠 Active Stage-0 bootstrap | Tests whether ordinal/rank relations among resolvent and Green response observables transport more stably than absolute calibration across dimension, coefficient family and perturbation regime. |
+| **TDI-21.x** | **Boolean Relational Architecture Research Programme** | 🟠 Active Stage-0 bootstrap | Tests a strict non-attention candidate family based on Boolean state, explicit logical routing, bounded memory and later GF(2)/ANF composition, with B2–B5 forbidding Q/K/V, `QK^T`, softmax, all-pairs similarity scoring and dense `N x N` score matrices. |
+
+The table currently surfaces the programme lines documented in this homepage plus TDI-21. It is not a claim that intermediate series numbers are absent; canonical programme files under [`docs/`](docs/) remain authoritative for series not yet summarized here.
 
 ## Current research frontier
 
@@ -87,6 +90,24 @@ TDI-12.0 is an **active Stage-0 bootstrap** and is **not frozen**. It lands exac
 
 Stage 0 does not authorize confirmatory populations, does not invent TDI-8.1 / TDI-9.1 / TDI-11.2 freeze pins, and does not contact TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces.
 
+### TDI-21.x — Boolean Relational Architecture Research Programme
+
+[`TDI-21.x`](docs/TDI-21-PROGRAMME.md) asks a deliberately stronger question than binary or sparse attention: can a deterministic Boolean relational system reproduce useful functions normally supplied by token attention **without using attention scoring at all**?
+
+The candidate family is separated from its controls:
+
+- **B0** — conventional attention reference; baseline only;
+- **B1** — binary/Hamming attention reference; baseline only;
+- **B2** — Boolean predicates plus bounded direct-address memory;
+- **B3** — Boolean routing plus bounded associative memory with explicit collision/replacement semantics;
+- **B4** — B3 plus explicit `F2` / algebraic-normal-form (Zhegalkin) relational composition;
+- **B5** — Boolean state evolution, routing, bounded memory and Boolean relation composition without an attention primitive.
+
+For B2–B5, the programme explicitly forbids Q/K/V projections, `QK^T`, dot-product/cosine or learned pairwise similarity scores, softmax or equivalent normalized token-score distributions, Hamming/POPCOUNT used as an all-pairs attention-score substitute, dense `N x N` token-score matrices, hidden attention fallback, and address lookup implemented by scanning all prior tokens.
+
+TDI-21.0 is an **active Stage-0 bootstrap**, is **not frozen**, and authorises **no confirmatory execution**. Its current implementation is limited to deterministic Boolean reference primitives, explicit route/memory accounting, pairwise-comparison fail-closed guards, ANF/Zhegalkin evaluation and small deterministic development fixtures. A positive Stage-0 result would not establish language-model quality, novelty, universal replacement of attention, asymptotic superiority or hardware speedup. See [`docs/TDI-21.0-STATUS.md`](docs/TDI-21.0-STATUS.md).
+
+A future FLAT-ATTENTION hybrid remains downstream and conditional on reproducible TDI-21 evidence. The intended research boundary is: TDI-21 validates Boolean semantics; SciRust may later receive stable reusable primitives; hardware-specific realization is evaluated separately; FLAT-ATTENTION may only then compare Boolean-only, softmax-only and Boolean-pre-routing-to-restricted-softmax modes.
 
 ## What the completed programme has taught us
 
