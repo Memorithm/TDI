@@ -45,7 +45,8 @@ pub fn keyed_boolean_fact_recall<const SLOTS: usize>(route: u64, fact: bool) -> 
 }
 
 /// A marker clause gates whether a payload is copied into bounded memory.
-/// The later read is direct-addressed and therefore does not search history.
+/// With no marker the correct answer is an explicit miss, not a fabricated
+/// payload. This is a smoke fixture rather than a delayed sequence benchmark.
 #[must_use]
 pub fn copy_after_marker<const SLOTS: usize>(
     marker_state: BooleanState,
@@ -62,10 +63,14 @@ pub fn copy_after_marker<const SLOTS: usize>(
         memory.write(COPY_ROUTE, payload, &mut resources);
     }
 
-    let correct = matches!(
-        memory.read(COPY_ROUTE, &mut resources),
-        MemoryRead::Hit(state) if state == payload
-    );
+    // The task oracle is defined directly from the input, not from the route
+    // activation outcome. A rejected genuine marker must still fail.
+    let expected = if marker_state.bits() & 1 == 1 {
+        MemoryRead::Hit(payload)
+    } else {
+        MemoryRead::Miss
+    };
+    let correct = memory.read(COPY_ROUTE, &mut resources) == expected;
 
     TaskOutcome {
         kind: TaskKind::CopyAfterMarker,
@@ -93,7 +98,10 @@ pub fn two_fact_conjunction<const SLOTS: usize>(left: bool, right: bool) -> Task
         memory.read(LEFT_ROUTE, &mut resources),
         memory.read(RIGHT_ROUTE, &mut resources),
     ) {
-        (MemoryRead::Hit(a), MemoryRead::Hit(b)) => Some(a.and_state(b).test(0)),
+        (MemoryRead::Hit(a), MemoryRead::Hit(b)) => {
+            resources.charge_word_boolean_evals(1);
+            Some(a.and_state(b).test(0))
+        }
         _ => None,
     };
 
@@ -146,13 +154,19 @@ mod tests {
     }
 
     #[test]
-    fn copy_after_false_marker_is_an_explicit_miss() {
+    fn copy_after_false_marker_correctly_reports_explicit_miss() {
         let marker = BooleanState::from_bits(0);
         let payload = BooleanState::from_bits(0b1010_0110);
         let outcome = copy_after_marker::<8>(marker, payload);
-        assert!(!outcome.correct);
+        assert!(outcome.correct);
         assert_eq!(outcome.resources.memory_misses, 1);
         assert_eq!(outcome.resources.pairwise_comparisons, 0);
+    }
+
+    #[test]
+    fn missing_capacity_is_not_success_for_a_genuine_marker() {
+        let outcome = copy_after_marker::<0>(BooleanState::from_bits(1), BooleanState::from_bits(0));
+        assert!(!outcome.correct);
     }
 
     #[test]
@@ -161,6 +175,7 @@ mod tests {
             for right in [false, true] {
                 let outcome = two_fact_conjunction::<8>(left, right);
                 assert!(outcome.correct, "left={left}, right={right}");
+                assert_eq!(outcome.resources.word_boolean_evals, 1);
                 assert_eq!(outcome.resources.pairwise_comparisons, 0);
             }
         }
