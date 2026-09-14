@@ -149,7 +149,13 @@ fn charge(counter: &mut u64, amount: u64) {
 }
 
 fn encode(word: u64) -> [f64; WIDTH] {
-    std::array::from_fn(|bit| if word & (1_u64 << bit) == 0 { -1.0 } else { 1.0 })
+    std::array::from_fn(|bit| {
+        if word & (1_u64 << bit) == 0 {
+            -1.0
+        } else {
+            1.0
+        }
+    })
 }
 
 fn reserved<T>(capacity: usize) -> Result<Vec<T>, AttentionError> {
@@ -252,8 +258,13 @@ impl AttentionReference {
     #[must_use]
     pub fn footprint(&self) -> AttentionFootprint {
         let (entry_bits, bytes) = match &self.history {
-            History::Dense(entries) => (8192, entries.capacity() * std::mem::size_of::<DenseEntry>()),
-            History::Binary(entries) => (4160, entries.capacity() * std::mem::size_of::<BinaryEntry>()),
+            History::Dense(entries) => {
+                (8192, entries.capacity() * std::mem::size_of::<DenseEntry>())
+            }
+            History::Binary(entries) => (
+                4160,
+                entries.capacity() * std::mem::size_of::<BinaryEntry>(),
+            ),
         };
         AttentionFootprint {
             history_component_bits: self.config.history_capacity * entry_bits,
@@ -270,7 +281,10 @@ impl AttentionReference {
         if self.work.events >= self.config.max_events {
             return Err(AttentionError::EventBudgetExhausted);
         }
-        if let Event::Write { payload, marker, .. } = event {
+        if let Event::Write {
+            payload, marker, ..
+        } = event
+        {
             if marker.bits() > 3 {
                 return Err(AttentionError::InvalidMarker);
             }
@@ -283,12 +297,19 @@ impl AttentionReference {
         }
         let mut work = self.work;
         let output = match event {
-            Event::Write { key, payload, marker } => {
+            Event::Write {
+                key,
+                payload,
+                marker,
+            } => {
                 if marker.bits() == 1 {
                     let value = encode(payload.bits());
                     match &mut self.history {
                         History::Dense(entries) => {
-                            entries.push(DenseEntry { key: encode(key), value });
+                            entries.push(DenseEntry {
+                                key: encode(key),
+                                value,
+                            });
                             charge(&mut work.key_component_encodes, WIDTH as u64);
                         }
                         History::Binary(entries) => entries.push(BinaryEntry { key, value }),
@@ -372,7 +393,11 @@ impl AttentionReference {
             return Ok(MemoryRead::Miss);
         }
         let mut bits = 0_u64;
-        for (bit, &value) in values.iter().enumerate().take(usize::from(self.config.payload_bits)) {
+        for (bit, &value) in values
+            .iter()
+            .enumerate()
+            .take(usize::from(self.config.payload_bits))
+        {
             charge(&mut work.readout_comparisons, 1);
             if value > 0.0 {
                 bits |= 1_u64 << bit;
@@ -391,7 +416,10 @@ mod tests {
         for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
             let mut row = [1.0, invalid];
             let mut work = AttentionWork::default();
-            assert_eq!(normalize(&mut row, &mut work), Err(AttentionError::NonFiniteArithmetic));
+            assert_eq!(
+                normalize(&mut row, &mut work),
+                Err(AttentionError::NonFiniteArithmetic)
+            );
             assert_eq!(row[0], 1.0);
             assert_eq!(work, AttentionWork::default());
         }

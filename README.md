@@ -35,7 +35,7 @@ The result is a growing body of **code + preregistration + evaluator + provenanc
 | **TDI-10.x** | **Operator / Resolvent Research** | 🟠 Active | Generic Jacobi / tridiagonal operator work on shifted resolvents, Schur cavities, Green functions, finite transport and explicitly classified asymptotic claims. |
 | **TDI-11.x** | **Hallucination Dynamics & Control Research Programme** | 🟠 Active bootstrap | Studies supported vs unsupported generation in fully specified worlds, measurable precursors, causal perturbations, risk estimation and bounded adaptive verification / recovery / abstention. |
 | **TDI-12.x** | **Ordinal Universality of Operator Responses** | 🟠 Active Stage-0 bootstrap | Tests whether ordinal/rank relations among resolvent and Green response observables transport more stably than absolute calibration across dimension, coefficient family and perturbation regime. |
-| **TDI-21.x** | **Boolean Relational Architecture Research Programme** | 🟠 Active Stage-0 development | Audited Boolean routing and causal B2/B3 memory references with bounded probes, independent development oracles and explicit capacity failures; no attention or trained-model superiority claim. |
+| **TDI-21.x** | **Boolean Relational Architecture Research Programme** | 🟠 Active Stage-0 development | Isolated B0/B1 attention references, causal B2/B3 Boolean memories and two competence controls on shared public development inputs; no trained-model or matched-budget superiority claim. |
 
 The table currently surfaces the programme lines documented in this homepage plus TDI-21. It is not a claim that intermediate series numbers are absent; canonical programme files under [`docs/`](docs/) remain authoritative for series not yet summarized here.
 
@@ -96,8 +96,8 @@ Stage 0 does not authorize confirmatory populations, does not invent TDI-8.1 / T
 
 The candidate family is separated from its controls:
 
-- **B0** — conventional attention reference; baseline only, adapter not yet implemented;
-- **B1** — binary/Hamming attention reference; baseline only, adapter not yet implemented;
+- **B0** — floating Q/K dot-product attention; bounded identity/recency development adapter implemented, not a trained Transformer;
+- **B1** — equivalent packed-binary Q/K attention with the same f64 values and softmax; development control implemented, not a Boolean candidate;
 - **B2** — Boolean predicates plus bounded direct-address memory; causal development reference implemented;
 - **B3** — Boolean routing plus bounded two-way memory; causal development reference implemented with explicit eviction semantics;
 - **B4** — planned B3 plus learned or synthesized `F2` / algebraic-normal-form (Zhegalkin) relational composition;
@@ -110,6 +110,8 @@ TDI-21.0 remains **development-only, not frozen, with no confirmatory execution 
 The [causal B2/B3 reference](docs/TDI-21.0-CAUSAL-STREAM.md) processes writes, recalls, conjunctions and delay events without receiving the evaluator's answer. Development tests cover an independent dictionary oracle, all length-four streams over a seven-event alphabet, 4,096-event delays, overwritten facts, absent facts, marker rejection, bounded probes, reset and explicit capacity failures. These hand-written memories are **not trained language models**. B3's replacement metadata is charged separately; equal entry counts are not equal resource budgets. No quality or hardware-speed superiority is claimed. See [current status](docs/TDI-21.0-STATUS.md).
 
 The [shared development evaluator and competence controls](docs/TDI-21.0-EVALUATION-CONTROLS.md) now score evaluator-expected queries, so silence, truncated output and execution errors cannot improve the denominator. An independent prefix-history oracle is separate from both candidate memory and the exact-dictionary control. B2/B3 share an explicit memory-substrate ceiling that includes B3 replacement bits; the dictionary and no-memory controls are not mislabeled attention baselines or matched total-resource competitors. Reports preserve wrong values, false hits, forgotten facts and omitted replies separately.
+
+The [isolated B0/B1 attention references](docs/TDI-21.0-ATTENTION-REFERENCES.md) implement numerical versus XOR/POPCOUNT Q/K scores, stable softmax, weighted values and explicit absence readout without receiving oracle answers. Tests cover 2,145 query-containing four-event strings, 64-bit identities, 256 overrides, delays, capacity rejection and separate native counters. A six-mechanism example uses the same public inputs for B0/B1/B2/B3 and both competence controls. Its attention-history reservations and Boolean memory ceilings are explicitly **not matched total budgets**; these hand-constructed controls do not establish learned semantic addressing, model quality or hardware speedups. B4/B5 learning and competent trained-model comparisons remain future work.
 
 Reproduce the non-final software fixtures from a clean checkout:
 
