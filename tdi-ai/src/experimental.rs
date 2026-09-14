@@ -22,3 +22,5 @@ pub mod boolean_policy_search_calibration;
 pub mod boolean_policy_synthesis;
 #[path = "development_campaign.rs"]
 pub mod development_campaign;
+#[path = "tdi21_boolean_relational.rs"]
+pub mod tdi21;
