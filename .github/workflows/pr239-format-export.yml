@@ -26,10 +26,14 @@ jobs:
       - name: Apply exact rustfmt output
         run: |
           cargo fmt --all
-          mkdir -p target/pr239-format-export/tdi-ai/src target/pr239-format-export/tdi-ai/examples
-          cp tdi-ai/src/boolean_policy_sensitivity.rs target/pr239-format-export/tdi-ai/src/
-          cp tdi-ai/src/experimental.rs target/pr239-format-export/tdi-ai/src/
-          cp tdi-ai/examples/boolean_c3_sensitivity.rs target/pr239-format-export/tdi-ai/examples/
+          mkdir -p target/pr239-format-export
+          git diff --name-only > target/pr239-format-export/changed-files.txt
+          git diff --binary > target/pr239-format-export/rustfmt.diff
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            mkdir -p "target/pr239-format-export/$(dirname "$path")"
+            cp "$path" "target/pr239-format-export/$path"
+          done < target/pr239-format-export/changed-files.txt
           cargo fmt --all -- --check
       - uses: actions/upload-artifact@v4
         with:
