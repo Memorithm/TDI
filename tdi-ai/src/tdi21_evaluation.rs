@@ -110,9 +110,14 @@ impl ScoreCard {
         expected: StepOutput,
         observed: Result<StepOutput, StreamError>,
     ) -> Result<(), EvaluationError> {
-        let events = self.events.checked_add(1).ok_or(EvaluationError::CounterOverflow)?;
+        let events = self
+            .events
+            .checked_add(1)
+            .ok_or(EvaluationError::CounterOverflow)?;
         let index = classify(expected, observed) as usize;
-        let count = self.counts[index].checked_add(1).ok_or(EvaluationError::CounterOverflow)?;
+        let count = self.counts[index]
+            .checked_add(1)
+            .ok_or(EvaluationError::CounterOverflow)?;
         self.counts[index] = count;
         self.events = events;
         Ok(())
@@ -178,7 +183,12 @@ fn oracle_lookup(
             return Err(EvaluationError::OracleBudgetExceeded);
         }
         *probes += 1;
-        if let Event::Write { key: stored, payload, marker } = *event {
+        if let Event::Write {
+            key: stored,
+            payload,
+            marker,
+        } = *event
+        {
             if stored == key && marker.bits() == 1 {
                 return Ok(Some(payload.bits()));
             }
@@ -212,7 +222,9 @@ impl DevelopmentEpisode {
         let mut queries = 0;
         for (index, event) in events.iter().enumerate() {
             match *event {
-                Event::Write { payload, marker, .. } => {
+                Event::Write {
+                    payload, marker, ..
+                } => {
                     if marker.bits() > 3
                         || (payload_bits < 64 && payload.bits() >> payload_bits != 0)
                     {
@@ -233,10 +245,14 @@ impl DevelopmentEpisode {
             return Err(EvaluationError::NoQueries);
         }
         let mut owned = Vec::new();
-        owned.try_reserve_exact(events.len()).map_err(|_| EvaluationError::AllocationFailed)?;
+        owned
+            .try_reserve_exact(events.len())
+            .map_err(|_| EvaluationError::AllocationFailed)?;
         owned.extend_from_slice(events);
         let mut expected = Vec::new();
-        expected.try_reserve_exact(events.len()).map_err(|_| EvaluationError::AllocationFailed)?;
+        expected
+            .try_reserve_exact(events.len())
+            .map_err(|_| EvaluationError::AllocationFailed)?;
         let mut probes = 0;
         for (index, event) in events.iter().enumerate() {
             let prefix = &events[..index];
@@ -251,7 +267,12 @@ impl DevelopmentEpisode {
             };
             expected.push(output);
         }
-        Ok(Self { events: owned, expected, payload_bits, oracle_probes: probes })
+        Ok(Self {
+            events: owned,
+            expected,
+            payload_bits,
+            oracle_probes: probes,
+        })
     }
 
     /// Original public inputs only; no oracle answers are exposed here.
@@ -288,7 +309,12 @@ pub fn substrate_bits(mode: MemoryMode, slots: usize) -> Result<usize, Evaluatio
     if slots == 0 || slots > MAX_SLOTS || (mode == MemoryMode::TwoWay && slots % 2 != 0) {
         return Err(EvaluationError::InvalidSlotCount);
     }
-    Ok(slots * 129 + if mode == MemoryMode::TwoWay { slots / 2 } else { 0 })
+    Ok(slots * 129
+        + if mode == MemoryMode::TwoWay {
+            slots / 2
+        } else {
+            0
+        })
 }
 
 /// Maximum entries under a COMMON memory-substrate ceiling, charging B3 metadata.
@@ -352,7 +378,13 @@ pub fn evaluate_boolean(
     {
         return Err(EvaluationError::CandidateAccountingMismatch);
     }
-    Ok(BooleanReport { config, ceiling_bits, score, counters, footprint })
+    Ok(BooleanReport {
+        config,
+        ceiling_bits,
+        score,
+        counters,
+        footprint,
+    })
 }
 
 /// Task-competence controls, deliberately outside the B0-B5 architecture ladder.
@@ -418,7 +450,11 @@ fn control_step(
         };
     }
     match event {
-        Event::Write { key, payload, marker } => {
+        Event::Write {
+            key,
+            payload,
+            marker,
+        } => {
             if marker.bits() == 1 {
                 work.map_writes += 1;
                 facts.insert(key, payload.bits());

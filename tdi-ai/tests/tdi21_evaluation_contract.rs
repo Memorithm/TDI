@@ -2,8 +2,8 @@
 
 use tdi_ai::experimental::tdi21::{BooleanState, MemoryRead};
 use tdi_ai::experimental::tdi21_evaluation::{
-    ControlArm, DevelopmentEpisode, EvaluationError, Outcome, ScoreCard,
-    evaluate_boolean, evaluate_control, fit_slots, substrate_bits,
+    ControlArm, DevelopmentEpisode, EvaluationError, Outcome, ScoreCard, evaluate_boolean,
+    evaluate_control, fit_slots, substrate_bits,
 };
 use tdi_ai::experimental::tdi21_stream::{
     Event, MemoryMode, StepOutput, StreamConfig, StreamError,
@@ -65,7 +65,9 @@ fn each_outcome_has_its_own_category_and_fixed_query_denominator() {
 fn zero_queries_silence_and_truncated_outputs_never_pass() {
     let mut score = ScoreCard::default();
     assert_eq!(score.accuracy_ratio(), None);
-    score.record(StepOutput::Quiet, Ok(StepOutput::Quiet)).unwrap();
+    score
+        .record(StepOutput::Quiet, Ok(StepOutput::Quiet))
+        .unwrap();
     assert!(!score.all_correct());
     let events = [write(7, 0, 1), Event::Recall { key: 7 }];
     let episode = DevelopmentEpisode::new(&events, 8).unwrap();
@@ -112,9 +114,19 @@ fn independent_oracle_respects_prefixes_markers_overrides_and_zero() {
     ];
     let episode = DevelopmentEpisode::new(&events, 8).unwrap();
     let outputs = [
-        miss(), StepOutput::Quiet, hit(0), StepOutput::Quiet, hit(0),
-        StepOutput::Quiet, hit(5), miss(), StepOutput::Quiet, hit(1), miss(),
-    ].map(Ok);
+        miss(),
+        StepOutput::Quiet,
+        hit(0),
+        StepOutput::Quiet,
+        hit(0),
+        StepOutput::Quiet,
+        hit(5),
+        miss(),
+        StepOutput::Quiet,
+        hit(1),
+        miss(),
+    ]
+    .map(Ok);
     let score = episode.score_outputs(&outputs).unwrap();
     assert!(score.all_correct());
     assert_eq!(score.accuracy_ratio(), Some((7, 7)));
@@ -146,9 +158,15 @@ fn common_memory_ceiling_charges_the_extra_replacement_bits() {
     }
     for mode in [MemoryMode::Direct, MemoryMode::TwoWay] {
         assert_eq!(fit_slots(mode, usize::MAX), Ok(4096));
-        assert_eq!(substrate_bits(mode, usize::MAX), Err(EvaluationError::InvalidSlotCount));
+        assert_eq!(
+            substrate_bits(mode, usize::MAX),
+            Err(EvaluationError::InvalidSlotCount)
+        );
     }
-    assert_eq!(substrate_bits(MemoryMode::TwoWay, 3), Err(EvaluationError::InvalidSlotCount));
+    assert_eq!(
+        substrate_bits(MemoryMode::TwoWay, 3),
+        Err(EvaluationError::InvalidSlotCount)
+    );
 }
 
 #[test]
@@ -181,8 +199,12 @@ fn candidate_runs_check_envelopes_before_execution() {
 #[test]
 fn capacity_failure_is_scored_against_truth_not_surviving_memory() {
     let events = [
-        write(1, 1, 1), write(5, 0, 1), write(9, 3, 1),
-        Event::Recall { key: 1 }, Event::Recall { key: 5 }, Event::Recall { key: 9 },
+        write(1, 1, 1),
+        write(5, 0, 1),
+        write(9, 3, 1),
+        Event::Recall { key: 1 },
+        Event::Recall { key: 5 },
+        Event::Recall { key: 9 },
     ];
     let episode = DevelopmentEpisode::new(&events, 8).unwrap();
     let direct = evaluate_boolean(&episode, config(MemoryMode::Direct, 518), 518).unwrap();
@@ -201,7 +223,10 @@ fn capacity_failure_is_scored_against_truth_not_surviving_memory() {
 #[test]
 fn reverse_control_preserves_two_way_nondominance() {
     let events = [
-        write(1, 1, 1), write(3, 3, 1), write(5, 5, 1), write(9, 9, 1),
+        write(1, 1, 1),
+        write(3, 3, 1),
+        write(5, 5, 1),
+        write(9, 9, 1),
         Event::Recall { key: 3 },
     ];
     let episode = DevelopmentEpisode::new(&events, 8).unwrap();
@@ -213,7 +238,10 @@ fn reverse_control_preserves_two_way_nondominance() {
 
 #[test]
 fn episodes_fail_closed_on_invalid_inputs_and_excess_oracle_work() {
-    assert_eq!(DevelopmentEpisode::new(&[], 8), Err(EvaluationError::EmptyEpisode));
+    assert_eq!(
+        DevelopmentEpisode::new(&[], 8),
+        Err(EvaluationError::EmptyEpisode)
+    );
     assert_eq!(
         DevelopmentEpisode::new(&[Event::Ignore], 8),
         Err(EvaluationError::NoQueries)
@@ -231,7 +259,10 @@ fn episodes_fail_closed_on_invalid_inputs_and_excess_oracle_work() {
         );
     }
     let long = vec![Event::Recall { key: 0 }; 16_385];
-    assert_eq!(DevelopmentEpisode::new(&long, 8), Err(EvaluationError::TooManyEvents));
+    assert_eq!(
+        DevelopmentEpisode::new(&long, 8),
+        Err(EvaluationError::TooManyEvents)
+    );
     let expensive = vec![Event::Recall { key: 0 }; 2000];
     assert_eq!(
         DevelopmentEpisode::new(&expensive, 8),
@@ -239,15 +270,23 @@ fn episodes_fail_closed_on_invalid_inputs_and_excess_oracle_work() {
     );
     let mut writes = vec![write(0, 0, 1); 4097];
     writes.push(Event::Recall { key: 0 });
-    assert_eq!(DevelopmentEpisode::new(&writes, 8), Err(EvaluationError::TooManyWrites));
+    assert_eq!(
+        DevelopmentEpisode::new(&writes, 8),
+        Err(EvaluationError::TooManyWrites)
+    );
 }
 
 #[test]
 fn exhaustive_three_event_development_controls_keep_the_oracle_independent() {
     let alphabet = [
-        write(0, 0, 1), write(0, 3, 1), write(1, 1, 1), write(1, 7, 3),
-        Event::Recall { key: 0 }, Event::Recall { key: 1 },
-        Event::Conjunction { left: 0, right: 1 }, Event::Ignore,
+        write(0, 0, 1),
+        write(0, 3, 1),
+        write(1, 1, 1),
+        write(1, 7, 3),
+        Event::Recall { key: 0 },
+        Event::Recall { key: 1 },
+        Event::Conjunction { left: 0, right: 1 },
+        Event::Ignore,
     ];
     let mut query_episodes = 0;
     for mut code in 0..8_usize.pow(3) {

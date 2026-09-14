@@ -3,8 +3,8 @@
 
 use tdi_ai::experimental::tdi21::{BooleanState, EvidenceRecord, RunManifest};
 use tdi_ai::experimental::tdi21_evaluation::{
-    ControlArm, DevelopmentEpisode, EVALUATION_SEMANTICS, Outcome, ScoreCard,
-    evaluate_boolean, evaluate_control, fit_slots,
+    ControlArm, DevelopmentEpisode, EVALUATION_SEMANTICS, Outcome, ScoreCard, evaluate_boolean,
+    evaluate_control, fit_slots,
 };
 use tdi_ai::experimental::tdi21_provenance::canonical_evidence_record;
 use tdi_ai::experimental::tdi21_stream::{Event, MemoryMode, STREAM_SEMANTICS, StreamConfig};
@@ -125,18 +125,24 @@ fn main() {
             );
             print_score(&report.score);
             let expected_correct = if mode == MemoryMode::Direct { b2 } else { b3 };
-            assert_eq!(report.score.accuracy_ratio(), Some((expected_correct, queries)));
+            assert_eq!(
+                report.score.accuracy_ratio(),
+                Some((expected_correct, queries))
+            );
             assert_eq!(report.counters.work.pairwise_comparisons, 0);
         }
         for arm in [ControlArm::NoMemory, ControlArm::ExactDictionary] {
             let report = evaluate_control(&episode, arm).unwrap();
             println!(
                 "fixture={id};control={arm:?};matched_memory_budget=false;entry_payload_bits_lower_bound={};native_map_work={:?}",
-                report.entry_payload_bits_lower_bound,
-                report.work,
+                report.entry_payload_bits_lower_bound, report.work,
             );
             print_score(&report.score);
-            let expected = if arm == ControlArm::NoMemory { absences } else { queries };
+            let expected = if arm == ControlArm::NoMemory {
+                absences
+            } else {
+                queries
+            };
             assert_eq!(report.score.accuracy_ratio(), Some((expected, queries)));
         }
     }
