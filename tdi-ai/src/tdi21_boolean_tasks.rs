@@ -93,7 +93,7 @@ pub fn two_fact_conjunction<const SLOTS: usize>(left: bool, right: bool) -> Task
         memory.read(LEFT_ROUTE, &mut resources),
         memory.read(RIGHT_ROUTE, &mut resources),
     ) {
-        (MemoryRead::Hit(a), MemoryRead::Hit(b)) => Some(a.bitand(b).test(0)),
+        (MemoryRead::Hit(a), MemoryRead::Hit(b)) => Some(a.and_state(b).test(0)),
         _ => None,
     };
 
