@@ -35,8 +35,7 @@ impl ArchitectureArm {
     }
 }
 
-/// Declaration used to fail closed when a candidate attempts to enable a
-/// mechanism prohibited by the TDI-21 research contract.
+/// A caller declaration, not an inspection or attestation of executed code.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ForbiddenMechanisms {
     pub qkv_projection: bool,
@@ -72,8 +71,9 @@ pub enum CandidateValidationError {
     ZeroMemorySlots,
 }
 
-/// Stage-0 candidate configuration. The 64-bit state ceiling is deliberate:
-/// bootstrap semantics stay small enough for exhaustive deterministic tests.
+/// Stage-0 declaration. The 64-bit ceiling bounds representation width; it
+/// does not make exhaustive enumeration of all 64-bit states practical.
+/// Declaring B3-B5 does not by itself implement or qualify those arms.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CandidateConfig {
     pub arm: ArchitectureArm,
@@ -103,7 +103,8 @@ impl CandidateConfig {
     }
 }
 
-/// Fixed-width Stage-0 Boolean state.
+/// Fixed-width Stage-0 Boolean storage. Raw operations are not instrumented;
+/// callers must use counted operations when exporting work measurements.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct BooleanState(u64);
 
@@ -162,9 +163,16 @@ impl Literal {
     const fn evaluate(self, state: BooleanState) -> bool {
         match self {
             Self::Bit(bit) => state.test(bit),
-            Self::NotBit(bit) => !state.test(bit),
+            // An invalid index is not a false proposition that can be negated.
+            Self::NotBit(bit) => bit < 64 && !state.test(bit),
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClauseValidationError {
+    InvalidWidth,
+    BitOutOfRange(u8),
 }
 
 /// A deterministic conjunction of Boolean literals.
@@ -174,9 +182,23 @@ pub struct Clause<const N: usize> {
 }
 
 impl<const N: usize> Clause<N> {
+    /// Check every literal, including those hidden behind short-circuiting.
+    pub fn validate(&self, width_bits: u8) -> Result<(), ClauseValidationError> {
+        if width_bits == 0 || width_bits > 64 {
+            return Err(ClauseValidationError::InvalidWidth);
+        }
+        for literal in &self.literals {
+            let (Literal::Bit(bit) | Literal::NotBit(bit)) = *literal;
+            if bit >= width_bits {
+                return Err(ClauseValidationError::BitOutOfRange(bit));
+            }
+        }
+        Ok(())
+    }
+
     pub fn evaluate(&self, state: BooleanState, counters: &mut ResourceCounters) -> bool {
         for &literal in &self.literals {
-            counters.boolean_primitive_evals += 1;
+            charge(&mut counters.boolean_primitive_evals, 1);
             if !literal.evaluate(state) {
                 return false;
             }
@@ -185,12 +207,27 @@ impl<const N: usize> Clause<N> {
     }
 }
 
-/// Semantic work counters. They intentionally keep pairwise comparisons
-/// separate rather than converting unlike operations to a fabricated FLOP
-/// equivalent.
+/// Checked accounting: exhaustion aborts the run instead of wrapping into
+/// apparently valid evidence. No saturated counter is reported as exact.
+fn charge(counter: &mut u64, amount: u64) {
+    *counter = counter
+        .checked_add(amount)
+        .expect("TDI-21 counter overflow");
+}
+
+/// Separate semantic work categories, not a fabricated FLOP or hardware cost.
+/// `boolean_primitive_evals` counts literal evaluations, including negated ones.
+/// `word_boolean_evals` counts explicitly instrumented u64 bitwise/shift ops.
+/// Address derivations, full-tag equality checks and ANF terms are separate.
+/// A zero pairwise counter is only a declaration-consistency check: arbitrary
+/// caller code cannot be certified attention-free by a mutable counter.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ResourceCounters {
     pub boolean_primitive_evals: u64,
+    pub word_boolean_evals: u64,
+    pub address_derivations: u64,
+    pub tag_equality_checks: u64,
+    pub anf_term_evals: u64,
     pub route_activations: u64,
     pub memory_reads: u64,
     pub memory_writes: u64,
@@ -201,10 +238,15 @@ pub struct ResourceCounters {
 }
 
 impl ResourceCounters {
-    /// B2-B5 runs fail closed if a pairwise token comparison is recorded.
+    /// Reject recorded token-pair scoring. This is not execution attestation.
     #[must_use]
     pub const fn candidate_is_pairwise_free(&self) -> bool {
         self.pairwise_comparisons == 0
+    }
+
+    /// Record explicitly executed packed-word Boolean operations.
+    pub fn charge_word_boolean_evals(&mut self, amount: u64) {
+        charge(&mut self.word_boolean_evals, amount);
     }
 }
 
@@ -224,7 +266,8 @@ struct Slot {
 ///
 /// Address selection is independent of sequence length. A full tag separates a
 /// genuine hit from an address collision; the implementation never scans prior
-/// tokens to find a match.
+/// tokens to find a match. A zero-slot fixture reports misses; operational
+/// constructors must reject zero capacity before execution.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DirectAddressMemory<const SLOTS: usize> {
     slots: [Option<Slot>; SLOTS],
@@ -244,60 +287,76 @@ impl<const SLOTS: usize> DirectAddressMemory<SLOTS> {
         if SLOTS == 0 {
             None
         } else {
-            Some((tag as usize) % SLOTS)
+            // Reduce BEFORE narrowing: identical semantics on 32/64-bit hosts.
+            Some(((tag as u128) % (SLOTS as u128)) as usize)
         }
     }
 
     pub fn write(&mut self, tag: u64, value: BooleanState, counters: &mut ResourceCounters) {
-        counters.memory_writes += 1;
+        charge(&mut counters.memory_writes, 1);
         let Some(index) = Self::index(tag) else {
-            counters.memory_misses += 1;
+            charge(&mut counters.memory_misses, 1);
             return;
         };
 
         if let Some(previous) = self.slots[index] {
+            charge(&mut counters.tag_equality_checks, 1);
             if previous.tag != tag {
-                counters.memory_collisions += 1;
-                counters.memory_replacements += 1;
+                charge(&mut counters.memory_collisions, 1);
+                charge(&mut counters.memory_replacements, 1);
             }
         }
         self.slots[index] = Some(Slot { tag, value });
     }
 
     pub fn read(&self, tag: u64, counters: &mut ResourceCounters) -> MemoryRead {
-        counters.memory_reads += 1;
+        charge(&mut counters.memory_reads, 1);
         let Some(index) = Self::index(tag) else {
-            counters.memory_misses += 1;
+            charge(&mut counters.memory_misses, 1);
             return MemoryRead::Miss;
         };
 
-        match self.slots[index] {
-            Some(slot) if slot.tag == tag => MemoryRead::Hit(slot.value),
-            _ => {
-                counters.memory_misses += 1;
-                MemoryRead::Miss
+        if let Some(slot) = self.slots[index] {
+            charge(&mut counters.tag_equality_checks, 1);
+            if slot.tag == tag {
+                return MemoryRead::Hit(slot.value);
             }
         }
+        charge(&mut counters.memory_misses, 1);
+        MemoryRead::Miss
     }
 
-    /// Exact semantic payload accounting for Stage 0: one occupancy bit, one
-    /// 64-bit tag, and one 64-bit Boolean state per slot. This is deliberately
-    /// not a claim about Rust struct padding or physical allocator overhead.
+    /// One occupancy bit, one 64-bit tag and one 64-bit payload per slot.
+    /// This is not Rust padding, allocator overhead, evaluator storage or a
+    /// complete architecture-memory claim. Overflow fails in every build mode.
     #[must_use]
     pub const fn peak_semantic_memory_bits() -> usize {
-        SLOTS * 129
+        SLOTS
+            .checked_mul(129)
+            .expect("TDI-21 memory accounting overflow")
     }
 }
 
-/// Direct Boolean route mixer. XOR and rotations are deterministic bit
-/// operations; this maps the current state to an address tag without comparing
-/// that state against stored tokens.
+/// Versioned route semantics. V1 used XOR with rotations and lost information.
+pub const ROUTE_SEMANTICS: &str = "tdi21-xorshift64-v2";
+
+/// Bijective for every fixed salt. Each XOR-shift is triangular over GF(2)
+/// with unit diagonal and therefore invertible. Reducing the returned tag to a
+/// memory slot can still collide; memory must retain and check the full tag.
+/// This is neither cryptographic hashing nor learned semantic addressing.
 #[must_use]
 pub const fn route_tag(state: BooleanState, salt: u64) -> u64 {
     let mut value = state.bits() ^ salt;
-    value ^= value.rotate_left(13);
-    value ^= value.rotate_right(7);
-    value ^ value.rotate_left(17)
+    value ^= value << 13;
+    value ^= value >> 7;
+    value ^ (value << 17)
+}
+
+pub fn counted_route_tag(state: BooleanState, salt: u64, counters: &mut ResourceCounters) -> u64 {
+    charge(&mut counters.address_derivations, 1);
+    // Salt XOR, three shifts, three XORs. Not seven CPU-cycle claims.
+    counters.charge_word_boolean_evals(7);
+    route_tag(state, salt)
 }
 
 pub fn activate_route<const N: usize>(
@@ -307,13 +366,13 @@ pub fn activate_route<const N: usize>(
 ) -> bool {
     let active = clause.evaluate(state, counters);
     if active {
-        counters.route_activations += 1;
+        charge(&mut counters.route_activations, 1);
     }
     active
 }
 
 /// One algebraic-normal-form monomial over GF(2). A set bit selects a Boolean
-/// variable participating in the product term.
+/// variable participating in the product term. The empty product is true.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AnfTerm {
     pub variables: u64,
@@ -326,12 +385,26 @@ impl AnfTerm {
     }
 }
 
-/// Evaluate a Zhegalkin/algebraic-normal-form expression as XOR of Boolean
-/// product terms. No numeric attention score is produced.
+/// Raw ANF evaluation. Use the counted variant for exported work measurements.
 #[must_use]
 pub fn evaluate_anf(constant: bool, terms: &[AnfTerm], assignment: u64) -> bool {
     let mut value = constant;
     for &term in terms {
+        value ^= term.evaluate(assignment);
+    }
+    value
+}
+
+/// Counts terms separately from literal or packed-word operation categories.
+pub fn counted_evaluate_anf(
+    constant: bool,
+    terms: &[AnfTerm],
+    assignment: u64,
+    counters: &mut ResourceCounters,
+) -> bool {
+    let mut value = constant;
+    for &term in terms {
+        charge(&mut counters.anf_term_evals, 1);
         value ^= term.evaluate(assignment);
     }
     value
@@ -354,19 +427,30 @@ pub struct EvidenceRecord {
 }
 
 impl EvidenceRecord {
+    /// Check declared dimensions and recorded pairwise work, not arbitrary code
+    /// execution or the availability/qualification of the declared arm.
     #[must_use]
     pub const fn candidate_structurally_valid(&self) -> bool {
-        self.manifest.arm.is_boolean_candidate() && self.resources.candidate_is_pairwise_free()
+        self.manifest.arm.is_boolean_candidate()
+            && self.manifest.sequence_len > 0
+            && self.manifest.state_width_bits > 0
+            && self.manifest.state_width_bits <= 64
+            && self.manifest.memory_slots > 0
+            && self.resources.candidate_is_pairwise_free()
     }
 }
 
-/// Deterministic Stage-0 delayed recall fixture.
+/// Two-event round-trip smoke fixture, NOT a long-delay recall experiment.
 #[must_use]
 pub fn delayed_bit_recall<const SLOTS: usize>(key: u64, value: bool) -> EvidenceRecord {
     let mut memory = DirectAddressMemory::<SLOTS>::default();
     let mut resources = ResourceCounters::default();
     let encoded = BooleanState::from_bits(if value { 1 } else { 0 });
-    let tag = route_tag(BooleanState::from_bits(key), 0x5444_4932_3100_0001);
+    let tag = counted_route_tag(
+        BooleanState::from_bits(key),
+        0x5444_4932_3100_0001,
+        &mut resources,
+    );
 
     memory.write(tag, encoded, &mut resources);
     let correct = matches!(
@@ -469,6 +553,7 @@ mod tests {
         let terms = [AnfTerm { variables: 0b01 }, AnfTerm { variables: 0b11 }];
         assert!(evaluate_anf(true, &terms, 0b00));
         assert!(!evaluate_anf(true, &terms, 0b01));
+        assert!(evaluate_anf(true, &terms, 0b10));
         assert!(evaluate_anf(true, &terms, 0b11));
     }
 

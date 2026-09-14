@@ -3,6 +3,8 @@
 //! No scientific values are pinned here. Missing fields remain explicit until a
 //! later preregistration chooses them under the TDI evidence discipline.
 
+use std::collections::BTreeSet;
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FreezeTemplate {
     pub sequence_lengths: Option<Vec<usize>>,
@@ -21,14 +23,21 @@ pub enum FreezeTemplateError {
     UnresolvedField(&'static str),
     EmptyField(&'static str),
     ZeroValue(&'static str),
+    DuplicateValue(&'static str),
     StateWidthExceedsBootstrapLimit,
     ConfirmatoryExecutionPremature,
 }
 
+fn check_unique<T: Ord>(values: &[T], field: &'static str) -> Result<(), FreezeTemplateError> {
+    if values.iter().collect::<BTreeSet<_>>().len() != values.len() {
+        return Err(FreezeTemplateError::DuplicateValue(field));
+    }
+    Ok(())
+}
+
 impl FreezeTemplate {
-    /// Validate that a prospective TDI-21.1 configuration has resolved all
-    /// required fields. Passing this method does not freeze or authorize an
-    /// experiment; it only proves that no required bootstrap field is absent.
+    /// Check structure only. Nonempty rule names do not establish a protocol,
+    /// prove split disjointness, freeze an artifact or authorize an experiment.
     pub fn validate_resolved(&self) -> Result<(), FreezeTemplateError> {
         if self.confirmatory_execution_authorized {
             return Err(FreezeTemplateError::ConfirmatoryExecutionPremature);
@@ -80,13 +89,13 @@ impl FreezeTemplate {
         if development_seeds.is_empty() {
             return Err(FreezeTemplateError::EmptyField("development_seeds"));
         }
-        if acceptance_rule_id.is_empty() {
+        if acceptance_rule_id.trim().is_empty() {
             return Err(FreezeTemplateError::EmptyField("acceptance_rule_id"));
         }
-        if development_split_id.is_empty() {
+        if development_split_id.trim().is_empty() {
             return Err(FreezeTemplateError::EmptyField("development_split_id"));
         }
-        if future_holdout_rule_id.is_empty() {
+        if future_holdout_rule_id.trim().is_empty() {
             return Err(FreezeTemplateError::EmptyField("future_holdout_rule_id"));
         }
 
@@ -105,6 +114,10 @@ impl FreezeTemplate {
         if state_width_bits.iter().any(|&width| width > 64) {
             return Err(FreezeTemplateError::StateWidthExceedsBootstrapLimit);
         }
+        check_unique(sequence_lengths, "sequence_lengths")?;
+        check_unique(state_width_bits, "state_width_bits")?;
+        check_unique(memory_slots, "memory_slots")?;
+        check_unique(development_seeds, "development_seeds")?;
 
         Ok(())
     }
@@ -116,8 +129,7 @@ mod tests {
 
     fn synthetic_resolved_template() -> FreezeTemplate {
         FreezeTemplate {
-            // Synthetic unit-test values only; these are not TDI-21 scientific
-            // pins and are deliberately confined to the test fixture.
+            // Synthetic unit-test values only, not scientific pins.
             sequence_lengths: Some(vec![1]),
             state_width_bits: Some(vec![1]),
             memory_slots: Some(vec![1]),
@@ -161,5 +173,22 @@ mod tests {
             template.validate_resolved(),
             Err(FreezeTemplateError::StateWidthExceedsBootstrapLimit)
         );
+    }
+
+    #[test]
+    fn duplicate_grids_and_blank_rule_names_fail_closed() {
+        for field in 0..7 {
+            let mut template = synthetic_resolved_template();
+            match field {
+                0 => template.sequence_lengths = Some(vec![1, 1]),
+                1 => template.state_width_bits = Some(vec![1, 1]),
+                2 => template.memory_slots = Some(vec![1, 1]),
+                3 => template.development_seeds = Some(vec![0, 0]),
+                4 => template.acceptance_rule_id = Some(" \t".to_owned()),
+                5 => template.development_split_id = Some("\n".to_owned()),
+                _ => template.future_holdout_rule_id = Some(" \r".to_owned()),
+            }
+            assert!(template.validate_resolved().is_err(), "field={field}");
+        }
     }
 }
