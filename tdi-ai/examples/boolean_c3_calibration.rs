@@ -65,7 +65,8 @@ fn reference_carrier() -> Carrier {
 }
 
 fn candidate_population() -> Result<Vec<BooleanPolicySearchCandidate>> {
-    let mut candidates = generate_c3_single_rule_baselines(&SynthesisSearchEnvelope::reference_c3())?;
+    let mut candidates =
+        generate_c3_single_rule_baselines(&SynthesisSearchEnvelope::reference_c3())?;
     candidates.push(BooleanPolicySearchCandidate {
         candidate_id: FULL_POLICY_ID.to_owned(),
         policy: reference_c3_policy()?,
@@ -108,8 +109,7 @@ fn calibrate(
         let matrix = confusion_matrix(candidate, &carrier.cases)?;
         let total: u64 = matrix.iter().flatten().sum();
         let correct: u64 = (0..4).map(|index| matrix[index][index]).sum();
-        if total != u64::try_from(carrier.cases.len())?
-            || total - correct != row.action_mismatches
+        if total != u64::try_from(carrier.cases.len())? || total - correct != row.action_mismatches
         {
             return Err("action matrix and shared search evidence disagree".into());
         }
@@ -181,7 +181,11 @@ mod tests {
         let counts: Vec<usize> = ACTIONS
             .iter()
             .map(|action| {
-                carrier.cases.iter().filter(|case| case.expected_action == *action).count()
+                carrier
+                    .cases
+                    .iter()
+                    .filter(|case| case.expected_action == *action)
+                    .count()
             })
             .collect();
         assert_eq!(counts, vec![48, 16, 16, 40]);
@@ -224,7 +228,11 @@ mod tests {
         let candidates = candidate_population().unwrap();
         let evidence = calibrate(&carrier, &candidates).unwrap();
         assert_eq!(evidence.len(), 28);
-        let best_error = evidence[..27].iter().map(|row| row.action_mismatches).min().unwrap();
+        let best_error = evidence[..27]
+            .iter()
+            .map(|row| row.action_mismatches)
+            .min()
+            .unwrap();
         assert_eq!(best_error, 40);
         let best: Vec<usize> = (0..27)
             .filter(|&index| evidence[index].action_mismatches == best_error)
@@ -235,7 +243,10 @@ mod tests {
             confusion_matrix(&candidates[18], &carrier.cases).unwrap(),
             [[48, 0, 0, 0], [16, 0, 0, 0], [16, 0, 0, 0], [8, 0, 0, 32]],
         );
-        assert_eq!(policy_search_pareto_indices(&evidence).unwrap(), vec![18, 27]);
+        assert_eq!(
+            policy_search_pareto_indices(&evidence).unwrap(),
+            vec![18, 27]
+        );
     }
 
     #[test]
