@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fail-closed TDI-9.3.0 representation-calibration gate.
+# Fail-closed TDI-9.3 representation and search-calibration gate.
 # Verifies exhaustive C2 + well-formed C3 truth-table equivalence tests,
 # synthesis envelopes, fail-closed mutation, C2↔C3 joint invariants,
 # complexity dominance, and non-pinning docs.
@@ -7,7 +7,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-fail() { echo "TDI-9.3.0 calibration ERROR: $*" >&2; exit 1; }
+fail() { echo "TDI-9.3 calibration ERROR: $*" >&2; exit 1; }
 
 test -s docs/TDI-9.3-BOOLEAN-POLICY-SYNTHESIS.md \
   || fail "missing TDI-9.3 design doc"
@@ -53,5 +53,9 @@ python3 scripts/check-tdi9.1-configuration-freeze.py \
 
 cargo test -p tdi-ai --all-features --lib boolean_policy_synthesis \
   || fail "boolean_policy_synthesis tests failed"
+cargo test --locked -p tdi-ai --features experimental --example boolean_c3_calibration \
+  || fail "C3 search calibration tests failed"
+cargo run --locked -p tdi-ai --features experimental --example boolean_c3_calibration \
+  || fail "C3 search calibration report failed"
 
-echo "TDI-9.3.0 representation calibration: PASS"
+echo "TDI-9.3 representation and search calibration: PASS"
