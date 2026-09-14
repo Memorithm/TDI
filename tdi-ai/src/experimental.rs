@@ -20,6 +20,8 @@ pub mod boolean_policy_search;
 pub mod boolean_policy_search_c3;
 #[path = "boolean_policy_search_calibration.rs"]
 pub mod boolean_policy_search_calibration;
+#[path = "boolean_policy_sensitivity.rs"]
+pub mod boolean_policy_sensitivity;
 #[path = "boolean_policy_synthesis.rs"]
 pub mod boolean_policy_synthesis;
 #[path = "development_campaign.rs"]
