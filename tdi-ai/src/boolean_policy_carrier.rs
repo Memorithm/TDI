@@ -8,8 +8,7 @@ use core::fmt;
 
 use super::boolean_policy_synthesis::{
     BooleanDecision, BooleanPolicy, BooleanPolicyError, REFERENCE_C3_PREDICATE_COUNT,
-    SynthesisSearchEnvelope, reference_c3_predicates,
-    reference_c3_verifier_encoding_well_formed,
+    SynthesisSearchEnvelope, reference_c3_predicates, reference_c3_verifier_encoding_well_formed,
 };
 
 /// Version of the abstract predicate order, not a TDI-9.1 observation-vector pin.
@@ -28,13 +27,8 @@ pub struct ValidatedC3PredicateRow {
 /// Carrier failures remain distinct from candidate-policy admission failures.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum C3CarrierError {
-    PredicateArity {
-        expected: usize,
-        actual: usize,
-    },
-    InvalidVerifierEncoding {
-        active_states: usize,
-    },
+    PredicateArity { expected: usize, actual: usize },
+    InvalidVerifierEncoding { active_states: usize },
     UnrecoverableViolation,
     Policy(BooleanPolicyError),
 }
@@ -53,8 +47,8 @@ impl ValidatedC3PredicateRow {
                 actual: raw.len(),
             })?;
         use reference_c3_predicates::{
-            CHECKPOINT_AVAILABLE, REMAINING_WORK, VERIFIER_ABSENT,
-            VERIFIER_INDETERMINATE, VERIFIER_SATISFIED, VERIFIER_VIOLATED,
+            CHECKPOINT_AVAILABLE, REMAINING_WORK, VERIFIER_ABSENT, VERIFIER_INDETERMINATE,
+            VERIFIER_SATISFIED, VERIFIER_VIOLATED,
         };
         if !reference_c3_verifier_encoding_well_formed(&predicates) {
             let active_states = [
@@ -130,8 +124,8 @@ mod tests {
     use super::*;
     use crate::experimental::adaptive_inference::{InferenceAction, PolicyArm};
     use crate::experimental::boolean_policy_synthesis::{
-        BooleanActionRule, BooleanExpr, reference_c2_stop_policy,
-        reference_c3_hand_action, reference_c3_policy,
+        BooleanActionRule, BooleanExpr, reference_c2_stop_policy, reference_c3_hand_action,
+        reference_c3_policy,
     };
 
     #[test]
@@ -208,7 +202,11 @@ mod tests {
         let mut row = [false; 9];
         row[reference_c3_predicates::VERIFIER_ABSENT] = true;
         let validated = ValidatedC3PredicateRow::new(&row).unwrap();
-        assert!(validated.decide(&reference_c2_stop_policy().unwrap()).is_err());
+        assert!(
+            validated
+                .decide(&reference_c2_stop_policy().unwrap())
+                .is_err()
+        );
         let invalid = BooleanPolicy::new(
             PolicyArm::C3VerificationRecovery,
             vec![BooleanActionRule::new(
@@ -218,7 +216,10 @@ mod tests {
             InferenceAction::Continue,
         )
         .unwrap();
-        assert!(matches!(validated.decide(&invalid), Err(C3CarrierError::Policy(_))));
+        assert!(matches!(
+            validated.decide(&invalid),
+            Err(C3CarrierError::Policy(_))
+        ));
     }
 
     #[test]
@@ -234,7 +235,10 @@ mod tests {
         raw.fill(false);
         assert!(ValidatedC3PredicateRow::new(&raw).is_err());
         assert_eq!(
-            valid.decide(&reference_c3_policy().unwrap()).unwrap().action(),
+            valid
+                .decide(&reference_c3_policy().unwrap())
+                .unwrap()
+                .action(),
             InferenceAction::Stop
         );
     }
