@@ -35,7 +35,7 @@ The result is a growing body of **code + preregistration + evaluator + provenanc
 | **TDI-10.x** | **Operator / Resolvent Research** | 🟠 Active | Generic Jacobi / tridiagonal operator work on shifted resolvents, Schur cavities, Green functions, finite transport and explicitly classified asymptotic claims. |
 | **TDI-11.x** | **Hallucination Dynamics & Control Research Programme** | 🟠 Active bootstrap | Studies supported vs unsupported generation in fully specified worlds, measurable precursors, causal perturbations, risk estimation and bounded adaptive verification / recovery / abstention. |
 | **TDI-12.x** | **Ordinal Universality of Operator Responses** | 🟠 Active Stage-0 bootstrap | Tests whether ordinal/rank relations among resolvent and Green response observables transport more stably than absolute calibration across dimension, coefficient family and perturbation regime. |
-| **TDI-21.x** | **Boolean Relational Architecture Research Programme** | 🟠 Active Stage-0 bootstrap | Tests a strict non-attention candidate family based on Boolean state, explicit logical routing, bounded memory and later GF(2)/ANF composition, with B2–B5 forbidding Q/K/V, `QK^T`, softmax, all-pairs similarity scoring and dense `N x N` score matrices. |
+| **TDI-21.x** | **Boolean Relational Architecture Research Programme** | 🟠 Active Stage-0 development | Audited Boolean routing and causal B2/B3 memory references with bounded probes, independent development oracles and explicit capacity failures; no attention or trained-model superiority claim. |
 
 The table currently surfaces the programme lines documented in this homepage plus TDI-21. It is not a claim that intermediate series numbers are absent; canonical programme files under [`docs/`](docs/) remain authoritative for series not yet summarized here.
 
@@ -96,18 +96,26 @@ Stage 0 does not authorize confirmatory populations, does not invent TDI-8.1 / T
 
 The candidate family is separated from its controls:
 
-- **B0** — conventional attention reference; baseline only;
-- **B1** — binary/Hamming attention reference; baseline only;
-- **B2** — Boolean predicates plus bounded direct-address memory;
-- **B3** — Boolean routing plus bounded associative memory with explicit collision/replacement semantics;
-- **B4** — B3 plus explicit `F2` / algebraic-normal-form (Zhegalkin) relational composition;
-- **B5** — Boolean state evolution, routing, bounded memory and Boolean relation composition without an attention primitive.
+- **B0** — conventional attention reference; baseline only, adapter not yet implemented;
+- **B1** — binary/Hamming attention reference; baseline only, adapter not yet implemented;
+- **B2** — Boolean predicates plus bounded direct-address memory; causal development reference implemented;
+- **B3** — Boolean routing plus bounded two-way memory; causal development reference implemented with explicit eviction semantics;
+- **B4** — planned B3 plus learned or synthesized `F2` / algebraic-normal-form (Zhegalkin) relational composition;
+- **B5** — planned learned Boolean state evolution, routing, bounded memory and relation composition without an attention primitive.
 
-For B2–B5, the programme explicitly forbids Q/K/V projections, `QK^T`, dot-product/cosine or learned pairwise similarity scores, softmax or equivalent normalized token-score distributions, Hamming/POPCOUNT used as an all-pairs attention-score substitute, dense `N x N` token-score matrices, hidden attention fallback, and address lookup implemented by scanning all prior tokens.
+For B2–B5, the programme explicitly forbids Q/K/V projections, `QK^T`, dot-product/cosine or learned pairwise similarity scores, softmax or equivalent normalized token-score distributions, Hamming/POPCOUNT used as an all-pairs attention-score substitute, dense `N x N` token-score matrices, hidden attention fallback, and address lookup implemented by scanning all prior tokens. Exact identifier checks in a bounded memory bucket are not token-similarity scoring and are accounted separately.
 
-TDI-21.0 is an **active Stage-0 bootstrap**, is **not frozen**, and authorises **no confirmatory execution**. Its current implementation is limited to deterministic Boolean reference primitives, explicit route/memory accounting, pairwise-comparison fail-closed guards, ANF/Zhegalkin evaluation and small deterministic development fixtures. A positive Stage-0 result would not establish language-model quality, novelty, universal replacement of attention, asymptotic superiority or hardware speedup. See [`docs/TDI-21.0-STATUS.md`](docs/TDI-21.0-STATUS.md).
+TDI-21.0 remains **development-only, not frozen, with no confirmatory execution authorised**. The [bootstrap audit](docs/TDI-21.0-AUDIT-20260914.md) found and corrected a rank-61 route aliasing defect, invalid negated literals, incomplete accounting, misleading absence scoring and unsafe text provenance. Counter consistency and SHA syntax are explicitly distinguished from execution attestation.
 
-A future FLAT-ATTENTION hybrid remains downstream and conditional on reproducible TDI-21 evidence. The intended research boundary is: TDI-21 validates Boolean semantics; SciRust may later receive stable reusable primitives; hardware-specific realization is evaluated separately; FLAT-ATTENTION may only then compare Boolean-only, softmax-only and Boolean-pre-routing-to-restricted-softmax modes.
+The [causal B2/B3 reference](docs/TDI-21.0-CAUSAL-STREAM.md) processes writes, recalls, conjunctions and delay events without receiving the evaluator's answer. Development tests cover an independent dictionary oracle, all length-four streams over a seven-event alphabet, 4,096-event delays, overwritten facts, absent facts, marker rejection, bounded probes, reset and explicit capacity failures. These hand-written memories are **not trained language models**. B3's replacement metadata is charged separately; equal entry counts are not equal resource budgets. No quality or hardware-speed superiority is claimed. See [current status](docs/TDI-21.0-STATUS.md).
+
+Reproduce the non-final software fixtures from a clean checkout:
+
+```bash
+bash scripts/check-tdi21-development.sh
+```
+
+A future FLAT-ATTENTION hybrid remains downstream and conditional on reproducible TDI-21 evidence. The intended research boundary is: TDI-21 validates Boolean semantics; SciRust may later receive stable reusable primitives; hardware-specific realization is evaluated separately; FLAT-ATTENTION may only then compare Boolean-only, softmax-only and Boolean-pre-routing-to-restricted-softmax modes. Switching costs, retained/reconstructed numerical KV state and quality calibration must be measured before claiming an elastic hybrid advantage.
 
 ## What the completed programme has taught us
 

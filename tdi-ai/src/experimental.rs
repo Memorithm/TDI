@@ -32,5 +32,7 @@ pub mod tdi21;
 pub mod tdi21_freeze;
 #[path = "tdi21_provenance.rs"]
 pub mod tdi21_provenance;
+#[path = "tdi21_stream.rs"]
+pub mod tdi21_stream;
 #[path = "tdi21_boolean_tasks.rs"]
 pub mod tdi21_tasks;
