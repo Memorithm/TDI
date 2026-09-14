@@ -248,12 +248,7 @@ impl<const SLOTS: usize> DirectAddressMemory<SLOTS> {
         }
     }
 
-    pub fn write(
-        &mut self,
-        tag: u64,
-        value: BooleanState,
-        counters: &mut ResourceCounters,
-    ) {
+    pub fn write(&mut self, tag: u64, value: BooleanState, counters: &mut ResourceCounters) {
         counters.memory_writes += 1;
         let Some(index) = Self::index(tag) else {
             counters.memory_misses += 1;
@@ -471,10 +466,7 @@ mod tests {
     #[test]
     fn anf_truth_table_is_exact() {
         // f(x0, x1) = 1 XOR x0 XOR (x0 * x1)
-        let terms = [
-            AnfTerm { variables: 0b01 },
-            AnfTerm { variables: 0b11 },
-        ];
+        let terms = [AnfTerm { variables: 0b01 }, AnfTerm { variables: 0b11 }];
         assert!(evaluate_anf(true, &terms, 0b00));
         assert!(!evaluate_anf(true, &terms, 0b01));
         assert!(evaluate_anf(true, &terms, 0b11));
@@ -482,7 +474,10 @@ mod tests {
 
     #[test]
     fn semantic_memory_accounting_is_exact_by_contract() {
-        assert_eq!(DirectAddressMemory::<8>::peak_semantic_memory_bits(), 8 * 129);
+        assert_eq!(
+            DirectAddressMemory::<8>::peak_semantic_memory_bits(),
+            8 * 129
+        );
     }
 
     #[test]

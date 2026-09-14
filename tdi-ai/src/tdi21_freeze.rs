@@ -61,10 +61,12 @@ impl FreezeTemplate {
             .development_split_id
             .as_ref()
             .ok_or(FreezeTemplateError::UnresolvedField("development_split_id"))?;
-        let future_holdout_rule_id = self
-            .future_holdout_rule_id
-            .as_ref()
-            .ok_or(FreezeTemplateError::UnresolvedField("future_holdout_rule_id"))?;
+        let future_holdout_rule_id =
+            self.future_holdout_rule_id
+                .as_ref()
+                .ok_or(FreezeTemplateError::UnresolvedField(
+                    "future_holdout_rule_id",
+                ))?;
 
         if sequence_lengths.is_empty() {
             return Err(FreezeTemplateError::EmptyField("sequence_lengths"));

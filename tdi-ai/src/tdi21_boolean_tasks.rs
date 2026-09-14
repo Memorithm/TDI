@@ -4,8 +4,8 @@
 //! benchmark and must not be interpreted as confirmatory evidence.
 
 use super::tdi21::{
-    activate_route, BooleanState, Clause, DirectAddressMemory, Literal, MemoryRead,
-    ResourceCounters,
+    BooleanState, Clause, DirectAddressMemory, Literal, MemoryRead, ResourceCounters,
+    activate_route,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -107,10 +107,7 @@ pub fn two_fact_conjunction<const SLOTS: usize>(left: bool, right: bool) -> Task
 /// Select a target from Boolean predicates while rejecting a distractor. The
 /// fixture deliberately performs no distance, dot product, or pairwise ranking.
 #[must_use]
-pub fn distractor_rejection(
-    target: BooleanState,
-    distractor: BooleanState,
-) -> TaskOutcome {
+pub fn distractor_rejection(target: BooleanState, distractor: BooleanState) -> TaskOutcome {
     let selector = Clause {
         literals: [Literal::Bit(0), Literal::NotBit(1), Literal::Bit(3)],
     };
