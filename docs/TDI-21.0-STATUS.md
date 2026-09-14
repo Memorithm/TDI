@@ -1,38 +1,24 @@
 # TDI-21.0 Status
 
-Status: **active bootstrap; not frozen; development-only**.
+Status: **active development; not frozen; no confirmatory execution**.
 
-## Verified repository lineage
+## Lineage and audit
 
-Bootstrap #233 and homepage #234 are merged. This status supersedes the bootstrap-era note that those PRs were still queued. Their merge does not constitute scientific confirmation.
+Bootstrap #233 and homepage #234 are merged. The [2026-09-14 audit](TDI-21.0-AUDIT-20260914.md) reviews their TDI-21 source at `41a71e22a6bde76870d44f952f8d0b5767541e54`, documents eight defects/limitations and supplies corrective regressions. A merge or passing software test is not scientific confirmation.
 
-See [the 2026-09-14 audit](TDI-21.0-AUDIT-20260914.md) for the inspected source revision, defects, corrections and remaining experimental gaps.
+Corrective engineering includes invertible versioned routing, invalid-literal rejection, declared-width clause validation, full-width address reduction, checked arithmetic, separate resource categories, evidence-dimension validation, correct absent-marker scoring, delimiter-safe evidence v2 and duplicate/blank freeze-field rejection. A recorded zero pairwise count is not execution attestation; valid SHA syntax is not proof of executed code.
 
-## Implemented surfaces
+## Implemented candidate surfaces
 
-The opt-in `tdi-ai::experimental` facade contains Boolean state, literals, clauses, bounded direct-address memory, ANF evaluation, smoke task fixtures, evidence serialization and a freeze-template structure validator. B0/B1 and B3-B5 labels in an enum are not implemented comparative architectures.
+The opt-in `tdi-ai::experimental` facade contains Boolean primitives, literal clauses, ANF evaluation, bounded memory, evidence serialization and a structural freeze-template validator. The historical `delayed_bit_recall` function remains a two-event smoke fixture, not a long-delay experiment.
 
-The audit correction adds an invertible versioned route transform; rejects invalid negated literals; exposes declared-width clause validation; reduces full-width tags before pointer narrowing; checks counter and semantic-memory arithmetic; counts address derivations, packed-word operations, tag equality checks and ANF terms separately; validates evidence dimensions; correctly scores no-marker misses; and uses delimiter-safe, versioned evidence serialization. Freeze-template grids reject duplicates and whitespace-only rule names.
+[The causal stream increment](TDI-21.0-CAUSAL-STREAM.md) adds a closed one-event-at-a-time B2/B3 reference. B2 addresses one slot; B3 probes at most two slots in an addressed bucket and records deterministic evictions. The candidate receives no oracle labels or future sequence. It distinguishes absent from stored-zero values, rejects malformed input atomically, bounds event/storage resources and resets between episodes.
 
-`pairwise_comparisons == 0` is a consistency check on recorded work, NOT proof that arbitrary caller code executed no attention. Syntactically valid SHA text is NOT proof of the executed revision. `129 * slots` counts only direct-memory semantic payload, not total process or architecture memory. Raw Boolean/ANF helper calls are uninstrumented unless their counted interface is used.
+Independent-oracle tests enumerate every length-four stream over seven events for both modes. Additional fixtures cover 4,096-event delays, updates, gated writes, capacity collisions, full-width identities, probe bounds and reset. The development example emits both successful retrievals and deliberate capacity failures, actual reference-object memory footprints and separate work counters. Debug/release tests and exact repeated output are wired into read-only CI.
 
-The historical `delayed_bit_recall` function is a two-event round-trip smoke fixture. It does not establish recall across long delays. A miss is not the Boolean value false; both must remain distinct.
+B0/B1 adapters and B4/B5 learned candidate systems are **not implemented**. Hand-written B2/B3 references do not demonstrate language modeling, learned semantic addressing or attention replacement at model scale.
 
-## Required next implementation
-
-1. A causal event-stream candidate interface with no oracle-answer argument, explicit reset and resource bounds.
-2. Development-only episodes with genuine delays, multiple writes, misses, overrides, distractors and controlled collisions; an evaluator-owned oracle independent of candidate storage.
-3. A bounded B3 memory with a declared lookup-probe bound and replacement metadata accounting.
-4. Separate B0/B1 baseline adapters; shared task inputs, training/tuning budgets and explicit memory accounting before comparative claims.
-5. Learned logical routing and systematic ablations before any language-model or hybrid-engine claim.
-
-## Required before TDI-21.1 freeze
-
-Resolve and preregister task definitions, sequence/state/memory grids, task counts, seeds, Development/Validation separation, resource envelopes and acceptance rules. A resolved template alone does not freeze these semantics. Preserve all existing protected holdout boundaries. Confirmatory execution remains unauthorized.
-
-## Validation
-
-Run on the exact candidate commit:
+## Validation and reproduction
 
 ```bash
 cargo fmt --all -- --check
@@ -40,10 +26,17 @@ cargo test --locked -p tdi-ai --all-features
 cargo clippy --locked -p tdi-ai --all-targets --all-features -- -D warnings
 cargo test --locked --workspace
 bash scripts/check-tdi-ai-experiments.sh
+bash scripts/check-tdi21-development.sh
 ```
 
-The audit regressions include the old route's rank-61 counterexample and the corrected route's rank-64 test, an independently implemented inverse, invalid literals/dimensions, full-width modulo, checked overflow, accounting, marker semantics and provenance injection. Test definitions are not execution results; use exact-head CI logs for the outcome.
+Use exact-head CI logs for current outcomes. The development script requires a clean checkout, records its real SHA and source hashes, and executes no protected/final population. Equal entry count does not imply equal memory budget; B3 replacement metadata and physical storage are reported separately.
 
-## Downstream boundary
+## Next scientific milestones
 
-TDI owns the sequence experiment; BooleanLab owns broader Boolean-function characterization. General primitives may be promoted to SciRust only with a versioned contract and qualification. FLAT-ATTENTION hybridization is a separate future question: Boolean-only, softmax-only and Boolean pre-routing followed by restricted softmax. No hybrid kernel or hardware speedup is established here.
+1. Add isolated B0/B1 adapters and exact-dictionary/no-memory task-competence controls on common causal inputs.
+2. Define total memory/compute/training/tuning envelopes rather than compare only slot counts.
+3. Implement and ablate learned or synthesized Boolean routing under a bounded search contract.
+4. Preregister independent Development/Validation task families, metrics, decision rules and stop conditions before comparative evidence.
+5. Qualify runtime and model behavior before promotion to SciRust or an elastic FLAT-ATTENTION hybrid.
+
+The structural freeze template remains insufficient to authorize a confirmatory experiment. All inherited holdout protections remain intact.
