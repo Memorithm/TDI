@@ -24,9 +24,9 @@ pub enum ArchitectureArm {
 impl ArchitectureArm {
     /// Whether the arm belongs to the non-attention candidate family.
     #[must_use]
-    pub const fn is_boolean_candidate(self) -> bool {
+    pub const fn is_boolean_candidate(&self) -> bool {
         matches!(
-            self,
+            *self,
             Self::B2BooleanDirect
                 | Self::B3BooleanAssociative
                 | Self::B4BooleanAnf
@@ -51,7 +51,7 @@ pub struct ForbiddenMechanisms {
 
 impl ForbiddenMechanisms {
     #[must_use]
-    pub const fn any(self) -> bool {
+    pub const fn any(&self) -> bool {
         self.qkv_projection
             || self.pairwise_dot_product
             || self.cosine_similarity
@@ -124,22 +124,22 @@ impl BooleanState {
     }
 
     #[must_use]
-    pub const fn bitand(self, rhs: Self) -> Self {
+    pub const fn and_state(self, rhs: Self) -> Self {
         Self(self.0 & rhs.0)
     }
 
     #[must_use]
-    pub const fn bitor(self, rhs: Self) -> Self {
+    pub const fn or_state(self, rhs: Self) -> Self {
         Self(self.0 | rhs.0)
     }
 
     #[must_use]
-    pub const fn bitxor(self, rhs: Self) -> Self {
+    pub const fn xor_state(self, rhs: Self) -> Self {
         Self(self.0 ^ rhs.0)
     }
 
     #[must_use]
-    pub const fn bitnot(self, width_bits: u8) -> Self {
+    pub const fn not_state(self, width_bits: u8) -> Self {
         let mask = if width_bits == 0 {
             0
         } else if width_bits >= 64 {
@@ -175,7 +175,7 @@ pub struct Clause<const N: usize> {
 
 impl<const N: usize> Clause<N> {
     pub fn evaluate(&self, state: BooleanState, counters: &mut ResourceCounters) -> bool {
-        for literal in self.literals {
+        for &literal in &self.literals {
             counters.boolean_primitive_evals += 1;
             if !literal.evaluate(state) {
                 return false;
@@ -203,7 +203,7 @@ pub struct ResourceCounters {
 impl ResourceCounters {
     /// B2-B5 runs fail closed if a pairwise token comparison is recorded.
     #[must_use]
-    pub const fn candidate_is_pairwise_free(self) -> bool {
+    pub const fn candidate_is_pairwise_free(&self) -> bool {
         self.pairwise_comparisons == 0
     }
 }
@@ -336,7 +336,7 @@ impl AnfTerm {
 #[must_use]
 pub fn evaluate_anf(constant: bool, terms: &[AnfTerm], assignment: u64) -> bool {
     let mut value = constant;
-    for term in terms {
+    for &term in terms {
         value ^= term.evaluate(assignment);
     }
     value
@@ -360,7 +360,7 @@ pub struct EvidenceRecord {
 
 impl EvidenceRecord {
     #[must_use]
-    pub const fn candidate_structurally_valid(self) -> bool {
+    pub const fn candidate_structurally_valid(&self) -> bool {
         self.manifest.arm.is_boolean_candidate() && self.resources.candidate_is_pairwise_free()
     }
 }
