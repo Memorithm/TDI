@@ -32,6 +32,13 @@ REQUIRED_FIELDS = (
 
 ALLOWED_DOMAINS = ["Development", "Validation"]
 ALLOWED_FIELD_STATUSES = {"unresolved_blocking", "pinned"}
+ALLOWED_PROVENANCE_KINDS = {
+    "git_blob",
+    "git_commit",
+    "sha256",
+    "registry_digest",
+    "protocol_revision",
+}
 
 
 class ContractError(ValueError):
@@ -68,6 +75,34 @@ def is_nonempty_pinned_value(value: Any) -> bool:
     return False
 
 
+def validate_pin_provenance(name: str, provenance: Any) -> None:
+    if not isinstance(provenance, dict):
+        fail(f"{name} pinned value requires pin_provenance")
+    if set(provenance) != {"kind", "immutable_reference"}:
+        fail(
+            f"{name} pin_provenance must contain exactly kind and immutable_reference"
+        )
+
+    kind = provenance["kind"]
+    reference = provenance["immutable_reference"]
+    if kind not in ALLOWED_PROVENANCE_KINDS:
+        fail(f"{name} has unsupported pin provenance kind {kind!r}")
+    if not isinstance(reference, str) or not reference.strip():
+        fail(f"{name} immutable_reference must be a non-empty string")
+
+    normalized = reference.lower()
+    if kind in {"git_blob", "git_commit"}:
+        if len(normalized) != 40 or any(
+            ch not in "0123456789abcdef" for ch in normalized
+        ):
+            fail(f"{name} {kind} reference must be an exact 40-hex Git object id")
+    elif kind == "sha256":
+        if len(normalized) != 64 or any(
+            ch not in "0123456789abcdef" for ch in normalized
+        ):
+            fail(f"{name} sha256 reference must be an exact 64-hex digest")
+
+
 def validate_contract(document: Any, *, require_complete: bool) -> tuple[int, str | None]:
     if not isinstance(document, dict):
         fail("top-level contract must be a JSON object")
@@ -90,8 +125,8 @@ def validate_contract(document: Any, *, require_complete: bool) -> tuple[int, st
             f"unexpected={sorted(actual_top - expected_top)}"
         )
 
-    if document["schema_version"] != 1:
-        fail("schema_version must equal 1")
+    if document["schema_version"] != 2:
+        fail("schema_version must equal 2 (immutable pin provenance required)")
     if document["kind"] != "tdi11_2_model_observation_freeze":
         fail("unexpected contract kind")
     if document["allowed_domains"] != ALLOWED_DOMAINS:
@@ -116,17 +151,29 @@ def validate_contract(document: Any, *, require_complete: bool) -> tuple[int, st
     unresolved = 0
     for name in REQUIRED_FIELDS:
         entry = freeze[name]
-        if not isinstance(entry, dict) or set(entry) != {"status", "value"}:
-            fail(f"{name} must contain exactly status and value")
+        if not isinstance(entry, dict) or set(entry) != {
+            "status",
+            "value",
+            "pin_provenance",
+        }:
+            fail(
+                f"{name} must contain exactly status, value and pin_provenance"
+            )
         status = entry["status"]
+        value = entry["value"]
+        provenance = entry["pin_provenance"]
         if status not in ALLOWED_FIELD_STATUSES:
             fail(f"{name} has unsupported status {status!r}")
         if status == "unresolved_blocking":
             unresolved += 1
-            if entry["value"] is not None:
+            if value is not None:
                 fail(f"{name} is unresolved but carries a value")
-        elif not is_nonempty_pinned_value(entry["value"]):
-            fail(f"{name} is pinned without a non-empty value")
+            if provenance is not None:
+                fail(f"{name} is unresolved but carries pin_provenance")
+        else:
+            if not is_nonempty_pinned_value(value):
+                fail(f"{name} is pinned without a non-empty value")
+            validate_pin_provenance(name, provenance)
 
     digest = document["contract_digest_sha256"]
     if unresolved:
@@ -178,12 +225,41 @@ def self_test(template: Any) -> None:
 
     bad_pin = copy.deepcopy(template)
     bad_pin["freeze"][REQUIRED_FIELDS[0]]["status"] = "pinned"
+    bad_pin["freeze"][REQUIRED_FIELDS[0]]["value"] = {"fixture": "value"}
     try:
         validate_contract(bad_pin, require_complete=False)
     except ContractError:
         pass
     else:
-        fail("self-test: empty pinned value was accepted")
+        fail("self-test: pinned value without provenance was accepted")
+
+    unresolved_with_provenance = copy.deepcopy(template)
+    unresolved_with_provenance["freeze"][REQUIRED_FIELDS[0]]["pin_provenance"] = {
+        "kind": "sha256",
+        "immutable_reference": "0" * 64,
+    }
+    try:
+        validate_contract(unresolved_with_provenance, require_complete=False)
+    except ContractError:
+        pass
+    else:
+        fail("self-test: unresolved field with provenance was accepted")
+
+    bad_provenance = copy.deepcopy(template)
+    bad_provenance["freeze"][REQUIRED_FIELDS[0]] = {
+        "status": "pinned",
+        "value": {"fixture": "value"},
+        "pin_provenance": {
+            "kind": "git_commit",
+            "immutable_reference": "not-an-object-id",
+        },
+    }
+    try:
+        validate_contract(bad_provenance, require_complete=False)
+    except ContractError:
+        pass
+    else:
+        fail("self-test: malformed immutable provenance was accepted")
 
     complete = copy.deepcopy(template)
     complete["status"] = "frozen_non_final"
@@ -191,6 +267,10 @@ def self_test(template: Any) -> None:
         complete["freeze"][name] = {
             "status": "pinned",
             "value": {"fixture": name},
+            "pin_provenance": {
+                "kind": "sha256",
+                "immutable_reference": hashlib.sha256(name.encode("utf-8")).hexdigest(),
+            },
         }
     complete["contract_digest_sha256"] = freeze_digest(complete["freeze"])
     unresolved, digest = validate_contract(complete, require_complete=True)
@@ -206,6 +286,18 @@ def self_test(template: Any) -> None:
     else:
         fail("self-test: digest mismatch was accepted")
 
+    provenance_tampered = copy.deepcopy(complete)
+    provenance_tampered["freeze"][REQUIRED_FIELDS[0]]["pin_provenance"] = {
+        "kind": "sha256",
+        "immutable_reference": "f" * 64,
+    }
+    try:
+        validate_contract(provenance_tampered, require_complete=True)
+    except ContractError:
+        pass
+    else:
+        fail("self-test: provenance digest tampering was accepted")
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -213,7 +305,7 @@ def main() -> int:
     parser.add_argument(
         "--require-complete",
         action="store_true",
-        help="require all 12 fields to be pinned and digest-bound",
+        help="require all 12 fields to be pinned, provenance-bound and digest-bound",
     )
     parser.add_argument(
         "--self-test",
