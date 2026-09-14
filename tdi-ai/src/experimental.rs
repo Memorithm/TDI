@@ -24,3 +24,5 @@ pub mod boolean_policy_synthesis;
 pub mod development_campaign;
 #[path = "tdi21_boolean_relational.rs"]
 pub mod tdi21;
+#[path = "tdi21_boolean_tasks.rs"]
+pub mod tdi21_tasks;
