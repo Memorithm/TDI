@@ -1,0 +1,41 @@
+name: TDI-21 causal Boolean development
+
+on:
+  pull_request:
+    paths:
+      - 'tdi-ai/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'scripts/check-tdi21-development.sh'
+      - '.github/workflows/tdi21-development.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tdi-ai/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'scripts/check-tdi21-development.sh'
+      - '.github/workflows/tdi21-development.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tdi21-development-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  development:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
+        with:
+          toolchain: '1.97.1'
+      - name: Debug and release regressions with deterministic replay
+        run: bash scripts/check-tdi21-development.sh

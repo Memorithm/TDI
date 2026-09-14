@@ -17,3 +17,7 @@ workspace = true
 [[example]]
 name = "development_campaign"
 required-features = ["experimental"]
+
+[[example]]
+name = "tdi21_development"
+required-features = ["experimental"]
