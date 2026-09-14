@@ -26,3 +26,7 @@ pub mod development_campaign;
 pub mod tdi21;
 #[path = "tdi21_boolean_tasks.rs"]
 pub mod tdi21_tasks;
+#[path = "tdi21_freeze.rs"]
+pub mod tdi21_freeze;
+#[path = "tdi21_provenance.rs"]
+pub mod tdi21_provenance;
