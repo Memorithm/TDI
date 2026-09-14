@@ -29,3 +29,7 @@ required-features = ["experimental"]
 [[example]]
 name = "tdi21_development"
 required-features = ["experimental"]
+
+[[example]]
+name = "tdi21_attention_comparison"
+required-features = ["experimental"]
