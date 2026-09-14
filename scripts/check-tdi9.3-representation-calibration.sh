@@ -53,6 +53,8 @@ python3 scripts/check-tdi9.1-configuration-freeze.py \
 
 cargo test -p tdi-ai --all-features --lib boolean_policy_synthesis \
   || fail "boolean_policy_synthesis tests failed"
+cargo test --locked -p tdi-ai --features experimental --lib boolean_policy_carrier \
+  || fail "checked C3 carrier tests failed"
 cargo test --locked -p tdi-ai --features experimental --example boolean_c3_calibration \
   || fail "C3 search calibration tests failed"
 cargo run --locked -p tdi-ai --features experimental --example boolean_c3_calibration \
