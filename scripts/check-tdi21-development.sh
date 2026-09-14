@@ -14,8 +14,10 @@ sha256sum Cargo.lock tdi-ai/src/tdi21_boolean_relational.rs \
   tdi-ai/src/tdi21_stream.rs tdi-ai/examples/tdi21_development.rs
 cargo test --locked -p tdi-ai --features experimental --test tdi21_audit_regressions
 cargo test --locked -p tdi-ai --features experimental --test tdi21_stream_contract
+cargo test --locked -p tdi-ai --features experimental --test tdi21_memory_tradeoffs -- --nocapture
 cargo test --locked --release -p tdi-ai --features experimental --test tdi21_audit_regressions
 cargo test --locked --release -p tdi-ai --features experimental --test tdi21_stream_contract
+cargo test --locked --release -p tdi-ai --features experimental --test tdi21_memory_tradeoffs -- --nocapture
 scratch="$(mktemp -d)"
 trap 'rm -rf -- "$scratch"' EXIT
 for trial in 1 2; do
