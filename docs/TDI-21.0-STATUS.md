@@ -6,7 +6,7 @@ Status: **active bootstrap; not frozen; development evidence only**.
 
 - Canonical TDI-21 programme and candidate prohibition set.
 - Architecture ladder B0-B5 with B0/B1 explicitly separated as attention baselines.
-- Experimental-only Rust modules exposed through `tdi-ai::experimental::tdi21` and `tdi-ai::experimental::tdi21_tasks`.
+- Experimental-only Rust modules exposed through the `tdi-ai::experimental` facade.
 - Fixed-width Boolean state and literal/conjunction evaluation.
 - Deterministic Boolean route activation.
 - Bounded direct-address memory with explicit hit, miss, collision, and replacement semantics.
@@ -19,7 +19,10 @@ Status: **active bootstrap; not frozen; development evidence only**.
 - Deterministic copy-after-marker fixture with explicit false-marker miss behavior.
 - Deterministic two-fact conjunction fixture with complete truth-table tests.
 - Deterministic distractor-rejection fixture driven by Boolean clauses rather than similarity scoring.
-- Unit tests for prohibition validation, direct recall, collision behavior, distractor rejection, ANF truth tables, semantic memory accounting, route determinism, and pairwise-work rejection.
+- Canonical evidence records requiring an exact 40-hex git SHA and recording structural/resource counters.
+- Fail-closed freeze-template scaffolding that leaves scientific values unresolved rather than inventing pins.
+- Explicit rejection of premature confirmatory-execution authorization in the Stage-0 freeze template.
+- Unit tests for prohibition validation, direct recall, collision behavior, distractor rejection, ANF truth tables, semantic memory accounting, route determinism, provenance, freeze-template completeness, and pairwise-work rejection.
 
 ## Not yet established
 
@@ -34,13 +37,16 @@ The bootstrap does not yet establish:
 
 ## Required before TDI-21.1 freeze
 
-- Define exact sequence-length, state-width, memory-slot, task-count, and development-seed grids.
+- Resolve, preregister, and review the currently unset sequence-length, state-width, memory-slot, task-count, and development-seed grids.
 - Define B0/B1 baseline adapters without making them callable from B2-B5 candidate code paths.
 - Define matched resource envelopes and separate native counters for unlike mechanisms.
-- Add machine-readable run provenance tied to exact git SHA.
 - Define development, validation, and future untouched holdout boundaries.
 - Define explicit acceptance/rejection criteria before comparative runs.
-- Run formatting, Clippy, and workspace tests on the final branch head.
+- Run formatting, Clippy, MSRV, experimental-contract, and workspace tests on the final branch head.
+
+## CI state
+
+At the time of this bootstrap update, GitHub Actions workflows for the branch are being created but remain queued. A queued workflow is not treated as a passing result. The PR must not be merged until the required checks complete successfully on its final head SHA.
 
 ## Downstream boundary
 
