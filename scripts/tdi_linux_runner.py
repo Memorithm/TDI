@@ -1,16 +1,17 @@
-"""Execution engine for schema-2 TDI cgroup-v2 campaigns."""
+"""Execution engine for schema-2/3 TDI cgroup-v2 campaigns."""
 import contextlib
 import os
 from pathlib import Path
 import subprocess
 import sys
 
+import tdi_experiment_contract as experiment
 import tdi_experiment_supervisor as durable
 from tdi_linux_containment import CgroupV2Attempt, ContainmentError, spawn_reaper
 from tdi_cgroup_delegation import require_inside_delegation
 from tdi_linux_contract import (
-    attempt_identity, execution_profile, journal_binding, recovery_marker,
-    validate_plan,
+    attempt_coordinates, execution_profile, experiment_identity, journal_binding,
+    recovery_marker, validate_plan,
 )
 
 TECHNICAL_FAILURES = set(durable.TECHNICAL_FAILURES) | {"ContainmentFailed"}
@@ -32,7 +33,7 @@ def _recover_via_reaper(reaper, timeout=5.0):
     """Hand containment to the detached reaper without sending release.
 
     Closing the control pipe is the same signal used when the supervisor
-    disappears unexpectedly.  The reaper must complete recovery before this
+    disappears unexpectedly. The reaper must complete recovery before this
     supervisor records the containment failure and aborts the campaign.
     """
     with contextlib.suppress(OSError):
@@ -48,7 +49,15 @@ def _recover_via_reaper(reaper, timeout=5.0):
         raise ContainmentError(f"containment reaper recovery exited with {code}")
 
 
-def _record_interrupted(journal, index, attempt_id, cgroup_parent, marker_path, reason):
+def _record_interrupted(
+    journal,
+    index,
+    trial_id,
+    attempt_id,
+    cgroup_parent,
+    marker_path,
+    reason,
+):
     """Durably consume one interrupted attempt after reconciling containment."""
     journal.append({"kind": "Start", "index": index})
     interrupted = {
@@ -57,15 +66,71 @@ def _record_interrupted(journal, index, attempt_id, cgroup_parent, marker_path, 
         "attempt_id": attempt_id,
         "recovery": CgroupV2Attempt.reconcile_existing(cgroup_parent, attempt_id),
     }
+    if trial_id is not None:
+        interrupted["trial_id"] = trial_id
     marker = recovery_marker(marker_path)
     if marker is not None:
         interrupted["reaper_marker"] = marker
     journal.append({"kind": "Finish", "index": index, "result": interrupted})
 
 
+def _worker_argv(plan, root, seed, plan_id, trial_id, attempt_id):
+    argv = [
+        str(durable.artifact(root, plan["argv"][0])),
+        *plan["argv"][1:],
+        "--tdi-seed",
+        str(seed),
+        "--tdi-plan-id",
+        plan_id,
+    ]
+    if plan["schema"] == 3:
+        argv.extend([
+            "--tdi-worker-protocol",
+            "2",
+            "--tdi-experiment-id",
+            experiment_identity(plan),
+            "--tdi-trial-id",
+            trial_id,
+            "--tdi-attempt-id",
+            attempt_id,
+            "--tdi-domain",
+            plan["domain"],
+            "--tdi-backend-identity",
+            plan["execution"]["backend"],
+        ])
+    return argv
+
+
+def _validate_worker_response(plan, response, *, plan_id, trial_id, attempt_id, seed):
+    if plan["schema"] == 2:
+        if (not isinstance(response, dict) or response.get("seed") != seed
+                or type(response.get("seed")) is not int
+                or response.get("plan_id") != plan_id
+                or response.get("status") not in ("Evaluated", "Rejected")):
+            raise durable.ContractError("worker response binding or status mismatch")
+        return None
+    try:
+        logical_budget = plan["experiment"]["logical_budget"]
+        experiment.validate_worker_response_v2(
+            response,
+            experiment_id=experiment_identity(plan),
+            plan_id=plan_id,
+            trial_id=trial_id,
+            attempt_id=attempt_id,
+            backend_identity=plan["execution"]["backend"],
+            domain=plan["domain"],
+            seed=seed,
+            max_completed_steps=logical_budget["max_steps_per_trial"],
+            max_completed_observations=logical_budget["max_observations_per_trial"],
+        )
+        return experiment.scientific_result_identity(response)
+    except experiment.ExperimentContractError as error:
+        raise durable.ContractError(str(error)) from error
+
+
 def run(plan, root, journal_path, cgroup_parent, cancelled=lambda: False,
         after_commit=lambda _: None, anchor_path=None, recovery_dir=None):
-    """Run one schema-2 campaign with one isolated cgroup per durable attempt."""
+    """Run one schema-2/3 campaign with one isolated cgroup per durable attempt."""
     root = Path(root).resolve(strict=True)
     plan_id = validate_plan(plan, root)
     profile = execution_profile(plan)
@@ -77,7 +142,7 @@ def run(plan, root, journal_path, cgroup_parent, cancelled=lambda: False,
     try:
         done, active, _ = journal.read()
         if active is not None:
-            attempt_id = attempt_identity(plan_id, active)
+            trial_id, attempt_id = attempt_coordinates(plan, plan_id, active)
             marker_path = recovery_dir / f"{attempt_id}.json"
             interrupted = {
                 "status": "Interrupted",
@@ -85,6 +150,8 @@ def run(plan, root, journal_path, cgroup_parent, cancelled=lambda: False,
                 "attempt_id": attempt_id,
                 "recovery": CgroupV2Attempt.reconcile_existing(cgroup_parent, attempt_id),
             }
+            if trial_id is not None:
+                interrupted["trial_id"] = trial_id
             marker = recovery_marker(marker_path)
             if marker is not None:
                 interrupted["reaper_marker"] = marker
@@ -96,17 +163,18 @@ def run(plan, root, journal_path, cgroup_parent, cancelled=lambda: False,
                 break
             validate_plan(plan, root)
             seed = index | (2**63 if plan["domain"] == "Validation" else 0)
-            attempt_id = attempt_identity(plan_id, index)
+            trial_id, attempt_id = attempt_coordinates(plan, plan_id, index)
             marker_path = recovery_dir / f"{attempt_id}.json"
             stale_path = cgroup_parent / f"tdi-{attempt_id}"
 
             # Recover attempts produced by older runners that could create a
-            # cgroup/reaper before Start was durably appended.  The trial is
+            # cgroup/reaper before Start was durably appended. The trial is
             # consumed as Interrupted rather than silently retried.
             if marker_path.exists() or stale_path.exists():
                 _record_interrupted(
                     journal,
                     index,
+                    trial_id,
                     attempt_id,
                     cgroup_parent,
                     marker_path,
@@ -122,13 +190,15 @@ def run(plan, root, journal_path, cgroup_parent, cancelled=lambda: False,
             group = CgroupV2Attempt(cgroup_parent, attempt_id, profile)
             reaper = None
             result = {"attempt_id": attempt_id, "backend": "linux-cgroup-v2"}
+            if trial_id is not None:
+                result["trial_id"] = trial_id
+                result["experiment_id"] = experiment_identity(plan)
             cleanup_errors = []
             abort_after_finish = False
             try:
                 group.create()
                 reaper = spawn_reaper(group.path, marker_path)
-                worker_argv = [str(durable.artifact(root, plan["argv"][0])), *plan["argv"][1:],
-                               "--tdi-seed", str(seed), "--tdi-plan-id", plan_id]
+                worker_argv = _worker_argv(plan, root, seed, plan_id, trial_id, attempt_id)
                 result.update(durable.supervise(_launcher_argv(group, worker_argv),
                                                 plan["timeout_seconds"],
                                                 plan["max_output_bytes"], cancelled))
@@ -138,12 +208,17 @@ def run(plan, root, journal_path, cgroup_parent, cancelled=lambda: False,
                         raise durable.ContractError("worker stdout is not valid UTF-8")
                     response = durable.strict_json(result["stdout"],
                                                    max_bytes=plan["max_output_bytes"])
-                    if (not isinstance(response, dict) or response.get("seed") != seed
-                            or type(response.get("seed")) is not int
-                            or response.get("plan_id") != plan_id
-                            or response.get("status") not in ("Evaluated", "Rejected")):
-                        raise durable.ContractError("worker response binding or status mismatch")
+                    result_id = _validate_worker_response(
+                        plan,
+                        response,
+                        plan_id=plan_id,
+                        trial_id=trial_id,
+                        attempt_id=attempt_id,
+                        seed=seed,
+                    )
                     result["response"] = response
+                    if result_id is not None:
+                        result["scientific_result_id"] = result_id
                 validate_plan(plan, root)
             except (durable.ContractError, OSError, subprocess.SubprocessError) as error:
                 result.update(status="ContractRejected", error=str(error)[:4096])

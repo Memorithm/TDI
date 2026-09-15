@@ -1,0 +1,2 @@
+TDI ExperimentSpec v1 synthetic fixture protocol.
+Development-only software qualification; no scientific claim or final execution.

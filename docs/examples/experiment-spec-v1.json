@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "semantic_version": "tdi-engine-fixture/1.0.0",
+  "series_id": "engine-contract-fixture",
+  "stage": "development-software",
+  "protocol_refs": [
+    {
+      "name": "docs/examples/experiment-protocol-fixture.txt",
+      "sha256": "542c27a6d01f11175be39122c3c052753d9512e6abcf5f14960ee146e44dadbc"
+    }
+  ],
+  "hypothesis_ids": ["ENGINE-CONTRACT-IDENTITY"],
+  "metrics": [
+    {
+      "id": "fixture_distance",
+      "unit": "count",
+      "orientation": "descriptive"
+    }
+  ],
+  "data": {
+    "access_class": "development",
+    "generator_identity": "durable-worker-v2-counter-fixture/v1",
+    "partition_derivation": "explicit-index-list/v1"
+  },
+  "randomness": {
+    "algorithm": "deterministic-index-fixture/v1",
+    "seed_namespace": "tdi-engine-contract-fixture",
+    "stream_derivation": "plan-domain-index-coordinate/v1"
+  },
+  "arms": [
+    {
+      "id": "reference",
+      "role": "baseline",
+      "implementation_identity": "increment-reference/v1"
+    },
+    {
+      "id": "shifted",
+      "role": "intervention",
+      "implementation_identity": "shift-by-two/v1"
+    }
+  ],
+  "adapter": {
+    "api_version": "tdi-worker-response/2",
+    "implementation_identity": "tdi-ai/examples/durable_worker_v2.rs",
+    "required_capabilities": ["cancel", "deadline"],
+    "reproducibility_class": "exact"
+  },
+  "logical_budget": {
+    "max_trials": 3,
+    "max_steps_per_trial": 4,
+    "max_observations_per_trial": 4
+  },
+  "physical_constraints": {
+    "timeout_milliseconds": 5000,
+    "max_output_bytes": 65536,
+    "memory_max_bytes": 67108864,
+    "swap_max_bytes": 0,
+    "cpu_quota_us": 100000,
+    "cpu_period_us": 100000,
+    "pids_max": 16,
+    "gpu_required": false,
+    "gpu_memory_max_bytes": null
+  },
+  "retry": {
+    "policy": "never",
+    "max_attempts_per_trial": 1
+  },
+  "statistics": {
+    "plan_identity": "fixture-descriptive-only/v1",
+    "missing_observation_policy": "retain-and-report"
+  },
+  "artifacts": {
+    "access_class": "development",
+    "retention_policy": "retain-all-trials",
+    "export_policy": "explicit-only"
+  },
+  "dependencies": [
+    {
+      "name": "tdi-ai",
+      "identity": "repository-source-and-Cargo.lock-must-be-pinned-by-plan"
+    }
+  ]
+}
