@@ -15,7 +15,9 @@ pub const MAX_SEARCH_VARIABLES: u8 = 6;
 pub const MAX_SEARCH_DEGREE: u8 = 3;
 pub const MAX_SEARCH_TERMS: usize = 4;
 pub const MAX_SEARCH_CANDIDATES: u64 = 65_536;
-pub const MAX_SEARCH_CASES: usize = 256;
+/// Maximum number of unique labelled rows. With at most six variables, the
+/// complete Boolean domain contains at most 64 distinct assignments.
+pub const MAX_SEARCH_CASES: usize = 64;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LabeledAssignment {
