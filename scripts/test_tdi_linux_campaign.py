@@ -1,4 +1,6 @@
+import contextlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -11,11 +13,31 @@ sys.path.insert(0, str(SCRIPTS))
 import tdi_experiment_supervisor as durable
 import tdi_linux_contract as contract
 import tdi_linux_runner as runner
+from tdi_linux_containment import ContainmentError
+
+
+class FakeProcess:
+    def __init__(self):
+        self.wait_calls = 0
+        self.killed = False
+    def wait(self, timeout=None):
+        self.wait_calls += 1
+        return 0
+    def kill(self):
+        self.killed = True
 
 
 class FakeReaper:
-    def __init__(self): self.released = False
-    def release(self): self.released = True
+    def __init__(self):
+        read_fd, self.control_fd = os.pipe()
+        os.close(read_fd)
+        self.process = FakeProcess()
+        self.released = False
+    def release(self):
+        with contextlib.suppress(OSError):
+            os.close(self.control_fd)
+        self.control_fd = -1
+        self.released = True
 
 
 class FakeGroup:
@@ -47,6 +69,11 @@ class FakeGroup:
             for child in path.iterdir(): child.unlink()
             path.rmdir()
         return {"present": present, "killed": present}
+
+
+class FailCleanupGroup(FakeGroup):
+    def cleanup(self):
+        raise ContainmentError("synthetic populated cgroup")
 
 
 class RunnerTests(unittest.TestCase):
@@ -97,6 +124,47 @@ class RunnerTests(unittest.TestCase):
             records=runner.run(self.plan,self.root,path,self.cgroup,recovery_dir=self.root/"recovery")
         self.assertEqual(records[0]["result"]["status"],"Interrupted")
         self.assertEqual(supervise.call_count,1)
+
+    def test_orphaned_pre_start_cgroup_is_consumed_not_retried(self):
+        plan_id=contract.validate_plan(self.plan,self.root)
+        attempt=contract.attempt_identity(plan_id,0)
+        stale=self.cgroup/f"tdi-{attempt}"; stale.mkdir(); (stale/"cgroup.procs").write_text("")
+        with mock.patch.object(runner,"CgroupV2Attempt",FakeGroup), \
+             mock.patch.object(runner,"require_inside_delegation",lambda *_: self.cgroup), \
+             mock.patch.object(runner,"spawn_reaper",lambda *_:FakeReaper()), \
+             mock.patch.object(runner.durable,"supervise") as supervise:
+            supervise.return_value={"status":"WorkerFailed","returncode":3,"stdout":"","stderr":"boom"}
+            records=runner.run(self.plan,self.root,self.root/"orphan.db",self.cgroup,
+                               recovery_dir=self.root/"recovery")
+        self.assertEqual(records[0]["result"]["status"],"Interrupted")
+        self.assertTrue(records[0]["result"]["recovery"]["present"])
+        self.assertEqual(supervise.call_count,1)
+
+    def test_cleanup_failure_hands_off_to_reaper_and_stops_campaign(self):
+        plan_id=contract.validate_plan(self.plan,self.root); reapers=[]
+        def fake_supervise(argv, *_):
+            seed=int(argv[-3]); return {"status":"Completed","returncode":0,
+                "stdout":json.dumps({"seed":seed,"plan_id":argv[-1],"status":"Evaluated"}),"stderr":""}
+        def fake_reaper(*_): h=FakeReaper(); reapers.append(h); return h
+        journal_path=self.root/"cleanup-failure.db"
+        with mock.patch.object(runner,"CgroupV2Attempt",FailCleanupGroup), \
+             mock.patch.object(runner,"require_inside_delegation",lambda *_: self.cgroup), \
+             mock.patch.object(runner,"spawn_reaper",fake_reaper), \
+             mock.patch.object(runner.durable,"supervise",fake_supervise):
+            with self.assertRaises(ContainmentError):
+                runner.run(self.plan,self.root,journal_path,self.cgroup,
+                           recovery_dir=self.root/"recovery")
+        journal=durable.Journal(journal_path,contract.journal_binding(self.plan))
+        try:
+            records,active,_=journal.read()
+        finally:
+            journal.close()
+        self.assertIsNone(active)
+        self.assertEqual(len(records),1)
+        self.assertEqual(records[0]["result"]["status"],"ContainmentFailed")
+        self.assertEqual(records[0]["result"]["prior_status"],"Completed")
+        self.assertFalse(reapers[0].released)
+        self.assertEqual(reapers[0].process.wait_calls,1)
 
     def test_launcher_attaches_exact_pid_before_exec(self):
         procs=self.root/"cgroup.procs"; procs.write_text("")
