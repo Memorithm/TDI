@@ -101,137 +101,71 @@ fn repeated_observation_does_not_move_replacement_cursor_or_change_footprint() {
 }
 
 #[test]
-fn predicate_vector_tracks_declared_marker_and_local_bucket_bits() {
-    let event = write(9, 99, 1);
-
-    let empty = encode_b4_write_predicates(
-        event,
-        RouteObservation {
-            exact_present: false,
-            bucket_full: false,
-            occupied_ways: 0,
-            ways: 2,
-            next_victim_way: 0,
-        },
-    )
-    .unwrap();
+fn predicate_vector_tracks_declared_marker_and_current_local_bucket_bits() {
+    let mut stream = BooleanStream::new(config(MemoryMode::TwoWay)).unwrap();
+    let empty = encode_b4_write_predicates(&mut stream, write(9, 99, 1)).unwrap();
     assert_eq!(empty.assignment(), 0b000001);
 
-    let exact = encode_b4_write_predicates(
-        event,
-        RouteObservation {
-            exact_present: true,
-            bucket_full: false,
-            occupied_ways: 1,
-            ways: 2,
-            next_victim_way: 0,
-        },
-    )
-    .unwrap();
+    stream.step(write(9, 99, 1)).unwrap();
+    let exact = encode_b4_write_predicates(&mut stream, write(9, 99, 1)).unwrap();
     assert_eq!(exact.assignment(), 0b001101);
     assert!(exact.test(WritePredicate::ExactTagPresent));
     assert!(exact.test(WritePredicate::BucketHasAny));
     assert!(!exact.test(WritePredicate::BucketFull));
 
-    let full_next_second = encode_b4_write_predicates(
-        event,
-        RouteObservation {
-            exact_present: false,
-            bucket_full: true,
-            occupied_ways: 2,
-            ways: 2,
-            next_victim_way: 1,
-        },
-    )
-    .unwrap();
-    assert_eq!(full_next_second.assignment(), 0b111001);
-    assert!(full_next_second.test(WritePredicate::NextVictimSecond));
+    stream.step(write(5, 23, 1)).unwrap();
+    let full_next_first = encode_b4_write_predicates(&mut stream, write(1, 0, 1)).unwrap();
+    assert_eq!(full_next_first.assignment() & 0b011000, 0b011000);
+}
+
+#[test]
+fn encoder_observes_the_write_key_instead_of_accepting_caller_metadata() {
+    let mut stream = BooleanStream::new(config(MemoryMode::TwoWay)).unwrap();
+    stream.step(write(1, 17, 1)).unwrap();
+
+    let before = stream.counters();
+    let _unrelated_probe = stream.observe_key(2);
+    let after_probe = stream.counters();
+    assert_eq!(after_probe.route_observations, before.route_observations + 1);
+
+    let encoded = encode_b4_write_predicates(&mut stream, write(1, 0, 1)).unwrap();
+    let after_encode = stream.counters();
+    assert!(encoded.test(WritePredicate::ExactTagPresent));
+    assert_eq!(
+        after_encode.route_observations,
+        after_probe.route_observations + 1
+    );
 }
 
 #[test]
 fn inhibited_marker_bits_are_preserved_without_payload_or_key_features() {
-    let observation = RouteObservation {
-        exact_present: false,
-        bucket_full: false,
-        occupied_ways: 0,
-        ways: 2,
-        next_victim_way: 0,
-    };
-    let marker_three = encode_b4_write_predicates(write(1, 255, 3), observation).unwrap();
-    let different_key_payload = encode_b4_write_predicates(write(99, 0, 3), observation).unwrap();
+    let mut first = BooleanStream::new(config(MemoryMode::TwoWay)).unwrap();
+    let mut second = BooleanStream::new(config(MemoryMode::TwoWay)).unwrap();
+    let marker_three = encode_b4_write_predicates(&mut first, write(1, 255, 3)).unwrap();
+    let different_key_payload = encode_b4_write_predicates(&mut second, write(99, 0, 3)).unwrap();
     assert_eq!(marker_three.assignment(), 0b000011);
     assert_eq!(marker_three, different_key_payload);
 }
 
 #[test]
-fn adapter_fails_closed_on_nonwrite_invalid_marker_and_non_b3_observation() {
-    let two_way = RouteObservation {
-        exact_present: false,
-        bucket_full: false,
-        occupied_ways: 0,
-        ways: 2,
-        next_victim_way: 0,
-    };
+fn adapter_fails_closed_on_nonwrite_invalid_marker_and_non_b3_stream() {
+    let mut stream = BooleanStream::new(config(MemoryMode::TwoWay)).unwrap();
+    let before = stream.counters();
     assert_eq!(
-        encode_b4_write_predicates(Event::Recall { key: 1 }, two_way),
+        encode_b4_write_predicates(&mut stream, Event::Recall { key: 1 }),
         Err(WritePredicateError::NotWriteEvent)
     );
     assert_eq!(
-        encode_b4_write_predicates(write(1, 0, 4), two_way),
+        encode_b4_write_predicates(&mut stream, write(1, 0, 4)),
         Err(WritePredicateError::InvalidMarker)
     );
+    assert_eq!(stream.counters(), before);
 
     let mut direct = BooleanStream::new(config(MemoryMode::Direct)).unwrap();
-    let direct_observation = direct.observe_key(1);
+    let direct_before = direct.counters();
     assert_eq!(
-        encode_b4_write_predicates(write(1, 0, 1), direct_observation),
+        encode_b4_write_predicates(&mut direct, write(1, 0, 1)),
         Err(WritePredicateError::RequiresTwoWayObservation)
     );
-}
-
-#[test]
-fn impossible_observation_shapes_are_rejected() {
-    let event = write(1, 0, 1);
-    for observation in [
-        RouteObservation {
-            exact_present: false,
-            bucket_full: false,
-            occupied_ways: 3,
-            ways: 2,
-            next_victim_way: 0,
-        },
-        RouteObservation {
-            exact_present: false,
-            bucket_full: false,
-            occupied_ways: 2,
-            ways: 2,
-            next_victim_way: 0,
-        },
-        RouteObservation {
-            exact_present: false,
-            bucket_full: true,
-            occupied_ways: 1,
-            ways: 2,
-            next_victim_way: 0,
-        },
-        RouteObservation {
-            exact_present: false,
-            bucket_full: false,
-            occupied_ways: 0,
-            ways: 2,
-            next_victim_way: 2,
-        },
-        RouteObservation {
-            exact_present: true,
-            bucket_full: false,
-            occupied_ways: 0,
-            ways: 2,
-            next_victim_way: 0,
-        },
-    ] {
-        assert_eq!(
-            encode_b4_write_predicates(event, observation),
-            Err(WritePredicateError::InvalidObservation)
-        );
-    }
+    assert_eq!(direct.counters(), direct_before);
 }
