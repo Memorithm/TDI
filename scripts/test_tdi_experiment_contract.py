@@ -76,7 +76,11 @@ def response(s, plan_id, trial_id, attempt_id):
         "backend_identity": "linux-cgroup-v2",
         "domain": "Development",
         "seed_decimal": str(2**63 - 1),
-        "progress": {"completed_steps": 3, "costs": {"logical_ops": 7}},
+        "progress": {
+            "completed_steps": 3,
+            "completed_observations": 3,
+            "costs": {"logical_ops": 7},
+        },
         "artifacts": [],
         "result": {"score": 5},
         "error": None,
@@ -94,6 +98,7 @@ def validate_response(s, value, plan_id, trial_id, attempt_id):
         domain="Development",
         seed=2**63 - 1,
         max_completed_steps=s["logical_budget"]["max_steps_per_trial"],
+        max_completed_observations=s["logical_budget"]["max_observations_per_trial"],
     )
 
 
@@ -182,6 +187,18 @@ class ExperimentContractTests(unittest.TestCase):
         attempt_id = contract.attempt_identity(plan_id, trial_id, "linux-cgroup-v2", 0)
         value = response(s, plan_id, trial_id, attempt_id)
         value["progress"]["completed_steps"] = s["logical_budget"]["max_steps_per_trial"] + 1
+        with self.assertRaises(contract.ExperimentContractError):
+            validate_response(s, value, plan_id, trial_id, attempt_id)
+
+    def test_completed_observations_above_frozen_budget_is_rejected(self):
+        s = spec()
+        plan_id = contract.experiment_plan_identity(s)
+        trial_id = contract.trial_identity(plan_id, "Development", 0)
+        attempt_id = contract.attempt_identity(plan_id, trial_id, "linux-cgroup-v2", 0)
+        value = response(s, plan_id, trial_id, attempt_id)
+        value["progress"]["completed_observations"] = (
+            s["logical_budget"]["max_observations_per_trial"] + 1
+        )
         with self.assertRaises(contract.ExperimentContractError):
             validate_response(s, value, plan_id, trial_id, attempt_id)
 
