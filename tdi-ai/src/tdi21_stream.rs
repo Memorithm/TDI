@@ -85,13 +85,15 @@ pub enum StepOutput {
 }
 
 /// Counts accepted events only. Rejected API calls do not mutate the candidate
-/// or yield evidence. Validation, allocator and evaluator costs are not CPU
-/// instructions inferred from these semantic categories.
+/// or yield evidence. Route observations are candidate-side metadata probes,
+/// not accepted sequence events. Validation, allocator and evaluator costs are
+/// not CPU instructions inferred from these semantic categories.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct StreamCounters {
     pub events: u64,
     pub replies: u64,
     pub rejected_writes: u64,
+    pub route_observations: u64,
     pub slot_probes: u64,
     pub work: ResourceCounters,
 }
@@ -105,6 +107,17 @@ pub struct MemoryFootprint {
     pub replacement_semantic_bits: usize,
     pub reserved_buffer_bytes: usize,
     pub inline_bytes: usize,
+}
+
+/// Bounded candidate-side metadata for one addressed bucket. No stored payload,
+/// evaluator answer, historical event list or future state is exposed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RouteObservation {
+    pub exact_present: bool,
+    pub bucket_full: bool,
+    pub occupied_ways: u8,
+    pub ways: u8,
+    pub next_victim_way: u8,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -189,6 +202,40 @@ impl BooleanStream {
             reserved_buffer_bytes: self.entries.capacity() * std::mem::size_of::<Option<Entry>>()
                 + self.next_victim.capacity() * std::mem::size_of::<bool>(),
             inline_bytes: std::mem::size_of::<Self>(),
+        }
+    }
+
+    /// Observe only the bounded bucket addressed by `key`. This is a candidate
+    /// feature probe, not an evaluator lookup: it never exposes stored payloads.
+    /// Address derivation, occupied-slot tag checks and slot probes are counted.
+    /// The observation does not change replacement state or stored entries.
+    pub fn observe_key(&mut self, key: u64) -> RouteObservation {
+        increment(&mut self.counters.route_observations);
+        let tag = self.tag(key);
+        let (bucket, start) = self.bucket(tag);
+        let ways = self.config.mode.ways();
+        let mut occupied_ways = 0u8;
+        let mut exact_present = false;
+        for index in start..start + ways {
+            increment(&mut self.counters.slot_probes);
+            if let Some(entry) = self.entries[index] {
+                occupied_ways = occupied_ways
+                    .checked_add(1)
+                    .expect("TDI-21 bucket occupancy overflow");
+                increment(&mut self.counters.work.tag_equality_checks);
+                exact_present |= entry.tag == tag;
+            }
+        }
+        RouteObservation {
+            exact_present,
+            bucket_full: usize::from(occupied_ways) == ways,
+            occupied_ways,
+            ways: ways as u8,
+            next_victim_way: if self.config.mode == MemoryMode::TwoWay {
+                u8::from(self.next_victim[bucket])
+            } else {
+                0
+            },
         }
     }
 
@@ -300,8 +347,8 @@ impl BooleanStream {
         let index = if let Some(index) = vacant {
             index
         } else {
-            // A collision here means a full bucket requiring eviction. Merely
-            // sharing a bucket is not an eviction or a false hit.
+            // A collision here means a full addressed bucket requiring eviction.
+            // Merely sharing a bucket is not an eviction or a false hit.
             increment(&mut self.counters.work.memory_collisions);
             increment(&mut self.counters.work.memory_replacements);
             if self.config.mode == MemoryMode::TwoWay {
