@@ -37,9 +37,12 @@ fn mobius_synthesis_recovers_every_three_variable_boolean_function() {
         for (assignment, expected) in table.iter().copied().enumerate() {
             assert_eq!(program.evaluate(assignment as u64), Ok(expected));
         }
-        assert!(program.terms().windows(2).all(|pair| {
-            pair[0].variables < pair[1].variables
-        }));
+        assert!(
+            program
+                .terms()
+                .windows(2)
+                .all(|pair| pair[0].variables < pair[1].variables)
+        );
     }
 }
 
@@ -63,7 +66,10 @@ fn marker_gate_has_the_expected_canonical_zhegalkin_form() {
 
 #[test]
 fn synthesis_fails_closed_on_invalid_shapes_and_bounds() {
-    assert_eq!(synthesize_anf(0, &[]), Err(AnfSynthesisError::ZeroVariables));
+    assert_eq!(
+        synthesize_anf(0, &[]),
+        Err(AnfSynthesisError::ZeroVariables)
+    );
     assert_eq!(
         synthesize_anf(MAX_ANF_VARIABLES + 1, &[]),
         Err(AnfSynthesisError::TooManyVariables)
@@ -134,10 +140,9 @@ fn b4_charges_anf_terms_without_hiding_b3_work() {
         assert_eq!(b4.step(event).unwrap(), b3.step(event).unwrap());
     }
     assert_eq!(b4.counters(), b3.counters());
-    // Two valid writes * two canonical ANF monomials.
     assert_eq!(b4.anf_work().anf_term_evals, 4);
     assert_eq!(b4.anf_work().pairwise_comparisons, 0);
-    assert_eq!(b4.arm().is_boolean_candidate(), true);
+    assert!(b4.arm().is_boolean_candidate());
     assert_eq!(
         b4.footprint().anf_program_semantic_bits,
         marker_acceptance_program().semantic_bits()
@@ -145,7 +150,7 @@ fn b4_charges_anf_terms_without_hiding_b3_work() {
 }
 
 #[test]
-fn rejected_invalid_marker_is_atomic_and_not_charged_as_anf_work() {
+fn rejected_calls_are_atomic_and_do_not_charge_anf_work() {
     let mut b4 = AlgebraicBooleanStream::new(b3_config()).unwrap();
     let before = b4.clone();
     assert_eq!(
@@ -153,6 +158,25 @@ fn rejected_invalid_marker_is_atomic_and_not_charged_as_anf_work() {
         Err(AlgebraicStreamError::Stream(StreamError::InvalidMarker))
     );
     assert_eq!(b4, before);
+
+    assert_eq!(
+        b4.step(write(1, 256, 1)),
+        Err(AlgebraicStreamError::Stream(StreamError::PayloadOutOfRange))
+    );
+    assert_eq!(b4, before);
+
+    let mut cfg = b3_config();
+    cfg.max_events = 1;
+    let mut bounded = AlgebraicBooleanStream::new(cfg).unwrap();
+    bounded.step(Event::Ignore).unwrap();
+    let before_exhausted = bounded.clone();
+    assert_eq!(
+        bounded.step(write(1, 1, 1)),
+        Err(AlgebraicStreamError::Stream(
+            StreamError::EventBudgetExhausted
+        ))
+    );
+    assert_eq!(bounded, before_exhausted);
 }
 
 #[test]
