@@ -34,7 +34,7 @@ For `m` eligible monomials and term limit `K`, the candidate count is exactly
 
 where the factor two represents the ANF constant bit.
 
-## Deterministic selection
+## Deterministic selection and provenance
 
 All admitted candidates are evaluated exhaustively on Development rows. Selection is lexicographic and fully declared:
 
@@ -44,13 +44,15 @@ All admitted candidates are evaluated exhaustively on Development rows. Selectio
 4. constant `false` before `true`;
 5. lexicographically smaller canonical monomial masks.
 
-This is a deterministic development selection rule, not a scientific acceptance criterion for TDI-21.1 or later stages.
+`SearchResult` retains the complete `SearchEnvelope` — variable count, maximum degree, maximum term count and candidate budget — rather than only the selected polynomial. The fitted arity is therefore also used automatically for exact ANF conversion and Validation admission. A caller cannot reinterpret a three-variable selected candidate as a two-variable program, nor silently detach a result from the search space that selected it.
+
+This envelope binding is provenance, not a scientific freeze. Development/Validation population identity, source revision and later task-generation contracts still require their own records.
 
 `SearchWork` records candidates, case evaluations and monomial evaluations. Those categories are semantic search work, not CPU instructions, FLOPs, bandwidth, energy or wall-clock measurements.
 
 ## Validation discipline
 
-`evaluate_validation` evaluates an already selected program without modifying it. Validation mismatches and monomial evaluations are reported separately from Development search work. Validation is not used to choose among candidates, choose the envelope, change degree/term limits or retry the search.
+`evaluate_validation` evaluates an already selected program without modifying it. Validation evidence records the fitted variable count, mismatches and monomial evaluations separately from Development search work. Validation is not used to choose among candidates, choose the envelope, change degree/term limits or retry the search.
 
 A future experiment must additionally freeze how Development and Validation rows are generated, prove their intended separation, define stopping/rejection rules before reporting comparative evidence, and retain negative results. This Stage-0 scaffold does none of that automatically.
 
@@ -60,8 +62,9 @@ The contract tests currently include:
 
 - exact recovery of `x0 XOR (x1*x2)` from all eight three-variable assignments under a degree-2/two-term envelope;
 - exact candidate/work-count checks for that search (`44` candidates, `352` case evaluations, `576` monomial evaluations);
-- conversion of the selected sparse candidate through the independent exact truth-table-to-ANF synthesizer;
-- Validation evaluation with both matching and deliberately inverted labels, confirming that post-selection validation cannot mutate the selected result;
+- retention of the exact selection envelope in the selected result;
+- conversion of the selected sparse candidate through the independent exact truth-table-to-ANF synthesizer at its fitted arity;
+- Validation evaluation with both matching and deliberately inverted labels, confirming that post-selection validation cannot mutate the selected result and retains the fitted arity;
 - deterministic simplicity/canonical tie breaking;
 - candidate-space rejection before an oversized degree-3/four-term six-variable enumeration;
 - duplicate and out-of-range assignment rejection;
