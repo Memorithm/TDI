@@ -3,9 +3,9 @@
 
 No repository-wide scan: historical/protected datasets must never be collected.
 The operator must list all relevant inputs and use immutable storage while running.
-Schema 1 preserves the legacy process-group path. Schema 2 additionally binds a
-cgroup-v2 resource profile into the plan identity; the delegated cgroup path is
-deployment state and is supplied to the supervisor at execution time.
+Schema 1 preserves the legacy process-group path. Schema 2 binds a cgroup-v2
+resource profile. Schema 3 additionally embeds a validated ExperimentSpec/v1;
+the delegated cgroup path remains deployment state supplied at execution time.
 """
 import argparse
 from pathlib import Path
@@ -38,6 +38,11 @@ def main():
     parser.add_argument("--output-limit", type=int, required=True)
     parser.add_argument("--plan", required=True, type=Path)
     parser.add_argument("--containment", choices=["legacy", "cgroup-v2"], default="legacy")
+    parser.add_argument(
+        "--experiment-spec",
+        type=Path,
+        help="ExperimentSpec/v1 JSON; requires cgroup-v2 and creates plan schema 3",
+    )
     parser.add_argument("--memory-max-bytes", type=int)
     parser.add_argument("--swap-max-bytes", type=int, default=0)
     parser.add_argument("--cpu-quota-us", type=int)
@@ -47,6 +52,9 @@ def main():
     parser.add_argument("--gpu-required", action="store_true")
     parser.add_argument("--gpu-memory-max-bytes", type=int)
     args = parser.parse_args()
+    if args.experiment_spec is not None and args.containment != "cgroup-v2":
+        parser.error("--experiment-spec requires --containment cgroup-v2")
+
     root = args.root.resolve(strict=True)
     selected = list(dict.fromkeys([args.worker, *args.artifact]))
     plan = {
@@ -71,7 +79,14 @@ def main():
             parser.error("cgroup-v2 containment requires " + ", ".join(missing))
         plan["schema"] = 2
         plan["execution"] = {"backend": "linux-cgroup-v2", "profile": _resource_profile(args)}
-    (contained.validate_plan(plan, root) if plan["schema"] == 2 else supervisor.validate(plan, root))
+        if args.experiment_spec is not None:
+            plan["schema"] = 3
+            plan["experiment"] = supervisor.strict_json(args.experiment_spec.read_bytes())
+
+    if plan["schema"] in (2, 3):
+        contained.validate_plan(plan, root)
+    else:
+        supervisor.validate(plan, root)
     # Refuse overwrite: freezing a different plan must use a new explicit path.
     with args.plan.open("x", encoding="utf-8") as stream:
         stream.write(supervisor.canonical(plan) + "\n")
