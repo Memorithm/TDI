@@ -10,9 +10,7 @@
 //! This is a substitution/isolation experiment, not learned routing, a model
 //! benchmark, a TDI-21.3 freeze, or evidence that ANF improves quality.
 
-use super::tdi21::{
-    AnfTerm, ArchitectureArm, ResourceCounters, counted_evaluate_anf,
-};
+use super::tdi21::{AnfTerm, ArchitectureArm, ResourceCounters, counted_evaluate_anf};
 use super::tdi21_stream::{
     BooleanStream, Event, MemoryFootprint, MemoryMode, StepOutput, StreamConfig, StreamCounters,
     StreamError,
@@ -95,7 +93,12 @@ impl AnfProgram {
     #[must_use]
     pub fn semantic_bits(&self) -> usize {
         9usize
-            .checked_add(self.terms.len().checked_mul(64).expect("ANF term bit overflow"))
+            .checked_add(
+                self.terms
+                    .len()
+                    .checked_mul(64)
+                    .expect("ANF term bit overflow"),
+            )
             .expect("ANF semantic bit overflow")
     }
 }
@@ -253,9 +256,11 @@ impl AlgebraicBooleanStream {
     }
 
     /// Valid marker values are algebraically classified before entering B3.
-    /// Invalid marker values are passed unchanged so B3 rejects them atomically
-    /// and no ANF work is spuriously charged for a rejected API call.
+    /// ANF work is staged locally and committed only when the B3 step succeeds,
+    /// so malformed payloads, exhausted event budgets and other rejected calls
+    /// remain fully accounting-atomic.
     pub fn step(&mut self, event: Event) -> Result<StepOutput, AlgebraicStreamError> {
+        let mut staged_anf_work = self.anf_work;
         let mapped = match event {
             Event::Write {
                 key,
@@ -264,7 +269,7 @@ impl AlgebraicBooleanStream {
             } if marker.bits() <= 3 => {
                 let active = self
                     .admission
-                    .evaluate_counted(marker.bits(), &mut self.anf_work)?;
+                    .evaluate_counted(marker.bits(), &mut staged_anf_work)?;
                 Event::Write {
                     key,
                     payload,
@@ -273,6 +278,8 @@ impl AlgebraicBooleanStream {
             }
             other => other,
         };
-        Ok(self.inner.step(mapped)?)
+        let output = self.inner.step(mapped)?;
+        self.anf_work = staged_anf_work;
+        Ok(output)
     }
 }
