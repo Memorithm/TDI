@@ -56,6 +56,25 @@ class LinuxContractV3Tests(unittest.TestCase):
         self.assertEqual(contained.experiment_identity(self.plan),
                          experiment.question_identity(self.plan["experiment"]))
 
+    def test_schema3_timeout_representation_is_canonicalized_for_binding(self):
+        integer_plan_id = contained.validate_plan(self.plan, self.root)
+        float_plan = copy.deepcopy(self.plan)
+        float_plan["timeout_seconds"] = 2.0
+        self.assertEqual(integer_plan_id, contained.validate_plan(float_plan, self.root))
+        self.assertEqual(contained.journal_binding(self.plan),
+                         contained.journal_binding(float_plan))
+        self.assertEqual(contained.journal_binding(self.plan)["execution_plan"]["timeout_seconds"],
+                         "2000ms")
+
+        fractional = copy.deepcopy(self.plan)
+        fractional["timeout_seconds"] = 1.5
+        fractional["experiment"]["physical_constraints"]["timeout_milliseconds"] = 1500
+        contained.validate_plan(fractional, self.root)
+        self.assertEqual(
+            contained.journal_binding(fractional)["execution_plan"]["timeout_seconds"],
+            "1500ms",
+        )
+
     def test_physical_change_requires_spec_change_but_not_question_change(self):
         original_plan_id = contained.validate_plan(self.plan, self.root)
         original_question = contained.experiment_identity(self.plan)
