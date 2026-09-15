@@ -351,7 +351,8 @@ def parse_seed_decimal(value):
 
 
 def validate_worker_response_v2(response, *, experiment_id, plan_id, trial_id, attempt_id,
-                                backend_identity, domain, seed, max_completed_steps):
+                                backend_identity, domain, seed, max_completed_steps,
+                                max_completed_observations):
     """Validate a worker response and all caller-owned identity/budget bindings."""
     _exact(response, {
         "schema", "execution_status", "scientific_disposition", "experiment_id", "plan_id",
@@ -375,10 +376,20 @@ def validate_worker_response_v2(response, *, experiment_id, plan_id, trial_id, a
         raise ExperimentContractError("worker response seed mismatch")
 
     _u64(max_completed_steps, "max_completed_steps")
-    progress = _exact(response["progress"], {"completed_steps", "costs"}, "progress")
+    _u64(max_completed_observations, "max_completed_observations")
+    progress = _exact(
+        response["progress"],
+        {"completed_steps", "completed_observations", "costs"},
+        "progress",
+    )
     _u64(progress["completed_steps"], "progress.completed_steps")
+    _u64(progress["completed_observations"], "progress.completed_observations")
     if progress["completed_steps"] > max_completed_steps:
         raise ExperimentContractError("worker completed_steps exceeds ExperimentSpec logical budget")
+    if progress["completed_observations"] > max_completed_observations:
+        raise ExperimentContractError(
+            "worker completed_observations exceeds ExperimentSpec logical budget"
+        )
     if not isinstance(progress["costs"], dict) or len(progress["costs"]) > MAX_LIST_ITEMS:
         raise ExperimentContractError("progress.costs must be a bounded object")
     for name, value in progress["costs"].items():
