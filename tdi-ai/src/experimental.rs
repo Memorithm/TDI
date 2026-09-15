@@ -34,6 +34,8 @@ pub mod tdi21_anf_search;
 pub mod tdi21_anf_synthesis;
 #[path = "tdi21_attention.rs"]
 pub mod tdi21_attention;
+#[path = "tdi21_distributional_objective.rs"]
+pub mod tdi21_distributional_objective;
 #[path = "tdi21_evaluation.rs"]
 pub mod tdi21_evaluation;
 #[path = "tdi21_event_predicates.rs"]
