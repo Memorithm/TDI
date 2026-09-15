@@ -4,7 +4,7 @@ Status: **active development; not frozen; no confirmatory execution**.
 
 ## Lineage and audit
 
-Bootstrap #233, homepage #234, audit #235, causal stream #237, evaluation controls #240, isolated attention references #241, first B4 ANF substitution #243 and bounded exact-function ANF search #244 are merged. The [2026-09-14 audit](TDI-21.0-AUDIT-20260914.md) reviews the initial TDI-21 source at `41a71e22a6bde76870d44f952f8d0b5767541e54`, documents eight defects/limitations and supplies corrective regressions. A merge or passing software test is not scientific confirmation.
+Bootstrap #233, homepage #234, audit #235, causal stream #237, evaluation controls #240, isolated attention references #241 and first B4 ANF substitution #243 are merged. The [2026-09-14 audit](TDI-21.0-AUDIT-20260914.md) reviews the initial TDI-21 source at `41a71e22a6bde76870d44f952f8d0b5767541e54`, documents eight defects/limitations and supplies corrective regressions. A merge or passing software test is not scientific confirmation.
 
 Corrective engineering includes invertible versioned routing, invalid-literal rejection, declared-width clause validation, full-width address reduction, checked arithmetic, separate resource categories, evidence-dimension validation, correct absent-marker scoring, delimiter-safe evidence v2 and duplicate/blank freeze-field rejection. A recorded zero pairwise count is not execution attestation; valid SHA syntax is not proof of executed code.
 
@@ -24,9 +24,7 @@ Independent-oracle tests enumerate every length-four stream over seven events fo
 
 [The bounded B4 search scaffold](TDI-21.0-B4-ANF-SEARCH.md) adds exhaustive sparse-ANF selection over a typed `DevelopmentSet`, while `ValidationSet` is accepted only after selection. Search is bounded to six variables, degree three, four monomials, 65,536 candidates and at most 64 unique labelled assignments — the complete largest domain possible under six variables. Candidate-space size is checked before enumeration rather than silently truncated. Selection and search-cost accounting are deterministic. `SearchResult` retains the complete selection envelope — variable count, degree limit, term limit and candidate budget — and Validation retains the fitted arity, preventing caller-driven reinterpretation of a selected program under a different search identity. The exact-function set rejects duplicate assignments by design; empirical policy learning with conflicting objectives requires a separate weighted/count-preserving surface rather than abusing this type. Software fixtures recover `x0 XOR (x1*x2)` and three-bit parity and separately exercise post-selection Validation behavior. This is not yet a sequence-task learning result.
 
-[The local event-predicate boundary](TDI-21.0-B4-EVENT-PREDICATES.md) defines six versioned write-routing predicates from the current two-bit marker and the addressed B3 bucket only: exact-tag-present, any-entry, full-bucket and next-victim state in addition to the marker bits. `observe_key` probes at most the two local ways, exposes no stored payload, oracle answer, future event or Validation label, and records route-observation, slot-probe and tag-check work separately from accepted sequence events and payload-memory reads. The adapter does not yet choose a routing action or connect labels to sparse ANF search.
-
-B5 learned relational state evolution, searched sequence-routing behavior, trained attention-model comparisons and matched total-resource experiments are **not implemented**. Hand-written B0/B1/B2/B3 references, the equivalent B4 substitution, sparse exact-function search fixtures, the local predicate boundary and successful dictionary controls do not demonstrate language modeling, learned semantic addressing or attention replacement at model scale.
+B5 learned relational state evolution, event-to-predicate learning, trained attention-model comparisons and matched total-resource experiments are **not implemented**. Hand-written B0/B1/B2/B3 references, the equivalent B4 substitution, sparse truth-table search fixtures and successful dictionary controls do not demonstrate language modeling, learned semantic addressing or attention replacement at model scale.
 
 ## Validation and reproduction
 
@@ -39,14 +37,14 @@ bash scripts/check-tdi-ai-experiments.sh
 bash scripts/check-tdi21-development.sh
 ```
 
-Use exact-head CI logs for current outcomes. The development script requires a clean checkout, records its real SHA and source hashes, and executes no protected/final population. Equal entry count does not imply equal memory budget. The B2/B3 common ceiling covers only the declared memory substrate; B4 additionally reports its ANF representation bits and term evaluations; sparse search reports search candidate/case/monomial work separately; local predicate observation reports bounded route-observation, slot-probe and tag-check work; the attention references separately reserve bounded write history and score buffers. Dictionary payload bits are a lower bound. None of these is matched total compute/training/allocator evidence.
+Use exact-head CI logs for current outcomes. The development script requires a clean checkout, records its real SHA and source hashes, and executes no protected/final population. Equal entry count does not imply equal memory budget. The B2/B3 common ceiling covers only the declared memory substrate; B4 additionally reports its ANF representation bits and term evaluations; sparse search reports search candidate/case/monomial work separately; the attention references separately reserve bounded write history and score buffers. Dictionary payload bits are a lower bound. None of these is matched total compute/training/allocator evidence.
 
 ## Next scientific milestones
 
-1. Define explicit Development and Validation sequence families that derive labels for one local B4 routing decision without exposing Validation labels to selection; connect those Development rows to the bounded sparse-ANF search only after the label semantics are versioned.
-2. Compare the resulting selected B4 policy against unchanged B3 on the same declared memory substrate, retaining harmful tradeoffs and negative cases rather than optimizing a single fixture.
+1. Define a versioned event-to-predicate adapter for a nontrivial B4 routing decision using only permitted present/past state, then connect the already bounded exact-function search surface without exposing Validation labels to selection.
+2. Keep exact Boolean-function synthesis distinct from the future empirical weighted policy search required when identical causal observations carry conflicting hindsight objectives.
 3. Freeze Development/Validation task-family generation, search envelopes, metrics, rejection rules and stop conditions before comparative evidence.
 4. Extend resource accounting to explicit total memory/compute/training/tuning envelopes, then compare competent trained models where the task requires learning.
-5. Build B5 only after B4 sequence-search semantics are falsifiable and reproducible, then qualify behavior before generic SciRust promotion or an elastic FLAT-ATTENTION hybrid.
+5. Build B5 only after B4 search and event-feature semantics are falsifiable and reproducible rather than promoting a toy truth-table fit, then qualify behavior before generic SciRust promotion or an elastic FLAT-ATTENTION hybrid.
 
 The structural freeze template remains insufficient to authorize a confirmatory experiment. All inherited holdout protections remain intact.

@@ -36,8 +36,6 @@ pub mod tdi21_anf_synthesis;
 pub mod tdi21_attention;
 #[path = "tdi21_evaluation.rs"]
 pub mod tdi21_evaluation;
-#[path = "tdi21_event_predicates.rs"]
-pub mod tdi21_event_predicates;
 #[path = "tdi21_freeze.rs"]
 pub mod tdi21_freeze;
 #[path = "tdi21_provenance.rs"]
@@ -46,3 +44,5 @@ pub mod tdi21_provenance;
 pub mod tdi21_stream;
 #[path = "tdi21_boolean_tasks.rs"]
 pub mod tdi21_tasks;
+#[path = "tdi22_torsor.rs"]
+pub mod tdi22_torsor;
