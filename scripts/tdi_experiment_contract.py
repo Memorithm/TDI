@@ -100,6 +100,28 @@ def _records(value, name, *, allow_empty=False):
     return value
 
 
+def _validated_artifacts(value):
+    """Validate and canonically order worker artifact references by name."""
+    artifacts = _records(value, "artifacts", allow_empty=True)
+    names = set()
+    normalized = []
+    for index, artifact in enumerate(artifacts):
+        _exact(artifact, {"name", "sha256", "access_class"}, f"artifacts[{index}]")
+        name = _text(artifact["name"], f"artifacts[{index}].name")
+        _sha256(artifact["sha256"], f"artifacts[{index}].sha256")
+        _text(artifact["access_class"], f"artifacts[{index}].access_class")
+        if name in names:
+            raise ExperimentContractError("duplicate artifact name")
+        names.add(name)
+        normalized.append({
+            "name": name,
+            "sha256": artifact["sha256"],
+            "access_class": artifact["access_class"],
+        })
+    normalized.sort(key=lambda artifact: artifact["name"])
+    return normalized
+
+
 def _canonical_result_value(value, name="result", depth=0):
     """Validate result values with language-independent numeric rules.
 
@@ -329,8 +351,8 @@ def parse_seed_decimal(value):
 
 
 def validate_worker_response_v2(response, *, experiment_id, plan_id, trial_id, attempt_id,
-                                backend_identity, domain, seed):
-    """Validate a worker response and all caller-owned identity bindings."""
+                                backend_identity, domain, seed, max_completed_steps):
+    """Validate a worker response and all caller-owned identity/budget bindings."""
     _exact(response, {
         "schema", "execution_status", "scientific_disposition", "experiment_id", "plan_id",
         "trial_id", "attempt_id", "backend_identity", "domain", "seed_decimal", "progress",
@@ -352,23 +374,18 @@ def validate_worker_response_v2(response, *, experiment_id, plan_id, trial_id, a
     if parse_seed_decimal(response["seed_decimal"]) != seed:
         raise ExperimentContractError("worker response seed mismatch")
 
+    _u64(max_completed_steps, "max_completed_steps")
     progress = _exact(response["progress"], {"completed_steps", "costs"}, "progress")
     _u64(progress["completed_steps"], "progress.completed_steps")
+    if progress["completed_steps"] > max_completed_steps:
+        raise ExperimentContractError("worker completed_steps exceeds ExperimentSpec logical budget")
     if not isinstance(progress["costs"], dict) or len(progress["costs"]) > MAX_LIST_ITEMS:
         raise ExperimentContractError("progress.costs must be a bounded object")
     for name, value in progress["costs"].items():
         _text(name, "progress cost name", max_bytes=256)
         _u64(value, f"progress.costs.{name}")
 
-    artifact_names = set()
-    for index, artifact in enumerate(_records(response["artifacts"], "artifacts", allow_empty=True)):
-        _exact(artifact, {"name", "sha256", "access_class"}, f"artifacts[{index}]")
-        name = _text(artifact["name"], f"artifacts[{index}].name")
-        _sha256(artifact["sha256"], f"artifacts[{index}].sha256")
-        _text(artifact["access_class"], f"artifacts[{index}].access_class")
-        if name in artifact_names:
-            raise ExperimentContractError("duplicate artifact name")
-        artifact_names.add(name)
+    _validated_artifacts(response["artifacts"])
 
     if response["result"] is not None and not isinstance(response["result"], dict):
         raise ExperimentContractError("worker result must be object or null")
@@ -384,17 +401,20 @@ def validate_worker_response_v2(response, *, experiment_id, plan_id, trial_id, a
 
 
 def scientific_result_identity(response):
-    """Hash scientific output while excluding variable operational telemetry."""
+    """Hash scientific output/artifacts while excluding variable operational telemetry."""
     if not isinstance(response, dict):
         raise ExperimentContractError("worker response must be an object")
-    for name in ("experiment_id", "plan_id", "trial_id", "scientific_disposition", "result"):
+    for name in ("experiment_id", "plan_id", "trial_id", "scientific_disposition",
+                 "artifacts", "result"):
         if name not in response:
             raise ExperimentContractError(f"worker response missing {name}")
+    artifacts = _validated_artifacts(response["artifacts"])
     if response["result"] is not None:
         _canonical_result_value(response["result"])
     return _digest("tdi-scientific-result/v1", {
         "experiment_id": response["experiment_id"], "plan_id": response["plan_id"],
         "trial_id": response["trial_id"],
         "scientific_disposition": response["scientific_disposition"],
+        "artifacts": artifacts,
         "result": response["result"],
     })
