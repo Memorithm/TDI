@@ -10,7 +10,9 @@ use super::tdi21::{BooleanState, MemoryRead};
 use super::tdi21_event_predicates::{
     WritePredicateError, WritePredicateVector, encode_b4_write_predicates,
 };
-use super::tdi21_stream::{BooleanStream, Event, MemoryMode, StepOutput, StreamConfig, StreamError};
+use super::tdi21_stream::{
+    BooleanStream, Event, MemoryMode, StepOutput, StreamConfig, StreamError,
+};
 
 pub const IDENTIFIABILITY_SEMANTICS: &str = "tdi21-b4-local-predicate-identifiability-v1";
 pub const MAX_AUDIT_PREFIX_EVENTS: usize = 32;
@@ -143,13 +145,7 @@ pub fn audit_admission_case(
         AdmissionAction::Admit,
         case.probe,
     )?;
-    let inhibit = apply_action(
-        stream,
-        key,
-        payload,
-        AdmissionAction::Inhibit,
-        case.probe,
-    )?;
+    let inhibit = apply_action(stream, key, payload, AdmissionAction::Inhibit, case.probe)?;
     let unique_hindsight_label = match (admit.succeeds, inhibit.succeeds) {
         (true, false) => Some(AdmissionAction::Admit),
         (false, true) => Some(AdmissionAction::Inhibit),
