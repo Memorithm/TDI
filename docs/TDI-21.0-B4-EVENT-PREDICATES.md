@@ -6,10 +6,12 @@ This increment defines the first versioned observation boundary that can later c
 
 ## Permitted input
 
-For a current `Write` event, the adapter receives:
+For a current `Write` event, the public adapter receives the B3 stream and the event. It derives the write key internally and observes exactly the bucket addressed by that key before encoding predicates. Callers do not provide a separate `RouteObservation` to the public encoder.
+
+The encoded state contains:
 
 1. the current marker's two declared bits;
-2. a bounded observation of the B3 bucket addressed by the current key.
+2. a bounded observation of the B3 bucket addressed by the current write key.
 
 The bucket observation contains only:
 
@@ -43,22 +45,28 @@ This restriction is intentional. The initial B4 search should first test whether
 
 ## Fail-closed validation
 
-The adapter rejects:
+The public adapter rejects before observation:
 
 - non-Write events;
 - markers outside the existing two-bit domain;
-- observations that are not from the two-way B3 substrate;
+- streams that are not the two-way B3 substrate.
+
+The internal observation encoder also rejects:
+
 - impossible occupancy/fullness combinations;
 - an exact-presence claim for an empty bucket;
-- replacement-victim indices outside the addressed bucket.
+- replacement-victim indices outside the addressed bucket;
+- a second-way replacement cursor on a non-full bucket, which the current B3 state machine does not produce.
 
-Synthetic or caller-constructed observations therefore cannot bypass the declared structural invariants.
+Synthetic observation shapes are exercised only inside module-local contract tests; the production-facing encoder does not accept caller-constructed observations.
 
 ## Accounting and causality
 
 `BooleanStream::observe_key` is candidate-side observation work, not an accepted sequence event. `StreamCounters::route_observations` records these calls separately. Each call also incurs the existing counted route transform, bounded slot probes and tag equality checks.
 
-Because it receives only the current key and current memory state, the interface is causal. This does not by itself prove that a future task generator or search process is leakage-free; Development/Validation generation and the labels used for search still require their own contract.
+`encode_b4_write_predicates` performs its own observation from the current `Write` key. An unrelated probe performed earlier cannot be substituted into that encoding. Invalid event, marker or memory-mode calls return before observation.
+
+Because the encoder derives its observation only from the current key and current memory state, the interface is causal. This does not by itself prove that a future task generator or search process is leakage-free; Development/Validation generation and the labels used for search still require their own contract.
 
 ## Qualification tests
 
@@ -67,10 +75,11 @@ The software contract checks:
 - an empty B3 bucket and exact counter deltas;
 - exact-present, one-occupied, full-bucket and post-eviction observations using the existing colliding keys `1`, `5` and `9`;
 - repeated observation without changing replacement state or memory footprint;
-- exact bit assignments for empty, exact-present and full/next-victim states;
-- independence from current key/payload values under otherwise identical inputs;
-- rejection of non-Write, invalid-marker and direct-memory observations;
-- rejection of impossible synthetic observation shapes;
+- exact predicate bits derived from the current write's own bucket state;
+- independence from current key/payload values under otherwise identical local state;
+- an unrelated manual probe cannot be supplied to the encoder and the encoder performs a fresh current-key observation;
+- rejection of non-Write, invalid-marker and direct-memory calls before observation;
+- rejection in module-local tests of unreachable non-full/second-victim observations;
 - zero recorded pairwise token comparisons.
 
 These are interface tests, not evidence that any searched policy improves B3.

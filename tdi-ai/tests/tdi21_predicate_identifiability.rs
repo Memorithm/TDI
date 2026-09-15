@@ -72,7 +72,8 @@ fn identical_v1_predicates_require_opposite_hindsight_actions() {
     assert!(new_audit.admit.succeeds);
     assert!(!new_audit.inhibit.succeeds);
 
-    let conflict = conflicting_pair(old_audit, new_audit).expect("must expose a collision in v1 features");
+    let conflict =
+        conflicting_pair(old_audit, new_audit).expect("must expose a collision in v1 features");
     assert_eq!(conflict.first_label, AdmissionAction::Inhibit);
     assert_eq!(conflict.second_label, AdmissionAction::Admit);
 }

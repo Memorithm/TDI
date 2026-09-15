@@ -10,7 +10,9 @@ use super::tdi21::{BooleanState, MemoryRead};
 use super::tdi21_event_predicates::{
     WritePredicateError, WritePredicateVector, encode_b4_write_predicates,
 };
-use super::tdi21_stream::{BooleanStream, Event, MemoryMode, StepOutput, StreamConfig, StreamError};
+use super::tdi21_stream::{
+    BooleanStream, Event, MemoryMode, StepOutput, StreamConfig, StreamError,
+};
 
 pub const IDENTIFIABILITY_SEMANTICS: &str = "tdi21-b4-local-predicate-identifiability-v1";
 pub const MAX_AUDIT_PREFIX_EVENTS: usize = 32;
@@ -112,8 +114,10 @@ fn apply_action(
 
 /// Compare Admit and Inhibit from the same causal prefix and current Write.
 ///
-/// The predicate vector is captured before either action. The declared future
-/// recall is evaluator-only and is never encoded into that vector.
+/// The predicate vector is captured before either action by the production-side
+/// adapter, which derives the bucket observation from the decision's own key.
+/// The declared future recall is evaluator-only and is never encoded into that
+/// vector.
 pub fn audit_admission_case(
     config: StreamConfig,
     case: &AdmissionAuditCase,
@@ -132,8 +136,7 @@ pub fn audit_admission_case(
     for &event in &case.prefix {
         stream.step(event)?;
     }
-    let observation = stream.observe_key(key);
-    let predicates = encode_b4_write_predicates(case.decision, observation)?;
+    let predicates = encode_b4_write_predicates(&mut stream, case.decision)?;
 
     let admit = apply_action(
         stream.clone(),
@@ -142,13 +145,7 @@ pub fn audit_admission_case(
         AdmissionAction::Admit,
         case.probe,
     )?;
-    let inhibit = apply_action(
-        stream,
-        key,
-        payload,
-        AdmissionAction::Inhibit,
-        case.probe,
-    )?;
+    let inhibit = apply_action(stream, key, payload, AdmissionAction::Inhibit, case.probe)?;
     let unique_hindsight_label = match (admit.succeeds, inhibit.succeeds) {
         (true, false) => Some(AdmissionAction::Admit),
         (false, true) => Some(AdmissionAction::Inhibit),
@@ -172,7 +169,10 @@ pub struct PredicateConflict {
 /// Return a concrete non-identifiability witness when the candidate observes
 /// the same predicate vector but the evaluator finds opposite unique labels.
 #[must_use]
-pub fn conflicting_pair(first: AdmissionAudit, second: AdmissionAudit) -> Option<PredicateConflict> {
+pub fn conflicting_pair(
+    first: AdmissionAudit,
+    second: AdmissionAudit,
+) -> Option<PredicateConflict> {
     let first_label = first.unique_hindsight_label?;
     let second_label = second.unique_hindsight_label?;
     if first.predicates == second.predicates && first_label != second_label {
