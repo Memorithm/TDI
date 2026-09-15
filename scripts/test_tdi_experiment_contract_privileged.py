@@ -48,7 +48,7 @@ class KernelExperimentContractTests(unittest.TestCase):
                 " 'backend_identity':'linux-cgroup-v2',\n"
                 " 'domain':'Development',\n"
                 " 'seed_decimal':str(seed),\n"
-                " 'progress':{'completed_steps':1,'costs':{'logical_ops':1}},\n"
+                " 'progress':{'completed_steps':1,'completed_observations':1,'costs':{'logical_ops':1}},\n"
                 " 'artifacts':[],\n"
                 " 'result':{'value':seed+1},\n"
                 " 'error':None}\n"
