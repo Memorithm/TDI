@@ -129,10 +129,7 @@ fn build_case_set(
 }
 
 impl DevelopmentSet {
-    pub fn new(
-        variable_count: u8,
-        cases: &[LabeledAssignment],
-    ) -> Result<Self, AnfSearchError> {
+    pub fn new(variable_count: u8, cases: &[LabeledAssignment]) -> Result<Self, AnfSearchError> {
         build_case_set(variable_count, cases).map(Self)
     }
 
@@ -153,10 +150,7 @@ impl DevelopmentSet {
 }
 
 impl ValidationSet {
-    pub fn new(
-        variable_count: u8,
-        cases: &[LabeledAssignment],
-    ) -> Result<Self, AnfSearchError> {
+    pub fn new(variable_count: u8, cases: &[LabeledAssignment]) -> Result<Self, AnfSearchError> {
         build_case_set(variable_count, cases).map(Self)
     }
 
@@ -352,19 +346,14 @@ fn better_candidate(
         .map(|mask| mask.count_ones())
         .max()
         .unwrap_or(0);
-    (
-        mismatches,
-        monomials.len(),
-        degree,
-        constant,
-        monomials,
-    ) < (
-        best_mismatches,
-        best_monomials.len(),
-        best_degree,
-        best_constant,
-        best_monomials,
-    )
+    (mismatches, monomials.len(), degree, constant, monomials)
+        < (
+            best_mismatches,
+            best_monomials.len(),
+            best_degree,
+            best_constant,
+            best_monomials,
+        )
 }
 
 /// Exhaustive bounded sparse-ANF search over Development labels only.
@@ -397,13 +386,7 @@ pub fn fit_sparse_anf(
         .try_reserve_exact((required / 2) as usize)
         .map_err(|_| AnfSearchError::AllocationFailed)?;
     for term_count in 0..=envelope.max_terms.min(universe.len()) {
-        enumerate_combinations(
-            &universe,
-            0,
-            term_count,
-            &mut Vec::new(),
-            &mut combinations,
-        )?;
+        enumerate_combinations(&universe, 0, term_count, &mut Vec::new(), &mut combinations)?;
     }
 
     let mut work = SearchWork::default();
@@ -414,10 +397,7 @@ pub fn fit_sparse_anf(
             let mut mismatches = 0u64;
             for case in &development.0.cases {
                 checked_add(&mut work.case_evaluations, 1)?;
-                checked_add(
-                    &mut work.monomial_evaluations,
-                    monomials.len() as u64,
-                )?;
+                checked_add(&mut work.monomial_evaluations, monomials.len() as u64)?;
                 if evaluate_sparse(constant, monomials, case.assignment) != case.expected {
                     checked_add(&mut mismatches, 1)?;
                 }
