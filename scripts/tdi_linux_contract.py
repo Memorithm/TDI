@@ -4,6 +4,7 @@ Schema 2 preserves the qualified cgroup-v2 plan introduced by the containment
 lot. Schema 3 adds ExperimentSpec/v1 and worker-response/v2 identities without
 changing schema-2 semantics or authorizing a scientific stage.
 """
+import copy
 from pathlib import Path
 
 import tdi_experiment_contract as experiment
@@ -79,6 +80,20 @@ def _validate_experiment_binding(plan, profile):
     return spec
 
 
+def _canonical_schema3_plan(plan):
+    """Normalize duplicate timeout representation before hashing/persistence.
+
+    Schema 3 carries authoritative integer milliseconds in ExperimentSpec while
+    the inherited runner field is expressed in seconds. JSON clients may emit
+    the same integral seconds as `2` or `2.0`; after validation both are reduced
+    to one language-independent `<milliseconds>ms` binding representation.
+    """
+    normalized = copy.deepcopy(plan)
+    milliseconds = plan["experiment"]["physical_constraints"]["timeout_milliseconds"]
+    normalized["timeout_seconds"] = f"{milliseconds}ms"
+    return normalized
+
+
 def validate_plan(plan, root):
     """Validate schema 2 or 3 while preserving schema-1 scientific semantics."""
     if not isinstance(plan, dict) or plan.get("schema") not in (2, 3):
@@ -104,7 +119,7 @@ def plan_identity(plan):
         spec_id = experiment.experiment_plan_identity(plan["experiment"])
     except experiment.ExperimentContractError as error:
         raise durable.ContractError(str(error)) from error
-    value = {"experiment_plan_id": spec_id, "execution_plan": plan}
+    value = {"experiment_plan_id": spec_id, "execution_plan": _canonical_schema3_plan(plan)}
     return durable.digest(b"tdi-execution-plan/v1\0" + experiment.canonical(value))
 
 
@@ -119,8 +134,9 @@ def experiment_identity(plan):
 
 
 def journal_binding(plan):
-    """Bind the entire execution plan without changing legacy Start/Finish events."""
-    return {"schema": 1, "indices": list(plan["indices"]), "execution_plan": plan}
+    """Bind a canonical execution plan without changing Start/Finish events."""
+    execution_plan = _canonical_schema3_plan(plan) if plan.get("schema") == 3 else plan
+    return {"schema": 1, "indices": list(plan["indices"]), "execution_plan": execution_plan}
 
 
 def attempt_identity(plan_id, index, ordinal=0):
