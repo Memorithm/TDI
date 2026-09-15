@@ -124,7 +124,11 @@ class LinuxContractV3Tests(unittest.TestCase):
             "backend_identity": "linux-cgroup-v2",
             "domain": "Development",
             "seed_decimal": "0",
-            "progress": {"completed_steps": 1, "costs": {"logical_ops": 3}},
+            "progress": {
+                "completed_steps": 1,
+                "completed_observations": 1,
+                "costs": {"logical_ops": 3},
+            },
             "artifacts": [],
             "result": {"value": 4},
             "error": None,
