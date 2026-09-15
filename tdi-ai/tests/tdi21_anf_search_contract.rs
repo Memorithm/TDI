@@ -35,6 +35,7 @@ fn exhaustive_search_recovers_nontrivial_sparse_zhegalkin_relation() {
     let development = DevelopmentSet::new(3, &full_three_variable_set()).unwrap();
     let result = fit_sparse_anf(&development, reference_envelope()).unwrap();
 
+    assert_eq!(result.variable_count(), 3);
     assert!(!result.constant());
     assert_eq!(result.monomials(), &[0b001, 0b110]);
     assert_eq!(result.development_mismatches(), 0);
@@ -52,7 +53,8 @@ fn exhaustive_search_recovers_nontrivial_sparse_zhegalkin_relation() {
 fn selected_program_round_trips_through_exact_anf_synthesizer() {
     let development = DevelopmentSet::new(3, &full_three_variable_set()).unwrap();
     let result = fit_sparse_anf(&development, reference_envelope()).unwrap();
-    let program = result.to_anf_program(3).unwrap();
+    let program = result.to_anf_program().unwrap();
+    assert_eq!(program.variable_count(), 3);
     assert!(!program.constant());
     let masks: Vec<_> = program.terms().iter().map(|term| term.variables).collect();
     assert_eq!(masks, vec![0b001, 0b110]);
@@ -99,8 +101,8 @@ fn validation_is_post_selection_and_cannot_change_the_fitted_program() {
     )
     .unwrap();
 
-    let good = evaluate_validation(&result, &validation_good, 3).unwrap();
-    let bad = evaluate_validation(&result, &validation_bad, 3).unwrap();
+    let good = evaluate_validation(&result, &validation_good).unwrap();
+    let bad = evaluate_validation(&result, &validation_bad).unwrap();
     assert_eq!(good.mismatches, 0);
     assert_eq!(bad.mismatches, 2);
     assert_eq!(result, before);
@@ -126,6 +128,7 @@ fn tie_breaking_prefers_the_simplest_canonical_program() {
         },
     )
     .unwrap();
+    assert_eq!(result.variable_count(), 2);
     assert!(!result.constant());
     assert!(result.monomials().is_empty());
     assert_eq!(result.development_mismatches(), 0);
@@ -218,12 +221,13 @@ fn variable_count_drift_fails_closed_for_fit_and_validation() {
     )
     .unwrap();
     assert_eq!(
-        evaluate_validation(&result, &validation, 3),
+        evaluate_validation(&result, &validation),
         Err(AnfSearchError::VariableCountMismatch {
             expected: 3,
             actual: 2,
         })
     );
+    assert_eq!(result.variable_count(), 3);
 }
 
 #[test]
@@ -244,6 +248,7 @@ fn sparse_search_can_recover_three_bit_parity_with_degree_one() {
         },
     )
     .unwrap();
+    assert_eq!(result.variable_count(), 3);
     assert!(!result.constant());
     assert_eq!(result.monomials(), &[0b001, 0b010, 0b100]);
     assert_eq!(result.development_mismatches(), 0);
