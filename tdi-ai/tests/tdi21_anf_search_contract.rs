@@ -35,6 +35,7 @@ fn exhaustive_search_recovers_nontrivial_sparse_zhegalkin_relation() {
     let development = DevelopmentSet::new(3, &full_three_variable_set()).unwrap();
     let result = fit_sparse_anf(&development, reference_envelope()).unwrap();
 
+    assert_eq!(result.envelope(), reference_envelope());
     assert_eq!(result.variable_count(), 3);
     assert!(!result.constant());
     assert_eq!(result.monomials(), &[0b001, 0b110]);
@@ -103,6 +104,10 @@ fn validation_is_post_selection_and_cannot_change_the_fitted_program() {
 
     let good = evaluate_validation(&result, &validation_good).unwrap();
     let bad = evaluate_validation(&result, &validation_bad).unwrap();
+    assert_eq!(good.variable_count, 3);
+    assert_eq!(bad.variable_count, 3);
+    assert_eq!(good.cases, 2);
+    assert_eq!(bad.cases, 2);
     assert_eq!(good.mismatches, 0);
     assert_eq!(bad.mismatches, 2);
     assert_eq!(result, before);
@@ -118,16 +123,14 @@ fn tie_breaking_prefers_the_simplest_canonical_program() {
         }],
     )
     .unwrap();
-    let result = fit_sparse_anf(
-        &development,
-        SearchEnvelope {
-            variable_count: 2,
-            max_degree: 2,
-            max_terms: 2,
-            max_candidates: 32,
-        },
-    )
-    .unwrap();
+    let envelope = SearchEnvelope {
+        variable_count: 2,
+        max_degree: 2,
+        max_terms: 2,
+        max_candidates: 32,
+    };
+    let result = fit_sparse_anf(&development, envelope).unwrap();
+    assert_eq!(result.envelope(), envelope);
     assert_eq!(result.variable_count(), 2);
     assert!(!result.constant());
     assert!(result.monomials().is_empty());
@@ -238,16 +241,14 @@ fn sparse_search_can_recover_three_bit_parity_with_degree_one() {
             expected: assignment.count_ones() % 2 == 1,
         })
         .collect();
-    let result = fit_sparse_anf(
-        &DevelopmentSet::new(3, &cases).unwrap(),
-        SearchEnvelope {
-            variable_count: 3,
-            max_degree: 1,
-            max_terms: 3,
-            max_candidates: 32,
-        },
-    )
-    .unwrap();
+    let envelope = SearchEnvelope {
+        variable_count: 3,
+        max_degree: 1,
+        max_terms: 3,
+        max_candidates: 32,
+    };
+    let result = fit_sparse_anf(&DevelopmentSet::new(3, &cases).unwrap(), envelope).unwrap();
+    assert_eq!(result.envelope(), envelope);
     assert_eq!(result.variable_count(), 3);
     assert!(!result.constant());
     assert_eq!(result.monomials(), &[0b001, 0b010, 0b100]);
