@@ -64,12 +64,12 @@ The worker returns exactly one JSON object containing:
 - `scientific_disposition: "evaluated" | "rejected"`;
 - all caller-owned identities echoed exactly;
 - `seed_decimal` as canonical unsigned decimal text;
-- bounded progress/cost counters;
+- bounded progress counters `completed_steps` and `completed_observations`, plus bounded auxiliary cost counters;
 - content-addressed artifact references with access class;
 - canonical result object or `null`;
 - structured error or `null`.
 
-`progress.completed_steps` is checked against the frozen `ExperimentSpec.logical_budget.max_steps_per_trial` before a response is accepted. A response over the declared logical budget is a contract failure rather than a completed scientific result. Content-addressed worker artifacts are also part of `scientific_result_id`, so changing bulk scientific output cannot be hidden behind an unchanged small `result` object.
+`progress.completed_steps` and `progress.completed_observations` are authoritative counters checked respectively against the frozen `ExperimentSpec.logical_budget.max_steps_per_trial` and `max_observations_per_trial` before a response is accepted. A response exceeding either declared logical budget is a contract failure rather than a completed scientific result. Auxiliary `progress.costs` entries are telemetry and cannot substitute for either authoritative counter. Content-addressed worker artifacts are also part of `scientific_result_id`, so changing bulk scientific output cannot be hidden behind an unchanged small `result` object.
 
 A scientific rejection is not converted into a technical worker failure. An identity mismatch, invalid serialization, over-budget progress or unsupported canonical number is a contract failure.
 
@@ -135,4 +135,4 @@ An interrupted active attempt is retained as `Interrupted`; it is not silently t
 
 ## Qualification
 
-Non-privileged tests cover canonical identities, semantic/physical drift, timeout-representation normalization, retry policy, JSON-safe integers, u64 seed strings, worker bindings, logical step-budget enforcement, artifact-backed result identity, float rejection and schema-2 compatibility. The dedicated real-kernel CI job executes a synthetic schema-3 campaign inside the qualified cgroup-v2 boundary, reopens it without repeating the completed trial and verifies that semantic drift is refused.
+Non-privileged tests cover canonical identities, semantic/physical drift, timeout-representation normalization, retry policy, JSON-safe integers, u64 seed strings, worker bindings, logical step- and observation-budget enforcement, artifact-backed result identity, float rejection and schema-2 compatibility. The dedicated real-kernel CI job executes a synthetic schema-3 campaign inside the qualified cgroup-v2 boundary, reopens it without repeating the completed trial and verifies that semantic drift is refused.
