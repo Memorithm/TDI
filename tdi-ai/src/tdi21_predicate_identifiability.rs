@@ -112,8 +112,10 @@ fn apply_action(
 
 /// Compare Admit and Inhibit from the same causal prefix and current Write.
 ///
-/// The predicate vector is captured before either action. The declared future
-/// recall is evaluator-only and is never encoded into that vector.
+/// The predicate vector is captured before either action by the production-side
+/// adapter, which derives the bucket observation from the decision's own key.
+/// The declared future recall is evaluator-only and is never encoded into that
+/// vector.
 pub fn audit_admission_case(
     config: StreamConfig,
     case: &AdmissionAuditCase,
@@ -132,8 +134,7 @@ pub fn audit_admission_case(
     for &event in &case.prefix {
         stream.step(event)?;
     }
-    let observation = stream.observe_key(key);
-    let predicates = encode_b4_write_predicates(case.decision, observation)?;
+    let predicates = encode_b4_write_predicates(&mut stream, case.decision)?;
 
     let admit = apply_action(
         stream.clone(),
