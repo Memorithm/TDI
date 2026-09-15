@@ -13,12 +13,17 @@ import sys
 import time
 import unittest
 import uuid
+import tempfile
 
 MODULE = Path(__file__).with_name("tdi_linux_containment.py")
 spec = importlib.util.spec_from_file_location("containment_priv", MODULE)
 containment = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = containment
 spec.loader.exec_module(containment)
+
+sys.path.insert(0, str(MODULE.parent))
+import tdi_experiment_supervisor as durable
+import tdi_linux_runner as campaign
 
 PARENT = os.environ.get("TDI_CGROUP_TEST_PARENT")
 
@@ -54,10 +59,16 @@ class KernelContainmentTests(unittest.TestCase):
             self.parent, f"kernel-{uuid.uuid4().hex[:20]}", profile).create()
 
     def launch(self, attempt, code):
+        # Exercise the same attach-before-exec launcher used by the production
+        # schema-2 runner. Using preexec_fn here would test a different fd
+        # lifetime/close_fds path and would not qualify the shipped boundary.
+        launcher = Path(__file__).with_name("tdi_cgroup_exec.py").resolve()
         process = subprocess.Popen(
-            [sys.executable, "-c", code], stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-            start_new_session=True, preexec_fn=attempt.preexec_attach(),
+            [sys.executable, str(launcher),
+             "--cgroup-procs", str(attempt.path / "cgroup.procs"),
+             "--", sys.executable, "-c", code],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, text=True, start_new_session=True,
             env={"LANG": "C", "LC_ALL": "C"},
         )
         attempt.close_attach_fd()
@@ -154,6 +165,53 @@ print(json.dumps({'children':len(children),'errno':error}))
                     if proc.stderr: proc.stderr.close()
             self.cleanup_attempt(a)
             self.cleanup_attempt(b)
+
+    def test_schema2_campaign_runs_through_real_cgroup_backend(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            worker = root / "worker"
+            worker.write_text(
+                f"#!{sys.executable}\n"
+                "import json,sys\n"
+                "args=dict(zip(sys.argv[1::2],sys.argv[2::2]))\n"
+                "seed=int(args['--tdi-seed'])\n"
+                "print(json.dumps({'seed':seed,'plan_id':args['--tdi-plan-id'],'status':'Evaluated','value':seed+1}))\n"
+            )
+            worker.chmod(0o755)
+            plan = {
+                "schema": 2,
+                "purpose": "development-software",
+                "domain": "Development",
+                "indices": [0],
+                "argv": ["worker"],
+                "artifacts": {"worker": durable.file_digest(worker)},
+                "timeout_seconds": 5,
+                "max_output_bytes": 4096,
+                "max_trials": 1,
+                "execution": {
+                    "backend": "linux-cgroup-v2",
+                    "profile": {
+                        "schema": 1,
+                        "memory_max_bytes": 64 * 1024 * 1024,
+                        "swap_max_bytes": 0,
+                        "cpu_quota_us": 100_000,
+                        "cpu_period_us": 100_000,
+                        "pids_max": 16,
+                        "trust": "trusted",
+                        "gpu_required": False,
+                        "gpu_memory_max_bytes": None,
+                    },
+                },
+            }
+            records = campaign.run(
+                plan, root, root / "campaign.db", self.parent,
+                recovery_dir=root / "recovery")
+            self.assertEqual(len(records), 1)
+            result = records[0]["result"]
+            self.assertEqual(result["status"], "Completed", result)
+            self.assertEqual(result["response"]["value"], 1)
+            self.assertEqual(result["resource_evidence"]["backend"], "linux-cgroup-v2")
+            self.assertEqual(result["resource_evidence"]["effective_limits"]["pids_max"], 16)
 
 
 if __name__ == "__main__":
