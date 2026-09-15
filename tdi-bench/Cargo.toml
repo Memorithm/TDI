@@ -3,6 +3,7 @@ name = "tdi-bench"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 description = "Reproducible benchmarks for the TDI research programmes"
 
 [lints]

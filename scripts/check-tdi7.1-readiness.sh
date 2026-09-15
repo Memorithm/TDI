@@ -22,8 +22,9 @@ verify_tdi68_historical_integrity() {
             Cargo.toml|Cargo.lock|.github/workflows/ci.yml|tdi-bench/Cargo.toml|tdi-core/Cargo.toml)
                 # These repository-level / crate-manifest integration surfaces
                 # legitimately evolve after TDI-6.8 (workspace members, deps,
-                # MSRV metadata). The frozen manifest remains historical
-                # evidence; current scientific source paths stay hash-checked.
+                # MSRV and license metadata). The frozen manifest remains
+                # historical evidence; current scientific source paths stay
+                # hash-checked.
                 continue
                 ;;
         esac
@@ -47,16 +48,17 @@ import sys
 out = Path(sys.argv[1])
 
 cargo_toml = Path("Cargo.toml").read_text()
-allowed_members = (
+allowed_metadata = (
     '    "tdi-ai",\n',
     '    "tdi-operator",\n',
+    'license = "PolyForm-Noncommercial-1.0.0"\n',
 )
-for member in allowed_members:
-    if cargo_toml.count(member) != 1:
+for entry in allowed_metadata:
+    if cargo_toml.count(entry) != 1:
         raise SystemExit(
-            f"Cargo.toml does not contain exactly one reviewed additive workspace member: {member.strip()}"
+            f"Cargo.toml does not contain exactly one reviewed workspace metadata entry: {entry.strip()}"
         )
-    cargo_toml = cargo_toml.replace(member, "", 1)
+    cargo_toml = cargo_toml.replace(entry, "", 1)
 (out / "Cargo.toml").write_text(cargo_toml)
 
 cargo_lock = Path("Cargo.lock").read_text()
@@ -78,7 +80,7 @@ PY
     [[ -n "$expected" ]] || fail "missing TDI-6.8 manifest entry for Cargo.toml"
     actual="$(sha256sum "$tmpdir/Cargo.toml" | awk '{print $1}')"
     [[ "$actual" == "$expected" ]] \
-        || fail "workspace metadata drift exceeds the reviewed additive tdi-ai/tdi-operator changes: Cargo.toml"
+        || fail "workspace metadata drift exceeds the reviewed additive tdi-ai/tdi-operator and PolyForm-license changes: Cargo.toml"
 
     # Cargo.lock dependency graphs evolve with crate manifests and toolchains;
     # require the reviewed additive package blocks, but do not hash-lock the
@@ -94,7 +96,7 @@ sha256sum -c docs/TDI-7.0-ATTENTION-RECOVERY-PREREGISTRATION.sha256
 printf '\n===== HISTORICAL TDI-6.8 INTEGRITY =====\n'
 verify_tdi68_historical_integrity
 printf 'TDI-6.8 frozen scientific paths: OK\n'
-printf 'TDI-6.8 workspace metadata projection: OK (reviewed additive tdi-ai + tdi-operator only)\n'
+printf 'TDI-6.8 workspace metadata projection: OK (reviewed additive tdi-ai + tdi-operator + PolyForm license metadata only)\n'
 printf 'Current CI workflow: PRESENT (mutable repository infrastructure)\n'
 
 printf '\n===== TDI-7.1 SPECIFICATION SURFACES =====\n'
