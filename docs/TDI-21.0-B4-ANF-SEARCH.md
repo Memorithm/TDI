@@ -24,7 +24,7 @@ where each monomial is the product/AND of the variables selected by one bit mask
 - monomial degree: at most 3;
 - monomial count per candidate: at most 4;
 - candidates evaluated: at most 65,536;
-- labelled cases per set: at most 256.
+- unique labelled assignments per set: at most 64, exactly matching the largest Boolean domain admitted by the six-variable limit.
 
 The implementation constructs the eligible monomial universe from the declared degree, computes the complete candidate-space size before enumeration, and refuses search when the required population exceeds the caller's candidate budget. It does not silently truncate a search space and call the truncated result optimal.
 
@@ -53,6 +53,8 @@ This envelope binding is provenance, not a scientific freeze. Development/Valida
 ## Validation discipline
 
 `evaluate_validation` evaluates an already selected program without modifying it. Validation evidence records the fitted variable count, mismatches and monomial evaluations separately from Development search work. Validation is not used to choose among candidates, choose the envelope, change degree/term limits or retry the search.
+
+The exact-function set deliberately rejects duplicate assignments. This is correct for truth-table/function synthesis. It also means this API is **not** the future empirical policy-learning surface for non-identifying states where the same observable assignment can occur with conflicting hindsight objectives. Such a distributional search requires a separate weighted/count-preserving contract rather than smuggling contradictory duplicates into this exact-function type.
 
 A future experiment must additionally freeze how Development and Validation rows are generated, prove their intended separation, define stopping/rejection rules before reporting comparative evidence, and retain negative results. This Stage-0 scaffold does none of that automatically.
 
