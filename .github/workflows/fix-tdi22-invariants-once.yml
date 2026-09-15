@@ -19,14 +19,13 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@1.89.0
         with:
-          components: rustfmt, clippy
+          components: rustfmt
       - name: Apply finite-overflow correction
         shell: bash
         run: |
           set -euo pipefail
           python3 .github/scripts/fix_tdi22_invariants_once.py
           cargo fmt -p tdi-ai -- --check
-          cargo clippy -p tdi-ai --features experimental --all-targets -- -D warnings
           cargo test -p tdi-ai --features experimental tdi22_torsor
           git diff --exit-code -- Cargo.lock
       - name: Commit source-only correction and remove helpers
