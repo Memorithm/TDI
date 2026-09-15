@@ -110,6 +110,7 @@ def _validate_worker_response(plan, response, *, plan_id, trial_id, attempt_id, 
             raise durable.ContractError("worker response binding or status mismatch")
         return None
     try:
+        logical_budget = plan["experiment"]["logical_budget"]
         experiment.validate_worker_response_v2(
             response,
             experiment_id=experiment_identity(plan),
@@ -119,7 +120,8 @@ def _validate_worker_response(plan, response, *, plan_id, trial_id, attempt_id, 
             backend_identity=plan["execution"]["backend"],
             domain=plan["domain"],
             seed=seed,
-            max_completed_steps=plan["experiment"]["logical_budget"]["max_steps_per_trial"],
+            max_completed_steps=logical_budget["max_steps_per_trial"],
+            max_completed_observations=logical_budget["max_observations_per_trial"],
         )
         return experiment.scientific_result_identity(response)
     except experiment.ExperimentContractError as error:
