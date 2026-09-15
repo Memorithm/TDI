@@ -70,6 +70,7 @@ class RunnerTests(unittest.TestCase):
                 "stdout":json.dumps({"seed":seed,"plan_id":argv[-1],"status":"Evaluated"}),"stderr":""}
         def fake_reaper(*_): h=FakeReaper(); reapers.append(h); return h
         with mock.patch.object(runner,"CgroupV2Attempt",FakeGroup), \
+             mock.patch.object(runner,"require_inside_delegation",lambda *_: self.cgroup), \
              mock.patch.object(runner,"spawn_reaper",fake_reaper), \
              mock.patch.object(runner.durable,"supervise",fake_supervise):
             records=runner.run(self.plan,self.root,self.root/"campaign.db",self.cgroup,
@@ -89,6 +90,7 @@ class RunnerTests(unittest.TestCase):
         attempt=contract.attempt_identity(contract.validate_plan(self.plan,self.root),0)
         stale=self.cgroup/f"tdi-{attempt}"; stale.mkdir(); (stale/"cgroup.procs").write_text("")
         with mock.patch.object(runner,"CgroupV2Attempt",FakeGroup), \
+             mock.patch.object(runner,"require_inside_delegation",lambda *_: self.cgroup), \
              mock.patch.object(runner,"spawn_reaper",lambda *_:FakeReaper()), \
              mock.patch.object(runner.durable,"supervise") as supervise:
             supervise.return_value={"status":"WorkerFailed","returncode":3,"stdout":"","stderr":"boom"}
