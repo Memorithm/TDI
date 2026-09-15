@@ -5,6 +5,7 @@ import sys
 
 import tdi_experiment_supervisor as durable
 from tdi_linux_containment import CgroupV2Attempt, ContainmentError, spawn_reaper
+from tdi_cgroup_delegation import require_inside_delegation
 from tdi_linux_contract import (
     attempt_identity, execution_profile, journal_binding, recovery_marker,
     validate_plan,
@@ -32,6 +33,7 @@ def run(plan, root, journal_path, cgroup_parent, cancelled=lambda: False,
     plan_id = validate_plan(plan, root)
     profile = execution_profile(plan)
     cgroup_parent = Path(cgroup_parent).resolve(strict=True)
+    require_inside_delegation(cgroup_parent)
     recovery_dir = Path(recovery_dir) if recovery_dir else Path(str(journal_path) + ".recovery")
     recovery_dir.mkdir(parents=True, exist_ok=True)
     journal = durable.Journal(journal_path, journal_binding(plan), anchor_path=anchor_path)
