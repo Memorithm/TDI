@@ -172,15 +172,33 @@ impl Torsor3 {
     }
 
     /// First reduction-point invariant used by Stage 0: `||R||^2`.
-    #[must_use]
-    pub fn resultant_norm_squared(self) -> f64 {
-        self.resultant.norm_squared()
+    ///
+    /// Finite vector components can still overflow during the dot product, so a
+    /// non-finite derived scalar is rejected rather than exposed as an invariant.
+    pub fn resultant_norm_squared(self) -> Result<f64, TorsorError> {
+        let value = self.resultant.norm_squared();
+        if value.is_finite() {
+            Ok(value)
+        } else {
+            Err(TorsorError::NonFiniteScalar {
+                field: "resultant_norm_squared",
+            })
+        }
     }
 
     /// Second reduction-point invariant used by Stage 0: `R . M(P)`.
-    #[must_use]
-    pub fn scalar_invariant(self) -> f64 {
-        self.resultant.dot(self.moment)
+    ///
+    /// As with the norm invariant, arithmetic overflow is a typed failure even
+    /// when every input component is individually finite.
+    pub fn scalar_invariant(self) -> Result<f64, TorsorError> {
+        let value = self.resultant.dot(self.moment);
+        if value.is_finite() {
+            Ok(value)
+        } else {
+            Err(TorsorError::NonFiniteScalar {
+                field: "scalar_invariant",
+            })
+        }
     }
 
     /// Produce the factorized key `(R, C)` used by the TDI-22 identity tests.
@@ -352,13 +370,34 @@ mod tests {
             Torsor3::new(v(1.5, -2.0, 0.75), v(4.0, 3.0, -5.0), v(2.0, 1.0, -3.0)).unwrap();
         let moved = torsor.transport(v(-4.0, 7.0, 9.0)).unwrap();
         close(
-            torsor.resultant_norm_squared(),
-            moved.resultant_norm_squared(),
+            torsor.resultant_norm_squared().unwrap(),
+            moved.resultant_norm_squared().unwrap(),
         );
-        close(torsor.scalar_invariant(), moved.scalar_invariant());
+        close(
+            torsor.scalar_invariant().unwrap(),
+            moved.scalar_invariant().unwrap(),
+        );
         close_vec(
             torsor.origin_moment().unwrap(),
             moved.origin_moment().unwrap(),
+        );
+    }
+
+    #[test]
+    fn derived_invariants_reject_finite_inputs_that_overflow() {
+        let huge = v(f64::MAX, 0.0, 0.0);
+        let torsor = Torsor3::new(huge, huge, Vec3::zero()).unwrap();
+        assert_eq!(
+            torsor.resultant_norm_squared(),
+            Err(TorsorError::NonFiniteScalar {
+                field: "resultant_norm_squared",
+            })
+        );
+        assert_eq!(
+            torsor.scalar_invariant(),
+            Err(TorsorError::NonFiniteScalar {
+                field: "scalar_invariant",
+            })
         );
     }
 
