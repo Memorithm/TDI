@@ -20,6 +20,8 @@ A timestamp or measured RSS therefore does not change the scientific result iden
 
 `ExperimentSpec/v1` uses canonical sorted UTF-8 JSON for hashing. Numeric identity fields are restricted to the JavaScript-safe integer range (`<= 2^53-1`) so a client cannot silently round a plan identity. Full-width u64 seeds are transported as canonical decimal strings in worker-response/v2.
 
+Schema-3 execution-plan identity and journal binding do not distinguish JSON spellings such as `2` and `2.0` when they describe the same validated timeout. The authoritative `ExperimentSpec/v1` integer `timeout_milliseconds` is substituted into the canonical binding as `<milliseconds>ms` only after the inherited runner timeout has been validated against it. This normalization changes neither the requested timeout nor schema-2 compatibility; it prevents semantically identical cross-language JSON round trips from producing different execution identities.
+
 Worker-response/v2 does **not** permit JSON floating-point values inside the canonical `result` object. A domain needing floating-point scientific output must define an explicit representation (for example a frozen hexadecimal or decimal-string format) before those values participate in canonical identity. This restriction avoids making an experiment identity depend on language-specific float rendering.
 
 ## ExperimentSpec/v1
@@ -131,4 +133,4 @@ An interrupted active attempt is retained as `Interrupted`; it is not silently t
 
 ## Qualification
 
-Non-privileged tests cover canonical identities, semantic/physical drift, retry policy, JSON-safe integers, u64 seed strings, worker bindings, float rejection and schema-2 compatibility. The dedicated real-kernel CI job executes a synthetic schema-3 campaign inside the qualified cgroup-v2 boundary, reopens it without repeating the completed trial and verifies that semantic drift is refused.
+Non-privileged tests cover canonical identities, semantic/physical drift, timeout-representation normalization, retry policy, JSON-safe integers, u64 seed strings, worker bindings, float rejection and schema-2 compatibility. The dedicated real-kernel CI job executes a synthetic schema-3 campaign inside the qualified cgroup-v2 boundary, reopens it without repeating the completed trial and verifies that semantic drift is refused.
