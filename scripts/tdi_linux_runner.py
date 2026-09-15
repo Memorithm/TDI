@@ -93,6 +93,10 @@ def _worker_argv(plan, root, seed, plan_id, trial_id, attempt_id):
             trial_id,
             "--tdi-attempt-id",
             attempt_id,
+            "--tdi-domain",
+            plan["domain"],
+            "--tdi-backend-identity",
+            plan["execution"]["backend"],
         ])
     return argv
 
