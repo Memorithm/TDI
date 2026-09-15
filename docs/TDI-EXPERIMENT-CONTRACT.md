@@ -12,9 +12,9 @@ TDI intentionally distinguishes five identities:
 2. **ExperimentSpec plan identity** — the complete `ExperimentSpec/v1`, including arms, adapter, logical budget, physical constraints, retry and artifact policies.
 3. **Execution plan identity** — the complete schema-3 runnable plan, including explicit indices, pinned executable/input artifacts and cgroup profile, bound to the ExperimentSpec plan identity.
 4. **Trial / attempt identity** — stable coordinates derived from the execution plan, domain, index, backend and attempt ordinal.
-5. **Scientific result identity** — canonical scientific disposition/result bound to experiment/plan/trial identity. Operational progress and measured resource telemetry are deliberately excluded.
+5. **Scientific result identity** — canonical scientific disposition/result plus the worker's content-addressed artifact references, bound to experiment/plan/trial identity. Artifact order is canonicalized by name. Operational progress and measured resource telemetry are deliberately excluded.
 
-A timestamp or measured RSS therefore does not change the scientific result identity. Changing a metric unit, protocol reference, generator derivation or statistical plan changes the question identity. Changing only a physical memory bound keeps the question identity but changes both plan identities.
+A timestamp, measured RSS or progress-cost counter therefore does not change the scientific result identity. Changing an artifact content hash does. Changing a metric unit, protocol reference, generator derivation or statistical plan changes the question identity. Changing only a physical memory bound keeps the question identity but changes both plan identities.
 
 ## Canonical numeric policy
 
@@ -69,7 +69,9 @@ The worker returns exactly one JSON object containing:
 - canonical result object or `null`;
 - structured error or `null`.
 
-A scientific rejection is not converted into a technical worker failure. An identity mismatch, invalid serialization or unsupported canonical number is a contract failure.
+`progress.completed_steps` is checked against the frozen `ExperimentSpec.logical_budget.max_steps_per_trial` before a response is accepted. A response over the declared logical budget is a contract failure rather than a completed scientific result. Content-addressed worker artifacts are also part of `scientific_result_id`, so changing bulk scientific output cannot be hidden behind an unchanged small `result` object.
+
+A scientific rejection is not converted into a technical worker failure. An identity mismatch, invalid serialization, over-budget progress or unsupported canonical number is a contract failure.
 
 `tdi-ai/examples/durable_worker_v2.rs` is a deterministic infrastructure fixture that exercises the actual bounded TDI Rust API. It is not a scientific population or performance benchmark.
 
@@ -133,4 +135,4 @@ An interrupted active attempt is retained as `Interrupted`; it is not silently t
 
 ## Qualification
 
-Non-privileged tests cover canonical identities, semantic/physical drift, timeout-representation normalization, retry policy, JSON-safe integers, u64 seed strings, worker bindings, float rejection and schema-2 compatibility. The dedicated real-kernel CI job executes a synthetic schema-3 campaign inside the qualified cgroup-v2 boundary, reopens it without repeating the completed trial and verifies that semantic drift is refused.
+Non-privileged tests cover canonical identities, semantic/physical drift, timeout-representation normalization, retry policy, JSON-safe integers, u64 seed strings, worker bindings, logical step-budget enforcement, artifact-backed result identity, float rejection and schema-2 compatibility. The dedicated real-kernel CI job executes a synthetic schema-3 campaign inside the qualified cgroup-v2 boundary, reopens it without repeating the completed trial and verifies that semantic drift is refused.
