@@ -46,6 +46,12 @@ def _validate_experiment_binding(plan, profile):
     except experiment.ExperimentContractError as error:
         raise durable.ContractError(str(error)) from error
 
+    for index in plan["indices"]:
+        if index > experiment.JSON_SAFE_INTEGER:
+            raise durable.ContractError(
+                "schema-3 trial indices must fit the language-independent JSON-safe range"
+            )
+
     logical = spec["logical_budget"]
     if plan["max_trials"] > logical["max_trials"]:
         raise durable.ContractError("execution max_trials exceeds ExperimentSpec logical budget")
@@ -133,10 +139,7 @@ def attempt_coordinates(plan, plan_id, index, ordinal=0):
     try:
         trial_id = experiment.trial_identity(plan_id, plan["domain"], index)
         attempt_id = experiment.attempt_identity(
-            plan_id,
-            trial_id,
-            plan["execution"]["backend"],
-            ordinal,
+            plan_id, trial_id, plan["execution"]["backend"], ordinal,
         )
     except experiment.ExperimentContractError as error:
         raise durable.ContractError(str(error)) from error
