@@ -44,3 +44,5 @@ pub mod tdi21_provenance;
 pub mod tdi21_stream;
 #[path = "tdi21_boolean_tasks.rs"]
 pub mod tdi21_tasks;
+#[path = "tdi22_torsor.rs"]
+pub mod tdi22_torsor;
