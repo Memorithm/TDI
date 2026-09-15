@@ -126,7 +126,10 @@ fn encoder_observes_the_write_key_instead_of_accepting_caller_metadata() {
     let before = stream.counters();
     let _unrelated_probe = stream.observe_key(2);
     let after_probe = stream.counters();
-    assert_eq!(after_probe.route_observations, before.route_observations + 1);
+    assert_eq!(
+        after_probe.route_observations,
+        before.route_observations + 1
+    );
 
     let encoded = encode_b4_write_predicates(&mut stream, write(1, 0, 1)).unwrap();
     let after_encode = stream.counters();
