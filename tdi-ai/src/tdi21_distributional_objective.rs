@@ -303,10 +303,7 @@ impl DistributionalScore {
     }
 }
 
-fn checked_add(
-    target: &mut u64,
-    amount: u64,
-) -> Result<(), DistributionalObjectiveError> {
+fn checked_add(target: &mut u64, amount: u64) -> Result<(), DistributionalObjectiveError> {
     *target = target
         .checked_add(amount)
         .ok_or(DistributionalObjectiveError::CountOverflow)?;
