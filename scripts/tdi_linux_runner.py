@@ -1,4 +1,6 @@
 """Execution engine for schema-2 TDI cgroup-v2 campaigns."""
+import contextlib
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -24,6 +26,41 @@ def _terminate_and_measure(group):
     if group.is_populated():
         group.kill()
     return evidence
+
+
+def _recover_via_reaper(reaper, timeout=5.0):
+    """Hand containment to the detached reaper without sending release.
+
+    Closing the control pipe is the same signal used when the supervisor
+    disappears unexpectedly.  The reaper must complete recovery before this
+    supervisor records the containment failure and aborts the campaign.
+    """
+    with contextlib.suppress(OSError):
+        os.close(reaper.control_fd)
+    reaper.control_fd = -1
+    try:
+        code = reaper.process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        reaper.process.kill()
+        reaper.process.wait()
+        raise ContainmentError("containment reaper did not complete recovery") from error
+    if code != 0:
+        raise ContainmentError(f"containment reaper recovery exited with {code}")
+
+
+def _record_interrupted(journal, index, attempt_id, cgroup_parent, marker_path, reason):
+    """Durably consume one interrupted attempt after reconciling containment."""
+    journal.append({"kind": "Start", "index": index})
+    interrupted = {
+        "status": "Interrupted",
+        "reason": reason,
+        "attempt_id": attempt_id,
+        "recovery": CgroupV2Attempt.reconcile_existing(cgroup_parent, attempt_id),
+    }
+    marker = recovery_marker(marker_path)
+    if marker is not None:
+        interrupted["reaper_marker"] = marker
+    journal.append({"kind": "Finish", "index": index, "result": interrupted})
 
 
 def run(plan, root, journal_path, cgroup_parent, cancelled=lambda: False,
@@ -61,16 +98,37 @@ def run(plan, root, journal_path, cgroup_parent, cancelled=lambda: False,
             seed = index | (2**63 if plan["domain"] == "Validation" else 0)
             attempt_id = attempt_identity(plan_id, index)
             marker_path = recovery_dir / f"{attempt_id}.json"
-            if marker_path.exists():
-                raise ContainmentError("recovery marker already exists for a new attempt identity")
-            group = CgroupV2Attempt(cgroup_parent, attempt_id, profile).create()
-            reaper = spawn_reaper(group.path, marker_path)
+            stale_path = cgroup_parent / f"tdi-{attempt_id}"
+
+            # Recover attempts produced by older runners that could create a
+            # cgroup/reaper before Start was durably appended.  The trial is
+            # consumed as Interrupted rather than silently retried.
+            if marker_path.exists() or stale_path.exists():
+                _record_interrupted(
+                    journal,
+                    index,
+                    attempt_id,
+                    cgroup_parent,
+                    marker_path,
+                    "orphaned containment state existed before durable Start; recovered and not retried",
+                )
+                after_commit(index)
+                continue
+
+            # Publish discovery before creating any attempt-owned kernel state.
+            # A crash after this point is therefore recoverable through the
+            # ordinary active-attempt path above.
             journal.append({"kind": "Start", "index": index})
-            worker_argv = [str(durable.artifact(root, plan["argv"][0])), *plan["argv"][1:],
-                           "--tdi-seed", str(seed), "--tdi-plan-id", plan_id]
+            group = CgroupV2Attempt(cgroup_parent, attempt_id, profile)
+            reaper = None
             result = {"attempt_id": attempt_id, "backend": "linux-cgroup-v2"}
             cleanup_errors = []
+            abort_after_finish = False
             try:
+                group.create()
+                reaper = spawn_reaper(group.path, marker_path)
+                worker_argv = [str(durable.artifact(root, plan["argv"][0])), *plan["argv"][1:],
+                               "--tdi-seed", str(seed), "--tdi-plan-id", plan_id]
                 result.update(durable.supervise(_launcher_argv(group, worker_argv),
                                                 plan["timeout_seconds"],
                                                 plan["max_output_bytes"], cancelled))
@@ -101,17 +159,33 @@ def run(plan, root, journal_path, cgroup_parent, cancelled=lambda: False,
                         group.cleanup()
                 except ContainmentError as error:
                     cleanup_errors.append(f"cgroup cleanup: {error}")
-                try:
-                    reaper.release()
-                except ContainmentError as error:
-                    cleanup_errors.append(f"reaper release: {error}")
+
+                if reaper is not None:
+                    if cleanup_errors:
+                        try:
+                            _recover_via_reaper(reaper)
+                        except ContainmentError as error:
+                            cleanup_errors.append(f"reaper recovery: {error}")
+                        abort_after_finish = True
+                    else:
+                        try:
+                            reaper.release()
+                        except ContainmentError as error:
+                            cleanup_errors.append(f"reaper release: {error}")
+                            abort_after_finish = True
+
                 if cleanup_errors:
                     prior = result.get("status")
                     result.update(status="ContainmentFailed", containment_errors=cleanup_errors)
                     if prior and prior != "ContainmentFailed":
                         result["prior_status"] = prior
+
             journal.append({"kind": "Finish", "index": index, "result": result})
             after_commit(index)
+            if abort_after_finish:
+                raise ContainmentError(
+                    "containment cleanup/reaper failure; campaign stopped after durable failure record"
+                )
         return journal.read()[0]
     finally:
         journal.close()
