@@ -160,6 +160,27 @@ fn candidate_space_is_rejected_before_unbounded_enumeration() {
 }
 
 #[test]
+fn full_six_variable_domain_is_64_rows_and_the_65th_is_rejected() {
+    let mut cases: Vec<_> = (0..64)
+        .map(|assignment| LabeledAssignment {
+            assignment,
+            expected: assignment.count_ones() % 2 == 1,
+        })
+        .collect();
+    let development = DevelopmentSet::new(6, &cases).unwrap();
+    assert_eq!(development.len(), 64);
+
+    cases.push(LabeledAssignment {
+        assignment: 0,
+        expected: false,
+    });
+    assert_eq!(
+        DevelopmentSet::new(6, &cases),
+        Err(AnfSearchError::TooManyCases)
+    );
+}
+
+#[test]
 fn datasets_reject_duplicate_and_out_of_range_assignments() {
     assert_eq!(
         DevelopmentSet::new(
