@@ -38,10 +38,10 @@ pub mod tdi21_attention;
 pub mod tdi21_evaluation;
 #[path = "tdi21_event_predicates.rs"]
 pub mod tdi21_event_predicates;
-#[path = "tdi21_predicate_identifiability.rs"]
-pub mod tdi21_predicate_identifiability;
 #[path = "tdi21_freeze.rs"]
 pub mod tdi21_freeze;
+#[path = "tdi21_predicate_identifiability.rs"]
+pub mod tdi21_predicate_identifiability;
 #[path = "tdi21_provenance.rs"]
 pub mod tdi21_provenance;
 #[path = "tdi21_stream.rs"]
