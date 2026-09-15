@@ -57,7 +57,10 @@ fn selected_program_round_trips_through_exact_anf_synthesizer() {
     let masks: Vec<_> = program.terms().iter().map(|term| term.variables).collect();
     assert_eq!(masks, vec![0b001, 0b110]);
     for assignment in 0..8 {
-        assert_eq!(program.evaluate(assignment), Ok(label_nontrivial(assignment)));
+        assert_eq!(
+            program.evaluate(assignment),
+            Ok(label_nontrivial(assignment))
+        );
     }
 }
 
