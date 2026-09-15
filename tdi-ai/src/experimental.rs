@@ -30,6 +30,8 @@ pub mod development_campaign;
 pub mod tdi21;
 #[path = "tdi21_anf_synthesis.rs"]
 pub mod tdi21_anf_synthesis;
+#[path = "tdi21_anf_search.rs"]
+pub mod tdi21_anf_search;
 #[path = "tdi21_attention.rs"]
 pub mod tdi21_attention;
 #[path = "tdi21_evaluation.rs"]
