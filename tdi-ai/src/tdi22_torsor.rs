@@ -252,8 +252,8 @@ pub struct FactorizedTwistQuery {
 impl FactorizedTwistQuery {
     /// Pair a factorized query with a factorized torsor key.
     pub fn pair(self, key: FactorizedTorsorKey) -> Result<f64, TorsorError> {
-        let score = self.resultant_dual.dot(key.resultant)
-            + self.moment_dual.dot(key.origin_moment);
+        let score =
+            self.resultant_dual.dot(key.resultant) + self.moment_dual.dot(key.origin_moment);
         if score.is_finite() {
             Ok(score)
         } else {
@@ -268,8 +268,7 @@ pub fn direct_pairing(
     key: Torsor3,
     query_position: Vec3,
 ) -> Result<f64, TorsorError> {
-    let score = query.linear.dot(key.resultant)
-        + query.angular.dot(key.moment_at(query_position)?);
+    let score = query.linear.dot(key.resultant) + query.angular.dot(key.moment_at(query_position)?);
     if score.is_finite() {
         Ok(score)
     } else {
@@ -349,19 +348,18 @@ mod tests {
 
     #[test]
     fn reduction_point_invariants_survive_transport() {
-        let torsor = Torsor3::new(
-            v(1.5, -2.0, 0.75),
-            v(4.0, 3.0, -5.0),
-            v(2.0, 1.0, -3.0),
-        )
-        .unwrap();
+        let torsor =
+            Torsor3::new(v(1.5, -2.0, 0.75), v(4.0, 3.0, -5.0), v(2.0, 1.0, -3.0)).unwrap();
         let moved = torsor.transport(v(-4.0, 7.0, 9.0)).unwrap();
         close(
             torsor.resultant_norm_squared(),
             moved.resultant_norm_squared(),
         );
         close(torsor.scalar_invariant(), moved.scalar_invariant());
-        close_vec(torsor.origin_moment().unwrap(), moved.origin_moment().unwrap());
+        close_vec(
+            torsor.origin_moment().unwrap(),
+            moved.origin_moment().unwrap(),
+        );
     }
 
     #[test]
@@ -369,12 +367,7 @@ mod tests {
         let cases = [
             (
                 Twist3::new(v(1.0, 2.0, 3.0), v(-2.0, 1.0, 4.0)).unwrap(),
-                Torsor3::new(
-                    v(4.0, -3.0, 2.0),
-                    v(5.0, 7.0, -11.0),
-                    v(3.0, -5.0, 8.0),
-                )
-                .unwrap(),
+                Torsor3::new(v(4.0, -3.0, 2.0), v(5.0, 7.0, -11.0), v(3.0, -5.0, 8.0)).unwrap(),
                 v(-7.0, 13.0, 17.0),
             ),
             (
@@ -405,12 +398,8 @@ mod tests {
         let key = Torsor3::new(v(7.0, 3.0, -5.0), v(2.0, -11.0, 13.0), source).unwrap();
         let translation = v(101.0, -37.0, 23.0);
 
-        let translated_key = Torsor3::new(
-            key.resultant(),
-            key.moment(),
-            source.plus(translation),
-        )
-        .unwrap();
+        let translated_key =
+            Torsor3::new(key.resultant(), key.moment(), source.plus(translation)).unwrap();
         let translated_query_position = query_position.plus(translation);
 
         close(
@@ -421,12 +410,7 @@ mod tests {
 
     #[test]
     fn factorized_key_is_independent_of_reduction_point() {
-        let key = Torsor3::new(
-            v(2.0, 3.0, 5.0),
-            v(7.0, 11.0, 13.0),
-            v(17.0, 19.0, 23.0),
-        )
-        .unwrap();
+        let key = Torsor3::new(v(2.0, 3.0, 5.0), v(7.0, 11.0, 13.0), v(17.0, 19.0, 23.0)).unwrap();
         let moved = key.transport(v(-29.0, 31.0, -37.0)).unwrap();
         let lhs = key.factorized_key().unwrap();
         let rhs = moved.factorized_key().unwrap();
