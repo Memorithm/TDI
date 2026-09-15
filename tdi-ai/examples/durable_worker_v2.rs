@@ -85,7 +85,8 @@ fn main() {
         .iter()
         .map(|point| *point.overlap())
         .collect();
+    let completed_observations = values.len();
     println!(
-        "{{\"schema\":2,\"execution_status\":\"completed\",\"scientific_disposition\":\"evaluated\",\"experiment_id\":\"{experiment}\",\"plan_id\":\"{plan}\",\"trial_id\":\"{trial}\",\"attempt_id\":\"{attempt}\",\"backend_identity\":\"{backend}\",\"domain\":\"{domain}\",\"seed_decimal\":\"{seed}\",\"progress\":{{\"completed_steps\":4,\"costs\":{{\"fixture_steps\":4}}}},\"artifacts\":[],\"result\":{{\"scores\":{values:?}}},\"error\":null}}"
+        "{{\"schema\":2,\"execution_status\":\"completed\",\"scientific_disposition\":\"evaluated\",\"experiment_id\":\"{experiment}\",\"plan_id\":\"{plan}\",\"trial_id\":\"{trial}\",\"attempt_id\":\"{attempt}\",\"backend_identity\":\"{backend}\",\"domain\":\"{domain}\",\"seed_decimal\":\"{seed}\",\"progress\":{{\"completed_steps\":4,\"completed_observations\":{completed_observations},\"costs\":{{\"fixture_steps\":4}}}},\"artifacts\":[],\"result\":{{\"scores\":{values:?}}},\"error\":null}}"
     );
 }
