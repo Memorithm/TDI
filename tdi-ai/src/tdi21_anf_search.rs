@@ -50,12 +50,12 @@ pub struct SearchWork {
     pub monomial_evaluations: u64,
 }
 
-/// Selected candidate together with the exact variable arity under which it was
-/// fitted. Arity is part of candidate identity and cannot be supplied anew by a
-/// caller during conversion or Validation evaluation.
+/// Selected candidate together with the exact search envelope under which it
+/// was fitted. The envelope is part of candidate provenance and cannot be
+/// supplied anew by a caller during conversion or Validation evaluation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SearchResult {
-    variable_count: u8,
+    envelope: SearchEnvelope,
     constant: bool,
     monomials: Vec<u64>,
     development_mismatches: u64,
@@ -64,6 +64,7 @@ pub struct SearchResult {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ValidationEvidence {
+    pub variable_count: u8,
     pub cases: u64,
     pub mismatches: u64,
     pub monomial_evaluations: u64,
@@ -206,8 +207,13 @@ impl SearchEnvelope {
 
 impl SearchResult {
     #[must_use]
+    pub const fn envelope(&self) -> SearchEnvelope {
+        self.envelope
+    }
+
+    #[must_use]
     pub const fn variable_count(&self) -> u8 {
-        self.variable_count
+        self.envelope.variable_count
     }
 
     #[must_use]
@@ -242,7 +248,7 @@ impl SearchResult {
     /// Canonicalize the selected sparse program through the exact ANF
     /// synthesizer at the same arity used during fitting.
     pub fn to_anf_program(&self) -> Result<AnfProgram, AnfSearchError> {
-        let rows = 1usize << self.variable_count;
+        let rows = 1usize << self.envelope.variable_count;
         let mut table = Vec::new();
         table
             .try_reserve_exact(rows)
@@ -250,7 +256,7 @@ impl SearchResult {
         for assignment in 0..rows as u64 {
             table.push(evaluate_sparse(self.constant, &self.monomials, assignment));
         }
-        synthesize_anf(self.variable_count, &table).map_err(AnfSearchError::Synthesis)
+        synthesize_anf(self.envelope.variable_count, &table).map_err(AnfSearchError::Synthesis)
     }
 }
 
@@ -426,7 +432,7 @@ pub fn fit_sparse_anf(
     let (development_mismatches, constant, monomials) =
         best.expect("validated search space always contains constant candidates");
     Ok(SearchResult {
-        variable_count: envelope.variable_count,
+        envelope,
         constant,
         monomials,
         development_mismatches,
@@ -434,20 +440,21 @@ pub fn fit_sparse_anf(
     })
 }
 
-/// Evaluate an already-selected program on Validation labels. The fitted arity
-/// is part of the result, so callers cannot reinterpret a selected program under
-/// a different variable count. This function cannot alter selection.
+/// Evaluate an already-selected program on Validation labels. The full fitted
+/// search envelope is part of the result, so callers cannot reinterpret a
+/// selected program under a different variable count. This cannot alter fit.
 pub fn evaluate_validation(
     result: &SearchResult,
     validation: &ValidationSet,
 ) -> Result<ValidationEvidence, AnfSearchError> {
-    if validation.variable_count() != result.variable_count {
+    if validation.variable_count() != result.envelope.variable_count {
         return Err(AnfSearchError::VariableCountMismatch {
-            expected: result.variable_count,
+            expected: result.envelope.variable_count,
             actual: validation.variable_count(),
         });
     }
     let mut evidence = ValidationEvidence {
+        variable_count: result.envelope.variable_count,
         cases: 0,
         mismatches: 0,
         monomial_evaluations: 0,
