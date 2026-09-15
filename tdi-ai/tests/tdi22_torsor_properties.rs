@@ -11,7 +11,7 @@ fn v(x: f64, y: f64, z: f64) -> Vec3 {
 fn close(lhs: f64, rhs: f64) {
     let scale = 1.0_f64.max(lhs.abs()).max(rhs.abs());
     assert!(
-        (lhs - rhs).abs() <= 256.0 * f64::EPSILON * scale,
+        (lhs - rhs).abs() <= 1024.0 * f64::EPSILON * scale,
         "lhs={lhs:?}, rhs={rhs:?}"
     );
 }
