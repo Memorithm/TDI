@@ -1,67 +1,73 @@
 # TDI engine industrialization status
 
-This file is the durable engineering handoff for the TDI engine industrialization programme. It records software-engineering evidence only; it does not authorize or reinterpret any scientific stage.
+This is the durable engineering handoff for the industrialization programme. It records software evidence only and does not authorize or reinterpret a scientific stage.
 
 ## Baseline
 
-- Historical audit baseline: `2b9cf772d3c0711349f9a70ba7cd7f1bfef90aca`.
-- Revalidated default-branch baseline for this programme: `c973b47355f8bd3eb630a2d267355f733dfde1b2` on 2026-09-15.
-- Working branch: `industrialize/engine-foundation-ab`.
-- Scientific boundaries: `AGENTS.md`, `agent/ecosystem-roadmap:.agent/TDI_ECOSYSTEM_ROADMAP.yaml`, and the Boolean/Elasticity overlay where applicable.
-- Existing research PRs #246, #247 and #248 are intentionally outside this engine-foundation branch.
+- Historical audit: `2b9cf772d3c0711349f9a70ba7cd7f1bfef90aca`.
+- Programme baseline revalidated 2026-09-15: `c973b47355f8bd3eb630a2d267355f733dfde1b2`.
+- Foundation A/B: PR #250, head `07b01760f23200665dbc713e73c0cdc35bb49e76`, merged `3b8686047a95c4665f6c1b70b87ab9a9ac3591be` after all applicable exact-head workflows succeeded.
+- Current branch: `industrialize/linux-containment-c`.
+- Scientific constraints remain those in `AGENTS.md` and the ecosystem roadmap/overlays.
 
-## Status vocabulary
+## Delivered / candidate capabilities
 
-- **qualified**: implementation and directly relevant executable tests exist on the recorded revision.
-- **partial**: a requested capability is materially implemented but the full lot remains open.
-- **planned**: no completion claim is made.
-- **blocked**: a named external capability or authorization is required.
-
-## Current implementation slice
-
-| Requirement | Status | Implementation / evidence |
+| Requirement | State | Evidence |
 | --- | --- | --- |
-| A-JSON finite numbers | qualified locally; CI pending | `strict_json` rejects NaN/Infinity and conversion overflow such as `1e999`; duplicate keys, invalid UTF-8, excessive size/depth/item/string bounds are rejected. |
-| A-CLI exit status | qualified locally; CI pending | Exit `0` is reserved for technically successful campaigns, including scientific `Rejected`; technical trial failure is `20`, contract failure `21`, durable-storage failure `22`, cancellation `130`. Subprocess tests exercise worker exit 3 and numeric-overflow plans. |
-| A-output separation | qualified locally; CI pending | Versioned machine JSON is written to stdout; human diagnostics are written to stderr. Invalid UTF-8 worker output is preserved as base64 rather than replacement-decoded. |
-| B-incremental journal head | qualified locally; CI pending | `Journal.append` hashes only the new event after one startup validation. The regression test counts one event hash per append. |
-| B-transition/index atomicity | qualified locally; CI pending | `events` and `trial_state` are updated in one SQLite transaction; impossible Start/Finish transitions are rejected before commit. |
-| B-v1 migration | qualified locally; CI pending | Existing event chains are preserved; v2 metadata/index tables are added and rebuilt from a validated legacy chain. |
-| B-independent audit | qualified locally; CI pending | `--audit-only` rescans the full chain and checks the durable index and optional external anchor. |
-| B-suffix anchoring | partial | Optional `--anchor` binds journal identity, head sequence and hash. It detects a clean suffix deletion only if the anchor is held on a separately trusted boundary. A colocated/rewriteable anchor is explicitly not tamper-proof. |
-| C-containment | planned | Existing process-group cleanup remains; cgroup v2 / namespace / recovery-owner work is not claimed by this slice. |
-| D+ experiment/spec/registry/scheduler/integrations | planned | No completion claim in this foundation slice. |
-
-## Local qualification performed for this slice
-
-Candidate contents matching the branch files were exercised with:
-
-```bash
-python3 -m py_compile scripts/tdi_experiment_supervisor.py
-python3 -m unittest discover -s scripts -p test_tdi_experiment_supervisor.py -v
-```
-
-Observed in the local qualification environment: 19 tests discovered, 18 passed, one Rust-worker integration test skipped because `TDI_DURABLE_WORKER` was not supplied. The repository CI job supplies that variable after building `tdi-ai/examples/durable_worker`; therefore exact-head GitHub CI remains required before merge.
+| A strict worker JSON | qualified | PR #250 rejects duplicates, non-finite/overflow numbers including `1e999`, invalid UTF-8 and configured structural limits. |
+| A CLI/error separation | qualified | PR #250: technical failure `20`, contract `21`, storage `22`, cancellation `130`; scientific `Rejected` can still be technical success `0`. |
+| B incremental journal | qualified | PR #250 validates history once, then hashes one new event per append. |
+| B transaction/migration/audit | qualified | PR #250 atomic event/index transition, non-destructive legacy migration, full `--audit-only`, optional external anchor. |
+| C schema-2 resource contract | candidate | Additive Linux runner binds memory/swap/CPU/PID limits while leaving the qualified schema-1 supervisor unchanged. |
+| C process-tree cleanup | candidate | dedicated attempt cgroup + `cgroup.kill`; independent pidfd recovery owner. |
+| C resume semantics | candidate | stale unfinished attempt reconciled before durable `Interrupted`; no silent scientific retry. |
+| C hostile-code sandbox | blocked | cgroup v2 is insufficient; `trust=untrusted` fails closed. |
+| C hard GPU-memory quota | blocked | visibility is not a VRAM quota; requested hard limit fails closed. |
+| D and later lots | planned | no completion claim yet. |
 
 ## Qualification matrix progress
 
-| ID | Status | Current evidence / remaining work |
+| ID | State | Evidence / remaining work |
 | --- | --- | --- |
-| Q01 | implemented; CI pending | CLI subprocess test: worker exit 3 produces durable `WorkerFailed` and exit 20. |
-| Q02 | implemented; CI pending | Duplicate keys, NaN/Infinity, `1e999`, invalid UTF-8, excessive nesting/item/string bounds. |
-| Q03 | implemented; CI pending | Hash corruption, index mismatch and impossible transitions fail closed. |
-| Q04 | implemented; CI pending | Event-hash counter demonstrates one new hash per append; larger benchmark/environment capture remains for Lot M. |
-| Q05 | existing + retained | Continuous/restart equivalence and interrupted active trial tests retained. |
-| Q06 | partial | Storage failure has a distinct exit class; explicit disk-full/fsync fault injection remains. |
-| Q13/Q14 | partial | Legacy journal migration is tested; portable registry/artifact export is later work. |
-| Remaining Q07-Q30 | planned | Must not be inferred from this foundation PR. |
+| Q01-Q03 | qualified | PR #250 subprocess failure/JSON/corruption/transition regressions. |
+| Q04 | qualified for hash-growth property | one new hash per append; Lot M still owes size-scaling benchmark and environment capture. |
+| Q05 | qualified at trial boundary | continuous/restart equivalence and interrupted trial retention. |
+| Q06 | partial | distinct storage failure exists; explicit disk-full/fsync injection remains. |
+| Q07 | candidate | pidfd reaper + tree kill; exact-head real-kernel CI required. |
+| Q08 | candidate | real-kernel memory/PID/CPU tests exist; exact-head CI required. |
+| Q09 | partial | unsupported hard VRAM quota fails closed; measured GPU qualification remains. |
+| Q10-Q12 | planned | ExperimentSpec/checkpoint/scheduler/adapter SDK. |
+| Q13-Q14 | partial | legacy journal migration qualified; portable registry/artifact export remains. |
+| Q15-Q30 | planned | must not be inferred from current infrastructure. |
 
-## Next slices
+## Local Lot-C validation
 
-1. Qualify and merge this A/B foundation on the exact PR head.
-2. Implement Linux containment capability discovery and cgroup-v2 execution/recovery profiles without claiming cgroups are a complete sandbox.
-3. Introduce the versioned experiment/attempt/worker-response contract while preserving v1 compatibility.
-4. Build the experiment specification, registry/artifact layer and scheduler adapters only after the durable execution contract is stable.
-5. Audit Hub, ElasticXxx, Forge, SciRust, FLAT-ATTENTION and NNIS contracts before adding cross-repository adapters.
+```bash
+PYTHONPATH=scripts python3 -m py_compile \
+  scripts/tdi_linux_containment.py scripts/tdi_linux_contract.py \
+  scripts/tdi_linux_runner.py scripts/tdi_linux_campaign.py \
+  scripts/tdi_cgroup_exec.py scripts/prepare_tdi_experiment_plan.py
+PYTHONPATH=scripts python3 -m unittest \
+  scripts/test_tdi_linux_containment.py \
+  scripts/test_tdi_linux_contract.py \
+  scripts/test_tdi_linux_campaign.py \
+  scripts/test_prepare_tdi_experiment_plan.py -v
+```
 
-Every later slice must update this file with the integrated SHA, exact validation commands, applicable CI status and any material qualification that was not executed.
+Non-privileged Lot-C tests pass locally. Real-kernel tests are separate and require a deliberately delegated cgroup parent; a skip does not count as success.
+
+## Cross-repository decisions
+
+- TDI declares Rust 1.85; current scirust-hub and ElasticXxx manifests declare 1.89. No mandatory direct Rust dependency is introduced merely for convenience.
+- scirust-hub remains owner of generic remote workers, leases, heartbeats and transport; TDI remains owner of scientific meaning and accepted publication.
+- ElasticXxx remains owner of generic observe/forecast/plan/validate/act/verify/commit-or-rollback resource policy.
+- Forge remains owner of candidate proposal/search; TDI controls allowed evaluation observations and verdicts.
+
+## Next
+
+1. Qualify and merge Lot C on the exact PR head, including real-kernel cgroup checks.
+2. Implement versioned ExperimentSpec / attempt / worker-response contracts while preserving scientific gates.
+3. Add registry, provenance verification, artifact CAS/export and controlled cache.
+4. Add DAG execution and a real Hub edge with fencing/authoritative publication.
+5. Add ElasticXxx, Forge, SciRust, FLAT-ATTENTION and NNIS integrations only through qualified versioned contracts.
+6. Continue statistics/sensitivity, CLI/API/viewer, external exports and measured engine benchmarks.
