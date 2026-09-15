@@ -119,6 +119,7 @@ def _validate_worker_response(plan, response, *, plan_id, trial_id, attempt_id, 
             backend_identity=plan["execution"]["backend"],
             domain=plan["domain"],
             seed=seed,
+            max_completed_steps=plan["experiment"]["logical_budget"]["max_steps_per_trial"],
         )
         return experiment.scientific_result_identity(response)
     except experiment.ExperimentContractError as error:
