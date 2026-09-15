@@ -1,0 +1,131 @@
+name: TDI engine Linux containment
+
+on:
+  pull_request:
+    paths:
+      - "scripts/tdi_experiment_supervisor.py"
+      - "scripts/tdi_linux_containment.py"
+      - "scripts/tdi_cgroup_delegation.py"
+      - "scripts/tdi_linux_campaign.py"
+      - "scripts/tdi_linux_runner.py"
+      - "scripts/tdi_linux_contract.py"
+      - "scripts/tdi_cgroup_exec.py"
+      - "scripts/prepare_tdi_experiment_plan.py"
+      - "scripts/test_tdi_experiment_supervisor.py"
+      - "scripts/test_tdi_linux_containment.py"
+      - "scripts/test_tdi_cgroup_delegation.py"
+      - "scripts/test_tdi_linux_campaign.py"
+      - "scripts/test_tdi_linux_contract.py"
+      - "scripts/test_tdi_linux_containment_privileged.py"
+      - ".github/workflows/tdi-engine-containment.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tdi-engine-containment-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python contract tests
+        run: |
+          set -euxo pipefail
+          python3 -m py_compile \
+            scripts/tdi_experiment_supervisor.py \
+            scripts/tdi_linux_containment.py \
+            scripts/tdi_cgroup_delegation.py \
+            scripts/tdi_linux_campaign.py \
+            scripts/tdi_linux_runner.py \
+            scripts/tdi_linux_contract.py \
+            scripts/tdi_cgroup_exec.py \
+            scripts/prepare_tdi_experiment_plan.py
+          python3 -m unittest \
+            scripts/test_tdi_experiment_supervisor.py \
+            scripts/test_tdi_linux_containment.py \
+            scripts/test_tdi_cgroup_delegation.py \
+            scripts/test_tdi_linux_campaign.py \
+            scripts/test_tdi_linux_contract.py \
+            scripts/test_prepare_tdi_experiment_plan.py -v
+
+  cgroup-v2-kernel:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create a disposable delegated cgroup-v2 test parent
+        id: cgroup
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ROOT=/sys/fs/cgroup
+          test -f "$ROOT/cgroup.controllers"
+          for controller in cpu memory pids; do
+            grep -qw "$controller" "$ROOT/cgroup.controllers"
+          done
+          # The GitHub-hosted runner is a disposable VM. Enable only the three
+          # controllers required by this qualification when they are not already
+          # enabled at the root. Failure is a visible lack of kernel capability,
+          # never a skipped success.
+          current="$(cat "$ROOT/cgroup.subtree_control")"
+          for controller in cpu memory pids; do
+            if ! grep -qw "$controller" <<<"$current"; then
+              echo "+$controller" | sudo tee "$ROOT/cgroup.subtree_control"
+            fi
+          done
+          PARENT="$ROOT/tdi-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          MANAGER="$PARENT/manager"
+          sudo mkdir "$PARENT"
+          sudo chown "$USER:$(id -gn)" "$PARENT" "$PARENT/cgroup.procs" "$PARENT/cgroup.subtree_control"
+          echo '+cpu +memory +pids' > "$PARENT/cgroup.subtree_control"
+          sudo mkdir "$MANAGER"
+          echo "parent=$PARENT" >> "$GITHUB_OUTPUT"
+          echo "manager=$MANAGER" >> "$GITHUB_OUTPUT"
+      - name: Qualify memory CPU PID and descendant isolation in the real kernel
+        env:
+          TDI_CGROUP_TEST_PARENT: ${{ steps.cgroup.outputs.parent }}
+          TDI_CGROUP_TEST_MANAGER: ${{ steps.cgroup.outputs.manager }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 scripts/tdi_linux_containment.py doctor --parent "$TDI_CGROUP_TEST_PARENT"
+          # Delegated cgroup-v2 migration rules require the supervisor itself to
+          # be within the delegated subtree. Enter a manager sibling as root,
+          # then drop back to the runner user before executing all qualification.
+          sudo env \
+            PARENT="$TDI_CGROUP_TEST_PARENT" \
+            MANAGER="$TDI_CGROUP_TEST_MANAGER" \
+            WORKSPACE="$GITHUB_WORKSPACE" \
+            RUNNER_USER="$USER" \
+            bash -c '
+              set -euxo pipefail
+              echo $$ > "$MANAGER/cgroup.procs"
+              cd "$WORKSPACE"
+              exec runuser -u "$RUNNER_USER" -- env \
+                TDI_CGROUP_TEST_PARENT="$PARENT" \
+                PYTHONPATH=scripts \
+                bash -c "
+                  set -euxo pipefail
+                  python3 -c '\''from tdi_cgroup_delegation import require_inside_delegation; import os; print(require_inside_delegation(os.environ[\"TDI_CGROUP_TEST_PARENT\"]))'\''
+                  python3 -m unittest scripts/test_tdi_linux_containment_privileged.py -v
+                "
+            '
+      - name: Cleanup disposable cgroup
+        if: always()
+        env:
+          TDI_CGROUP_TEST_PARENT: ${{ steps.cgroup.outputs.parent }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          if [ -n "${TDI_CGROUP_TEST_PARENT:-}" ] && [ -d "$TDI_CGROUP_TEST_PARENT" ]; then
+            if [ -e "$TDI_CGROUP_TEST_PARENT/cgroup.kill" ]; then
+              echo 1 | sudo tee "$TDI_CGROUP_TEST_PARENT/cgroup.kill" >/dev/null || true
+            fi
+            sudo find "$TDI_CGROUP_TEST_PARENT" -mindepth 1 -maxdepth 1 -type d -exec rmdir {} \; || true
+            sudo rmdir "$TDI_CGROUP_TEST_PARENT" || true
+          fi
