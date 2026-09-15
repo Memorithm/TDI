@@ -172,7 +172,10 @@ pub struct PredicateConflict {
 /// Return a concrete non-identifiability witness when the candidate observes
 /// the same predicate vector but the evaluator finds opposite unique labels.
 #[must_use]
-pub fn conflicting_pair(first: AdmissionAudit, second: AdmissionAudit) -> Option<PredicateConflict> {
+pub fn conflicting_pair(
+    first: AdmissionAudit,
+    second: AdmissionAudit,
+) -> Option<PredicateConflict> {
     let first_label = first.unique_hindsight_label?;
     let second_label = second.unique_hindsight_label?;
     if first.predicates == second.predicates && first_label != second_label {
