@@ -65,12 +65,11 @@ def spec():
 
 
 def response(s, plan_id, trial_id, attempt_id):
-    experiment_id = contract.question_identity(s)
     return {
         "schema": 2,
         "execution_status": "completed",
         "scientific_disposition": "evaluated",
-        "experiment_id": experiment_id,
+        "experiment_id": contract.question_identity(s),
         "plan_id": plan_id,
         "trial_id": trial_id,
         "attempt_id": attempt_id,
@@ -108,19 +107,17 @@ class ExperimentContractTests(unittest.TestCase):
         question_id = contract.question_identity(s)
         a = contract.trial_identity(plan_id, "Development", 0)
         b = contract.trial_identity(plan_id, "Development", 1)
-        forward = {
-            trial: contract.stream_identity(question_id, trial, "fixture", "adapter")
-            for trial in (a, b)
-        }
-        reverse = {
-            trial: contract.stream_identity(question_id, trial, "fixture", "adapter")
-            for trial in (b, a)
-        }
+        forward = {trial: contract.stream_identity(question_id, trial, "fixture", "adapter") for trial in (a, b)}
+        reverse = {trial: contract.stream_identity(question_id, trial, "fixture", "adapter") for trial in (b, a)}
         self.assertEqual(forward, reverse)
 
-    def test_retry_and_decimal_seed_fail_closed(self):
+    def test_retry_decimal_seed_and_large_identity_integer_fail_closed(self):
         invalid = spec()
         invalid["retry"] = {"policy": "never", "max_attempts_per_trial": 2}
+        with self.assertRaises(contract.ExperimentContractError):
+            contract.validate_experiment_spec(invalid)
+        invalid = spec()
+        invalid["logical_budget"]["max_steps_per_trial"] = 2**53
         with self.assertRaises(contract.ExperimentContractError):
             contract.validate_experiment_spec(invalid)
         for seed in (1, -1, "01", "+1", str(2**64)):
@@ -129,7 +126,7 @@ class ExperimentContractTests(unittest.TestCase):
                     contract.parse_seed_decimal(seed)
         self.assertEqual(contract.parse_seed_decimal(str(2**64 - 1)), 2**64 - 1)
 
-    def test_worker_binding_and_result_identity_exclude_operational_progress(self):
+    def test_worker_binding_result_identity_and_float_policy(self):
         s = spec()
         plan_id = contract.experiment_plan_identity(s)
         trial_id = contract.trial_identity(plan_id, "Development", 0)
@@ -150,6 +147,9 @@ class ExperimentContractTests(unittest.TestCase):
         self.assertEqual(identity, contract.scientific_result_identity(value))
         value["result"]["score"] = 6
         self.assertNotEqual(identity, contract.scientific_result_identity(value))
+        value["result"]["score"] = 0.5
+        with self.assertRaises(contract.ExperimentContractError):
+            contract.scientific_result_identity(value)
 
     def test_wrong_attempt_binding_is_rejected(self):
         s = spec()
