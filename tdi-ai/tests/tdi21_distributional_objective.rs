@@ -7,7 +7,10 @@ use tdi_ai::experimental::tdi21_distributional_objective::{
     score_validation_policy,
 };
 
-fn constant_program(variable_count: u8, value: bool) -> tdi_ai::experimental::tdi21_anf_synthesis::AnfProgram {
+fn constant_program(
+    variable_count: u8,
+    value: bool,
+) -> tdi_ai::experimental::tdi21_anf_synthesis::AnfProgram {
     synthesize_anf(variable_count, &vec![value; 1usize << variable_count]).unwrap()
 }
 
