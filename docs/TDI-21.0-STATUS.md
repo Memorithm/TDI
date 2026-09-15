@@ -22,7 +22,9 @@ Independent-oracle tests enumerate every length-four stream over seven events fo
 
 [The first B4 development surface](TDI-21.0-B4-ANF-SYNTHESIS.md) adds an exact bounded truth-table-to-ANF Möbius transform and a B3 + synthesized-Zhegalkin admission control. The initial polynomial is intentionally semantically identical to the existing marker rule: `x0 XOR x0*x1`. This isolates and accounts the algebraic composition layer rather than claiming an improvement. Contract tests reconstruct every three-variable Boolean function and require B4/B3 parity over all 4,096 four-event streams in the declared alphabet. B4 remains pairwise-score free.
 
-B5 learned relational state evolution, nontrivial learned/synthesized B4 routing, trained attention-model comparisons and matched total-resource experiments are **not implemented**. Hand-written B0/B1/B2/B3 references, the equivalent B4 substitution and successful dictionary controls do not demonstrate language modeling, learned semantic addressing or attention replacement at model scale.
+[The bounded B4 search scaffold](TDI-21.0-B4-ANF-SEARCH.md) adds exhaustive sparse-ANF selection over a typed `DevelopmentSet`, while `ValidationSet` is accepted only after selection. Search is bounded to six variables, degree three, four monomials, 65,536 candidates and 256 labelled rows; candidate-space size is checked before enumeration rather than silently truncated. Selection and search-cost accounting are deterministic. Software fixtures recover `x0 XOR (x1*x2)` and three-bit parity and separately exercise post-selection Validation behavior. This is not yet a sequence-task learning result.
+
+B5 learned relational state evolution, event-to-predicate learning, trained attention-model comparisons and matched total-resource experiments are **not implemented**. Hand-written B0/B1/B2/B3 references, the equivalent B4 substitution, sparse truth-table search fixtures and successful dictionary controls do not demonstrate language modeling, learned semantic addressing or attention replacement at model scale.
 
 ## Validation and reproduction
 
@@ -35,14 +37,14 @@ bash scripts/check-tdi-ai-experiments.sh
 bash scripts/check-tdi21-development.sh
 ```
 
-Use exact-head CI logs for current outcomes. The development script requires a clean checkout, records its real SHA and source hashes, and executes no protected/final population. Equal entry count does not imply equal memory budget. The B2/B3 common ceiling covers only the declared memory substrate; B4 additionally reports its ANF representation bits and term evaluations; the attention references separately reserve bounded write history and score buffers. Dictionary payload bits are a lower bound. None of these is matched total compute/training/allocator evidence.
+Use exact-head CI logs for current outcomes. The development script requires a clean checkout, records its real SHA and source hashes, and executes no protected/final population. Equal entry count does not imply equal memory budget. The B2/B3 common ceiling covers only the declared memory substrate; B4 additionally reports its ANF representation bits and term evaluations; sparse search reports search candidate/case/monomial work separately; the attention references separately reserve bounded write history and score buffers. Dictionary payload bits are a lower bound. None of these is matched total compute/training/allocator evidence.
 
 ## Next scientific milestones
 
-1. Define a bounded, leakage-safe synthesis/search contract for nontrivial B4 relations, including explicit search-cost accounting and separate Development/Validation families.
-2. Extend resource accounting to explicit total memory/compute/training/tuning envelopes, then compare competent trained models where the task requires learning.
-3. Preregister independent Development/Validation task families, metrics, decision rules and stop conditions before comparative evidence.
-4. Build B5 only after B4 search semantics are falsifiable and reproducible rather than promoting an equivalent Stage-0 substitution.
+1. Define a versioned event-to-predicate adapter for a nontrivial B4 routing decision using only permitted present/past state, then connect the already bounded search surface without exposing Validation labels to selection.
+2. Freeze Development/Validation task-family generation, search envelopes, metrics, rejection rules and stop conditions before comparative evidence.
+3. Extend resource accounting to explicit total memory/compute/training/tuning envelopes, then compare competent trained models where the task requires learning.
+4. Build B5 only after B4 search and event-feature semantics are falsifiable and reproducible rather than promoting a toy truth-table fit.
 5. Qualify runtime and model behavior before generic SciRust promotion or an elastic FLAT-ATTENTION hybrid.
 
 The structural freeze template remains insufficient to authorize a confirmatory experiment. All inherited holdout protections remain intact.
