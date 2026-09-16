@@ -53,7 +53,7 @@ This is the durable engineering handoff for the industrialization programme. It 
 
 ## Lot-E candidate validation
 
-Local non-privileged qualification currently covers 12 checkpoint/graph contract tests:
+Local non-privileged qualification currently covers 13 checkpoint/graph contract tests:
 
 ```bash
 PYTHONPATH=scripts python3 -m py_compile \
