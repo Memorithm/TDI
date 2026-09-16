@@ -98,6 +98,8 @@ pub mod tdi2_intuition_encoder;
 pub mod tdi2_intuition_engine;
 #[path = "tdi2_intuition_evaluation.rs"]
 pub mod tdi2_intuition_evaluation;
+#[path = "tdi2_intuition_experience.rs"]
+pub mod tdi2_intuition_experience;
 #[path = "tdi2_intuition_inference.rs"]
 pub mod tdi2_intuition_inference;
 #[path = "tdi2_intuition_margin.rs"]
