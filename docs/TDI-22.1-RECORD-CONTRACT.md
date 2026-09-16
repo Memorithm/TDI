@@ -37,16 +37,22 @@ Field order is exactly:
 ## Scalar encoding
 
 - unsigned integers: minimal base-10 ASCII, no sign, no leading zeros except `0`;
-- binary64 score scalar: `0x` followed by exactly 16 lowercase hex digits from `to_bits()`;
+- available binary64 score scalar: `0x` followed by exactly 16 lowercase hex digits from `to_bits()`;
 - boolean: `0` or `1` only;
-- absent selected identity: `none`; otherwise unsigned integer;
-- no rejection: `none`.
+- unavailable identity or score: literal `none`;
+- no rejection: literal `none`.
+
+`target_identity` is `none` only when evaluator truth could not be validly established (for example `missing_target`, generator exhaustion before a target, or malformed episode). `selected_identity` is `none` when the arm has no valid selection.
+
+`target_score_bits`, `runner_up_score_bits`, and `target_margin_bits` are each `none` when that scalar is unavailable because evaluation failed before it was produced. Otherwise they use the exact binary64 bit encoding above. A valid finite score is never replaced by `none` merely because the record is unsuccessful.
+
+`exact_success` is `0` for every rejected record. For a non-rejected record it is `1` iff `selected_identity == target_identity`, otherwise `0`.
 
 ## Resource-field semantics
 
 `query_bits`, `key_bits`, `value_bits`, `position_bits`, `dynamic_state_bits`, and `static_parameter_bits` are **unsigned integer bit counts**. They are not payload dumps or lists of floating-point values. They quantify candidate-visible/retained storage according to the frozen resource ledger and are always present, including when zero.
 
-`temporary_slots`, `add_count`, `mul_count`, `cross_count`, `dot_lane_count`, and `comparison_count` are unsigned integer semantic operation/storage counts. They are not wall-clock measurements.
+`temporary_slots`, `add_count`, `mul_count`, `cross_count`, `dot_lane_count`, and `comparison_count` are unsigned integer semantic operation/storage counts. They are not wall-clock measurements. On a rejected record they report the candidate work actually completed before rejection; they are not retroactively replaced by nominal full-query costs.
 
 ## Enum tokens
 
