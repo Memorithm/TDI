@@ -29,8 +29,8 @@ Primary Stage-0 surfaces:
 7. A coordinate-subspace reduction can be assigned object by object as a first auditable global-reduction family.
 8. For that Stage-0 reduction, `R(f^dagger) = R(f)^dagger` is tested directly.
 9. Reduce/lift/reduce idempotence is tested on the retained coordinate block, while a max-absolute reconstruction residual records discarded entries.
-10. Composition is explicitly **not** assumed to be preserved: the scaffold compares `R(g o f)` with `R(g) o R(f)` and exposes the resulting defect.
-11. Deterministic controls include both zero defect with a fully retained intermediate basis and a predicted non-zero defect when a contributing intermediate path is removed.
+10. Composition is explicitly **not** assumed to be preserved: the scaffold evaluates the structural omitted-path term `E_C^dagger g (I_B - P_B) f E_A` directly in ambient intermediate-coordinate order and reports its max-absolute magnitude. It deliberately does not subtract independently accumulated `f64` realizations of `R(g o f)` and `R(g) o R(f)`, so this diagnostic does not claim to measure floating-point execution residual.
+11. Deterministic controls include both zero structural defect with a fully retained intermediate basis, including a permuted full basis, and a predicted non-zero defect when a contributing intermediate path is removed.
 12. Softmax and the Boolean / `F2` / ANF / max-plus research domains remain explicitly outside the Stage-0 linear carrier.
 13. Comparative scientific fields remain unresolved and both execution-authorization flags remain false.
 
