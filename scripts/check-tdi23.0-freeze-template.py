@@ -17,6 +17,8 @@ REQUIRED_FREEZE_FIELDS = (
     "dagger_semantics",
     "composition_semantics",
     "attention_score_mapping",
+    "global_reduction_family",
+    "global_reduction_preservation",
     "nonlinear_boundary",
     "numerical_tolerance_policy",
     "development_fixture_family",
@@ -44,6 +46,13 @@ REQUIRED_BOUNDARIES = [
     "anf_not_silently_fdhilb",
     "max_plus_not_silently_fdhilb",
 ]
+REQUIRED_REDUCTION_DIAGNOSTICS = [
+    "dagger_commutation",
+    "reduce_lift_residual",
+    "composition_defect",
+    "full_middle_space_control",
+    "dropped_middle_path_control",
+]
 REQUIRED_CONTROLS = [
     "identity_map",
     "zero_map",
@@ -52,6 +61,11 @@ REQUIRED_CONTROLS = [
     "dimension_mismatch_rejection",
     "nonfinite_rejection",
     "rewrite_disabled_reference",
+    "no_reduction_reference",
+    "dagger_reduction_commutation",
+    "full_middle_space_composition_defect_zero",
+    "dropped_middle_path_composition_defect_nonzero",
+    "reduce_lift_residual",
 ]
 
 
@@ -114,6 +128,11 @@ def validate_template(document: Any) -> int:
 
     if freeze["nonlinear_boundary"].get("required_named_boundaries") != REQUIRED_BOUNDARIES:
         fail("nonlinear_boundary.required_named_boundaries drifted")
+    if (
+        freeze["global_reduction_preservation"].get("required_named_diagnostics")
+        != REQUIRED_REDUCTION_DIAGNOSTICS
+    ):
+        fail("global_reduction_preservation.required_named_diagnostics drifted")
     if freeze["control_battery"].get("required_named_controls") != REQUIRED_CONTROLS:
         fail("control_battery.required_named_controls drifted")
 
@@ -123,6 +142,9 @@ def validate_template(document: Any) -> int:
         "confirmatory_execution_authorized_true",
         "final_execution_authorized_true",
         "flat_attention_integration_authorized",
+        "global_reduction_is_lossless",
+        "global_reduction_is_functorial",
+        "global_reduction_improves_performance",
     )
     for token in forbidden_positive_claims:
         if token in serialized:
@@ -153,6 +175,27 @@ def self_test(template: Any) -> None:
         pass
     else:
         fail("self-test: invented dagger pin was accepted")
+
+    reduction_pinned = copy.deepcopy(template)
+    reduction_pinned["freeze"]["global_reduction_family"]["status"] = "pinned"
+    reduction_pinned["freeze"]["global_reduction_family"]["value"] = "coordinate_subspace"
+    try:
+        validate_template(reduction_pinned)
+    except TemplateError:
+        pass
+    else:
+        fail("self-test: invented global-reduction pin was accepted")
+
+    reduction_softened = copy.deepcopy(template)
+    reduction_softened["freeze"]["global_reduction_preservation"][
+        "required_named_diagnostics"
+    ] = []
+    try:
+        validate_template(reduction_softened)
+    except TemplateError:
+        pass
+    else:
+        fail("self-test: global-reduction diagnostics removal was accepted")
 
     softened = copy.deepcopy(template)
     softened["freeze"]["nonlinear_boundary"]["required_named_boundaries"] = []
