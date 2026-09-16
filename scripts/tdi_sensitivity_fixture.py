@@ -120,7 +120,9 @@ def run(params):
                 or any(not isinstance(x, str) or len(x) > 32 for x in row["values"])):
             raise durable.ContractError("invalid analytic row")
         graphs._sha256(row["id"], "row identity"); seen.add(row["ordinal"])
-        result.append({"id": row["id"], "ordinal": row["ordinal"], "value": evaluate(params["function"], [float(x) for x in row["values"]])})
+        values = [float(x) for x in row["values"]]
+        result.append({"id": row["id"], "ordinal": row["ordinal"], "values": list(row["values"]),
+                       "value": evaluate(params["function"], values)})
     costs = {"wall_ns": time.perf_counter_ns() - started, "cpu_ns": time.process_time_ns() - cpu,
              "sensor": "Python perf_counter_ns/process_time_ns", "scope": "batch computation; excludes interpreter startup, imports and identity checks",
              "process_peak_rss_bytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024 if sys.platform == "linux" else None,
