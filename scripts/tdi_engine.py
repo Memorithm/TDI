@@ -18,6 +18,7 @@ import tdi_engine_runtime as runtime
 from tdi_engine_store import EngineStore, atomic_json, identity
 from tdi_hub_client import HubClient, HubTransportUnknown
 from tdi_engine_archive import export_bundle, restore_bundle, verify_bundle
+from tdi_observability import ExportError, EXIT_EXPORT
 
 
 def read_json(path, limit=16 * 1024 * 1024):
@@ -57,6 +58,12 @@ def main(argv=None):
     p = sub.add_parser("cache-get"); p.add_argument("request", type=Path)
     p.add_argument("--allow-exact-reuse", action="store_true")
     p = sub.add_parser("view"); p.add_argument("--port", type=int, default=8765)
+    p = sub.add_parser("export-mlflow"); p.add_argument("campaign"); p.add_argument("--endpoint", required=True); p.add_argument("--experiment-id", required=True); p.add_argument("--metrics", type=Path)
+    p = sub.add_parser("export-otlp"); p.add_argument("campaign"); p.add_argument("--endpoint", required=True)
+    p = sub.add_parser("exports"); p.add_argument("--after", type=int, default=0)
+    p = sub.add_parser("inspect-export"); p.add_argument("export_id")
+    for verb in ("retry-export", "reconcile-export"):
+        p = sub.add_parser(verb); p.add_argument("export_id"); p.add_argument("--run-id")
     args = parser.parse_args(argv)
     try:
         result = dispatch(args)
@@ -65,6 +72,8 @@ def main(argv=None):
             code = durable.EXIT_TRIAL_FAILURE
         print(durable.canonical({"schema": 1, "operation": args.operation, "exit_code": code, "result": result}))
         return code
+    except ExportError as error:
+        code, status, message = EXIT_EXPORT, "external-export-error", str(error)
     except HubTransportUnknown as error:
         code, status = durable.EXIT_TRIAL_FAILURE, "outcome-unknown"
         message = str(error)
@@ -103,7 +112,7 @@ def dispatch(args):
         from tdi_engine_viewer import serve
         serve(args.catalogue, args.port)
         return {"status": "stopped"}
-    readonly = op in ("status", "inspect", "compare", "events", "backup", "export", "cache-request", "cache-get")
+    readonly = op in ("status", "inspect", "compare", "events", "backup", "export", "cache-request", "cache-get", "exports", "inspect-export")
     if op in ("fixture-plan", "submit", "run", "resume", "cancel", "attach", "export", "restore", "cache-get"):
         client = HubClient(args.hub, token=os.environ.get("TDI_HUB_TOKEN"),
                            allow_loopback_http=args.allow_loopback_http, timeout=args.timeout)
@@ -115,6 +124,22 @@ def dispatch(args):
         atomic_json(args.output, spec)
         return {"path": str(args.output), "campaign_identity": identity("tdi-operational-campaign/v1", spec)}
     with EngineStore(args.catalogue, readonly=readonly) as store:
+        if op == "exports":
+            return store.list_exports(after=args.after)
+        if op == "inspect-export":
+            return store.get_export(args.export_id)
+        if op in ("export-mlflow", "export-otlp", "retry-export", "reconcile-export"):
+            from tdi_observability import MLflowClient, OTLPClient, prepare_mlflow, prepare_otlp, send_export, reconcile_mlflow
+            record = store.get_export(args.export_id) if op in ("retry-export", "reconcile-export") else None
+            kind = record["kind"] if record else ("mlflow" if op == "export-mlflow" else "otlp")
+            client_type = MLflowClient if kind == "mlflow" else OTLPClient
+            client = client_type(record["endpoint"] if record else args.endpoint, token=os.environ.get("TDI_EXPORT_TOKEN"),
+                                 allow_loopback_http=args.allow_loopback_http, timeout=args.timeout, max_bytes=1024 * 1024)
+            if op == "reconcile-export":
+                return reconcile_mlflow(store, record["id"], client, args.run_id)
+            if record is None:
+                record = prepare_mlflow(store, args.campaign, client, args.experiment_id, read_json(args.metrics) if args.metrics else []) if kind == "mlflow" else prepare_otlp(store, args.campaign, client)
+            return send_export(store, record["id"], client, retry=op == "retry-export", resume_run=getattr(args, "run_id", None))
         if op == "cache-request":
             from tdi_engine_cache import cache_request
             return cache_request(store, store.get(args.campaign), args.step, args.output)
