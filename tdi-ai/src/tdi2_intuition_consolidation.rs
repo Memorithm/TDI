@@ -420,3 +420,90 @@ mod generalization_evaluation_tests {
         assert!(!evaluation.passes_supplied_evidence());
     }
 }
+
+use super::tdi2_intuition_matching::match_template;
+
+fn matches_specialized(
+    template: &Template,
+    state: &BooleanState,
+    proposal: SpecializationProposal,
+) -> bool {
+    if !match_template(template, state).is_exact() {
+        return false;
+    }
+    match proposal.polarity {
+        ClausePolarity::Required => state.contains(proposal.predicate),
+        ClausePolarity::Forbidden => !state.contains(proposal.predicate),
+    }
+}
+
+/// Evaluate a one-literal specialization without applying it.
+pub fn evaluate_specialization_proposal(
+    template: &Template,
+    proposal: SpecializationProposal,
+    positives: &[BooleanState],
+    negatives: &[BooleanState],
+) -> Result<ProposalEvaluation, ProposalError> {
+    if proposal.template_id != template.id() {
+        return Err(ProposalError::WrongTemplate);
+    }
+    if template
+        .required()
+        .binary_search(&proposal.predicate)
+        .is_ok()
+        || template
+            .forbidden()
+            .binary_search(&proposal.predicate)
+            .is_ok()
+    {
+        return Err(ProposalError::ExistingClause);
+    }
+    Ok(ProposalEvaluation {
+        positive_total: positives.len(),
+        positive_admitted: positives
+            .iter()
+            .filter(|state| matches_specialized(template, state, proposal))
+            .count(),
+        negative_total: negatives.len(),
+        negative_admitted: negatives
+            .iter()
+            .filter(|state| matches_specialized(template, state, proposal))
+            .count(),
+    })
+}
+
+#[cfg(test)]
+mod specialization_evaluation_tests {
+    use super::{ClausePolarity, SpecializationProposal, evaluate_specialization_proposal};
+    use crate::experimental::tdi2_intuition::{BooleanState, PredicateId, Template, TemplateId};
+
+    #[test]
+    fn specialization_can_exclude_counterexample_without_losing_positives() {
+        let template = Template::new(
+            TemplateId::new(8),
+            vec![PredicateId::new(1)],
+            Vec::new(),
+            Vec::new(),
+        )
+        .expect("template");
+        let proposal = SpecializationProposal {
+            template_id: template.id(),
+            predicate: PredicateId::new(8),
+            polarity: ClausePolarity::Forbidden,
+        };
+        let evaluation = evaluate_specialization_proposal(
+            &template,
+            proposal,
+            &[
+                BooleanState::new(vec![PredicateId::new(1)]),
+                BooleanState::new(vec![PredicateId::new(1), PredicateId::new(9)]),
+            ],
+            &[BooleanState::new(vec![
+                PredicateId::new(1),
+                PredicateId::new(8),
+            ])],
+        )
+        .expect("valid proposal");
+        assert!(evaluation.passes_supplied_evidence());
+    }
+}
