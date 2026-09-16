@@ -30,12 +30,13 @@ A checkpoint manifest binds:
 - adapter and backend identity;
 - the full-width seed as canonical decimal text;
 - checkpoint ordinal;
+- the frozen `max_steps` and `max_observations` budget values for the owning step/trial;
 - completed steps and completed observations;
 - named RNG stream identities plus canonical decimal counters;
 - named immutable input artifact SHA-256 identities;
 - one content-addressed state artifact (`sha256`, media type, byte length).
 
-`checkpoint_identity()` hashes the complete canonical manifest under the domain `tdi-checkpoint/v1`. Named input/RNG sets are sorted by name before hashing, so list order is not semantic. State bytes are not embedded in the manifest: their SHA-256 is authoritative.
+`checkpoint_identity()` hashes the complete canonical manifest under the domain `tdi-checkpoint/v1`. Named input/RNG sets are sorted by name before hashing, so list order is not semantic. Frozen budgets are part of the identity; changing them creates a different checkpoint identity. State bytes are not embedded in the manifest: their SHA-256 is authoritative.
 
 ### Exact resume
 
@@ -44,10 +45,11 @@ A checkpoint manifest binds:
 - experiment, plan, trial, step and step-definition identity;
 - adapter/backend identity;
 - seed;
+- frozen step/observation budgets;
 - immutable input artifact names and hashes;
 - RNG stream names and stream identities.
 
-Recorded progress may not exceed the frozen `max_steps_per_trial` or `max_observations_per_trial` supplied by the owning ExperimentSpec. RNG counters and checkpoint state may advance between checkpoints, but changing a stream identity is not resume.
+The manifest is invalid if recorded progress exceeds its own embedded frozen budgets. Resume also requires those embedded budget values to equal the plan-derived `max_steps_per_trial` / `max_observations_per_trial` supplied by the owning engine boundary; a wider caller limit cannot silently reinterpret an existing checkpoint. RNG counters and checkpoint state may advance between checkpoints, but changing a stream identity is not resume.
 
 An accepted checkpoint is **not** permission to retry, resume a protected/final run, or bypass a series gate. Authorization remains external to this software contract.
 
@@ -102,7 +104,7 @@ The preview emits no retry policy. Distributed leases, fencing tokens, liveness 
 - `docs/examples/checkpoint-manifest-v1.json`
 - `docs/examples/execution-graph-v1.json`
 
-The fixture graph pins the Hub source/model contract, ComponentId, component version/manifest digest and capability contract versions, and demonstrates `prepare -> evaluate`, with a content-addressed external input and an exact checkpoint output. These are software fixtures, not scientific populations or benchmark evidence.
+The fixture graph pins the Hub source/model contract, ComponentId, component version/manifest digest and capability contract versions, and demonstrates `prepare -> evaluate`, with a content-addressed external input and an exact checkpoint output. The checkpoint fixture also carries its frozen step/observation budgets. These are software fixtures, not scientific populations or benchmark evidence.
 
 ## Qualification
 
@@ -117,6 +119,6 @@ PYTHONPATH=scripts python3 -m unittest \
   scripts/test_tdi_execution_graph.py -v
 ```
 
-The current targeted suite contains 16 tests: 5 checkpoint tests and 11 graph tests. It covers canonical checkpoint identity, state/RNG sensitivity, exact lineage binding, frozen progress budgets, input/RNG drift, graph order/cycle rejection, output references, checkpoint ports, language-independent parameters, exact Hub source pinning, component-ID/version/manifest/capability sensitivity, alias-pin consistency, audited Hub input/parameter/timeout bounds, canonical UUIDs and the non-executable structural workflow preview.
+The current targeted suite contains 17 tests: 6 checkpoint tests and 11 graph tests. It covers canonical checkpoint identity, state/RNG/budget sensitivity, exact lineage binding, embedded frozen progress budgets, caller-budget reinterpretation rejection, input/RNG drift, graph order/cycle rejection, output references, checkpoint ports, language-independent parameters, exact Hub source pinning, component-ID/version/manifest/capability sensitivity, alias-pin consistency, audited Hub input/parameter/timeout bounds, canonical UUIDs and the non-executable structural workflow preview.
 
 Passing these tests establishes only the software contract. A real distributed TDI↔Hub edge requires a separate versioned capability plus authoritative component/artifact verification, exact deployed Hub-limit checks, Hub-side tests, fencing and authoritative-publication qualification.
