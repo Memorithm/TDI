@@ -1,0 +1,74 @@
+name: TDI Lot H Forge one-shot sync
+
+on:
+  push:
+    branches: [industrialize/forge-partner-h1]
+    paths:
+      - '.github/workflows/zz-tdi-h-forge-sync.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: industrialize/forge-partner-h1
+      - name: Apply bounded source and status corrections
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('scripts/tdi_forge_partner_contract.py')
+          s = p.read_text()
+          old = 'FORGE_SCIENTIFIC_DOMAIN_SCHEMA_VERSION = 1\n'
+          new = old + 'FORGE_PROTOCOL_NAME = "forge.scientific-external-domain"\nFORGE_PROTOCOL_VERSION = 1\n'
+          assert s.count(old) == 1
+          s = s.replace(old, new)
+          old = 'not all(ch.isalnum() or ch in "._-" for ch in component)'
+          new = 'not all(ch.isascii() and (ch.isalnum() or ch in "._-") for ch in component)'
+          assert s.count(old) == 1
+          s = s.replace(old, new)
+          old = '''    if adapter["source_sha"] != FORGE_SOURCE_SHA:\n        raise ForgePartnerContractError(\n            "Forge adapter source does not match the audited Forge source"\n        )\n\n    forge = value["forge"]\n'''
+          new = '''    if adapter["source_sha"] != FORGE_SOURCE_SHA:\n        raise ForgePartnerContractError(\n            "Forge adapter source does not match the audited Forge source"\n        )\n    if (\n        adapter["protocol"]["name"] != FORGE_PROTOCOL_NAME\n        or adapter["protocol"]["version"] != FORGE_PROTOCOL_VERSION\n    ):\n        raise ForgePartnerContractError(\n            "Forge adapter protocol does not match the audited scientific-domain contract"\n        )\n\n    forge = value["forge"]\n'''
+          assert s.count(old) == 1
+          s = s.replace(old, new)
+          p.write_text(s)
+
+          p = Path('scripts/test_tdi_forge_partner_contract.py')
+          s = p.read_text()
+          old = '''        with self.assertRaisesRegex(\n            forge.ForgePartnerContractError, "audited Forge source"\n        ):\n            forge.canonical_forge_search_contract(value)\n\n    def test_forge_source_and_schema_pins_fail_closed(self):\n'''
+          new = '''        with self.assertRaisesRegex(\n            forge.ForgePartnerContractError, "audited Forge source"\n        ):\n            forge.canonical_forge_search_contract(value)\n\n        value = contract()\n        value["partner_step"]["adapter"]["protocol"]["name"] = "forge.other"\n        value["partner_step"] = partner.bind_admitted_partner_step(\n            value["partner_step"]["adapter"],\n            hub_fixture.bind_fixture(),\n            step_key="evaluate",\n        )\n        with self.assertRaisesRegex(\n            forge.ForgePartnerContractError, "protocol does not match"\n        ):\n            forge.canonical_forge_search_contract(value)\n\n    def test_forge_source_and_schema_pins_fail_closed(self):\n'''
+          assert s.count(old) == 1
+          s = s.replace(old, new)
+          old = '    def test_development_and_validation_sources_must_be_nonempty_and_disjoint(self):\n'
+          new = '''    def test_upstream_repository_matches_forge_ascii_owner_name_grammar(self):\n        value = contract()\n        value["upstream"]["repository"] = "Mémorithm/TDI"\n        with self.assertRaisesRegex(\n            forge.ForgePartnerContractError, "owner/name syntax"\n        ):\n            forge.canonical_forge_search_contract(value)\n\n    def test_development_and_validation_sources_must_be_nonempty_and_disjoint(self):\n'''
+          assert s.count(old) == 1
+          s = s.replace(old, new)
+          p.write_text(s)
+
+          p = Path('docs/engineering/industrialization-status.md')
+          s = p.read_text()
+          replacements = {
+              '- Lot H common partner-adapter foundation: candidate on branch `industrialize/common-adapter-h`. It defines a versioned authority-free descriptor for ElasticXxx, Forge, SciRust, FLAT-ATTENTION and NNIS and binds one descriptor to an exact G3-admitted Graph/v1 step without claiming partner execution qualification.': '- Lot H common partner-adapter foundation: PR #273, final head `53316ef9af6c402fbda6728707da03903dcbfa0a`, merged `5905cfeed38f4a12ec6f8c9d238a0ede16815d2a` after all returned exact-head workflows succeeded, including the dedicated partner-adapter gate. PR #275 then hardened the public G3 version fields against JSON Boolean aliases on exact head `2cadda0ae0fe6511b7a90ba9b3e6a1c86ce9b4eb`, merged `c3e2275d807a67aac7ac1be36412d1f8e1ed7f07` after every returned applicable workflow succeeded.',
+              '| H common partner adapter descriptor | candidate | `PartnerAdapter/v1` pins exact repository/source/protocol/Hub-component identities for the five declared partner classes; the common contract grants no holdout, verdict, stage or actuation authority and does not itself qualify partner execution. |': '| H common partner adapter descriptor | qualified | PR #273 qualifies `PartnerAdapter/v1` + `AdmittedPartnerStep/v1` for ElasticXxx, Forge, SciRust, FLAT-ATTENTION and NNIS on exact admitted Hub steps while granting no holdout, verdict, stage, actuation or partner-execution authority; PR #275 hardens the embedded G3 version-type boundary. |\n| H Forge scientific-search boundary | candidate | PR #277 pins audited Forge source `8946e702e697c144c85e0fb166a21fe759cdae46`, external/scientific domain schema v1, leak-safe generation/verification/final-holdout identities and authority-free manifest compilation; exact-head qualification and review are pending. |',
+              '| Q12 | candidate | Lot H common PartnerAdapter/v1 and AdmittedPartnerStep/v1 are under exact-head qualification; partner-specific request/response execution remains separate. |': '| Q12 | partial | The common Lot H PartnerAdapter/v1 + AdmittedPartnerStep/v1 boundary is qualified by #273/#275. Forge-specific scientific-search interchange is candidate #277; partner execution remains unqualified and the other partner-specific slices remain planned. |',
+              '1. Qualify the Lot H common partner adapter contract on its exact final head; do not interpret structural binding as partner execution qualification.': '1. The common Lot H partner adapter is qualified by #273/#275; qualify Forge-specific PR #277 on its exact final head without promoting structural interchange to Forge execution or scientific authority.',
+          }
+          for old, new in replacements.items():
+              assert s.count(old) == 1, old
+              s = s.replace(old, new)
+          p.write_text(s)
+
+          Path('.github/workflows/zz-tdi-h-forge-sync.yml').unlink()
+          PY
+      - name: Commit synchronized Lot H state
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/tdi_forge_partner_contract.py scripts/test_tdi_forge_partner_contract.py docs/engineering/industrialization-status.md .github/workflows/zz-tdi-h-forge-sync.yml
+          git commit -m 'fix(engine): tighten Forge wire compatibility and sync Lot H status'
+          git push origin HEAD:industrialize/forge-partner-h1
