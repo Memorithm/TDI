@@ -87,7 +87,10 @@ impl fmt::Display for ReductionError {
                 "coordinate {coordinate} is outside ambient dimension {ambient_dim}"
             ),
             Self::DuplicateCoordinate { coordinate } => {
-                write!(formatter, "coordinate {coordinate} is selected more than once")
+                write!(
+                    formatter,
+                    "coordinate {coordinate} is selected more than once"
+                )
             }
             Self::AmbientDimensionMismatch {
                 role,
@@ -110,7 +113,10 @@ impl fmt::Display for ReductionError {
                 formatter.write_str("reduction defect comparison requires identical map dimensions")
             }
             Self::CoordinateLookupFailure { row, column } => {
-                write!(formatter, "validated coordinate lookup failed at ({row}, {column})")
+                write!(
+                    formatter,
+                    "validated coordinate lookup failed at ({row}, {column})"
+                )
             }
             Self::NonFiniteDerivedValue { operation } => {
                 write!(formatter, "{operation} produced a non-finite value")
@@ -187,11 +193,7 @@ impl CoordinateReduction {
         &self.kept
     }
 
-    fn validate_map_side(
-        &self,
-        expected: usize,
-        role: &'static str,
-    ) -> Result<(), ReductionError> {
+    fn validate_map_side(&self, expected: usize, role: &'static str) -> Result<(), ReductionError> {
         if self.ambient_dim != expected {
             return Err(ReductionError::AmbientDimensionMismatch {
                 role,
@@ -373,7 +375,9 @@ mod tests {
         let map = RealLinearMap::new(
             4,
             3,
-            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
+            vec![
+                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
+            ],
         )
         .expect("fixture map");
         let domain = CoordinateReduction::new(4, vec![0, 2]).expect("domain reduction");
@@ -382,8 +386,8 @@ mod tests {
         let reduced_then_dagger = reduce_linear_map(&map, &domain, &codomain)
             .expect("reduce")
             .dagger();
-        let dagger_then_reduced = reduce_linear_map(&map.dagger(), &codomain, &domain)
-            .expect("reduce dagger");
+        let dagger_then_reduced =
+            reduce_linear_map(&map.dagger(), &codomain, &domain).expect("reduce dagger");
 
         assert_eq!(reduced_then_dagger, dagger_then_reduced);
     }
@@ -395,29 +399,23 @@ mod tests {
         let reduction = CoordinateReduction::new(3, vec![2, 0]).expect("reduction");
         let reduced = reduce_linear_map(&map, &reduction, &reduction).expect("reduce");
         let lifted = lift_linear_map(&reduced, &reduction, &reduction).expect("lift");
-        let reduced_again = reduce_linear_map(&lifted, &reduction, &reduction).expect("reduce again");
+        let reduced_again =
+            reduce_linear_map(&lifted, &reduction, &reduction).expect("reduce again");
 
         assert_eq!(reduced_again, reduced);
     }
 
     #[test]
     fn tdi23_full_middle_reduction_has_zero_composition_defect_fixture() {
-        let first = RealLinearMap::new(2, 3, vec![1.0, 0.0, 2.0, 1.0, -1.0, 3.0])
-            .expect("first");
-        let second = RealLinearMap::new(3, 2, vec![2.0, 1.0, 0.0, -1.0, 4.0, 2.0])
-            .expect("second");
+        let first = RealLinearMap::new(2, 3, vec![1.0, 0.0, 2.0, 1.0, -1.0, 3.0]).expect("first");
+        let second = RealLinearMap::new(3, 2, vec![2.0, 1.0, 0.0, -1.0, 4.0, 2.0]).expect("second");
         let domain = CoordinateReduction::new(2, vec![0, 1]).expect("domain");
         let middle = CoordinateReduction::new(3, vec![0, 1, 2]).expect("middle");
         let codomain = CoordinateReduction::new(2, vec![0, 1]).expect("codomain");
 
-        let defect = reduction_composition_defect_max_abs(
-            &first,
-            &second,
-            &domain,
-            &middle,
-            &codomain,
-        )
-        .expect("defect");
+        let defect =
+            reduction_composition_defect_max_abs(&first, &second, &domain, &middle, &codomain)
+                .expect("defect");
         assert_eq!(defect, 0.0);
     }
 
@@ -428,14 +426,9 @@ mod tests {
         let endpoint = CoordinateReduction::new(1, vec![0]).expect("endpoint");
         let middle = CoordinateReduction::new(2, vec![0]).expect("middle");
 
-        let defect = reduction_composition_defect_max_abs(
-            &first,
-            &second,
-            &endpoint,
-            &middle,
-            &endpoint,
-        )
-        .expect("defect");
+        let defect =
+            reduction_composition_defect_max_abs(&first, &second, &endpoint, &middle, &endpoint)
+                .expect("defect");
         assert_eq!(defect, 2.0);
     }
 
