@@ -32,6 +32,7 @@ This is the durable engineering handoff for the industrialization programme. It 
 | E CheckpointManifest/v1 | candidate | content-addressed state plus exact experiment/plan/trial/step/adapter/backend/input/RNG binding; frozen step/observation budgets are embedded in checkpoint identity and enforced against resume inputs. |
 | E declarative execution graph | candidate | topological Graph/v1 with per-step identity binding to exact Hub ComponentId, component version/manifest digest, capability-contract version, inputs, parameters and checkpoint ports. |
 | E pinned Hub structural limits | candidate | Graph/v1 matches audited Hub v1/default limits for max concurrency, step count, input count, serialized parameters, timeout and input-name grammar before producing a preview. |
+| E Hub text/version fidelity | candidate | output labels reject Unicode `Cc` controls/whitespace like pinned Hub; version parsing intentionally matches Hub's semver-shaped (not full SemVer) grammar. |
 | E Hub bridge | structural preview only | `compile_hub_workflow_preview()` emits `execution_authorized: false`; current WorkflowSpec/v1 cannot atomically enforce component/capability pins, registry state or portable-artifact identity. |
 | E generic scheduling | intentionally delegated | scirust-hub owns ready-set scheduling, retries, cancellation, workflow lifecycle, artifacts, leases and remote transport; TDI does not duplicate them. |
 
@@ -47,7 +48,7 @@ This is the durable engineering handoff for the industrialization programme. It 
 | Q08 | qualified for declared cgroup-v2 profile | PR #252 real-kernel memory/PID/CPU limits and sibling isolation. |
 | Q09 | partial | unsupported hard VRAM quota fails closed; measured GPU qualification remains. |
 | Q10 | candidate pending Lot-E exact-head qualification | PR #253 qualified plan/trial/attempt identity; Lot E adds exact checkpoint lineage plus embedded frozen budget binding for resume. |
-| Q11 | candidate for declarative graph semantics only | Lot E validates graph/component/capability pins and pinned Hub structural bounds; authoritative Hub execution is blocked until a versioned Hub edge enforces registry/artifact pins. |
+| Q11 | candidate for declarative graph semantics only | Lot E validates graph/component/capability pins, pinned Hub structural/text/version boundaries and a non-authoritative preview; authoritative Hub execution is blocked until a versioned Hub edge enforces registry/artifact pins. |
 | Q12 | planned | common adapter SDK remains separate from graph/checkpoint semantics. |
 | Q13-Q14 | partial | legacy journal migration qualified; portable provenance/artifact export remains. |
 | Q15-Q17 | planned | controlled cache and distributed fencing/deduplication. |
@@ -55,7 +56,7 @@ This is the durable engineering handoff for the industrialization programme. It 
 
 ## Lot-E candidate validation
 
-Local non-privileged qualification currently covers 17 checkpoint/graph contract tests (6 checkpoint + 11 graph):
+Local non-privileged qualification currently covers 19 checkpoint/graph contract tests (6 checkpoint + 13 graph):
 
 ```bash
 PYTHONPATH=scripts python3 -m py_compile \
@@ -66,13 +67,14 @@ PYTHONPATH=scripts python3 -m unittest \
   scripts/test_tdi_execution_graph.py -v
 ```
 
-Checkpoint regressions cover exact lineage, input/RNG drift, content identity, embedded progress limits and rejection of caller-side budget widening. Graph regressions include component-id/version/manifest/capability identity sensitivity, single-alias pin consistency, Hub input grammar, max 32 inputs, 16 KiB serialized parameters and the audited 3,600,000 ms timeout bound. The existing `TDI engine Linux containment` workflow executes these contracts alongside all previously qualified engine-contract tests on the exact PR head. The cgroup kernel job remains enabled so Lot E cannot accidentally regress the contained execution foundation.
+Checkpoint regressions cover exact lineage, input/RNG drift, content identity, embedded progress limits and rejection of caller-side budget widening. Graph regressions include component-id/version/manifest/capability identity sensitivity, single-alias pin consistency, Hub input grammar, max 32 inputs, 16 KiB serialized parameters, audited 3,600,000 ms timeout bound, pinned Hub prerelease-version behavior and Unicode control rejection for output labels. The existing `TDI engine Linux containment` workflow executes these contracts alongside all previously qualified engine-contract tests on the exact PR head. The cgroup kernel job remains enabled so Lot E cannot accidentally regress the contained execution foundation.
 
 ## Cross-repository decisions
 
 - TDI declares Rust 1.85; audited scirust-hub declares Rust 1.89. No mandatory direct Rust dependency is introduced for the graph bridge.
 - The Lot-E graph contract pins `Memorithm/scirust-hub` source `4bf6186841e1ea70ed15cd84faf33de9b48429cd`, WorkflowSpec schema `1`, model `1.2.0`, capability/version grammar, canonical UUID identifiers and the relevant default RunSpec admission limits.
 - Graph steps pin exact Hub ComponentId, component version, component-manifest digest and capability-contract version. Current Hub WorkflowSpec/v1 cannot enforce all those pins atomically during normal workflow submission, so Lot E exposes a non-executable preview only.
+- The pinned Hub `Version::parse` is semver-shaped rather than a full SemVer parser; TDI mirrors that exact accepted wire grammar instead of rejecting Hub-valid version labels.
 - scirust-hub remains owner of generic DAG scheduling, remote workers, leases, heartbeats, retries, cancellation and artifact transport; TDI remains owner of scientific meaning, checkpoint admissibility and accepted publication.
 - Hub's current remote lease v1 has attempt/lease identity, heartbeat and expiry but no qualified fencing/generation token preventing stale publication after reassignment; distributed fencing remains a later Lot-H requirement.
 - Hub already owns a content-addressed artifact store. Hub `ContentDigest` is domain-separated and is not interchangeable with TDI portable raw SHA-256; Lot F must define portable TDI provenance/export/cache rules and verification without duplicating physical CAS storage.
