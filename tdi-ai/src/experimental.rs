@@ -46,6 +46,8 @@ pub mod tdi2_intuition_matching;
 pub mod tdi2_intuition_relations;
 #[path = "tdi2_intuition_reliability.rs"]
 pub mod tdi2_intuition_reliability;
+#[path = "tdi2_intuition_risk_coverage.rs"]
+pub mod tdi2_intuition_risk_coverage;
 #[path = "tdi2_intuition_selection.rs"]
 pub mod tdi2_intuition_selection;
 #[path = "tdi2_intuition_store.rs"]
