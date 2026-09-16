@@ -30,10 +30,12 @@ grep -Fq 'BitwiseExact' "$REWRITE_SRC" \
     || fail "bitwise exactness class missing"
 grep -Fq 'pub mod tdi23_rewrite;' "$EXPERIMENTAL_FACADE" \
     || fail "rewrite module is not exposed through the experimental facade"
+grep -Fq 'BLOCKED ON TDI-23.1 FREEZE' "$SCOPE" \
+    || fail "scope no longer records the TDI-23.1 freeze dependency"
 grep -Fq 'NO REWRITE SEARCH / NO CONFIRMATORY EXECUTION' "$SCOPE" \
     || fail "rewrite scope authorization boundary drifted"
-grep -Fq 'DRAFT PR / NOT FROZEN / NO REWRITE SEARCH' "$STATUS" \
-    || fail "TDI-23.2 status no longer records the non-frozen draft boundary"
+grep -Fq 'CANDIDATE PREPARATION / DRAFT PR / BLOCKED ON TDI-23.1 FREEZE' "$STATUS" \
+    || fail "TDI-23.2 status no longer records candidate/draft/freeze boundaries"
 grep -Fq 'bash scripts/check-tdi23.2-rewrite.sh' "$WORKFLOW" \
     || fail "dedicated workflow no longer invokes the TDI-23.2 gate"
 
