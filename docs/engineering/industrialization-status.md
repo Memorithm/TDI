@@ -12,6 +12,7 @@ This is the durable engineering handoff for the industrialization programme. It 
 - Checkpoint/DAG E: PR #254, final head `2afb9c1d391a79c2f6828fe5fcf2f30477c1d357`, merged `bad24136e081157886d9c94283f3d49d43be335a` after all returned applicable exact-head workflows succeeded and no unresolved review thread remained.
 - Lot F: PR #261, final head `dceb67d4a9c49ce293c08347cab61db0f3347871`, merged `494240ebc5cd8d9418ce8c174dd65a4bc4e17651` after all returned applicable exact-head workflows succeeded, including the dedicated artifact/provenance contract gate.
 - Post-Lot-F base: `494240ebc5cd8d9418ce8c174dd65a4bc4e17651`.
+- Hub portable-artifact prerequisite: `Memorithm/scirust-hub` PR #47 merged as `9f666225b186fbca6160dd34068aea1c9af57040`; the qualified endpoint re-verifies stored bytes against Hub digest and size before returning ordinary SHA-256, with bounded portable-digest scan concurrency.
 - Scientific constraints remain those in `AGENTS.md` and the ecosystem roadmap/overlays.
 
 ## Delivered / candidate capabilities
@@ -41,6 +42,8 @@ This is the durable engineering handoff for the industrialization programme. It 
 | F ExportManifest/v1 | qualified | PR #261 qualifies complete member-set verification, payload verification and monotone access restriction without storage or publication. |
 | F exact-domain cache semantics | qualified | PR #261: cache key binds domain/plan/step/implementation/backend/inputs/parameters; disabled and unauthorized reuse fail closed; no cache store or scientific authorization is implemented. |
 | F physical CAS/registry | intentionally delegated | Hub remains owner of physical content-addressed storage, registry persistence and transport. |
+| G1 Hub portable artifact binding | candidate | `HubArtifactBinding/v1` pins the qualified Hub #47 source, Hub artifact id/domain digest, exact TDI ArtifactDescriptor identity and raw-SHA256/size agreement; execution and authoritative publication are hard-false. |
+| G authoritative publication | blocked | Hub issue #46 still lacks a qualified durable generation/fencing contract atomically guarding authoritative publication across retries/restarts. TDI must not implement that generic lease/fence authority locally. |
 
 ## Qualification matrix progress
 
@@ -58,7 +61,7 @@ This is the durable engineering handoff for the industrialization programme. It 
 | Q12 | planned | common adapter SDK remains separate from graph/checkpoint semantics. |
 | Q13-Q14 | qualified for portable contract verification | PR #261 exact-head qualification passed for descriptor/provenance/export verification; external export integration remains later work. |
 | Q15 | qualified for contract semantics | PR #261 exact-head qualification passed for exact-domain cache identity/refusal; durable cache index/storage remains outside this module and reuse still requires caller authorization. |
-| Q16-Q17 | planned | real Hub edge, fencing and deduplicated authoritative publication. |
+| Q16-Q17 | candidate / blocked | portable artifact translation is now represented by the fail-closed G1 contract pinned to Hub #47; execution/publication remain unauthorized until Hub-owned durable fencing/generation (issue #46) and atomic authoritative publication are qualified. |
 | Q18-Q30 | planned | cross-repository integrations, statistics, CLI/viewer/exports, hardware adapters, docs and final integrated qualification. |
 
 ## Lot-E qualified validation
@@ -90,6 +93,7 @@ The dedicated `TDI artifact and provenance contracts` workflow succeeded on the 
 - scirust-hub remains owner of generic DAG scheduling, remote workers, leases, heartbeats, retries, cancellation, artifact storage/transport and registry persistence; TDI remains owner of scientific meaning, checkpoint admissibility, portable scientific provenance and accepted publication semantics.
 - Hub's current remote lease v1 has attempt/lease identity, heartbeat and expiry but no qualified fencing/generation token preventing stale publication after reassignment; distributed fencing remains a later Lot-H requirement.
 - Hub `ContentDigest` at pinned source is domain-separated (`scirust-hub-digest:v1` + framed domain + bytes) and is not interchangeable with TDI portable raw SHA-256. Lot F therefore records raw payload SHA-256 for portable verification and explicitly forbids treating that value as a Hub CAS key without verified translation.
+- Hub PR #47 provides that verified translation surface for artifact identity only: TDI G1 checks the returned ordinary SHA-256 and byte count against ArtifactDescriptor/v1 while retaining Hub ContentDigest as opaque translation provenance. The bridge does not authenticate transport itself and does not create execution/publication authority.
 - Lot F does not implement a physical CAS, registry, transport, or durable cache store. It defines TDI-owned identities/verification and exact reuse boundaries only.
 - ElasticXxx remains owner of generic observe/forecast/plan/validate/act/verify/commit-or-rollback resource policy.
 - Forge remains owner of candidate proposal/search; TDI controls allowed evaluation observations and scientific verdicts.
@@ -97,7 +101,7 @@ The dedicated `TDI artifact and provenance contracts` workflow succeeded on the 
 
 ## Next
 
-1. Add a real TDI↔Hub capability/publication edge that atomically enforces component, capability and portable-artifact pins; keep execution fail-closed while Hub v1 lacks a qualified fencing/generation token.
-2. Qualify lease fencing and authoritative publication in Hub-owned orchestration before TDI treats remote publication as authoritative.
+1. Qualify the G1 portable-artifact binding against Hub #47 while keeping `execution_authorized=false` and `publication_authoritative=false`; component/capability pins still require an atomic authoritative edge.
+2. Implement and qualify Hub issue #46 in Hub-owned orchestration: durable monotone fencing/generation plus atomic authoritative publication across retry, cancellation and restart. Only then may TDI advance the real edge.
 3. Add ElasticXxx, Forge, SciRust, FLAT-ATTENTION and NNIS integrations only through qualified versioned contracts.
 4. Continue statistics/sensitivity, CLI/API/viewer, external exports and measured engine benchmarks.
