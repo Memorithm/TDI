@@ -1,7 +1,9 @@
-//! External operation accounting for TDI-2.1 reference experiments.
+//! External operation and resource accounting for TDI-2.1 reference experiments.
 //!
-//! These counters describe what an inference run did. They are measurements and
-//! are never inputs to template applicability, ranking, transfer, or abstention.
+//! These measurements are never inputs to template applicability, ranking,
+//! transfer, consolidation, or abstention.
+
+use super::tdi2_intuition_store::ExperienceStore;
 
 /// Logical operation counts for one inference run.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -43,9 +45,43 @@ impl OperationAccounting {
     }
 }
 
+/// Logical memory footprint, deliberately not reported as physical bytes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LogicalMemoryAccounting {
+    /// Stored experiential templates.
+    pub templates: u64,
+    /// Required plus forbidden Boolean clauses.
+    pub boolean_clauses: u64,
+    /// Declared abstract roles.
+    pub roles: u64,
+    /// Directed typed role relations.
+    pub relations: u64,
+    /// Explicit success/failure counters.
+    pub reliability_counters: u64,
+}
+
+/// Count logical memory units without inferring allocator, cache, or resident-byte usage.
+#[must_use]
+pub fn logical_memory_accounting(store: &ExperienceStore) -> LogicalMemoryAccounting {
+    let mut accounting = LogicalMemoryAccounting::default();
+    for entry in store.entries() {
+        accounting.templates += 1;
+        accounting.boolean_clauses += (entry.template().base().required().len()
+            + entry.template().base().forbidden().len()) as u64;
+        accounting.roles += entry.template().base().roles().len() as u64;
+        accounting.relations += entry.template().relations().len() as u64;
+        accounting.reliability_counters += 2;
+    }
+    accounting
+}
+
 #[cfg(test)]
 mod tests {
-    use super::OperationAccounting;
+    use super::{OperationAccounting, logical_memory_accounting};
+    use crate::experimental::tdi2_intuition::{PredicateId, RoleId, Template, TemplateId};
+    use crate::experimental::tdi2_intuition_relations::{RelationId, RelationalTemplate, RoleRelation};
+    use crate::experimental::tdi2_intuition_reliability::ReliabilityEvidence;
+    use crate::experimental::tdi2_intuition_store::{ExperienceEntry, ExperienceStore};
 
     #[test]
     fn operation_record_is_stable_and_additive() {
@@ -58,5 +94,31 @@ mod tests {
         };
         assert_eq!(accounting.declared_total(), 15);
         assert!(accounting.canonical_record().contains("templates=3"));
+    }
+
+    #[test]
+    fn logical_memory_accounting_does_not_claim_bytes() {
+        let base = Template::new(
+            TemplateId::new(1),
+            vec![PredicateId::new(1), PredicateId::new(2)],
+            Vec::new(),
+            vec![RoleId::new(1), RoleId::new(2)],
+        )
+        .expect("template");
+        let relational = RelationalTemplate::new(
+            base,
+            vec![RoleRelation::new(RoleId::new(1), RelationId::new(7), RoleId::new(2))],
+        )
+        .expect("relations");
+        let mut store = ExperienceStore::new(2).expect("store");
+        store
+            .insert(ExperienceEntry::new(relational, ReliabilityEvidence::new(3, 1)))
+            .expect("insert");
+        let accounting = logical_memory_accounting(&store);
+        assert_eq!(accounting.templates, 1);
+        assert_eq!(accounting.boolean_clauses, 2);
+        assert_eq!(accounting.roles, 2);
+        assert_eq!(accounting.relations, 1);
+        assert_eq!(accounting.reliability_counters, 2);
     }
 }
