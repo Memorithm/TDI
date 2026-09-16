@@ -21,6 +21,7 @@
         "output": "file:checkpoint"
       },
       "component_alias": "tdi-runner",
+      "component_id": "11111111-1111-1111-1111-111111111111",
       "component_manifest_digest": "9999999999999999999999999999999999999999999999999999999999999999",
       "component_version": "1.2.3",
       "inputs": {
@@ -52,6 +53,7 @@
         "output": null
       },
       "component_alias": "tdi-runner",
+      "component_id": "11111111-1111-1111-1111-111111111111",
       "component_manifest_digest": "9999999999999999999999999999999999999999999999999999999999999999",
       "component_version": "1.2.3",
       "inputs": {
