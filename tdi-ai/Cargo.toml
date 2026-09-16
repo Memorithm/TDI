@@ -94,3 +94,7 @@ required-features = ["experimental"]
 [[example]]
 name = "tdi2_intuition_temporal_transfer_development"
 required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_temporal_order_control"
+required-features = ["experimental"]
