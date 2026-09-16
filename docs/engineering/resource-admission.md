@@ -30,11 +30,11 @@ Use the separately qualified cgroup execution profile for hard resource limits.
 
 `measured_process` records a particular child's `wait4` user/system CPU seconds,
 Linux peak RSS in bytes, wall/launch nanoseconds, output sizes and exit status.
-Wall time includes process/I/O overhead and at most 5 ms completion polling
-latency. RSS is the child's high-water measurement, not a sum of concurrent
-descendants. File output budgets are polled and bounded on capture; they are not
-kernel-enforced file quotas. Timeout/output failures stay explicit. This helper
-executes trusted pinned software, not hostile code.
+Wall time includes launch, I/O and up to 5 ms completion polling latency. RSS is
+the child's high-water measurement, not a sum of concurrent descendants. File
+output budgets are polled and bounded on capture; they are not kernel-enforced
+file quotas. Timeout/output failures stay explicit. This helper executes trusted
+pinned software, not hostile code.
 
 ## Execute an admitted campaign
 
@@ -100,16 +100,25 @@ attempt duration and errno. Child exit status, CPU use and RSS remain absent;
 the campaign has a durable `resource-admission` failure event and no Hub work.
 
 The link from original plan to admitted graph is durable before any Hub mutation.
-Retrying the same command reconciles an already-dispatched workflow. If dispatch
-has not started, it samples fresh capacity and must re-admit the identical width;
-it cannot change an already submitted graph. Stale readings after Hub submission
-leave an admitted workflow unexecuted. Changed resource policy/binary/source or
-insufficient capacity for an existing width stops execution and requires an
-explicit cancel/replan. Ambiguous submission uses the existing attach/inspect
-contract and never creates another workflow automatically.
+That dispatch binding includes the policy, Elastic binary/source identities and
+a content identity of the supplied root-artifact bindings, so a crash before Hub
+submission cannot be retried with different roots. Resource admission is never
+retrofit onto a campaign already dispatched through ordinary `submit`/`run`; such
+a campaign is rejected unless a prior `resource-dispatch` event proves that its
+Hub lifecycle belongs to this admission path.
+
+Retrying the same admitted command reconciles an already-dispatched workflow. If
+dispatch has not started, it samples fresh capacity and must re-admit the exact
+same width and root bindings; it cannot change an already submitted graph. Stale
+readings after Hub submission leave an admitted workflow unexecuted. Changed
+resource policy, binary/source identity, root bindings, or insufficient capacity
+for an existing width stops execution and requires an explicit cancel/replan.
+Ambiguous submission uses the existing attach/inspect contract and never creates
+another workflow automatically.
 
 Qualification executes the real Elastic binary and Hub, reduces a three-trial
 counter graph to width one, verifies all other canonical fields unchanged,
-checks identical snapshots on retry, and rejects a real impossible memory
-envelope without creating work. Tests also execute a failing process, timeout,
-output-budget failure and wrong binary identity. No GPU/energy claim is made.
+checks identical snapshots on retry, rejects a real impossible memory envelope
+without creating work, and rejects retroactive admission of an already-submitted
+ordinary campaign. Tests also execute a failing process, timeout, output-budget
+failure and wrong binary identity. No GPU/energy claim is made.
