@@ -31,7 +31,7 @@ This is the durable engineering handoff for the industrialization programme. It 
 | D cross-language canonical numbers | qualified for v1/v2 scope | JSON-safe identity integers, decimal u64 seeds, timeout normalization, and explicit float exclusion from canonical scientific result values. |
 | E CheckpointManifest/v1 | candidate | content-addressed state plus exact experiment/plan/trial/step/adapter/backend/input/RNG binding; frozen step/observation budgets are embedded in checkpoint identity and enforced against resume inputs. |
 | E declarative execution graph | candidate | topological Graph/v1 with per-step identity binding to exact Hub ComponentId, component version/manifest digest, capability-contract version, inputs, parameters and checkpoint ports. |
-| E pinned Hub structural limits | candidate | Graph/v1 matches audited Hub v1/default limits for max concurrency, step count, input count, serialized parameters, timeout and input-name grammar before producing a preview. |
+| E pinned Hub structural limits | candidate | Graph/v1 matches audited Hub v1/default limits for max concurrency, step count, input count, serialized parameters, timeout, input-name grammar and workflow-name NUL admission before producing a preview. |
 | E Hub text/version fidelity | candidate | output labels reject Unicode `Cc` controls/whitespace like pinned Hub; version parsing intentionally matches Hub's semver-shaped (not full SemVer) grammar. |
 | E Hub bridge | structural preview only | `compile_hub_workflow_preview()` emits `execution_authorized: false`; current WorkflowSpec/v1 cannot atomically enforce component/capability pins, registry state or portable-artifact identity. |
 | E generic scheduling | intentionally delegated | scirust-hub owns ready-set scheduling, retries, cancellation, workflow lifecycle, artifacts, leases and remote transport; TDI does not duplicate them. |
@@ -56,7 +56,7 @@ This is the durable engineering handoff for the industrialization programme. It 
 
 ## Lot-E candidate validation
 
-Local non-privileged qualification currently covers 19 checkpoint/graph contract tests (6 checkpoint + 13 graph):
+Local non-privileged qualification currently covers 20 checkpoint/graph contract tests (6 checkpoint + 14 graph):
 
 ```bash
 PYTHONPATH=scripts python3 -m py_compile \
@@ -67,7 +67,7 @@ PYTHONPATH=scripts python3 -m unittest \
   scripts/test_tdi_execution_graph.py -v
 ```
 
-Checkpoint regressions cover exact lineage, input/RNG drift, content identity, embedded progress limits and rejection of caller-side budget widening. Graph regressions include component-id/version/manifest/capability identity sensitivity, single-alias pin consistency, Hub input grammar, max 32 inputs, 16 KiB serialized parameters, audited 3,600,000 ms timeout bound, pinned Hub prerelease-version behavior and Unicode control rejection for output labels. The existing `TDI engine Linux containment` workflow executes these contracts alongside all previously qualified engine-contract tests on the exact PR head. The cgroup kernel job remains enabled so Lot E cannot accidentally regress the contained execution foundation.
+Checkpoint regressions cover exact lineage, input/RNG drift, content identity, embedded progress limits and rejection of caller-side budget widening. Graph regressions include component-id/version/manifest/capability identity sensitivity, single-alias pin consistency, Hub input grammar, max 32 inputs, 16 KiB serialized parameters, audited 3,600,000 ms timeout bound, workflow-name NUL rejection, pinned Hub prerelease-version behavior and Unicode control rejection for output labels. The existing `TDI engine Linux containment` workflow executes these contracts alongside all previously qualified engine-contract tests on the exact PR head. The cgroup kernel job remains enabled so Lot E cannot accidentally regress the contained execution foundation.
 
 ## Cross-repository decisions
 
