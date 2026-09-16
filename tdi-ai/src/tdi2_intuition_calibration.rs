@@ -156,3 +156,37 @@ mod tests {
         assert_eq!(brier_score(&observations), Ok(Some(0.25)));
     }
 }
+
+use super::tdi2_intuition_reliability::{ReliabilityError, ReliabilityEvidence};
+
+/// Convert empirical template evidence into a calibration observation.
+///
+/// The probability-like prediction is the Beta-posterior mean, not the
+/// experience ranking weight. This preserves the distinction between ranking
+/// strength and calibrated correctness probability.
+pub fn calibration_observation_from_evidence(
+    evidence: ReliabilityEvidence,
+    alpha: f64,
+    beta: f64,
+    correct: bool,
+) -> Result<CalibrationObservation, ReliabilityError> {
+    Ok(CalibrationObservation {
+        predicted: evidence.posterior_mean(alpha, beta)?,
+        correct,
+    })
+}
+
+#[cfg(test)]
+mod evidence_calibration_tests {
+    use super::calibration_observation_from_evidence;
+    use crate::experimental::tdi2_intuition_reliability::ReliabilityEvidence;
+
+    #[test]
+    fn calibration_uses_reliability_not_ranking_weight() {
+        let observation =
+            calibration_observation_from_evidence(ReliabilityEvidence::new(8, 2), 1.0, 1.0, true)
+                .unwrap();
+        assert_eq!(observation.predicted, 0.75);
+        assert!(observation.correct);
+    }
+}
