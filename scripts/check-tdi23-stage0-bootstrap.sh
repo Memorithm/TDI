@@ -49,7 +49,7 @@ if grep -Eiq \
 fi
 
 mapfile -t forbidden < <(
-    find tdi-ai scripts .github/workflows -type f \
+    find tdi-ai tdi-bench scripts .github/workflows -type f \
         \( -iname '*tdi23-final*' -o -iname '*tdi23_final*' \
            -o -iname '*tdi23-confirm*' -o -iname '*tdi23_confirm*' \) \
         2>/dev/null | sort
