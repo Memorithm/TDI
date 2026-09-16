@@ -154,6 +154,43 @@ def _canonical_request(value):
     }
 
 
+def _require_candidate_bound_to_partner_step(admitted_partner_step, candidate):
+    """Require the FLAT candidate to be the exact root artifact consumed by the admitted step."""
+    workflow_binding = admitted_partner_step["workflow_admission_binding"]
+    step_key = admitted_partner_step["step_key"]
+    step = next(
+        (record for record in workflow_binding["graph"]["steps"] if record["key"] == step_key),
+        None,
+    )
+    if step is None:
+        raise FlatPartnerContractError("partner_step is not present in the admitted Graph/v1")
+
+    direct_root_digests = {
+        input_binding["sha256"]
+        for input_binding in step["inputs"].values()
+        if input_binding["kind"] == "artifact"
+    }
+    candidate_digest = candidate["raw_sha256"]
+    if candidate_digest not in direct_root_digests:
+        raise FlatPartnerContractError(
+            "candidate artifact must be a direct root artifact consumed by partner_step"
+        )
+
+    root_binding = workflow_binding["root_artifact_bindings"].get(candidate_digest)
+    if root_binding is None:
+        raise FlatPartnerContractError(
+            "candidate artifact is missing its admitted root artifact binding"
+        )
+    try:
+        root_descriptor = artifact.canonical_artifact(root_binding["descriptor"])
+    except artifact.ArtifactContractError as exc:
+        raise FlatPartnerContractError(str(exc)) from exc
+    if experiment.canonical(candidate) != experiment.canonical(root_descriptor):
+        raise FlatPartnerContractError(
+            "candidate artifact must exactly match the admitted root artifact descriptor"
+        )
+
+
 def _canonical_review(value):
     _exact(
         value,
@@ -210,11 +247,13 @@ def canonical_flat_qualification_contract(value):
     for field, expected in flat_adapter_surface().items():
         if adapter[field] != expected:
             raise FlatPartnerContractError(f"FLAT adapter {field} does not match the audited source projection")
+    request = _canonical_request(value["request"])
+    _require_candidate_bound_to_partner_step(admitted_partner_step, request["candidate_artifact"])
     return {
         "schema": FLAT_QUALIFICATION_CONTRACT_SCHEMA,
         "partner_step": admitted_partner_step,
         "flat": _canonical_flat_metadata(value["flat"]),
-        "request": _canonical_request(value["request"]),
+        "request": request,
         "review": _canonical_review(value["review"]),
         "permissions": _canonical_permissions(value["permissions"]),
     }
