@@ -60,11 +60,17 @@ if grep -Eiq \
     fail "scientific-boundary gate rejected an unsupported positive claim"
 fi
 
+# Scan the complete checked-out tree, including conventional docs/results/artifacts/
+# release-manifests locations. Exclude only VCS/build internals, never scientific
+# output directories, so a forbidden TDI-23 final/confirmatory payload fails closed.
 mapfile -t forbidden < <(
-    find tdi-ai tdi-bench scripts .github/workflows -type f \
+    find . \
+        -path './.git' -prune -o \
+        -path './target' -prune -o \
+        -type f \
         \( -iname '*tdi23-final*' -o -iname '*tdi23_final*' \
            -o -iname '*tdi23-confirm*' -o -iname '*tdi23_confirm*' \) \
-        2>/dev/null | sort
+        -print | sort
 )
 if ((${#forbidden[@]} > 0)); then
     printf 'TDI-23 Stage-0 forbids confirmatory surfaces:\n' >&2
