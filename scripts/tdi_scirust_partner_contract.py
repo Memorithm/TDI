@@ -34,8 +34,6 @@ SCIRUST_REPRESENTATION_SCHEMA_IDENTITY = (
     "92f258383afe68c364a9ee361999bf18db3b7e611da84c75290f5de17fb3853d"
 )
 
-# TDI-owned adapter interchange contract. The identity is frozen from the
-# audited source/API descriptor documented in lot-h-scirust-primitive-boundary.md.
 SCIRUST_PROTOCOL_NAME = "tdi.scirust.representation-promotion"
 SCIRUST_PROTOCOL_VERSION = 1
 SCIRUST_PROTOCOL_SCHEMA_IDENTITY = (
@@ -187,6 +185,43 @@ def _canonical_request(value):
     }
 
 
+def _require_candidate_bound_to_partner_step(admitted_partner_step, candidate):
+    """Require the SciRust candidate to be the exact root artifact consumed by the admitted step."""
+    workflow_binding = admitted_partner_step["workflow_admission_binding"]
+    step_key = admitted_partner_step["step_key"]
+    step = next(
+        (record for record in workflow_binding["graph"]["steps"] if record["key"] == step_key),
+        None,
+    )
+    if step is None:
+        raise SciRustPartnerContractError("partner_step is not present in the admitted Graph/v1")
+
+    direct_root_digests = {
+        input_binding["sha256"]
+        for input_binding in step["inputs"].values()
+        if input_binding["kind"] == "artifact"
+    }
+    candidate_digest = candidate["raw_sha256"]
+    if candidate_digest not in direct_root_digests:
+        raise SciRustPartnerContractError(
+            "candidate artifact must be a direct root artifact consumed by partner_step"
+        )
+
+    root_binding = workflow_binding["root_artifact_bindings"].get(candidate_digest)
+    if root_binding is None:
+        raise SciRustPartnerContractError(
+            "candidate artifact is missing its admitted root artifact binding"
+        )
+    try:
+        root_descriptor = artifact.canonical_artifact(root_binding["descriptor"])
+    except artifact.ArtifactContractError as exc:
+        raise SciRustPartnerContractError(str(exc)) from exc
+    if experiment.canonical(candidate) != experiment.canonical(root_descriptor):
+        raise SciRustPartnerContractError(
+            "candidate artifact must exactly match the admitted root artifact descriptor"
+        )
+
+
 def _canonical_review(value):
     _exact(
         value,
@@ -279,11 +314,13 @@ def canonical_scirust_promotion_contract(value):
                 f"SciRust adapter {field} does not match the audited source projection"
             )
 
+    request = _canonical_request(value["request"])
+    _require_candidate_bound_to_partner_step(admitted_partner_step, request["candidate_artifact"])
     return {
         "schema": SCIRUST_PROMOTION_CONTRACT_SCHEMA,
         "partner_step": admitted_partner_step,
         "scirust": _canonical_scirust_metadata(value["scirust"]),
-        "request": _canonical_request(value["request"]),
+        "request": request,
         "review": _canonical_review(value["review"]),
         "permissions": _canonical_permissions(value["permissions"]),
     }
