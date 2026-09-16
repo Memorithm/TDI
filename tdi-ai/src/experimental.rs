@@ -62,5 +62,7 @@ pub mod tdi22_generator;
 pub mod tdi22_torsor;
 #[path = "tdi23_categorical.rs"]
 pub mod tdi23_categorical;
+#[path = "tdi23_ir.rs"]
+pub mod tdi23_ir;
 #[path = "tdi23_reduction.rs"]
 pub mod tdi23_reduction;
