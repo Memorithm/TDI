@@ -38,30 +38,13 @@ REQUIRED_TOP_KEYS = {
     "freeze",
 }
 
-BASIC_FIELD_KEYS = {"status", "value", "non_authorizing_candidates"}
-FIELD_ALLOWED_KEYS = {
-    "scalar_field_contract": BASIC_FIELD_KEYS,
-    "inner_product_contract": BASIC_FIELD_KEYS,
-    "linear_map_storage_contract": BASIC_FIELD_KEYS,
-    "dagger_semantics": BASIC_FIELD_KEYS,
-    "composition_semantics": BASIC_FIELD_KEYS,
-    "attention_score_mapping": BASIC_FIELD_KEYS,
-    "global_reduction_family": BASIC_FIELD_KEYS,
-    "global_reduction_preservation": {
-        "status",
-        "value",
-        "required_named_diagnostics",
-        "non_authorizing_candidates",
-    },
-    "nonlinear_boundary": {"status", "value", "required_named_boundaries"},
-    "numerical_tolerance_policy": BASIC_FIELD_KEYS,
-    "development_fixture_family": BASIC_FIELD_KEYS,
-    "control_battery": {"status", "value", "required_named_controls"},
-    "split_discipline": BASIC_FIELD_KEYS,
-    "provenance_contract": BASIC_FIELD_KEYS,
-}
-
 ALLOWED_DOMAINS = ["Development", "Validation"]
+EXPECTED_NOTES = [
+    "Stage-0 template only. Every scientific field stays unresolved_blocking.",
+    "Merging this template does not freeze TDI-23.0 and does not authorize comparative or confirmatory attention experiments.",
+    "Global-reduction candidates remain development-only and may not be promoted as functorial, lossless, or performance-improving without later evidence.",
+    "FLAT-ATTENTION integration remains downstream and independently gated.",
+]
 REQUIRED_BOUNDARIES = [
     "softmax_external_to_fdhilb_linear_morphisms",
     "boolean_not_silently_fdhilb",
@@ -91,6 +74,78 @@ REQUIRED_CONTROLS = [
     "reduce_lift_residual",
 ]
 
+# Every schema-approved metadata key also has exact Stage-0 contents. This is
+# deliberately stricter than a JSON-shape check: no final seeds, selected policy,
+# tolerance, hidden result material, or alternate candidate may be smuggled into
+# an otherwise approved key while the field still reports unresolved_blocking.
+EXPECTED_FIELD_METADATA: dict[str, dict[str, Any]] = {
+    "scalar_field_contract": {
+        "non_authorizing_candidates": ["real_f64_stage0", "complex_f64_future_only"],
+    },
+    "inner_product_contract": {
+        "non_authorizing_candidates": ["standard_euclidean_real"],
+    },
+    "linear_map_storage_contract": {
+        "non_authorizing_candidates": ["row_major_dense"],
+    },
+    "dagger_semantics": {
+        "non_authorizing_candidates": [
+            "real_matrix_transpose_in_declared_orthonormal_bases"
+        ],
+    },
+    "composition_semantics": {
+        "non_authorizing_candidates": [
+            "left_after_right_typed_matrix_composition"
+        ],
+    },
+    "attention_score_mapping": {
+        "non_authorizing_candidates": [
+            "key_dagger_compose_query_ket",
+            "batched_q_times_k_transpose_future",
+        ],
+    },
+    "global_reduction_family": {
+        "non_authorizing_candidates": [
+            "objectwise_coordinate_subspace_stage0",
+            "arbitrary_orthonormal_subspace_future_only",
+            "learned_subspace_future_only",
+        ],
+    },
+    "global_reduction_preservation": {
+        "required_named_diagnostics": REQUIRED_REDUCTION_DIAGNOSTICS,
+        "non_authorizing_candidates": [
+            "coordinate_reduction_exact_dagger_commutation",
+            "composition_not_assumed_preserved",
+        ],
+    },
+    "nonlinear_boundary": {
+        "required_named_boundaries": REQUIRED_BOUNDARIES,
+    },
+    "numerical_tolerance_policy": {
+        "non_authorizing_candidates": [
+            "exact_structural_checks_plus_declared_scaled_f64_tolerance"
+        ],
+    },
+    "development_fixture_family": {
+        "non_authorizing_candidates": [
+            "small_integer_dense_maps",
+            "basis_and_small_integer_query_key_kets",
+            "small_coordinate_reduction_fixtures",
+        ],
+    },
+    "control_battery": {
+        "required_named_controls": REQUIRED_CONTROLS,
+    },
+    "split_discipline": {
+        "non_authorizing_candidates": [
+            "development_and_validation_only_no_final_surface"
+        ],
+    },
+    "provenance_contract": {
+        "non_authorizing_candidates": ["stage0_contract_version_plus_git_sha"],
+    },
+}
+
 
 class TemplateError(ValueError):
     """Raised when the Stage-0 template violates its fail-closed contract."""
@@ -113,15 +168,21 @@ def require_unresolved_field(name: str, entry: Any) -> None:
     """Require one Stage-0 freeze field to match its exact unpinned schema."""
     if not isinstance(entry, dict):
         fail(f"{name}: must be a JSON object")
-    allowed_keys = FIELD_ALLOWED_KEYS[name]
-    if set(entry) != allowed_keys:
-        unexpected = sorted(set(entry) - allowed_keys)
-        missing = sorted(allowed_keys - set(entry))
+
+    expected_metadata = EXPECTED_FIELD_METADATA[name]
+    expected_keys = {"status", "value", *expected_metadata}
+    if set(entry) != expected_keys:
+        unexpected = sorted(set(entry) - expected_keys)
+        missing = sorted(expected_keys - set(entry))
         fail(f"{name}: field keys drifted; unexpected={unexpected}, missing={missing}")
     if entry.get("status") != "unresolved_blocking":
         fail(f"{name}: status must remain unresolved_blocking")
     if entry.get("value") is not None:
         fail(f"{name}: value must remain null during Stage 0")
+
+    for key, expected in expected_metadata.items():
+        if entry.get(key) != expected:
+            fail(f"{name}.{key}: contents drifted from the Stage-0 schema")
 
 
 def validate_template(document: Any) -> int:
@@ -142,8 +203,8 @@ def validate_template(document: Any) -> int:
         fail("final_execution_authorized must remain false")
     if document["allowed_domains"] != ALLOWED_DOMAINS:
         fail("allowed_domains must be exactly Development then Validation")
-    if not isinstance(document["notes"], list) or not document["notes"]:
-        fail("notes must be a non-empty list")
+    if document["notes"] != EXPECTED_NOTES:
+        fail("notes drifted from the exact Stage-0 non-authorizing text")
 
     freeze = document["freeze"]
     if not isinstance(freeze, dict):
@@ -153,16 +214,6 @@ def validate_template(document: Any) -> int:
 
     for name in REQUIRED_FREEZE_FIELDS:
         require_unresolved_field(name, freeze[name])
-
-    if freeze["nonlinear_boundary"].get("required_named_boundaries") != REQUIRED_BOUNDARIES:
-        fail("nonlinear_boundary.required_named_boundaries drifted")
-    if (
-        freeze["global_reduction_preservation"].get("required_named_diagnostics")
-        != REQUIRED_REDUCTION_DIAGNOSTICS
-    ):
-        fail("global_reduction_preservation.required_named_diagnostics drifted")
-    if freeze["control_battery"].get("required_named_controls") != REQUIRED_CONTROLS:
-        fail("control_battery.required_named_controls drifted")
 
     serialized = json.dumps(document, sort_keys=True).lower()
     forbidden_positive_claims = (
@@ -181,85 +232,78 @@ def validate_template(document: Any) -> int:
     return len(REQUIRED_FREEZE_FIELDS)
 
 
+def expect_rejected(document: Any, label: str) -> None:
+    """Require one mutated self-test fixture to be rejected."""
+    try:
+        validate_template(document)
+    except TemplateError:
+        return
+    fail(f"self-test: {label} was accepted")
+
+
 def self_test(template: Any) -> None:
     """Run deterministic negative fixtures proving the validator fails closed."""
     validate_template(template)
 
     armed = copy.deepcopy(template)
     armed["confirmatory_execution_authorized"] = True
-    try:
-        validate_template(armed)
-    except TemplateError:
-        pass
-    else:
-        fail("self-test: confirmatory authorization was accepted")
+    expect_rejected(armed, "confirmatory authorization")
 
     pinned = copy.deepcopy(template)
     pinned["freeze"]["dagger_semantics"]["status"] = "pinned"
     pinned["freeze"]["dagger_semantics"]["value"] = "transpose"
-    try:
-        validate_template(pinned)
-    except TemplateError:
-        pass
-    else:
-        fail("self-test: invented dagger pin was accepted")
+    expect_rejected(pinned, "invented dagger pin")
 
     hidden_policy = copy.deepcopy(template)
-    hidden_policy["freeze"]["global_reduction_family"]["selected_policy"] = "learned_subspace"
-    try:
-        validate_template(hidden_policy)
-    except TemplateError:
-        pass
-    else:
-        fail("self-test: undeclared selected_policy key was accepted")
+    hidden_policy["freeze"]["global_reduction_family"]["selected_policy"] = (
+        "learned_subspace"
+    )
+    expect_rejected(hidden_policy, "undeclared selected_policy key")
 
     hidden_final_material = copy.deepcopy(template)
-    hidden_final_material["freeze"]["development_fixture_family"]["final_seed_list"] = [1, 2, 3]
-    try:
-        validate_template(hidden_final_material)
-    except TemplateError:
-        pass
-    else:
-        fail("self-test: undeclared final_seed_list key was accepted")
+    hidden_final_material["freeze"]["development_fixture_family"]["final_seed_list"] = [
+        1,
+        2,
+        3,
+    ]
+    expect_rejected(hidden_final_material, "undeclared final_seed_list key")
+
+    nested_final_material = copy.deepcopy(template)
+    nested_final_material["freeze"]["development_fixture_family"][
+        "non_authorizing_candidates"
+    ] = {"final_seed_list": [1, 2, 3]}
+    expect_rejected(nested_final_material, "final material hidden in an allowed metadata key")
+
+    altered_candidate = copy.deepcopy(template)
+    altered_candidate["freeze"]["global_reduction_family"][
+        "non_authorizing_candidates"
+    ].append("selected_secret_policy")
+    expect_rejected(altered_candidate, "extra candidate hidden in an allowed metadata key")
+
+    altered_notes = copy.deepcopy(template)
+    altered_notes["notes"].append("final_seed_list=1,2,3")
+    expect_rejected(altered_notes, "scientific material hidden in notes")
 
     reduction_pinned = copy.deepcopy(template)
     reduction_pinned["freeze"]["global_reduction_family"]["status"] = "pinned"
-    reduction_pinned["freeze"]["global_reduction_family"]["value"] = "coordinate_subspace"
-    try:
-        validate_template(reduction_pinned)
-    except TemplateError:
-        pass
-    else:
-        fail("self-test: invented global-reduction pin was accepted")
+    reduction_pinned["freeze"]["global_reduction_family"]["value"] = (
+        "coordinate_subspace"
+    )
+    expect_rejected(reduction_pinned, "invented global-reduction pin")
 
     reduction_softened = copy.deepcopy(template)
     reduction_softened["freeze"]["global_reduction_preservation"][
         "required_named_diagnostics"
     ] = []
-    try:
-        validate_template(reduction_softened)
-    except TemplateError:
-        pass
-    else:
-        fail("self-test: global-reduction diagnostics removal was accepted")
+    expect_rejected(reduction_softened, "global-reduction diagnostics removal")
 
     softened = copy.deepcopy(template)
     softened["freeze"]["nonlinear_boundary"]["required_named_boundaries"] = []
-    try:
-        validate_template(softened)
-    except TemplateError:
-        pass
-    else:
-        fail("self-test: nonlinear boundary removal was accepted")
+    expect_rejected(softened, "nonlinear boundary removal")
 
     missing = copy.deepcopy(template)
     del missing["freeze"]["provenance_contract"]
-    try:
-        validate_template(missing)
-    except TemplateError:
-        pass
-    else:
-        fail("self-test: missing provenance field was accepted")
+    expect_rejected(missing, "missing provenance field")
 
 
 def main() -> int:
