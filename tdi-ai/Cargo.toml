@@ -126,3 +126,7 @@ required-features = ["experimental"]
 [[example]]
 name = "tdi2_intuition_consolidation_sequence"
 required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_calibration_diagnostic"
+required-features = ["experimental"]
