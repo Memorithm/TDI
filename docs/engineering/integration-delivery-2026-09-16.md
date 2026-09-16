@@ -66,9 +66,16 @@ cannot be silently promoted to compatible timing baselines.
 
 ## Exact-head release blockers observed
 
-Default main snapshot: `d8785a04d112e732bf92bd115d23640e7bfb60e7`.
+Historical component-delivery main snapshot: `d8785a04d112e732bf92bd115d23640e7bfb60e7`.
 The following counts were fetched on 2026-09-16 after publishing the final
 component fixes; they are observations, not predictions of later CI state.
+
+At the 2026-09-16 23:26 UTC consolidation sync, default `main` had advanced to
+`bcfa972003907c2528b3664d1b74f13f88b6f892` through PRs #412, #407 and #410.
+The consolidated #413 branch was merged forward through that exact main without
+conflicts. Current queries for the final heads of those already-merged CI PRs
+still include queued/pending workflow runs, so their presence on `main` is not
+used here as retroactive exact-head qualification evidence.
 
 | Repository / PR | Exact head | Observed checks | Consequence |
 | --- | --- | --- | --- |
@@ -99,9 +106,12 @@ runner details were unavailable through the connector. Queue cause is unknown.
 ## Remaining qualification scope
 
 The code and documentation in these review partitions are reviewable now.
-Remaining work is to resolve upstream hardware/CI failures, obtain final
-reviewed dependency merge pins, execute the exact-head GitHub gates, merge the
-consolidated candidate and verify the resulting main SHA. Physical GPU results,
+To prevent an independent component squash from racing the consolidated route,
+#385, #387, #388, #389, #409 and #411 are held as draft review/evidence
+partitions while #413 is the active consolidated candidate. Remaining work is
+to resolve upstream hardware/CI failures, obtain final reviewed dependency merge
+pins, execute the exact-head GitHub gates, merge the consolidated candidate and
+verify the resulting main SHA. Physical GPU results,
 multi-node fault/load profiles, power-loss durability on a persistent filesystem,
 hard VRAM quotas and a mixed-store scientific ACL require their own qualified
 profiles; they are not silently included in this trusted non-final product.
