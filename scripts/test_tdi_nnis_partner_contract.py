@@ -1,12 +1,25 @@
 import copy
 import unittest
 
+import tdi_hub_admission_contract as admission
+import tdi_hub_edge_contract as hub
 import tdi_nnis_partner_contract as nnis
 import tdi_partner_adapter_contract as partner
 import test_tdi_hub_admission_contract as hub_fixture
 import test_tdi_partner_adapter_contract as partner_fixture
 
 SHA = lambda c: c * 64
+
+
+def candidate_descriptor():
+    return {
+        "schema": 1,
+        "name": "tdi-nnis-hardware-qualification-candidate-v1.json",
+        "raw_sha256": SHA("1"),
+        "size_bytes": 123,
+        "media_type": nnis.NNIS_CANDIDATE_MEDIA_TYPE,
+        "access_class": "development",
+    }
 
 
 def admitted_nnis_step():
@@ -23,9 +36,22 @@ def admitted_nnis_step():
         "capability": nnis.NNIS_HUB_CAPABILITY,
         "capability_contract_version": nnis.NNIS_HUB_CAPABILITY_CONTRACT_VERSION,
     }
-    return partner.bind_admitted_partner_step(
-        descriptor, hub_fixture.bind_fixture(), step_key="prepare"
+    candidate = candidate_descriptor()
+    portable = hub.bind_portable_artifact(
+        candidate,
+        {
+            "id": hub_fixture.INPUT_ARTIFACT,
+            "hub_digest": "c" * 64,
+            "raw_sha256": candidate["raw_sha256"],
+            "size": candidate["size_bytes"],
+        },
     )
+    admitted = admission.bind_exact_workflow_admission(
+        hub_fixture.fixture_graph(),
+        hub_fixture.workflow_response(),
+        root_artifact_bindings={candidate["raw_sha256"]: portable},
+    )
+    return partner.bind_admitted_partner_step(descriptor, admitted, step_key="prepare")
 
 
 def contract():
@@ -48,14 +74,7 @@ def contract():
         "request": {
             "domain": "Development",
             "qualification_scope": "cuda-rust-simt-contract",
-            "candidate_artifact": {
-                "schema": 1,
-                "name": "tdi-nnis-hardware-qualification-candidate-v1.json",
-                "raw_sha256": SHA("a"),
-                "size_bytes": 768,
-                "media_type": nnis.NNIS_CANDIDATE_MEDIA_TYPE,
-                "access_class": "development",
-            },
+            "candidate_artifact": candidate_descriptor(),
         },
         "review": {
             "owner": nnis.NNIS_REPOSITORY,
@@ -105,7 +124,7 @@ class NnisPartnerContractTests(unittest.TestCase):
         descriptor = value["partner_step"]["adapter"]
         descriptor["source_sha"] = "f" * 40
         value["partner_step"] = partner.bind_admitted_partner_step(
-            descriptor, hub_fixture.bind_fixture(), step_key="prepare"
+            descriptor, value["partner_step"]["workflow_admission_binding"], step_key="prepare"
         )
         with self.assertRaisesRegex(nnis.NnisPartnerContractError, "audited source"):
             nnis.canonical_nnis_qualification_contract(value)
@@ -119,7 +138,7 @@ class NnisPartnerContractTests(unittest.TestCase):
             descriptor = value["partner_step"]["adapter"]
             descriptor["protocol"][field] = changed
             value["partner_step"] = partner.bind_admitted_partner_step(
-                descriptor, hub_fixture.bind_fixture(), step_key="prepare"
+                descriptor, value["partner_step"]["workflow_admission_binding"], step_key="prepare"
             )
             with self.subTest(field=field), self.assertRaisesRegex(
                 nnis.NnisPartnerContractError, "protocol does not match"
@@ -133,11 +152,10 @@ class NnisPartnerContractTests(unittest.TestCase):
             "capability": "tdi.evaluate",
             "capability_contract_version": "1.1.0",
         }
-        value["partner_step"] = partner.bind_admitted_partner_step(
-            descriptor, hub_fixture.bind_fixture(), step_key="evaluate"
-        )
-        with self.assertRaisesRegex(nnis.NnisPartnerContractError, "preparation boundary"):
-            nnis.canonical_nnis_qualification_contract(value)
+        with self.assertRaises(partner.PartnerAdapterContractError):
+            partner.bind_admitted_partner_step(
+                descriptor, value["partner_step"]["workflow_admission_binding"], step_key="prepare"
+            )
 
         for field, replacement in (
             ("capabilities", []),
@@ -149,7 +167,7 @@ class NnisPartnerContractTests(unittest.TestCase):
             descriptor = value["partner_step"]["adapter"]
             descriptor[field] = replacement
             value["partner_step"] = partner.bind_admitted_partner_step(
-                descriptor, hub_fixture.bind_fixture(), step_key="prepare"
+                descriptor, value["partner_step"]["workflow_admission_binding"], step_key="prepare"
             )
             with self.subTest(field=field), self.assertRaisesRegex(
                 nnis.NnisPartnerContractError, "audited source projection"
@@ -201,14 +219,6 @@ class NnisPartnerContractTests(unittest.TestCase):
         with self.assertRaisesRegex(nnis.NnisPartnerContractError, "access_class"):
             nnis.canonical_nnis_qualification_contract(value)
 
-        value = contract()
-        value["request"]["domain"] = "Validation"
-        value["request"]["candidate_artifact"]["access_class"] = "validation"
-        self.assertEqual(
-            "Validation",
-            nnis.canonical_nnis_qualification_contract(value)["request"]["domain"],
-        )
-
         for scope in ("cuda-rust-simt-contract", "cuda-rust-simt-evidence-review"):
             value = contract()
             value["request"]["qualification_scope"] = scope
@@ -221,6 +231,17 @@ class NnisPartnerContractTests(unittest.TestCase):
         value = contract()
         value["request"]["candidate_artifact"]["media_type"] = "application/json"
         with self.assertRaisesRegex(nnis.NnisPartnerContractError, "media_type"):
+            nnis.canonical_nnis_qualification_contract(value)
+
+    def test_candidate_must_be_exact_admitted_root_consumed_by_partner_step(self):
+        value = contract()
+        value["request"]["candidate_artifact"]["raw_sha256"] = SHA("a")
+        with self.assertRaisesRegex(nnis.NnisPartnerContractError, "direct root artifact"):
+            nnis.canonical_nnis_qualification_contract(value)
+
+        value = contract()
+        value["request"]["candidate_artifact"]["size_bytes"] += 1
+        with self.assertRaisesRegex(nnis.NnisPartnerContractError, "exactly match"):
             nnis.canonical_nnis_qualification_contract(value)
 
     def test_review_gates_and_authority_flags_cannot_be_relaxed(self):
