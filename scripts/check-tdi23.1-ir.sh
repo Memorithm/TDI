@@ -27,6 +27,12 @@ grep -Fq 'TensorProduct' "$IR_SRC" \
     || fail "tensor-product construction missing"
 grep -Fq 'CompositionObjectMismatch' "$IR_SRC" \
     || fail "exact middle-object legality check missing"
+grep -Fq 'ForeignObjectHandle' "$IR_SRC" \
+    || fail "foreign object-handle ownership guard missing"
+grep -Fq 'ForeignNodeHandle' "$IR_SRC" \
+    || fail "foreign node-handle ownership guard missing"
+grep -Fq 'tdi23_1_handles_are_bound_to_their_owning_ir' "$IR_SRC" \
+    || fail "cross-IR handle negative control missing"
 grep -Fq 'DaggerCrossesNonlinearBoundary' "$IR_SRC" \
     || fail "dagger nonlinear-boundary guard missing"
 grep -Fq 'MissingReductionAnnotation' "$IR_SRC" \
