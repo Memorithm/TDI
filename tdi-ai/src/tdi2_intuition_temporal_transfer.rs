@@ -1,5 +1,5 @@
 //! Reusable ordered Boolean templates for TDI-2.1 temporal transfer.
-use super::tdi2_intuition::{PredicateId, TemplateId};
+use super::tdi2_intuition::{BooleanState, PredicateId, TemplateId};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TemporalClause {
@@ -178,5 +178,103 @@ mod matching_tests {
         assert!(match_temporal_pattern(&pattern, &query).exact);
         let reversed = BooleanSequence::new(query.frames().iter().cloned().rev().collect());
         assert!(!match_temporal_pattern(&pattern, &reversed).exact);
+    }
+}
+
+/// Frozen Development start for reusable temporal cases.
+pub const TEMPORAL_TRANSFER_DEVELOPMENT_START: u32 = 5_000;
+/// Frozen Validation start for reusable temporal cases.
+pub const TEMPORAL_TRANSFER_VALIDATION_START: u32 = 6_000;
+/// Number of cases per non-final temporal-transfer domain.
+pub const TEMPORAL_TRANSFER_DOMAIN_CASES: usize = 33;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TransferableTemporalCase {
+    query: BooleanSequence,
+    expected_template: TemplateId,
+}
+
+impl TransferableTemporalCase {
+    #[must_use]
+    pub const fn query(&self) -> &BooleanSequence {
+        &self.query
+    }
+    #[must_use]
+    pub const fn expected_template(&self) -> TemplateId {
+        self.expected_template
+    }
+}
+
+fn temporal_semantics(class: u32) -> [PredicateId; 3] {
+    match class {
+        0 => [
+            PredicateId::new(60_000),
+            PredicateId::new(60_001),
+            PredicateId::new(60_002),
+        ],
+        1 => [
+            PredicateId::new(60_002),
+            PredicateId::new(60_001),
+            PredicateId::new(60_000),
+        ],
+        _ => [
+            PredicateId::new(60_000),
+            PredicateId::new(60_003),
+            PredicateId::new(60_002),
+        ],
+    }
+}
+
+/// Three reusable temporal patterns whose semantics are independent of case ids.
+#[must_use]
+pub fn reusable_temporal_patterns() -> Vec<TemporalPattern> {
+    (0..3_u32)
+        .map(|class| {
+            let frames = temporal_semantics(class)
+                .into_iter()
+                .map(|predicate| {
+                    TemporalClause::new(vec![predicate], Vec::new()).expect("fixed clause")
+                })
+                .collect();
+            TemporalPattern::new(TemplateId::new(300_000 + u64::from(class)), frames)
+                .expect("fixed temporal pattern")
+        })
+        .collect()
+}
+
+/// Novel-identity temporal case with one irrelevant predicate per frame.
+#[must_use]
+pub fn transferable_temporal_case(case_id: u32) -> TransferableTemporalCase {
+    let class = case_id % 3;
+    let block = 700_000 + (case_id % 10_000) * 4;
+    let frames = temporal_semantics(class)
+        .into_iter()
+        .enumerate()
+        .map(|(frame, semantic)| {
+            BooleanState::new(vec![semantic, PredicateId::new(block + frame as u32)])
+        })
+        .collect();
+    TransferableTemporalCase {
+        query: BooleanSequence::new(frames),
+        expected_template: TemplateId::new(300_000 + u64::from(class)),
+    }
+}
+
+#[cfg(test)]
+mod transferable_fixture_tests {
+    use super::{match_temporal_pattern, reusable_temporal_patterns, transferable_temporal_case};
+    #[test]
+    fn reusable_temporal_case_matches_class_pattern_under_new_distractors() {
+        let patterns = reusable_temporal_patterns();
+        let first = transferable_temporal_case(1);
+        let repeated = transferable_temporal_case(4);
+        assert_eq!(first.expected_template(), repeated.expected_template());
+        assert_ne!(first.query(), repeated.query());
+        let pattern = patterns
+            .iter()
+            .find(|p| p.id() == first.expected_template())
+            .unwrap();
+        assert!(match_temporal_pattern(pattern, first.query()).exact);
+        assert!(match_temporal_pattern(pattern, repeated.query()).exact);
     }
 }
