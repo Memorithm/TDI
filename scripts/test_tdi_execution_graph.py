@@ -111,6 +111,16 @@ class Tests(unittest.TestCase):
         with self.assertRaises(graph.ExecutionGraphError):
             graph.canonical_graph(a)
 
+    def test_version_parser_matches_pinned_hub_prerelease_shape(self):
+        # Pinned Hub Version::parse accepts any non-empty ASCII prerelease made
+        # only of alphanumeric, dot and hyphen characters; it is deliberately
+        # semver-shaped rather than a full SemVer parser.
+        for version in ("1.2.3-.", "1.2.3-alpha..1", "1.2.3-01"):
+            a = fixture()
+            a["steps"][0]["component_version"] = version
+            a["steps"][1]["component_version"] = version
+            graph.canonical_graph(a)
+
     def test_component_pins_change_step_identity(self):
         a = fixture()
         base = graph.step_identity(a, "prepare")
@@ -153,6 +163,13 @@ class Tests(unittest.TestCase):
 
         a = fixture()
         a["steps"][0]["inputs"] = {"bad.name": {"kind": "artifact", "sha256": SHA("1")}}
+        with self.assertRaises(graph.ExecutionGraphError):
+            graph.canonical_graph(a)
+
+    def test_output_labels_reject_unicode_control_characters(self):
+        a = fixture()
+        a["steps"][0]["outputs"] = ["file:bad\u0080label"]
+        a["steps"][0]["checkpoint"]["output"] = "file:bad\u0080label"
         with self.assertRaises(graph.ExecutionGraphError):
             graph.canonical_graph(a)
 
