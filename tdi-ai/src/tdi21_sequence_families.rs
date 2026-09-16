@@ -10,6 +10,7 @@ use super::tdi21::{BooleanState, MemoryRead};
 use super::tdi21_distributional_objective::{
     DevelopmentAdmissionSet, DistributionalObjectiveError, ValidationAdmissionSet,
 };
+use super::tdi21_event_predicates::WRITE_PREDICATE_WIDTH;
 use super::tdi21_predicate_identifiability::{AdmissionAuditCase, FutureRecallProbe};
 use super::tdi21_sequence_materializer::{
     MaterializationSummary, SequenceMaterializationError, materialize_admission_cases,
@@ -120,8 +121,18 @@ impl MaterializedValidationFamily {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SequenceFamilyError {
-    DuplicateId { split: SequenceSplit, scenario: FamilyScenario },
-    DuplicateCaseWithinSplit { split: SequenceSplit },
+    SplitMismatch {
+        family: SequenceSplit,
+        case: SequenceSplit,
+        scenario: FamilyScenario,
+    },
+    DuplicateId {
+        split: SequenceSplit,
+        scenario: FamilyScenario,
+    },
+    DuplicateCaseWithinSplit {
+        split: SequenceSplit,
+    },
     SharedCaseAcrossSplits,
     Materialization(SequenceMaterializationError),
     Dataset(DistributionalObjectiveError),
@@ -193,7 +204,11 @@ fn audit_case(
     }
 }
 
-fn family_case(split: SequenceSplit, scenario: FamilyScenario, audit: AdmissionAuditCase) -> FamilyCase {
+fn family_case(
+    split: SequenceSplit,
+    scenario: FamilyScenario,
+    audit: AdmissionAuditCase,
+) -> FamilyCase {
     FamilyCase {
         id: FamilyCaseId { split, scenario },
         audit,
@@ -235,8 +250,9 @@ fn generate(split: SequenceSplit) -> SequenceFamily {
 fn validate_family(family: &SequenceFamily) -> Result<(), SequenceFamilyError> {
     for (i, left) in family.cases.iter().enumerate() {
         if left.id.split != family.split {
-            return Err(SequenceFamilyError::DuplicateId {
-                split: family.split,
+            return Err(SequenceFamilyError::SplitMismatch {
+                family: family.split,
+                case: left.id.split,
                 scenario: left.id.scenario,
             });
         }
@@ -319,7 +335,7 @@ pub fn materialize_development_family(
 ) -> Result<MaterializedDevelopmentFamily, SequenceFamilyError> {
     validate_family(&family.0)?;
     let materialized = materialize_admission_cases(config, &audits(&family.0.cases)?)?;
-    let dataset = DevelopmentAdmissionSet::new(6, materialized.samples())?;
+    let dataset = DevelopmentAdmissionSet::new(WRITE_PREDICATE_WIDTH, materialized.samples())?;
     Ok(MaterializedDevelopmentFamily {
         ids: ids(&family.0.cases)?,
         dataset,
@@ -333,7 +349,7 @@ pub fn materialize_validation_family(
 ) -> Result<MaterializedValidationFamily, SequenceFamilyError> {
     validate_family(&family.0)?;
     let materialized = materialize_admission_cases(config, &audits(&family.0.cases)?)?;
-    let dataset = ValidationAdmissionSet::new(6, materialized.samples())?;
+    let dataset = ValidationAdmissionSet::new(WRITE_PREDICATE_WIDTH, materialized.samples())?;
     Ok(MaterializedValidationFamily {
         ids: ids(&family.0.cases)?,
         dataset,
