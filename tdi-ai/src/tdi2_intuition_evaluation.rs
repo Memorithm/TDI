@@ -33,41 +33,33 @@ impl EvaluationSummary {
     /// Total number of evaluated cases.
     #[must_use]
     pub const fn total(self) -> u64 { self.total }
-
     /// Number of non-abstained predictions.
     #[must_use]
     pub const fn selected(self) -> u64 { self.selected }
-
     /// Number of correct selected predictions.
     #[must_use]
     pub const fn correct(self) -> u64 { self.correct }
-
     /// Number of incorrect selected predictions.
     #[must_use]
     pub const fn incorrect(self) -> u64 { self.incorrect }
-
     /// Number of abstentions.
     #[must_use]
     pub const fn abstained(self) -> u64 { self.abstained }
-
     /// Fraction of cases for which the system produced a prediction.
     #[must_use]
     pub fn coverage(self) -> Option<f64> {
         (self.total > 0).then(|| self.selected as f64 / self.total as f64)
     }
-
     /// Correct predictions divided by all evaluated cases.
     #[must_use]
     pub fn overall_accuracy(self) -> Option<f64> {
         (self.total > 0).then(|| self.correct as f64 / self.total as f64)
     }
-
     /// Correct predictions divided by selected cases only.
     #[must_use]
     pub fn selected_accuracy(self) -> Option<f64> {
         (self.selected > 0).then(|| self.correct as f64 / self.selected as f64)
     }
-
     /// Error rate among selected cases.
     #[must_use]
     pub fn selective_risk(self) -> Option<f64> {
@@ -75,9 +67,46 @@ impl EvaluationSummary {
     }
 }
 
+/// Matched correctness accounting for intuition and one baseline on identical cases.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PairedComparison {
+    /// Both arms correct.
+    pub both_correct: u64,
+    /// Only intuition correct.
+    pub intuition_only: u64,
+    /// Only baseline correct.
+    pub baseline_only: u64,
+    /// Neither arm correct.
+    pub neither: u64,
+}
+
+impl PairedComparison {
+    /// Record one paired case.
+    pub fn observe(&mut self, intuition_correct: bool, baseline_correct: bool) {
+        match (intuition_correct, baseline_correct) {
+            (true, true) => self.both_correct += 1,
+            (true, false) => self.intuition_only += 1,
+            (false, true) => self.baseline_only += 1,
+            (false, false) => self.neither += 1,
+        }
+    }
+
+    /// Number of paired cases.
+    #[must_use]
+    pub const fn total(self) -> u64 {
+        self.both_correct + self.intuition_only + self.baseline_only + self.neither
+    }
+
+    /// Net paired advantage in case counts: intuition-only minus baseline-only.
+    #[must_use]
+    pub fn net_advantage(self) -> i128 {
+        i128::from(self.intuition_only) - i128::from(self.baseline_only)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::EvaluationSummary;
+    use super::{EvaluationSummary, PairedComparison};
     use crate::experimental::tdi2_intuition::TemplateId;
     use crate::experimental::tdi2_intuition_inference::IntuitionOutcome;
     use crate::experimental::tdi2_intuition_tasks::motif_retrieval_case;
@@ -114,5 +143,18 @@ mod tests {
         );
         assert_eq!(summary.selected_accuracy(), Some(0.5));
         assert_eq!(summary.selective_risk(), Some(0.5));
+    }
+
+    #[test]
+    fn paired_comparison_preserves_direction_of_disagreements() {
+        let mut comparison = PairedComparison::default();
+        comparison.observe(true, false);
+        comparison.observe(true, false);
+        comparison.observe(false, true);
+        comparison.observe(true, true);
+        assert_eq!(comparison.total(), 4);
+        assert_eq!(comparison.intuition_only, 2);
+        assert_eq!(comparison.baseline_only, 1);
+        assert_eq!(comparison.net_advantage(), 1);
     }
 }
