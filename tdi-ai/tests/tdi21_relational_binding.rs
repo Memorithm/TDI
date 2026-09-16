@@ -1,7 +1,7 @@
 #![cfg(feature = "experimental")]
 
 use tdi_ai::experimental::tdi21_relational_binding::{
-    RelationalBinder, RelationalConfig, RelationalError, RelationalRead,
+    MAX_COMPOSITION_HOPS, RelationalBinder, RelationalConfig, RelationalError, RelationalRead,
 };
 use tdi_ai::experimental::tdi21_stream::{MemoryMode, StreamConfig};
 
@@ -35,6 +35,20 @@ fn two_hop_composition_recovers_the_terminal_object() {
     binder.bind(2, 5, 9).unwrap();
     assert_eq!(binder.compose2(1, 2, 3).unwrap(), RelationalRead::Hit(9));
     assert_eq!(binder.counters().work.memory_reads, 2);
+    assert_eq!(binder.counters().work.pairwise_comparisons, 0);
+}
+
+#[test]
+fn three_hop_path_is_composed_with_one_lookup_per_hop() {
+    let mut binder = RelationalBinder::new(config(128)).unwrap();
+    binder.bind(1, 3, 5).unwrap();
+    binder.bind(2, 5, 9).unwrap();
+    binder.bind(4, 9, 13).unwrap();
+    assert_eq!(
+        binder.compose_path(&[1, 2, 4], 3).unwrap(),
+        RelationalRead::Hit(13)
+    );
+    assert_eq!(binder.counters().work.memory_reads, 3);
     assert_eq!(binder.counters().work.pairwise_comparisons, 0);
 }
 
@@ -82,6 +96,21 @@ fn bounded_memory_can_lose_relations_and_failure_remains_visible() {
     assert!(matches!(answer, RelationalRead::Hit(9) | RelationalRead::Miss));
     assert!(binder.counters().work.memory_replacements > 0);
     assert_eq!(binder.counters().work.pairwise_comparisons, 0);
+}
+
+#[test]
+fn relation_path_length_is_explicitly_bounded() {
+    let mut binder = RelationalBinder::new(config(32)).unwrap();
+    assert_eq!(
+        binder.compose_path(&[], 1),
+        Err(RelationalError::EmptyRelationPath)
+    );
+    let too_long = vec![1; MAX_COMPOSITION_HOPS + 1];
+    assert_eq!(
+        binder.compose_path(&too_long, 1),
+        Err(RelationalError::TooManyCompositionHops)
+    );
+    assert_eq!(binder.counters().work.memory_reads, 0);
 }
 
 #[test]
