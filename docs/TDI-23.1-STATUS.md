@@ -8,7 +8,8 @@ TDI-23.1 now has a first bounded graph IR in `tdi-ai/src/tdi23_ir.rs`, exposed o
 
 Implemented surfaces:
 
-- stable `ObjectId` and `NodeId` handles;
+- instance-bound `ObjectId` and `NodeId` handles with explicit rejection of cross-IR handles;
+- non-clonable mutable IR ownership in this slice, preventing divergent graphs from sharing one owner token;
 - named finite-dimensional real Hilbert objects;
 - atomic objects;
 - direct sums with additive dimension;
@@ -25,13 +26,15 @@ Implemented surfaces:
 
 ## Important semantic properties
 
-1. Equal dimensions are not sufficient for composition: the same declared middle object must connect the two nodes.
-2. Direct sum and tensor product are distinct IR constructions and produce additive versus multiplicative dimensions respectively.
-3. A nonlinear boundary may appear in a typed pipeline, but the IR refuses to reinterpret it as a linear morphism.
-4. Dagger construction fails closed if its source subgraph crosses any declared nonlinear/algebraic boundary.
-5. Coordinate reductions are annotations, never implicit transformations.
-6. Reduced lowering fails if required object annotations are missing.
-7. The composition-reduction diagnostic is the direct omitted-middle-path structural term inherited from TDI-23.0; it is not an independently accumulated floating-point residual.
+1. Handles are valid only in the IR instance that created them. A foreign object/node handle fails closed even if the receiving graph has the same numeric slot.
+2. Equal dimensions are not sufficient for composition: the same declared middle object must connect the two nodes.
+3. Direct sum and tensor product are distinct IR constructions and produce additive versus multiplicative dimensions respectively.
+4. A nonlinear boundary may appear in a typed pipeline, but the IR refuses to reinterpret it as a linear morphism.
+5. Dagger construction fails closed if its source subgraph crosses any declared nonlinear/algebraic boundary.
+6. Coordinate reductions are annotations, never implicit transformations.
+7. Reduced lowering fails if required object annotations are missing.
+8. The composition-reduction diagnostic is the direct omitted-middle-path structural term inherited from TDI-23.0; it is not an independently accumulated floating-point residual.
+9. The current owner token is process-local and is not a serialization/provenance identifier. Stable cross-process graph identity remains future work.
 
 ## Scientific authorization state
 
@@ -45,7 +48,7 @@ Implemented surfaces:
 
 After this slice is qualified and merged, the next TDI-23.1 work should remain development-only and focus on a small legality/equivalence oracle around the existing graph grammar:
 
-- deterministic graph serialization/provenance;
+- deterministic graph serialization/provenance with explicit stable graph identity distinct from the process-local owner token;
 - explicit structural validation independent of construction path;
 - boundary-aware equivalence fixtures for linear-only subgraphs;
 - explicit reduction-contract summaries attached to candidate graph fragments;
