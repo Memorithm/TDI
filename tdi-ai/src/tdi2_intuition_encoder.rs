@@ -1,7 +1,7 @@
 //! Frozen predicate-catalogue encoder for TDI-2.1.
 
 use super::tdi2_intuition::{BooleanState, NumericState, PredicateId};
-use super::tdi2_intuition_predicates::{PredicateError, ScalarPredicate};
+use super::tdi2_intuition_predicates::{Comparison, PredicateError, ScalarPredicate};
 
 /// Apply a frozen scalar predicate catalogue to one numeric state.
 pub fn encode_boolean(
@@ -23,9 +23,32 @@ pub fn predicate_catalogue_ids(predicates: &[ScalarPredicate]) -> Vec<PredicateI
     predicates.iter().map(|predicate| predicate.id).collect()
 }
 
+/// Canonical text record binding ids, feature indices, directions and exact threshold bits.
+#[must_use]
+pub fn predicate_catalogue_record(predicates: &[ScalarPredicate]) -> String {
+    let body = predicates
+        .iter()
+        .map(|predicate| {
+            let comparison = match predicate.comparison {
+                Comparison::GreaterOrEqual => "ge",
+                Comparison::LessOrEqual => "le",
+            };
+            format!(
+                "{}:{}:{}:{:016x}",
+                predicate.id.raw(),
+                predicate.feature,
+                comparison,
+                predicate.threshold.to_bits()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("|");
+    format!("tdi2-intuition-predicate-catalogue-v1;{body}")
+}
+
 #[cfg(test)]
 mod tests {
-    use super::encode_boolean;
+    use super::{encode_boolean, predicate_catalogue_record};
     use crate::experimental::tdi2_intuition::{NumericState, PredicateId};
     use crate::experimental::tdi2_intuition_predicates::{Comparison, ScalarPredicate};
 
@@ -40,5 +63,24 @@ mod tests {
         ];
         let encoded = encode_boolean(&state, &predicates).expect("encode");
         assert_eq!(encoded.predicates(), &[PredicateId::new(1)]);
+    }
+
+    #[test]
+    fn catalogue_record_changes_when_threshold_bits_change() {
+        let first = [ScalarPredicate::new(
+            PredicateId::new(1),
+            0,
+            Comparison::GreaterOrEqual,
+            1.0,
+        )
+        .expect("predicate")];
+        let second = [ScalarPredicate::new(
+            PredicateId::new(1),
+            0,
+            Comparison::GreaterOrEqual,
+            1.5,
+        )
+        .expect("predicate")];
+        assert_ne!(predicate_catalogue_record(&first), predicate_catalogue_record(&second));
     }
 }
