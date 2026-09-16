@@ -35,6 +35,7 @@ This audit focuses on later merged/open work whose current exact-head evidence d
 | NNIS qualification boundary | #286 | `f46eae12dae981de2057768ab64ff953da939e8e` | merged | Rust/Public Rust/MSRV, operational-engine, dedicated NNIS and multiple repository runs observed now are queued/pending | **current exact-head qualification not established by this audit**; upstream NNIS hardware qualification remains independently blocking |
 | Shared replay SDK + real finite/Jacobi libraries | #331 | `58f399b139834efeb255c9e9126809762d9cb28b` | open, non-draft, mergeable | the material resume-depth P1 review thread is resolved on the current head; dedicated real-library, Rust/Public Rust/MSRV, operational-engine and repository workflows are queued | **candidate** |
 | Paired analysis consuming SciRust | #296 | `29294e801234e858e122bf32ed694acbb3190d54` | open, non-draft, mergeable | both material P2 review threads are resolved; dedicated analysis and repository workflows are queued/pending | **candidate, dependency-gated by SciRust #1452** |
+| Durable Forge scientific search through Hub | #385 | `080329d6df556c6cd0fa437f0a112b9083593782` | open, non-draft, mergeable | ambiguous-submission cancellation P2 is resolved; the current head preserves the existing Hub `attach` reconciliation path and adds a real integration regression; dedicated Forge-search and repository workflows are queued/pending | **candidate, dependency-gated by the final qualified Forge #39 revision and exact-head CI** |
 
 ## Evidence rule: merge presence is not a substitute for current qualification evidence
 
@@ -51,16 +52,22 @@ The evidence-preserving handling is therefore:
 ## Q19–Q30 implications
 
 - **Q19 Elastic resource control:** partial. The non-actuating #279 contract has complete exact-head evidence, but the current audit does not establish qualification of merged #288 hardening and no actual ElasticXxx actuation/control effectiveness is established.
-- **Q20 Forge:** still partial. #277 qualifies interchange only; it does not establish a real Forge PROPOSE/MUTATE→COMPILE→VERIFY→MEASURE→SELECT execution path.
+- **Q20 Forge:** candidate execution path #385 now connects a pinned Forge process to independently evaluated authoritative Hub workflows with durable checkpoints/recovery, but its final Forge dependency pin and exact-head qualification are still pending. #277 remains the qualified interchange-only foundation.
 - **Q21 SciRust primitive consumption:** remains incomplete. #283 is structural and the current audit does not establish complete qualification of its final head; real primitive consumption against an independent reference remains required.
 - **Q22 statistical units/exclusions/uncertainty:** active candidate #296. It keeps unit weighting, explicit exclusions and non-assessed scientific verdicts, but remains dependency/CI gated.
 - **Q23 sensitivity/search bounds:** active upstream candidate `Memorithm/scirust#1452`; no TDI promotion until upstream exact-head qualification and final pinning are complete.
 - **Q24/Q25 operational CLI/API/viewer:** #284 exact-head workflows are fully green for its declared Development/Validation software scope. This does not extend cgroup/GPU/sandbox claims beyond the explicitly qualified paths.
 - **Q26 external tracking:** #287 exact-head workflows are fully green for its declared MLflow/OTLP software boundary. Retry may duplicate remote metrics; exactly-once delivery is not claimed.
 - **Q28 FLAT/NNIS hardware:** blocked/unqualified. No exact-head FLAT final-head workflow evidence was returned for #285; the current audit does not establish complete #286 qualification, and NNIS upstream hardware qualification remains separate.
-- **Q30 final-head discipline:** current evidence is incomplete for #283/#285/#286/#288. This audit records the gap without inferring historical merge-time check state that it cannot reconstruct.
+- **Q30 final-head discipline:** current evidence is incomplete for #283/#285/#286/#288 and active candidates remain unqualified until every applicable final-head gate completes successfully. This audit records gaps without inferring historical merge-time check state that it cannot reconstruct.
 
 ## Current coding frontier
+
+### #385 — durable Forge scientific search
+
+The candidate adds resumable Forge ask/tell search over actual Hub-owned workflows rather than recreating scheduling in TDI. TDI persists the Forge checkpoint and the attempt-to-Hub campaign mapping before the first workflow mutation; stage evidence is consumed only through authoritative Hub artifacts and Forge retains proposal/budget/Pareto mechanics. A material cancellation review exposed an unsafe boundary when a Hub workflow had been created but its identity was not yet durably bound. The current head now refuses to make the search terminal while any mapped campaign is `submitting` or `submission-unknown`; the existing `runtime.attach` path must reconcile the workflow first. A regression creates a real Hub workflow, injects a lost binding response, proves cancellation leaves the search phase unchanged, attaches the known workflow, then verifies search/campaign cancellation succeeds.
+
+The workflow currently pins Forge `4c3813347d564953bfa3930ef613d1c62a08daf3`, while active Forge PR #39 has advanced beyond that revision. This is therefore a candidate dependency pin, not final evidence. Merge remains forbidden until Forge #39 reaches a final reviewed exact-head-qualified revision, #385 is repinned to it, and every applicable TDI workflow is green on the resulting exact final head.
 
 ### #331 — reusable real-library adapter SDK
 
