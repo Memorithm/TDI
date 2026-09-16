@@ -70,3 +70,7 @@ required-features = ["experimental"]
 [[example]]
 name = "tdi2_intuition_distractor_stress"
 required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_ood_abstention"
+required-features = ["experimental"]
