@@ -110,3 +110,25 @@ Baseline identity: `bb8a9d8f86f128b247ff8611360deb1e7000976dc57df8745729082404a4
 
 Each row has one warmup and three measured repetitions. These are scoped
 observations on the recorded host, not latency targets or general speed claims.
+
+## Corrected comparison profile
+
+The initial raw report above predates the review corrections for process-duration
+string encoding and the complete cache/CLI source manifest. It remains a truthful
+record of its raw observations; it is not accepted as a complete environment/source
+reference by the corrected comparison path.
+
+The corrected profile includes whole-case process measurements, decimal-string
+nanosecond durations and finite CPU seconds in comparable summaries. It compares
+visible CPU/RAM, the effective cgroup CPU slots and ancestor quota periods, and
+memory hard limits while excluding changing free-memory/current-usage readings.
+Unknown or changed limits are incompatible; limits changing during a run make it
+incomplete. The cache module and comparison CLI dependencies are pinned too.
+
+A new full 72-record baseline was executed on benchmark source
+`fdd0f57dc3f5fe885601229b9c2d570e54b35635`. Its identity is
+`c9f6ba56f4dac4bab374b37c7fac1c547417771c8e36f67c2f5459b92995215e`.
+[Corrected raw baseline](benchmarks/2026-09-16-engine-baseline-qualified.json).
+All repetitions completed; six focused benchmark tests pass. Use this corrected
+profile for future baseline-bound policies. No performance threshold was selected
+from these observations after execution.
