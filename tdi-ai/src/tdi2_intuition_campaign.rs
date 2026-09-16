@@ -87,6 +87,37 @@ impl CampaignManifest {
     }
 }
 
+/// Canonical post-run artifact binding a manifest to observed denominators and outcomes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CampaignResultArtifact {
+    /// Frozen pre-run manifest.
+    pub manifest: CampaignManifest,
+    /// Observed aggregate evaluation.
+    pub summary: EvaluationSummary,
+}
+
+impl CampaignResultArtifact {
+    /// Construct a result artifact from a frozen manifest and completed summary.
+    #[must_use]
+    pub const fn new(manifest: CampaignManifest, summary: EvaluationSummary) -> Self {
+        Self { manifest, summary }
+    }
+
+    /// Stable result record. The manifest is included verbatim as a nested canonical record.
+    #[must_use]
+    pub fn canonical_record(self) -> String {
+        format!(
+            "tdi2.1-campaign-result-v1;manifest=[{}];total={};selected={};correct={};incorrect={};abstained={}",
+            self.manifest.canonical_record(),
+            self.summary.total(),
+            self.summary.selected(),
+            self.summary.correct(),
+            self.summary.incorrect(),
+            self.summary.abstained()
+        )
+    }
+}
+
 /// Campaign-construction failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CampaignError {
@@ -201,8 +232,8 @@ pub fn analogy_cases(start: u32, count: usize) -> Result<Vec<AnalogyCase>, Campa
 #[cfg(test)]
 mod tests {
     use super::{
-        CampaignDomain, CampaignFamily, CampaignManifest, analogy_cases, context_cases, motif_cases,
-        run_paired_campaign, run_synthetic_campaign, temporal_cases,
+        CampaignDomain, CampaignFamily, CampaignManifest, CampaignResultArtifact, analogy_cases,
+        context_cases, motif_cases, run_paired_campaign, run_synthetic_campaign, temporal_cases,
     };
     use crate::experimental::tdi2_intuition_analogy_tasks::analogy_case;
     use crate::experimental::tdi2_intuition_inference::IntuitionOutcome;
@@ -224,6 +255,26 @@ mod tests {
         let record = manifest.canonical_record();
         assert!(record.contains("domain=validation"));
         assert!(record.contains("min_weight_bits=3fe0000000000000"));
+    }
+
+    #[test]
+    fn result_artifact_keeps_abstentions_in_denominator() {
+        let manifest = CampaignManifest::new(
+            CampaignDomain::Development,
+            CampaignFamily::MotifRetrieval,
+            0,
+            2,
+            0,
+            0.0,
+        )
+        .expect("manifest");
+        let cases = motif_cases(0, 2).expect("cases");
+        let summary = run_synthetic_campaign(CampaignDomain::Development, &cases, |_| {
+            IntuitionOutcome::InsufficientExperience
+        });
+        let record = CampaignResultArtifact::new(manifest, summary).canonical_record();
+        assert!(record.contains("total=2"));
+        assert!(record.contains("abstained=2"));
     }
 
     #[test]
