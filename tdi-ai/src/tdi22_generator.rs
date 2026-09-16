@@ -57,7 +57,10 @@ impl fmt::Display for GeneratorError {
             ),
             Self::QueryIndexOverflow => write!(formatter, "query structural index overflow"),
             Self::DerivedOutOfBounds { field } => {
-                write!(formatter, "derived field {field} exceeds frozen numeric domain")
+                write!(
+                    formatter,
+                    "derived field {field} exceeds frozen numeric domain"
+                )
             }
             Self::AmbiguousTarget => write!(formatter, "evaluator-owned target is ambiguous"),
             Self::RetryBudgetExhausted { query_index } => write!(
@@ -175,10 +178,7 @@ fn unique_content_target(
     )
 }
 
-fn unique_direct_target(
-    query: EvalQuery,
-    candidates: &[EvalKey],
-) -> Result<u16, GeneratorError> {
+fn unique_direct_target(query: EvalQuery, candidates: &[EvalKey]) -> Result<u16, GeneratorError> {
     let mut scored = Vec::with_capacity(candidates.len());
     for candidate in candidates {
         let transported = bound_vec(
@@ -235,7 +235,10 @@ fn materialize_content_at(
     candidate: ContentCandidate,
     reference: Vec3,
 ) -> Result<EvalKey, GeneratorError> {
-    let cross = bound_vec(reference.cross(candidate.resultant), "position_cross_resultant")?;
+    let cross = bound_vec(
+        reference.cross(candidate.resultant),
+        "position_cross_resultant",
+    )?;
     let local_moment = bound_vec(
         candidate.origin_moment.minus(cross),
         "reconstructed_local_moment",
@@ -422,10 +425,12 @@ mod tests {
             let second = generate_episode(Split::Development, cell, 0).unwrap();
             assert_eq!(first, second);
             assert_eq!(first.queries.len(), QUERIES_PER_EPISODE);
-            assert!(first
-                .queries
-                .iter()
-                .all(|query| query.candidates.len() == CANDIDATES_PER_QUERY));
+            assert!(
+                first
+                    .queries
+                    .iter()
+                    .all(|query| query.candidates.len() == CANDIDATES_PER_QUERY)
+            );
         }
     }
 
