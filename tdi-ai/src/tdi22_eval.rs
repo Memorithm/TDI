@@ -647,8 +647,7 @@ mod tests {
 
     #[test]
     fn dyadic_generators_match_frozen_lattices() {
-        let mut stream =
-            SplitMix64::for_episode(Split::Development, PrimaryCell::P2, 0).unwrap();
+        let mut stream = SplitMix64::for_episode(Split::Development, PrimaryCell::P2, 0).unwrap();
         for _ in 0..128 {
             let half = stream.half_step().unwrap();
             assert!((-8.0..=8.0).contains(&half));
@@ -701,12 +700,7 @@ mod tests {
         .unwrap();
         let key = EvalKey::new(
             0,
-            Torsor3::new(
-                v(1.0, 2.0, 0.0),
-                v(0.0, 0.0, 0.0),
-                v(0.0, 0.0, 1.0),
-            )
-            .unwrap(),
+            Torsor3::new(v(1.0, 2.0, 0.0), v(0.0, 0.0, 0.0), v(0.0, 0.0, 1.0)).unwrap(),
         )
         .unwrap();
         assert_ne!(
@@ -772,9 +766,7 @@ mod tests {
         };
         let line = record.encode_line();
         assert_eq!(line.trim_end_matches('\n').split('\t').count(), 25);
-        assert!(line.contains(
-            "\ttarget_identity=none\tselected_identity=none\texact_success=0\t"
-        ));
+        assert!(line.contains("\ttarget_identity=none\tselected_identity=none\texact_success=0\t"));
         assert!(line.contains("\trejection_reason=missing_target\t"));
         assert!(line.ends_with('\n'));
     }
