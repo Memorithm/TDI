@@ -112,6 +112,20 @@ impl PairedComparison {
     pub fn net_advantage(self) -> i128 {
         i128::from(self.intuition_only) - i128::from(self.baseline_only)
     }
+
+    /// Stable record for paired Development/Validation evidence.
+    #[must_use]
+    pub fn canonical_record(self) -> String {
+        format!(
+            "tdi2.1-paired-comparison-v1;total={};both_correct={};intuition_only={};baseline_only={};neither={};net_advantage={}",
+            self.total(),
+            self.both_correct,
+            self.intuition_only,
+            self.baseline_only,
+            self.neither,
+            self.net_advantage()
+        )
+    }
 }
 
 #[cfg(test)]
