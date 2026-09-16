@@ -43,7 +43,13 @@ pub fn evaluate_transfer(
 ) -> TransferEvaluation {
     let mut expected_keys = expected
         .iter()
-        .map(|relation| (relation.left.raw(), relation.relation.raw(), relation.right.raw()))
+        .map(|relation| {
+            (
+                relation.left.raw(),
+                relation.relation.raw(),
+                relation.right.raw(),
+            )
+        })
         .collect::<Vec<_>>();
     expected_keys.sort_unstable();
     expected_keys.dedup();
@@ -82,8 +88,12 @@ pub fn evaluate_transfer(
 mod tests {
     use super::{ExpectedRelation, evaluate_transfer};
     use crate::experimental::tdi2_intuition::{PredicateId, RoleId, Template, TemplateId};
-    use crate::experimental::tdi2_intuition_relations::{RelationId, RelationalTemplate, RoleRelation};
-    use crate::experimental::tdi2_intuition_transfer::{EntityId, RoleBinding, RoleMap, transfer_relations};
+    use crate::experimental::tdi2_intuition_relations::{
+        RelationId, RelationalTemplate, RoleRelation,
+    };
+    use crate::experimental::tdi2_intuition_transfer::{
+        EntityId, RoleBinding, RoleMap, transfer_relations,
+    };
 
     #[test]
     fn exact_role_transfer_scores_exactly() {
@@ -96,7 +106,11 @@ mod tests {
         .expect("template");
         let template = RelationalTemplate::new(
             base,
-            vec![RoleRelation::new(RoleId::new(1), RelationId::new(7), RoleId::new(2))],
+            vec![RoleRelation::new(
+                RoleId::new(1),
+                RelationId::new(7),
+                RoleId::new(2),
+            )],
         )
         .expect("relation");
         let map = RoleMap::for_template(
@@ -110,7 +124,11 @@ mod tests {
         let actual = transfer_relations(&template, &map);
         let score = evaluate_transfer(
             &actual,
-            &[ExpectedRelation { left: EntityId::new(10), relation: RelationId::new(7), right: EntityId::new(20) }],
+            &[ExpectedRelation {
+                left: EntityId::new(10),
+                relation: RelationId::new(7),
+                right: EntityId::new(20),
+            }],
         );
         assert!(score.is_exact());
     }

@@ -130,9 +130,14 @@ impl core::fmt::Display for IntuitionError {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::NonFiniteNumeric { index } => {
-                write!(formatter, "numeric intuition feature at index {index} is not finite")
+                write!(
+                    formatter,
+                    "numeric intuition feature at index {index} is not finite"
+                )
             }
-            Self::EmptyTemplate => formatter.write_str("intuition template has no Boolean condition"),
+            Self::EmptyTemplate => {
+                formatter.write_str("intuition template has no Boolean condition")
+            }
             Self::ContradictoryPredicate { predicate } => write!(
                 formatter,
                 "predicate {} is both required and forbidden",
@@ -289,7 +294,11 @@ mod tests {
     fn template_canonicalizes_conditions() {
         let template = Template::new(
             TemplateId::new(9),
-            vec![PredicateId::new(3), PredicateId::new(1), PredicateId::new(3)],
+            vec![
+                PredicateId::new(3),
+                PredicateId::new(1),
+                PredicateId::new(3),
+            ],
             vec![PredicateId::new(8)],
             vec![RoleId::new(2), RoleId::new(1)],
         )
