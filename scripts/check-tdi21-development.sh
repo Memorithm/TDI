@@ -25,7 +25,9 @@ sha256sum Cargo.lock Cargo.toml tdi-ai/Cargo.toml \
   tdi-ai/src/tdi21_distributional_objective.rs \
   tdi-ai/tests/tdi21_distributional_objective.rs \
   tdi-ai/src/tdi21_distributional_search.rs \
-  tdi-ai/tests/tdi21_distributional_search.rs
+  tdi-ai/tests/tdi21_distributional_search.rs \
+  tdi-ai/src/tdi21_sequence_materializer.rs \
+  tdi-ai/tests/tdi21_sequence_materializer.rs
 cargo test --locked -p tdi-ai --features experimental --test tdi21_audit_regressions
 cargo test --locked -p tdi-ai --features experimental --test tdi21_stream_contract
 cargo test --locked -p tdi-ai --features experimental --test tdi21_memory_tradeoffs -- --nocapture
@@ -37,6 +39,7 @@ cargo test --locked -p tdi-ai --features experimental --test tdi21_event_predica
 cargo test --locked -p tdi-ai --features experimental --test tdi21_predicate_identifiability -- --nocapture
 cargo test --locked -p tdi-ai --features experimental --test tdi21_distributional_objective
 cargo test --locked -p tdi-ai --features experimental --test tdi21_distributional_search
+cargo test --locked -p tdi-ai --features experimental --test tdi21_sequence_materializer
 cargo test --locked -p tdi-ai --features experimental --lib experimental::tdi21_attention
 cargo test --locked --release -p tdi-ai --features experimental --test tdi21_audit_regressions
 cargo test --locked --release -p tdi-ai --features experimental --test tdi21_stream_contract
@@ -49,6 +52,7 @@ cargo test --locked --release -p tdi-ai --features experimental --test tdi21_eve
 cargo test --locked --release -p tdi-ai --features experimental --test tdi21_predicate_identifiability -- --nocapture
 cargo test --locked --release -p tdi-ai --features experimental --test tdi21_distributional_objective
 cargo test --locked --release -p tdi-ai --features experimental --test tdi21_distributional_search
+cargo test --locked --release -p tdi-ai --features experimental --test tdi21_sequence_materializer
 cargo test --locked --release -p tdi-ai --features experimental --lib experimental::tdi21_attention
 scratch="$(mktemp -d)"
 trap 'rm -rf -- "$scratch"' EXIT
