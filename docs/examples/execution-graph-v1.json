@@ -1,0 +1,73 @@
+{
+  "hub_contract": {
+    "repository": "Memorithm/scirust-hub",
+    "source_commit": "4bf6186841e1ea70ed15cd84faf33de9b48429cd",
+    "workflow_model_version": "1.2.0",
+    "workflow_schema_version": 1
+  },
+  "max_concurrency": 2,
+  "name": "fixture-graph",
+  "root_plan_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "schema": 1,
+  "semantic_version": "tdi-graph/1.0.0",
+  "steps": [
+    {
+      "after": [],
+      "capability": "tdi.prepare",
+      "checkpoint": {
+        "input": null,
+        "mode": "exact",
+        "output": "file:checkpoint"
+      },
+      "component_alias": "tdi-runner",
+      "inputs": {
+        "spec": {
+          "kind": "artifact",
+          "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+        }
+      },
+      "key": "prepare",
+      "outputs": [
+        "file:prepared",
+        "file:checkpoint"
+      ],
+      "parameters": {
+        "count": 2,
+        "mode": "fixture"
+      },
+      "timeout_milliseconds": 1000
+    },
+    {
+      "after": [
+        "prepare"
+      ],
+      "capability": "tdi.evaluate",
+      "checkpoint": {
+        "input": null,
+        "mode": "none",
+        "output": null
+      },
+      "component_alias": "tdi-runner",
+      "inputs": {
+        "checkpoint": {
+          "kind": "step",
+          "output": "file:checkpoint",
+          "step": "prepare"
+        },
+        "prepared": {
+          "kind": "step",
+          "output": "file:prepared",
+          "step": "prepare"
+        }
+      },
+      "key": "evaluate",
+      "outputs": [
+        "file:result"
+      ],
+      "parameters": {
+        "mode": "fixture"
+      },
+      "timeout_milliseconds": 2000
+    }
+  ]
+}
