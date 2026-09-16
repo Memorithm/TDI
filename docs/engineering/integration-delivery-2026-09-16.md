@@ -25,6 +25,14 @@ the schema-4 catalogue. The complete public-process integration run passed
 **70 tests in 42.373 seconds**, with optional figures and real MLflow enabled.
 This local run is new evidence; it does not turn queued GitHub checks green.
 
+The final source-bound aggregate invocation on published head
+`cabb0b5ab2c6ad2c45121134bbeffa4c822ef028` also passed all 70 tests, with
+zero skips/expected failures and unchanged executable hashes. Its
+[raw software report](qualification/2026-09-16-public-integration.json) records
+the exact runner/test-file hashes, package versions and source declarations.
+It explicitly retains `release_qualified: false` and
+`hardware_execution_performed: false`. This report is not a build attestation.
+
 The integration adds an always-scheduled aggregate workflow, a no-skip runner,
 an operating/recovery guide, source/format compatibility and release procedures,
 and a prepared inactive ruleset. Existing numerical, MSRV, scientific-integrity,
