@@ -1,8 +1,8 @@
 //! Deterministic rooted-subgraph validation and provenance for TDI-23.1.
 //!
-//! The manifest is intentionally a provenance format, not a claim of graph-
-//! isomorphism canonicalization. It is deterministic for a fixed construction
-//! order and excludes the process-local IR ownership token.
+//! The manifest is a provenance format, not a claim of graph-isomorphism
+//! canonicalization. It is deterministic for the relative construction order
+//! of the reachable subgraph and excludes the process-local IR ownership token.
 
 use core::fmt;
 use std::collections::{BTreeMap, BTreeSet};
@@ -98,6 +98,16 @@ pub enum ProvenanceError {
         /// Object index.
         object: usize,
     },
+    /// An independently validated reachable object was missing from manifest remapping.
+    MissingObjectOrdinal {
+        /// Original IR-local object index.
+        object: usize,
+    },
+    /// An independently validated reachable node was missing from manifest remapping.
+    MissingNodeOrdinal {
+        /// Original IR-local node index.
+        node: usize,
+    },
 }
 
 impl fmt::Display for ProvenanceError {
@@ -109,7 +119,10 @@ impl fmt::Display for ProvenanceError {
                 "object {object} references non-prior object {referenced}"
             ),
             Self::ForwardNodeReference { node, referenced } => {
-                write!(formatter, "node {node} references non-prior node {referenced}")
+                write!(
+                    formatter,
+                    "node {node} references non-prior node {referenced}"
+                )
             }
             Self::DirectSumDimensionMismatch {
                 object,
@@ -131,13 +144,22 @@ impl fmt::Display for ProvenanceError {
                 write!(formatter, "identity node {node} has unequal endpoints")
             }
             Self::LinearMapDimensionMismatch { node } => {
-                write!(formatter, "linear-map node {node} disagrees with object dimensions")
+                write!(
+                    formatter,
+                    "linear-map node {node} disagrees with object dimensions"
+                )
             }
             Self::CompositionEndpointMismatch { node } => {
-                write!(formatter, "composition node {node} has inconsistent endpoints")
+                write!(
+                    formatter,
+                    "composition node {node} has inconsistent endpoints"
+                )
             }
             Self::DaggerEndpointMismatch { node } => {
-                write!(formatter, "dagger node {node} does not reverse source endpoints")
+                write!(
+                    formatter,
+                    "dagger node {node} does not reverse source endpoints"
+                )
             }
             Self::DaggerContainsNonlinearBoundary { node, boundary } => {
                 write!(formatter, "dagger node {node} crosses {boundary} boundary")
@@ -154,7 +176,16 @@ impl fmt::Display for ProvenanceError {
                 write!(formatter, "reachable object name {name:?} is duplicated")
             }
             Self::DimensionOverflow { object } => {
-                write!(formatter, "dimension overflow while validating object {object}")
+                write!(
+                    formatter,
+                    "dimension overflow while validating object {object}"
+                )
+            }
+            Self::MissingObjectOrdinal { object } => {
+                write!(formatter, "reachable object {object} has no manifest ordinal")
+            }
+            Self::MissingNodeOrdinal { node } => {
+                write!(formatter, "reachable node {node} has no manifest ordinal")
             }
         }
     }
@@ -232,6 +263,127 @@ pub fn validate_rooted_subgraph(
     ir: &CategoricalAttentionIr,
     root: NodeId,
 ) -> Result<RootedValidationSummary, ProvenanceError> {
+    let reachable = collect_and_validate(ir, root)?;
+
+    let reduction_annotation_count = reachable
+        .objects
+        .values()
+        .copied()
+        .map(|object| ir.coordinate_reduction(object))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .filter(Option::is_some)
+        .count();
+
+    Ok(RootedValidationSummary {
+        root,
+        object_count: reachable.objects.len(),
+        node_count: reachable.nodes.len(),
+        nonlinear_boundary_count: reachable.nonlinear_boundaries,
+        reduction_annotation_count,
+    })
+}
+
+/// Serialize one validated rooted subgraph into a deterministic textual manifest.
+///
+/// Runtime owner tokens and absolute IR-local indices are excluded. Reachable
+/// objects and nodes are remapped to manifest-local ordinals in relative
+/// construction order, so unrelated unreachable prefixes do not perturb the
+/// manifest. This is provenance, not graph-isomorphism canonicalization.
+pub fn canonical_rooted_manifest(
+    ir: &CategoricalAttentionIr,
+    root: NodeId,
+) -> Result<String, ProvenanceError> {
+    let reachable = collect_and_validate(ir, root)?;
+    let object_ordinals = ordinals(reachable.objects.keys().copied());
+    let node_ordinals = ordinals(reachable.nodes.keys().copied());
+    let root_ordinal = mapped_node_ordinal(&node_ordinals, root)?;
+
+    let mut output = String::new();
+    output.push_str(ROOTED_MANIFEST_CONTRACT);
+    output.push('\n');
+    output.push_str("ir_contract=");
+    output.push_str(CATEGORICAL_IR_CONTRACT);
+    output.push('\n');
+    output.push_str(&format!("root={root_ordinal}\n"));
+
+    for (source_index, object_id) in &reachable.objects {
+        let ordinal = object_ordinals
+            .get(source_index)
+            .copied()
+            .ok_or(ProvenanceError::MissingObjectOrdinal {
+                object: *source_index,
+            })?;
+        let object = ir.object(*object_id)?;
+        output.push_str(&format!(
+            "object|{ordinal}|name_hex={}|dim={}|kind={}",
+            hex_bytes(object.name().as_bytes()),
+            object.dimension(),
+            object_kind_token(object.kind(), &object_ordinals)?
+        ));
+        if let Some(reduction) = ir.coordinate_reduction(*object_id)? {
+            output.push_str("|reduction=");
+            output.push_str(&reduction.ambient_dim().to_string());
+            output.push(':');
+            push_usize_list(&mut output, reduction.kept_coordinates());
+        } else {
+            output.push_str("|reduction=none");
+        }
+        output.push('\n');
+    }
+
+    for (source_index, node_id) in &reachable.nodes {
+        let ordinal = node_ordinals
+            .get(source_index)
+            .copied()
+            .ok_or(ProvenanceError::MissingNodeOrdinal {
+                node: *source_index,
+            })?;
+        let node = ir.node(*node_id)?;
+        output.push_str(&format!(
+            "node|{ordinal}|domain={}|codomain={}|op=",
+            mapped_object_ordinal(&object_ordinals, node.domain())?,
+            mapped_object_ordinal(&object_ordinals, node.codomain())?
+        ));
+        match node.kind() {
+            IrNodeKind::LinearMap(map) => {
+                output.push_str("linear|bits=");
+                for (position, value) in map.entries().iter().enumerate() {
+                    if position > 0 {
+                        output.push(',');
+                    }
+                    output.push_str(&format!("{:016x}", value.to_bits()));
+                }
+            }
+            IrNodeKind::Identity => output.push_str("identity"),
+            IrNodeKind::Compose { outer, inner } => {
+                output.push_str(&format!(
+                    "compose:{}:{}",
+                    mapped_node_ordinal(&node_ordinals, *outer)?,
+                    mapped_node_ordinal(&node_ordinals, *inner)?
+                ));
+            }
+            IrNodeKind::Dagger { source } => {
+                output.push_str(&format!(
+                    "dagger:{}",
+                    mapped_node_ordinal(&node_ordinals, *source)?
+                ));
+            }
+            IrNodeKind::NonlinearBoundary { boundary } => {
+                output.push_str("boundary:");
+                output.push_str(boundary_token(*boundary));
+            }
+        }
+        output.push('\n');
+    }
+
+    Ok(output)
+}
+
+fn collect_and_validate(
+    ir: &CategoricalAttentionIr,
+    root: NodeId,
+) -> Result<Reachable, ProvenanceError> {
     let mut reachable = Reachable::default();
     let mut visiting = BTreeSet::new();
     let mut validated_nodes = BTreeSet::new();
@@ -255,124 +407,7 @@ pub fn validate_rooted_subgraph(
             &mut names,
         )?;
     }
-
-    let reduction_annotation_count = reachable
-        .objects
-        .values()
-        .copied()
-        .map(|object| ir.coordinate_reduction(object))
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter()
-        .filter(Option::is_some)
-        .count();
-
-    Ok(RootedValidationSummary {
-        root,
-        object_count: reachable.objects.len(),
-        node_count: reachable.nodes.len(),
-        nonlinear_boundary_count: reachable.nonlinear_boundaries,
-        reduction_annotation_count,
-    })
-}
-
-/// Serialize one validated rooted subgraph into a deterministic textual manifest.
-///
-/// The manifest excludes process-local ownership tokens. It is intentionally
-/// sensitive to local construction indices and therefore serves provenance and
-/// reproducibility, not graph-isomorphism canonicalization.
-pub fn canonical_rooted_manifest(
-    ir: &CategoricalAttentionIr,
-    root: NodeId,
-) -> Result<String, ProvenanceError> {
-    validate_rooted_subgraph(ir, root)?;
-
-    let mut reachable = Reachable::default();
-    let mut visiting = BTreeSet::new();
-    let mut validated_nodes = BTreeSet::new();
-    validate_node(
-        ir,
-        root,
-        &mut reachable,
-        &mut visiting,
-        &mut validated_nodes,
-    )?;
-    let object_ids = reachable.objects.values().copied().collect::<Vec<_>>();
-    let mut validated_objects = BTreeSet::new();
-    let mut names = BTreeMap::new();
-    for object in object_ids {
-        validate_object(
-            ir,
-            object,
-            &mut reachable,
-            &mut validated_objects,
-            &mut names,
-        )?;
-    }
-
-    let mut output = String::new();
-    output.push_str(ROOTED_MANIFEST_CONTRACT);
-    output.push('\n');
-    output.push_str("ir_contract=");
-    output.push_str(CATEGORICAL_IR_CONTRACT);
-    output.push('\n');
-    output.push_str(&format!("root={}\n", root.index()));
-
-    for (index, object_id) in &reachable.objects {
-        let object = ir.object(*object_id)?;
-        output.push_str(&format!(
-            "object|{index}|name_hex={}|dim={}|kind={}",
-            hex_bytes(object.name().as_bytes()),
-            object.dimension(),
-            object_kind_token(object.kind())
-        ));
-        if let Some(reduction) = ir.coordinate_reduction(*object_id)? {
-            output.push_str("|reduction=");
-            output.push_str(&reduction.ambient_dim().to_string());
-            output.push(':');
-            push_usize_list(&mut output, reduction.kept_coordinates());
-        } else {
-            output.push_str("|reduction=none");
-        }
-        output.push('\n');
-    }
-
-    for (index, node_id) in &reachable.nodes {
-        let node = ir.node(*node_id)?;
-        output.push_str(&format!(
-            "node|{index}|domain={}|codomain={}|op=",
-            node.domain().index(),
-            node.codomain().index()
-        ));
-        match node.kind() {
-            IrNodeKind::LinearMap(map) => {
-                output.push_str("linear|bits=");
-                for (position, value) in map.entries().iter().enumerate() {
-                    if position > 0 {
-                        output.push(',');
-                    }
-                    output.push_str(&format!("{:016x}", value.to_bits()));
-                }
-            }
-            IrNodeKind::Identity => output.push_str("identity"),
-            IrNodeKind::Compose { outer, inner } => {
-                output.push_str(&format!(
-                    "compose:{}:{}",
-                    outer.index(),
-                    inner.index()
-                ));
-            }
-            IrNodeKind::Dagger { source } => {
-                output.push_str(&format!("dagger:{}", source.index()));
-            }
-            IrNodeKind::NonlinearBoundary { boundary } => {
-                output.push_str("boundary:");
-                output.push_str(boundary_token(*boundary));
-            }
-        }
-        output.push('\n');
-    }
-
-    Ok(output)
+    Ok(reachable)
 }
 
 fn validate_node(
@@ -395,7 +430,9 @@ fn validate_node(
 
     let node = ir.node(node_id)?;
     reachable.nodes.insert(index, node_id);
-    reachable.objects.insert(node.domain().index(), node.domain());
+    reachable
+        .objects
+        .insert(node.domain().index(), node.domain());
     reachable
         .objects
         .insert(node.codomain().index(), node.codomain());
@@ -404,7 +441,8 @@ fn validate_node(
 
     let has_boundary = match node.kind() {
         IrNodeKind::LinearMap(map) => {
-            if map.domain_dim() != domain.dimension() || map.codomain_dim() != codomain.dimension() {
+            if map.domain_dim() != domain.dimension() || map.codomain_dim() != codomain.dimension()
+            {
                 return Err(ProvenanceError::LinearMapDimensionMismatch { node: index });
             }
             false
@@ -608,28 +646,76 @@ fn first_boundary(
     let result = match ir.node(node_id)?.kind() {
         IrNodeKind::LinearMap(_) | IrNodeKind::Identity => None,
         IrNodeKind::NonlinearBoundary { boundary } => Some(*boundary),
-        IrNodeKind::Compose { outer, inner } => first_boundary(ir, *outer, visiting)?
-            .or(first_boundary(ir, *inner, visiting)?),
+        IrNodeKind::Compose { outer, inner } => {
+            first_boundary(ir, *outer, visiting)?.or(first_boundary(ir, *inner, visiting)?)
+        }
         IrNodeKind::Dagger { source } => first_boundary(ir, *source, visiting)?,
     };
     visiting.remove(&node_id.index());
     Ok(result)
 }
 
-fn object_kind_token(kind: &HilbertObjectKind) -> String {
+fn ordinals(indices: impl IntoIterator<Item = usize>) -> BTreeMap<usize, usize> {
+    indices
+        .into_iter()
+        .enumerate()
+        .map(|(ordinal, index)| (index, ordinal))
+        .collect()
+}
+
+fn mapped_object_ordinal(
+    ordinals: &BTreeMap<usize, usize>,
+    object: ObjectId,
+) -> Result<usize, ProvenanceError> {
+    ordinals
+        .get(&object.index())
+        .copied()
+        .ok_or(ProvenanceError::MissingObjectOrdinal {
+            object: object.index(),
+        })
+}
+
+fn mapped_node_ordinal(
+    ordinals: &BTreeMap<usize, usize>,
+    node: NodeId,
+) -> Result<usize, ProvenanceError> {
+    ordinals
+        .get(&node.index())
+        .copied()
+        .ok_or(ProvenanceError::MissingNodeOrdinal { node: node.index() })
+}
+
+fn object_kind_token(
+    kind: &HilbertObjectKind,
+    object_ordinals: &BTreeMap<usize, usize>,
+) -> Result<String, ProvenanceError> {
     match kind {
-        HilbertObjectKind::Atomic => "atomic".to_owned(),
+        HilbertObjectKind::Atomic => Ok("atomic".to_owned()),
         HilbertObjectKind::DirectSum(parts) => {
             let mut token = "direct_sum:".to_owned();
-            push_id_list(&mut token, parts.iter().map(|id| id.index()));
-            token
+            push_mapped_object_list(&mut token, parts, object_ordinals)?;
+            Ok(token)
         }
         HilbertObjectKind::TensorProduct(parts) => {
             let mut token = "tensor_product:".to_owned();
-            push_id_list(&mut token, parts.iter().map(|id| id.index()));
-            token
+            push_mapped_object_list(&mut token, parts, object_ordinals)?;
+            Ok(token)
         }
     }
+}
+
+fn push_mapped_object_list(
+    output: &mut String,
+    objects: &[ObjectId],
+    ordinals: &BTreeMap<usize, usize>,
+) -> Result<(), ProvenanceError> {
+    for (position, object) in objects.iter().enumerate() {
+        if position > 0 {
+            output.push(',');
+        }
+        output.push_str(&mapped_object_ordinal(ordinals, *object)?.to_string());
+    }
+    Ok(())
 }
 
 fn boundary_token(boundary: NonlinearBoundaryKind) -> &'static str {
@@ -651,11 +737,7 @@ fn hex_bytes(bytes: &[u8]) -> String {
 }
 
 fn push_usize_list(output: &mut String, values: &[usize]) {
-    push_id_list(output, values.iter().copied());
-}
-
-fn push_id_list(output: &mut String, values: impl IntoIterator<Item = usize>) {
-    for (position, value) in values.into_iter().enumerate() {
+    for (position, value) in values.iter().enumerate() {
         if position > 0 {
             output.push(',');
         }
@@ -666,15 +748,28 @@ fn push_id_list(output: &mut String, values: impl IntoIterator<Item = usize>) {
 #[cfg(test)]
 mod tests {
     use super::{
-        ROOTED_MANIFEST_CONTRACT, ProvenanceError, canonical_rooted_manifest,
+        ProvenanceError, ROOTED_MANIFEST_CONTRACT, canonical_rooted_manifest,
         validate_rooted_subgraph,
     };
     use crate::experimental::tdi23_categorical::RealLinearMap;
-    use crate::experimental::tdi23_ir::{CategoricalAttentionIr, NonlinearBoundaryKind};
+    use crate::experimental::tdi23_ir::{CategoricalAttentionIr, NodeId, NonlinearBoundaryKind};
     use crate::experimental::tdi23_reduction::CoordinateReduction;
 
-    fn build_linear_fixture(value: f64) -> (CategoricalAttentionIr, crate::experimental::tdi23_ir::NodeId) {
+    fn build_linear_fixture(value: f64) -> (CategoricalAttentionIr, NodeId) {
         let mut ir = CategoricalAttentionIr::new();
+        let h = ir.add_atomic_object("H", 2).expect("H");
+        let k = ir.add_atomic_object("K", 1).expect("K");
+        let map = RealLinearMap::new(2, 1, vec![value, 2.0]).expect("map");
+        let node = ir.add_linear_map(h, k, map).expect("linear node");
+        (ir, node)
+    }
+
+    fn build_linear_fixture_with_unreachable_prefix(
+        value: f64,
+    ) -> (CategoricalAttentionIr, NodeId) {
+        let mut ir = CategoricalAttentionIr::new();
+        let unused = ir.add_atomic_object("UNUSED", 3).expect("unused");
+        let _unused_identity = ir.add_identity(unused).expect("unused identity");
         let h = ir.add_atomic_object("H", 2).expect("H");
         let k = ir.add_atomic_object("K", 1).expect("K");
         let map = RealLinearMap::new(2, 1, vec![value, 2.0]).expect("map");
@@ -684,7 +779,10 @@ mod tests {
 
     #[test]
     fn tdi23_1_manifest_contract_is_versioned() {
-        assert_eq!(ROOTED_MANIFEST_CONTRACT, "tdi23.1-rooted-ir-manifest-v1");
+        assert_eq!(
+            ROOTED_MANIFEST_CONTRACT,
+            "tdi23.1-rooted-ir-manifest-v1"
+        );
     }
 
     #[test]
@@ -695,6 +793,17 @@ mod tests {
         let right_manifest = canonical_rooted_manifest(&right, right_root).expect("right manifest");
         assert_eq!(left_manifest, right_manifest);
         assert!(left_manifest.starts_with(ROOTED_MANIFEST_CONTRACT));
+    }
+
+    #[test]
+    fn tdi23_1_manifest_ignores_unreachable_prefix() {
+        let (plain, plain_root) = build_linear_fixture(1.0);
+        let (prefixed, prefixed_root) = build_linear_fixture_with_unreachable_prefix(1.0);
+        let plain_manifest = canonical_rooted_manifest(&plain, plain_root).expect("plain manifest");
+        let prefixed_manifest =
+            canonical_rooted_manifest(&prefixed, prefixed_root).expect("prefixed manifest");
+        assert_eq!(plain_manifest, prefixed_manifest);
+        assert!(!prefixed_manifest.contains("UNUSED"));
     }
 
     #[test]
@@ -733,9 +842,7 @@ mod tests {
         let mut sum_ir = CategoricalAttentionIr::new();
         let a = sum_ir.add_atomic_object("A", 2).expect("A");
         let b = sum_ir.add_atomic_object("B", 2).expect("B");
-        let sum = sum_ir
-            .add_direct_sum_object("AB", &[a, b])
-            .expect("sum");
+        let sum = sum_ir.add_direct_sum_object("AB", &[a, b]).expect("sum");
         let sum_root = sum_ir.add_identity(sum).expect("sum identity");
 
         let mut tensor_ir = CategoricalAttentionIr::new();
