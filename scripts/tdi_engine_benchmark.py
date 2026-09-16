@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+from fractions import Fraction
 import hashlib
 import json
 import math
@@ -35,6 +36,11 @@ from tdi_hub_client import HubClient
 from tdi_hub_fixture import prepare_fixture
 from tdi_observability import OTLPClient, prepare_otlp
 from tdi_physical_telemetry import capacity_snapshot, measured_process
+
+DEPLOYMENT_MODULES = ('tdi_engine_benchmark.py', 'tdi_engine_store.py', 'tdi_engine_runtime.py', 'tdi_experiment_supervisor.py',
+                      'tdi_hub_client.py', 'tdi_hub_fixture.py', 'tdi_physical_telemetry.py', 'tdi_observability.py',
+                      'tdi_artifact_contract.py', 'tdi_execution_graph.py', 'tdi_hub_edge_contract.py', 'tdi_hub_admission_contract.py',
+                      'tdi_experiment_contract.py', 'tdi_engine_cache.py', 'tdi_engine.py', 'tdi_engine_archive.py')
 
 
 def proc_io():
@@ -66,9 +72,43 @@ def hardware_environment():
             mounts.append((len(mount.parts), {"filesystem_type": after[0], "mount_options": fields[5].split(','),
                 "semantic_options": [x for x in options if '=' not in x or x.split('=')[0] in ('fsync', 'index', 'metacopy', 'data', 'barrier', 'sync')]}))
     filesystem = max(mounts, key=lambda x: x[0])[1] if mounts else None
-    return {"visible_cpu": cpu or None, "temporary_filesystem": filesystem,
+    total_memory = next((int(line.split()[1]) * 1024 for line in Path('/proc/meminfo').read_text().splitlines() if line.startswith('MemTotal:')), None)
+    return {"visible_cpu": cpu or None, "visible_memory_total_bytes": total_memory, "temporary_filesystem": filesystem,
             "storage_durability_qualified": False,
             "storage_scope": 'latency on the visible filesystem; successful fsync is not a power-loss experiment'}
+
+
+def stable_capacity(snapshot):
+    """Compare stable effective limits, excluding time-varying free memory/counters.
+
+    Unknown capacity is not comparable. CPU quotas are reduced rational core
+    budgets; memory uses the minimum finite visible ancestor hard limit. This
+    does not infer hidden ancestor limits outside the observed namespace.
+    """
+    try:
+        if snapshot['capacity']['status'] != 'available': return None
+        quotas, memory, cpu_limits, memory_limits = [], [], [], []
+        slots = snapshot['capacity']['cpu_slots']
+        if type(slots) is not int or slots <= 0: return None
+        for reading in snapshot['readings']:
+            if reading['sensor'].endswith('/cpu.max'):
+                quota, period = reading['raw'].split()
+                if int(period) <= 0 or quota != 'max' and int(quota) < 0: return None
+                cpu_limits.append((quota, int(period)))
+                if quota != 'max': quotas.append(Fraction(int(quota), int(period)))
+            elif reading['sensor'].endswith('/memory.max'):
+                if reading.get('status') == 'unlimited-at-this-level':
+                    memory_limits.append('max')
+                elif type(reading.get('limit')) is int and reading['limit'] >= 0:
+                    memory.append(reading['limit']); memory_limits.append(str(reading['limit']))
+                else: return None
+        return {'cpu_slots': slots,
+                'cpu_quota_cores': str(min(quotas)) if quotas else 'unlimited-visible',
+                'cpu_limits': sorted(cpu_limits), 'memory_limits': sorted(memory_limits),
+                'memory_hard_limit_bytes': min(memory) if memory else None,
+                'scope': snapshot['scope']}
+    except (KeyError, TypeError, ValueError, ZeroDivisionError, AttributeError):
+        return None
 
 
 def measure(function):
@@ -99,6 +139,7 @@ def journal_case(root, count, payload_bytes):
     def write():
         for i in range(count):
             journal.append({"kind": "Start", "index": i})
+            # Distinct payload objects exercise retained result memory.
             journal.append({"kind": "Finish", "index": i, "result": {"status": "microbenchmark", "payload": str(i).zfill(payload_bytes)}})
     try:
         _, writing = measure(write)
@@ -239,6 +280,7 @@ def hub_case(root, count, concurrency, hubd, worker):
 
 def catalogue_case(root, count):
     """Measure actual registry writes and queries over explicitly synthetic rows."""
+    # No Hub execution or result is asserted for these inventory-only records.
     with EngineStore(root / 'catalogue.sqlite') as store:
         def populate():
             for i in range(count):
@@ -277,26 +319,26 @@ def run_case(case, hubd, worker):
 
 
 def numeric_metrics(value, prefix=''):
-    """Flatten comparable physical measurements while retaining sensor numeric encodings."""
+    """Flatten physical measurements for comparisons; exclude counters and IDs."""
     found = {}
     if isinstance(value, dict):
         for key, item in value.items():
             name = prefix + '/' + key
-            metric = key.endswith(('_ns', '_bytes', '_seconds', '_joules'))
-            if metric and type(item) is int and item >= 0:
-                found[name] = item
-            elif metric and isinstance(item, str) and item.isascii() and item.isdigit():
-                found[name] = int(item)
-            elif metric and type(item) is float and math.isfinite(item) and item >= 0:
-                found[name] = item
-            elif isinstance(item, dict):
-                found.update(numeric_metrics(item, name))
+            if key.endswith(('_ns', '_bytes', '_seconds', '_joules')):
+                if type(item) is int and item >= 0:
+                    found[name] = item
+                elif isinstance(item, str) and item.isascii() and item.isdigit() and len(item) <= 16 and int(item) <= 2**53 - 1:
+                    found[name] = int(item)
+                elif type(item) is float and math.isfinite(item) and item >= 0:
+                    found[name] = item
+            elif isinstance(item, dict): found.update(numeric_metrics(item, name))
     return found
 
 
 def summarize(records):
     """Report raw-observation median/min/max without statistical coverage claims."""
-    metrics = [numeric_metrics(r['measurements']) for r in records if r['phase'] == 'measured']
+    metrics = [numeric_metrics(r['measurements']) | numeric_metrics(r.get('outer_process', {}), '/whole_case_process')
+               for r in records if r['phase'] == 'measured']
     if not metrics: raise durable.ContractError('no measured benchmark repetitions')
     keys = set.intersection(*(set(m) for m in metrics))
     return {key: {"median": statistics.median(m[key] for m in metrics), "min": min(m[key] for m in metrics),
@@ -343,11 +385,7 @@ def main(argv=None):
         environment = {"python": platform.python_version(), "platform": platform.platform(), "machine": platform.machine(),
                        "sqlite": sqlite3.sqlite_version, "cpu_affinity": sorted(os.sched_getaffinity(0)),
                        "hardware": hardware_environment(), "capacity": capacity}
-        modules = ('tdi_engine_benchmark.py', 'tdi_engine_store.py', 'tdi_engine_runtime.py', 'tdi_engine_cache.py',
-                   'tdi_experiment_supervisor.py', 'tdi_hub_client.py', 'tdi_hub_fixture.py', 'tdi_physical_telemetry.py',
-                   'tdi_observability.py', 'tdi_artifact_contract.py', 'tdi_execution_graph.py', 'tdi_hub_edge_contract.py',
-                   'tdi_hub_admission_contract.py', 'tdi_experiment_contract.py')
-        source_files = {name: durable.file_digest(Path(__file__).with_name(name)) for name in modules}
+        source_files = {name: durable.file_digest(Path(__file__).with_name(name)) for name in DEPLOYMENT_MODULES}
         plan = {"schema": 1, "kind": "tdi-engine-benchmark-plan", "scope": 'non-final public software; serial cases; no GPU/energy claim',
                 "source_commit": args.source_commit, "hub_source_commit": args.hub_source_commit,
                 "files": source_files, "binary_sha256": {"hubd": durable.file_digest(args.hubd), "worker": durable.file_digest(args.worker)},
@@ -378,7 +416,11 @@ def main(argv=None):
                 if failure: break
             if failure: break
         summaries = [{"case": case, "metrics": summarize([r for r in records if r['case'] == case])} for case in plan['cases']] if failure is None else []
+        capacity_after = capacity_snapshot()
+        if stable_capacity(capacity_after) != stable_capacity(capacity):
+            failure = 'effective cgroup capacity changed during measurement'
         report = {"schema": 1, "kind": "tdi-engine-benchmark", "plan": plan, "records": records, "summary": summaries,
+                  "capacity_after": capacity_after,
                   "status": 'measured' if failure is None else 'incomplete', "error": failure,
                   "scientific_verdict": 'not-assessed', "comparison": None}
         if baseline and failure is None: report['comparison'] = compare(baseline, report, policy)
@@ -421,46 +463,17 @@ def validate_baseline(baseline, policy):
         seen.add(key)
 
 
-def stable_capacity(value):
-    """Extract stable effective cgroup constraints, excluding timestamps/usage noise."""
-    if not isinstance(value, dict):
-        return None
-    capacity = value.get('capacity')
-    readings = value.get('readings')
-    if not isinstance(capacity, dict) or capacity.get('status') != 'available' or not isinstance(readings, list):
-        return None
-    cpu_limits, memory_limits = [], []
-    for reading in readings:
-        if not isinstance(reading, dict):
-            return None
-        sensor = reading.get('sensor', '')
-        if sensor.endswith('/cpu.max'):
-            raw = reading.get('raw')
-            if not isinstance(raw, str):
-                return None
-            cpu_limits.append(raw)
-        elif sensor.endswith('/memory.max'):
-            if reading.get('status') == 'unlimited-at-this-level':
-                memory_limits.append('max')
-            elif type(reading.get('limit')) is int and reading['limit'] >= 0:
-                memory_limits.append(str(reading['limit']))
-            else:
-                return None
-    if type(capacity.get('cpu_slots')) is not int or capacity['cpu_slots'] <= 0:
-        return None
-    return {"cpu_slots": capacity['cpu_slots'], "cpu_limits": cpu_limits, "memory_limits": memory_limits}
-
-
 def compare(baseline, current, policy):
     """Compare only matching workloads/environment, retaining every selected ratio."""
     old, new = baseline['plan'], current['plan']
     fields = ('python', 'platform', 'machine', 'sqlite', 'cpu_affinity', 'hardware')
-    old_capacity = stable_capacity(old['environment'].get('capacity'))
-    new_capacity = stable_capacity(new['environment'].get('capacity'))
-    if (old['cases'] != new['cases'] or old['repetitions'] != new['repetitions'] or old['warmup'] != new['warmup']
-            or any(old['environment'][f] != new['environment'][f] for f in fields)
-            or old_capacity is None or new_capacity is None or old_capacity != new_capacity):
-        return {"status": 'incompatible', "reason": 'workload or declared effective environment/cgroup capacity differs', "metrics": []}
+    if old['cases'] != new['cases'] or old['repetitions'] != new['repetitions'] or old['warmup'] != new['warmup'] or any(old['environment'][f] != new['environment'][f] for f in fields):
+        return {"status": 'incompatible', "reason": 'workload or declared environment differs', "metrics": []}
+    old_capacity, new_capacity = (stable_capacity(p['environment'].get('capacity', {})) for p in (old, new))
+    if old_capacity is None or new_capacity is None or old_capacity != new_capacity:
+        return {"status": 'incompatible', "reason": 'stable effective cgroup capacity differs or is unknown', "metrics": []}
+    if any(set(DEPLOYMENT_MODULES) - set(p.get('files', {})) for p in (old, new)):
+        return {"status": 'incompatible', "reason": 'baseline or candidate lacks the complete project source manifest', "metrics": []}
     metrics = []
     for limit in policy['limits']:
         a = next(row for row in baseline['summary'] if row['case'] == limit['case'])['metrics'][limit['metric']]['median']
