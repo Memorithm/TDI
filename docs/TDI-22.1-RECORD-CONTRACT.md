@@ -34,14 +34,19 @@ Field order is exactly:
 24. `dot_lane_count`
 25. `comparison_count`
 
-## Scalar and collection encoding
+## Scalar encoding
 
 - unsigned integers: minimal base-10 ASCII, no sign, no leading zeros except `0`;
-- binary64 scalar: `0x` followed by exactly 16 lowercase hex digits from `to_bits()`;
-- vector/list of binary64 bits: comma-separated scalar encodings with no spaces, enclosed in `[` and `]`;
+- binary64 score scalar: `0x` followed by exactly 16 lowercase hex digits from `to_bits()`;
 - boolean: `0` or `1` only;
 - absent selected identity: `none`; otherwise unsigned integer;
 - no rejection: `none`.
+
+## Resource-field semantics
+
+`query_bits`, `key_bits`, `value_bits`, `position_bits`, `dynamic_state_bits`, and `static_parameter_bits` are **unsigned integer bit counts**. They are not payload dumps or lists of floating-point values. They quantify candidate-visible/retained storage according to the frozen resource ledger and are always present, including when zero.
+
+`temporary_slots`, `add_count`, `mul_count`, `cross_count`, `dot_lane_count`, and `comparison_count` are unsigned integer semantic operation/storage counts. They are not wall-clock measurements.
 
 ## Enum tokens
 
@@ -55,12 +60,4 @@ Field order is exactly:
 
 `none`, `malformed_episode`, `non_finite_input`, `non_finite_derived`, `invalid_geometry`, `out_of_bounds`, `missing_target`, `duplicate_target`, `length_mismatch`, `unresolved_protocol_parameter`, `arithmetic_overflow`, `unexpected_extra_output`, `ambiguous_target`, `retry_budget_exhausted`, `ambiguous_t1_top`.
 
-No implementation-defined enum formatting is permitted.
-
-## Bit-list semantics
-
-`query_bits`, `key_bits`, `value_bits`, and `position_bits` contain the candidate-visible binary64 payload in the exact logical lane order defined by the arm contract. When a payload class is absent its list is `[]`; it must not be omitted.
-
-`dynamic_state_bits` and `static_parameter_bits` are integer bit counts, not bit lists.
-
-A conforming encoder must be byte-deterministic for identical semantic records.
+No implementation-defined enum formatting is permitted. A conforming encoder must be byte-deterministic for identical semantic records.
