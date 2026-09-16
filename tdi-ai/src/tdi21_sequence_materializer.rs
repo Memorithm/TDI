@@ -4,9 +4,7 @@
 //! cases and the conflict-preserving distributional objective. Candidate-side
 //! code never receives the evaluator future probe or counterfactual outcomes.
 
-use super::tdi21_distributional_objective::{
-    AdmissionOutcomeSample, MAX_DISTRIBUTIONAL_SAMPLES,
-};
+use super::tdi21_distributional_objective::{AdmissionOutcomeSample, MAX_DISTRIBUTIONAL_SAMPLES};
 use super::tdi21_predicate_identifiability::{
     AdmissionAuditCase, IdentifiabilityError, audit_admission_case,
 };
@@ -91,9 +89,8 @@ pub fn materialize_admission_cases(
     let mut summary = MaterializationSummary::default();
 
     for (index, case) in cases.iter().enumerate() {
-        let audit = audit_admission_case(config, case).map_err(|source| {
-            SequenceMaterializationError::Case { index, source }
-        })?;
+        let audit = audit_admission_case(config, case)
+            .map_err(|source| SequenceMaterializationError::Case { index, source })?;
         let sample = AdmissionOutcomeSample {
             assignment: audit.predicates.assignment(),
             admit_succeeds: audit.admit.succeeds,
