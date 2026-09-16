@@ -1,0 +1,62 @@
+name: TDI NNIS partner contracts
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/tdi_nnis_partner_contract.py'
+      - 'scripts/test_tdi_nnis_partner_contract.py'
+      - 'scripts/tdi_partner_adapter_contract.py'
+      - 'scripts/test_tdi_partner_adapter_contract.py'
+      - 'scripts/tdi_hub_admission_contract.py'
+      - 'scripts/test_tdi_hub_admission_contract.py'
+      - 'scripts/tdi_hub_edge_contract.py'
+      - 'scripts/tdi_execution_graph.py'
+      - 'scripts/tdi_artifact_contract.py'
+      - 'scripts/tdi_experiment_contract.py'
+      - 'docs/engineering/industrialization-status.md'
+      - 'docs/engineering/lot-h-nnis-hardware-boundary.md'
+      - '.github/workflows/tdi-nnis-partner-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/tdi_nnis_partner_contract.py'
+      - 'scripts/test_tdi_nnis_partner_contract.py'
+      - 'scripts/tdi_partner_adapter_contract.py'
+      - 'scripts/test_tdi_partner_adapter_contract.py'
+      - 'scripts/tdi_hub_admission_contract.py'
+      - 'scripts/test_tdi_hub_admission_contract.py'
+      - 'scripts/tdi_hub_edge_contract.py'
+      - 'scripts/tdi_execution_graph.py'
+      - 'scripts/tdi_artifact_contract.py'
+      - 'scripts/tdi_experiment_contract.py'
+      - 'docs/engineering/industrialization-status.md'
+      - 'docs/engineering/lot-h-nnis-hardware-boundary.md'
+      - '.github/workflows/tdi-nnis-partner-contract.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile TDI NNIS adapter contracts
+        run: |
+          PYTHONPATH=scripts python3 -m py_compile \
+            scripts/tdi_experiment_contract.py \
+            scripts/tdi_artifact_contract.py \
+            scripts/tdi_execution_graph.py \
+            scripts/tdi_hub_edge_contract.py \
+            scripts/tdi_hub_admission_contract.py \
+            scripts/tdi_partner_adapter_contract.py \
+            scripts/tdi_nnis_partner_contract.py \
+            scripts/test_tdi_hub_admission_contract.py \
+            scripts/test_tdi_partner_adapter_contract.py \
+            scripts/test_tdi_nnis_partner_contract.py
+      - name: Run TDI NNIS adapter regressions
+        run: |
+          PYTHONPATH=scripts python3 -m unittest \
+            scripts/test_tdi_hub_admission_contract.py \
+            scripts/test_tdi_partner_adapter_contract.py \
+            scripts/test_tdi_nnis_partner_contract.py -v
