@@ -198,10 +198,7 @@ fn candidate_failures(
     let mut failures = 0u64;
     for state in development.states() {
         checked_add(&mut work.state_evaluations, 1)?;
-        checked_add(
-            &mut work.monomial_evaluations,
-            monomials.len() as u64,
-        )?;
+        checked_add(&mut work.monomial_evaluations, monomials.len() as u64)?;
         let outcomes = state.outcomes();
         let row_failures = if evaluate_sparse(constant, monomials, state.assignment()) {
             outcomes.failures_if_admit()
