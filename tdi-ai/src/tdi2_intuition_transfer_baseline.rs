@@ -31,6 +31,12 @@ pub struct TransferAblationResult {
     pub no_transfer_exact: bool,
 }
 
+fn canonical_expected(mut relations: Vec<ExpectedRelation>) -> Vec<ExpectedRelation> {
+    relations.sort_unstable();
+    relations.dedup();
+    relations
+}
+
 /// Compare structural transfer against the literal-role control on one frozen analogy case.
 pub fn evaluate_transfer_ablation(
     case: &AnalogyCase,
@@ -38,16 +44,8 @@ pub fn evaluate_transfer_ablation(
     let role_map = RoleMap::for_template(&case.template, case.bindings.clone())?;
     let transferred = transfer_relations(&case.template, &role_map);
     let transfer_exact = evaluate_transfer(&transferred, &case.expected).is_exact();
-    let baseline = literal_role_identity_baseline(&case.template);
-    let baseline_as_actual = baseline
-        .iter()
-        .map(|expected| super::tdi2_intuition_transfer::EntityRelation::new_for_reference(
-            expected.left,
-            expected.relation,
-            expected.right,
-        ))
-        .collect::<Vec<_>>();
-    let no_transfer_exact = evaluate_transfer(&baseline_as_actual, &case.expected).is_exact();
+    let no_transfer_exact = canonical_expected(literal_role_identity_baseline(&case.template))
+        == canonical_expected(case.expected.clone());
     Ok(TransferAblationResult { transfer_exact, no_transfer_exact })
 }
 
