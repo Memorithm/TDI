@@ -13,9 +13,7 @@ The packed selector is exactly:
 
 Bits 48..55 are therefore zero. Invalid cell ids or out-of-range episode indices fail closed before packing.
 
-The initial state is:
-
-`state_0 = split_domain XOR selector`.
+The initial state is `state_0 = split_domain XOR selector`.
 
 Development domain: `0x5444493232444556`.
 Validation domain: `0x544449323256414c`.
@@ -46,9 +44,9 @@ The subtraction is signed integer arithmetic before binary64 conversion. This yi
 
 Supplied-coordinate component:
 
-`quarter_step(w) = ((w mod 17) - 8) / 4`.
+`quarter_step(w) = ((w mod 15) - 7) / 4`.
 
-The subtraction is signed integer arithmetic before binary64 conversion. This yields exactly the 17 quarter-integers `-2..+2`.
+The subtraction is signed integer arithmetic before binary64 conversion. This yields exactly the 15 quarter-integers `-1.75..+1.75`, matching the F1 derived-bound proof frozen in `TDI-22.1-FREEZE.md`.
 
 ## Retry semantics
 
@@ -56,6 +54,6 @@ An evaluator-owned ambiguous target does not rewind the stream. The complete que
 
 For F3, nuisance geometry is generated only after a unique target exists, so ambiguous-target attempts consume no nuisance-position words.
 
-A T0 tie used by T1 is **not** a generator retry condition. It produces the T1-only rejection `AmbiguousT1Top`, as frozen by `TDI-22.1-FREEZE.md`.
+A T0 tie used by T1 is **not** a generator retry condition. It produces the T1-only rejection `AmbiguousT1Top`.
 
 No final/confirmatory seed domain is defined here.
