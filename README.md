@@ -30,7 +30,7 @@ The intended output is therefore **code + preregistration + evaluator + provenan
 | **TDI-6.1–6.7** | **Non-exact frontier** | ✅ Completed line | Extends controls to literal spectral gap, nonlinear models, information decomposition, causal probes and cross-generator transfer under declared floating-point discipline. |
 | **TDI-6.8** | **Transportable Ordering Across Generator Families** | 🟠 Preregistered / research line | Tests whether rank ordering transports more robustly than absolute calibration across fresh generator-family populations. |
 | **TDI-7.x** | **Attention / Memory** | 🟠 Active | Intervention-conditioned recovery, heterogeneity, long-horizon joint information and identifiability in deterministic attention/memory tasks. |
-| **TDI-8.x** | **Recurrent Associative Architecture** | 🟠 Active | Matched-budget A0/A1/A2/A3 programme spanning full-history reference, bounded recurrent state, associative memory and VSA/holographic workspace. |
+| **TDI-8.x** | **Recurrent Associative Architecture** | 🟠 Active | Matched-budget A0/A1/A2/A3 programme spanning full-history reference, bounded recurrent state, bounded associative memory and VSA/holographic workspace. |
 | **TDI-9.x** | **Autonomous Adaptive Inference Dynamics** | 🟠 Active | Fixed/static/adaptive policy ladder plus Boolean policy synthesis over leakage-safe trajectory predicates. |
 | **TDI-10.x** | **Operator / Resolvent Research** | 🟠 Active | Jacobi/tridiagonal operators, shifted resolvents, Schur cavities, Green functions, finite transport and explicitly classified exact/asymptotic claims. |
 | **TDI-11.x** | **Hallucination Dynamics & Control** | 🟠 Active bootstrap | Controlled worlds, measurable precursors, causal interventions and bounded verification/recovery/abstention policies. |
@@ -44,10 +44,10 @@ The intended output is therefore **code + preregistration + evaluator + provenan
 | **TDI-19.x** | **Approximate Submodularity of Scientific Discovery** | 🟠 Active Stage-0 bootstrap; not frozen | Tests when greedy expected-information-gain-per-cost planning approaches stronger non-myopic scientific-search policies. |
 | **TDI-20.x** | **Convergence of an Autonomous Discovery Ecosystem** | 🟠 Active Stage-0 bootstrap; not frozen | Tests whether modular proposal, experiment, falsification/proof, optimization, deployment and observation improve held-out knowledge quality over repeated cycles. |
 | **TDI-21.x** | **Boolean Relational Architecture** | 🟠 Active Stage-0 development; not frozen | Tests attention-like functionality without attention scoring, with Boolean/F2/ANF relational routing and bounded causal memory separated from numerical controls. |
-| **TDI-22.x** | **Torsor Attention** | 🟠 Active Stage-0 bootstrap; not frozen | Studies six-component torsor/twist attention semantics, exact transport/factorization identities and matched six-component controls. |
+| **TDI-22.x** | **Torsor Attention** | 🟠 22.0/22.1 frozen; bounded non-final 22.2 implementation active | Frozen torsor semantics and matched controls; deterministic evaluator and P1–P5 generator infrastructure are merged, without a campaign result or final/confirmatory authorisation. |
 | **TDI-23.x** | **Categorical / Dagger Attention** | 🟠 Active TDI-23.1 development; not frozen | Typed categorical attention IR, real finite-dimensional dagger semantics, explicit nonlinear boundaries, global-reduction diagnostics, provenance and exact-equivalence tooling. |
 
-All Stage-0 lines marked **not frozen** remain development research. They do **not** authorize confirmatory/final execution, downstream product claims or hardware-performance claims.
+All Stage-0 lines marked **not frozen** remain development research. They do **not** authorize confirmatory/final execution, downstream product claims or hardware-performance claims. A frozen non-final contract such as TDI-22.1 likewise does not authorize final/confirmatory execution.
 
 ## Current research frontier
 
@@ -83,9 +83,11 @@ TDI-21.0 remains development-only and unfrozen. No trained-model, matched-total-
 
 ### TDI-22.x — Torsor Attention
 
-[`TDI-22.x`](docs/TDI-22-PROGRAMME.md) studies whether a six-component torsor/twist representation can provide useful attention semantics under matched controls. Stage 0 fixes an explicit three-dimensional sign convention and tests exact/bounded identities such as Varignon transport and direct-versus-factorized dual pairing.
+[`TDI-22.x`](docs/TDI-22-PROGRAMME.md) studies whether a six-component torsor/twist representation can provide useful attention semantics under matched controls. TDI-22.0 fixes and freezes the explicit three-dimensional sign convention and exact transport/factorization scaffolding; TDI-22.1 freezes the bounded non-final T0–T4 comparison contract, including matched controls, geometry families, splits and rejection rules.
 
-The critical future comparison is the full torsor score against a **matched six-component non-torsor control**, not merely against a lower-dimensional vector baseline. TDI-22.0 is active, **not frozen**, and makes no FLAT-ATTENTION, KV-memory or hardware-speed claim.
+TDI-22.2 is now the active bounded implementation stage. Its deterministic evaluator foundation and deterministic P1–P5 episode generator are merged on `main`. Those changes provide infrastructure only: they explicitly contain no full campaign execution or committed result payload, and they do not authorise T2, final/confirmatory execution, FLAT-ATTENTION integration or any hardware/performance claim.
+
+The critical scientific comparison remains the full torsor score against a **matched six-component non-torsor control**, not merely against a lower-dimensional vector baseline. Later TDI-22 stages remain gated by the frozen contract and evidence from preceding stages.
 
 ### TDI-23.x — Categorical / Dagger Attention
 
