@@ -138,8 +138,8 @@ def collect(store, plan, selections):
     """Select verified terminal catalogue batches, preserving every row identity.
 
     A selection names campaign/step/output. The artifact's payload must echo
-    the full plan identity and ordered row IDs. Failed or missing batches are
-    rejected; callers inspect their unchanged campaign evidence for diagnostics.
+    the full plan identity, row IDs and evaluated coordinate vectors. Failed or
+    missing batches are rejected; callers inspect unchanged campaign evidence.
     """
     plan = validate_plan(plan)
     if not isinstance(selections, list) or not 1 <= len(selections) <= 128:
@@ -180,13 +180,16 @@ def collect(store, plan, selections):
                 or not 1 <= len(batch["rows"]) <= 32):
             raise durable.ContractError("sensitivity result plan/unit/schema mismatch")
         for index, row in enumerate(batch["rows"]):
-            if not isinstance(row, dict) or set(row) != {"id", "ordinal", "value"} or type(row["ordinal"]) is not int or not 0 <= row["ordinal"] < len(plan["rows"]):
+            if (not isinstance(row, dict) or set(row) != {"id", "ordinal", "values", "value"}
+                    or type(row["ordinal"]) is not int or not 0 <= row["ordinal"] < len(plan["rows"])):
                 raise durable.ContractError("invalid sensitivity response row")
             expected = plan["rows"][row["ordinal"]]
-            if row["id"] != expected["id"] or row["id"] in rows:
-                raise durable.ContractError("duplicate or unplanned sensitivity response")
-            rows[row["id"]] = {**row, "value": finite(row["value"]), "source": {**selection,
-                "artifact_identity": evidence["artifact_identity"], "provenance_identity": evidence["provenance_identity"], "pointer": f"/rows/{index}/value"}}
+            expected_values = [repr(x) for x in expected["values"]]
+            if row["id"] != expected["id"] or row["values"] != expected_values or row["id"] in rows:
+                raise durable.ContractError("duplicate, unplanned or coordinate-mismatched sensitivity response")
+            rows[row["id"]] = {"id": row["id"], "ordinal": row["ordinal"], "value": finite(row["value"]),
+                "source": {**selection, "artifact_identity": evidence["artifact_identity"],
+                           "provenance_identity": evidence["provenance_identity"], "pointer": f"/rows/{index}/value"}}
         costs.append({**selection, "measurements": batch.get("cost_measurements"),
                       "status": "recorded" if batch.get("cost_measurements") is not None else "unavailable"})
     if len(rows) != len(plan["rows"]):
