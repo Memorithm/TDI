@@ -1,0 +1,84 @@
+name: TDI external tracking qualification
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/tdi_*'
+      - 'scripts/test_tdi_*'
+      - 'scripts/fixtures/tdi-catalogue-v1.sql'
+      - 'scripts/requirements-research-qualification.txt'
+      - 'tdi-ai/**'
+      - 'tdi-core/**'
+      - 'Cargo.*'
+      - 'docs/engineering/**'
+      - '.github/workflows/tdi-observability.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/tdi_*'
+      - 'scripts/test_tdi_*'
+      - 'scripts/fixtures/tdi-catalogue-v1.sql'
+      - 'scripts/requirements-research-qualification.txt'
+      - 'tdi-ai/**'
+      - 'tdi-core/**'
+      - 'Cargo.*'
+      - 'docs/engineering/**'
+      - '.github/workflows/tdi-observability.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tdi-observability-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  minimal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONPATH: scripts
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 -m unittest -v scripts/test_tdi_observability_unit.py scripts/test_tdi_engine_unit.py
+      - run: python3 scripts/tdi_engine.py doctor
+  external:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: integration-tdi
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONPATH: scripts
+      CARGO_INCREMENTAL: '0'
+      CARGO_BUILD_JOBS: '2'
+      RUSTFLAGS: '-C debuginfo=0'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: integration-tdi
+      - uses: actions/checkout@v7
+        with:
+          repository: Memorithm/scirust-hub
+          ref: ccdcb99a4573dbefb944af0df713101b100b5f78
+          path: integration-hub
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.89.0
+      - name: Build independent Hub checkout
+        working-directory: integration-hub
+        run: cargo build --locked -p scirust-hubd -p scirust-hub-worker
+      - name: Build TDI worker and optional Python qualification environment
+        run: |
+          cargo build --locked -p tdi-ai --example durable_worker
+          python3 -m venv .qualification-venv
+          .qualification-venv/bin/pip install -r scripts/requirements-research-qualification.txt
+      - name: Qualify real MLflow and OTLP delivery failures
+        env:
+          TDI_HUBD_BIN: ${{ github.workspace }}/integration-hub/target/debug/scirust-hubd
+          TDI_DURABLE_WORKER: ${{ github.workspace }}/integration-tdi/target/debug/examples/durable_worker
+          TDI_MLFLOW_BIN: ${{ github.workspace }}/integration-tdi/.qualification-venv/bin/mlflow
+        run: .qualification-venv/bin/python -m unittest -v scripts/test_tdi_observability_integration.py
