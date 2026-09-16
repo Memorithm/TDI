@@ -38,6 +38,8 @@ The bounded IR must represent:
 
 The IR is fail-closed.
 
+- `ObjectId` and `NodeId` are bound to the IR instance that created them. A handle from another graph must be rejected even when its numeric slot exists locally.
+- The mutable IR itself is not clonable in this slice, preventing two diverging graph instances from sharing one ownership token and later aliasing same-index handles.
 - Composition requires **exact identity of the middle object**, not merely equal dimensions.
 - A concrete linear map must match the dimensions of its declared domain and codomain objects.
 - A dagger may not be constructed across any nonlinear/algebraic boundary.
@@ -75,6 +77,7 @@ The IR does **not** claim that this reduction is lossless, generally functorial,
 TDI-23.1 development tests must include at least:
 
 - versioned IR contract;
+- rejection of object and node handles originating from another IR instance;
 - direct-sum versus tensor-product distinction;
 - rejection of composition across distinct same-dimension middle objects;
 - dagger/composition equivalence to the Stage-0 linear carrier;
