@@ -105,6 +105,17 @@ class Tests(unittest.TestCase):
         with self.assertRaises(graph.ExecutionGraphError):
             graph.canonical_graph(a)
 
+    def test_identity_version_fields_reject_boolean_aliases(self):
+        a = fixture()
+        a["schema"] = True
+        with self.assertRaisesRegex(graph.ExecutionGraphError, "execution graph schema"):
+            graph.canonical_graph(a)
+
+        a = fixture()
+        a["hub_contract"]["workflow_schema_version"] = True
+        with self.assertRaisesRegex(graph.ExecutionGraphError, "Hub workflow schema version"):
+            graph.canonical_graph(a)
+
     def test_workflow_name_matches_pinned_hub_boundary(self):
         a = fixture()
         a["name"] = "   "

@@ -128,7 +128,10 @@ def _expected_admission(graph):
 
 def _canonical_admission(admission, expected):
     _exact(admission, {"schema_version", "steps"}, "Hub workflow admission")
-    if admission["schema_version"] != HUB_WORKFLOW_ADMISSION_SCHEMA_VERSION:
+    if (
+        type(admission["schema_version"]) is not int
+        or admission["schema_version"] != HUB_WORKFLOW_ADMISSION_SCHEMA_VERSION
+    ):
         raise HubAdmissionContractError("unsupported Hub workflow admission schema version")
     if not isinstance(admission["steps"], dict):
         raise HubAdmissionContractError("Hub workflow admission steps must be an object")
@@ -289,7 +292,10 @@ def canonical_workflow_admission_binding(binding):
         },
         "Hub workflow admission binding",
     )
-    if binding["schema"] != HUB_WORKFLOW_ADMISSION_BINDING_SCHEMA:
+    if (
+        type(binding["schema"]) is not int
+        or binding["schema"] != HUB_WORKFLOW_ADMISSION_BINDING_SCHEMA
+    ):
         raise HubAdmissionContractError("unsupported Hub workflow admission binding schema")
     if binding["hub_repository"] != HUB_REPOSITORY:
         raise HubAdmissionContractError("Hub repository pin mismatch")
@@ -297,7 +303,10 @@ def canonical_workflow_admission_binding(binding):
     workflow = _canonical_uuid(binding["workflow"], "Hub workflow id")
     if binding["workflow_model_version"] != HUB_WORKFLOW_MODEL_VERSION:
         raise HubAdmissionContractError("Hub workflow model version mismatch")
-    if binding["admission_schema_version"] != HUB_WORKFLOW_ADMISSION_SCHEMA_VERSION:
+    if (
+        type(binding["admission_schema_version"]) is not int
+        or binding["admission_schema_version"] != HUB_WORKFLOW_ADMISSION_SCHEMA_VERSION
+    ):
         raise HubAdmissionContractError("Hub workflow admission schema version mismatch")
 
     try:
