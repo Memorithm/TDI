@@ -30,6 +30,8 @@ pub mod development_campaign;
 pub mod tdi2_intuition;
 #[path = "tdi2_intuition_aggregation.rs"]
 pub mod tdi2_intuition_aggregation;
+#[path = "tdi2_intuition_consolidation.rs"]
+pub mod tdi2_intuition_consolidation;
 #[path = "tdi2_intuition_inference.rs"]
 pub mod tdi2_intuition_inference;
 #[path = "tdi2_intuition_matching.rs"]
