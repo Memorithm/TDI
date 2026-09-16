@@ -11,6 +11,7 @@ import argparse
 import copy
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import platform
@@ -98,7 +99,6 @@ def journal_case(root, count, payload_bytes):
     def write():
         for i in range(count):
             journal.append({"kind": "Start", "index": i})
-            # Distinct payload objects exercise retained result memory.
             journal.append({"kind": "Finish", "index": i, "result": {"status": "microbenchmark", "payload": str(i).zfill(payload_bytes)}})
     try:
         _, writing = measure(write)
@@ -239,7 +239,6 @@ def hub_case(root, count, concurrency, hubd, worker):
 
 def catalogue_case(root, count):
     """Measure actual registry writes and queries over explicitly synthetic rows."""
-    # No Hub execution or result is asserted for these inventory-only records.
     with EngineStore(root / 'catalogue.sqlite') as store:
         def populate():
             for i in range(count):
@@ -278,14 +277,20 @@ def run_case(case, hubd, worker):
 
 
 def numeric_metrics(value, prefix=''):
-    """Flatten physical measurements for comparisons; exclude counters and IDs."""
+    """Flatten comparable physical measurements while retaining sensor numeric encodings."""
     found = {}
     if isinstance(value, dict):
         for key, item in value.items():
             name = prefix + '/' + key
-            if type(item) is int and (key.endswith('_ns') or key.endswith('_bytes')):
+            metric = key.endswith(('_ns', '_bytes', '_seconds', '_joules'))
+            if metric and type(item) is int and item >= 0:
                 found[name] = item
-            elif isinstance(item, dict): found.update(numeric_metrics(item, name))
+            elif metric and isinstance(item, str) and item.isascii() and item.isdigit():
+                found[name] = int(item)
+            elif metric and type(item) is float and math.isfinite(item) and item >= 0:
+                found[name] = item
+            elif isinstance(item, dict):
+                found.update(numeric_metrics(item, name))
     return found
 
 
@@ -338,10 +343,10 @@ def main(argv=None):
         environment = {"python": platform.python_version(), "platform": platform.platform(), "machine": platform.machine(),
                        "sqlite": sqlite3.sqlite_version, "cpu_affinity": sorted(os.sched_getaffinity(0)),
                        "hardware": hardware_environment(), "capacity": capacity}
-        modules = ('tdi_engine_benchmark.py', 'tdi_engine_store.py', 'tdi_engine_runtime.py', 'tdi_experiment_supervisor.py',
-                   'tdi_hub_client.py', 'tdi_hub_fixture.py', 'tdi_physical_telemetry.py', 'tdi_observability.py',
-                   'tdi_artifact_contract.py', 'tdi_execution_graph.py', 'tdi_hub_edge_contract.py', 'tdi_hub_admission_contract.py',
-                   'tdi_experiment_contract.py')
+        modules = ('tdi_engine_benchmark.py', 'tdi_engine_store.py', 'tdi_engine_runtime.py', 'tdi_engine_cache.py',
+                   'tdi_experiment_supervisor.py', 'tdi_hub_client.py', 'tdi_hub_fixture.py', 'tdi_physical_telemetry.py',
+                   'tdi_observability.py', 'tdi_artifact_contract.py', 'tdi_execution_graph.py', 'tdi_hub_edge_contract.py',
+                   'tdi_hub_admission_contract.py', 'tdi_experiment_contract.py')
         source_files = {name: durable.file_digest(Path(__file__).with_name(name)) for name in modules}
         plan = {"schema": 1, "kind": "tdi-engine-benchmark-plan", "scope": 'non-final public software; serial cases; no GPU/energy claim',
                 "source_commit": args.source_commit, "hub_source_commit": args.hub_source_commit,
@@ -416,12 +421,46 @@ def validate_baseline(baseline, policy):
         seen.add(key)
 
 
+def stable_capacity(value):
+    """Extract stable effective cgroup constraints, excluding timestamps/usage noise."""
+    if not isinstance(value, dict):
+        return None
+    capacity = value.get('capacity')
+    readings = value.get('readings')
+    if not isinstance(capacity, dict) or capacity.get('status') != 'available' or not isinstance(readings, list):
+        return None
+    cpu_limits, memory_limits = [], []
+    for reading in readings:
+        if not isinstance(reading, dict):
+            return None
+        sensor = reading.get('sensor', '')
+        if sensor.endswith('/cpu.max'):
+            raw = reading.get('raw')
+            if not isinstance(raw, str):
+                return None
+            cpu_limits.append(raw)
+        elif sensor.endswith('/memory.max'):
+            if reading.get('status') == 'unlimited-at-this-level':
+                memory_limits.append('max')
+            elif type(reading.get('limit')) is int and reading['limit'] >= 0:
+                memory_limits.append(str(reading['limit']))
+            else:
+                return None
+    if type(capacity.get('cpu_slots')) is not int or capacity['cpu_slots'] <= 0:
+        return None
+    return {"cpu_slots": capacity['cpu_slots'], "cpu_limits": cpu_limits, "memory_limits": memory_limits}
+
+
 def compare(baseline, current, policy):
     """Compare only matching workloads/environment, retaining every selected ratio."""
     old, new = baseline['plan'], current['plan']
     fields = ('python', 'platform', 'machine', 'sqlite', 'cpu_affinity', 'hardware')
-    if old['cases'] != new['cases'] or old['repetitions'] != new['repetitions'] or old['warmup'] != new['warmup'] or any(old['environment'][f] != new['environment'][f] for f in fields):
-        return {"status": 'incompatible', "reason": 'workload or declared environment differs', "metrics": []}
+    old_capacity = stable_capacity(old['environment'].get('capacity'))
+    new_capacity = stable_capacity(new['environment'].get('capacity'))
+    if (old['cases'] != new['cases'] or old['repetitions'] != new['repetitions'] or old['warmup'] != new['warmup']
+            or any(old['environment'][f] != new['environment'][f] for f in fields)
+            or old_capacity is None or new_capacity is None or old_capacity != new_capacity):
+        return {"status": 'incompatible', "reason": 'workload or declared effective environment/cgroup capacity differs', "metrics": []}
     metrics = []
     for limit in policy['limits']:
         a = next(row for row in baseline['summary'] if row['case'] == limit['case'])['metrics'][limit['metric']]['median']
