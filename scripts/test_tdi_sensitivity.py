@@ -25,6 +25,7 @@ def protocol(method="morris", samples=16, *, ishigami=False):
                 "upper": math.pi if ishigami else 1, "baseline": .5 if method == "ablation" else None,
                 "intervention": 0 if method == "ablation" else None} for j in range(3)],
             "output_unit": "dimensionless", "samples": samples, "seed": "0", "max_evaluations": 4096,
+            "response": {"kind": "public-analytic/v1", "function": "ishigami" if ishigami else "additive"},
             "missing": "reject-incomplete", "assumptions": ["deterministic-response", "declared-one-factor-interventions" if method == "ablation" else "independent-uniform-factors"]}
 
 
@@ -152,6 +153,24 @@ class SensitivityTests(unittest.TestCase):
                 report = json.loads(paths["report"].read_text())
                 self.assertEqual(len(plan["rows"]), report["included_rows"])
                 hub.cli("sensitivity-analyze", "--plan", paths["plan"], "--campaign", key, "--output", paths["report"], *extra, expected_code=22)
+
+    def test_actual_altered_workflows_cannot_substitute_coordinates_or_response(self):
+        hub_fixture.OperationalIntegrationTests.setUpClass()
+        hub = hub_fixture.OperationalIntegrationTests(); self.addCleanup(hub.doCleanups); hub.setUp()
+        plan = sensitivity.make_plan(protocol("morris", 2))
+        spec = fixture.prepare(hub.client, plan, "additive")
+        with self.assertRaises(durable.ContractError): fixture.prepare(hub.client, plan, "ishigami")
+        for change in ("coordinates", "function"):
+            altered = copy.deepcopy(spec)
+            params = altered["graph"]["steps"][0]["parameters"]
+            if change == "coordinates": params["rows"][0]["values"][0] = "0.1234567"
+            else: params["function"] = "ishigami"
+            with EngineStore(hub.catalogue) as store:
+                key = runtime.submit(hub.client, store, altered, {})
+                self.assertEqual("completed", runtime.execute(hub.client, store, key)["phase"])
+                selectors = [{"campaign": key, "step": "batch-0", "output": "file:result"}]
+                with self.assertRaisesRegex(durable.ContractError, "frozen response, coordinates or component"):
+                    sensitivity.collect(store, plan, selectors)
 
 
 if __name__ == "__main__": unittest.main()

@@ -30,6 +30,7 @@ p = {
     "schema": 1, "purpose": "exploratory-sensitivity", "domain": "Development",
     "name": "additive-control", "method": "morris", "output_unit": "dimensionless",
     "samples": 8, "seed": "0", "max_evaluations": 32,
+    "response": {"kind": "public-analytic/v1", "function": "additive"},
     "missing": "reject-incomplete",
     "assumptions": ["deterministic-response", "independent-uniform-factors"],
     "factors": [{"name": f"x{i}", "unit": "dimensionless", "lower": 0, "upper": 1,
@@ -47,6 +48,13 @@ Limits are 1–8 factors, 4,096 evaluations, 16,384 coordinate scalars and a dec
 `max_evaluations` that covers the complete design. Budget violations fail before
 sampling. No sampler may discard observations, optimize its seed after results,
 or reinterpret a failed batch as zero output.
+
+The response function is frozen in the protocol before sampling. Analytic plans
+also pin the evaluator, its support files and Python binary. Collection
+reconstructs the exact expected component manifest, parameters and workflow;
+registration checks the manifest digest against the actual Hub. Editing a
+prepared workflow's coordinates, function, component or policy makes its results
+incompatible with the original plan, even when echoed row IDs remain unchanged.
 
 | Method | Design | Output and limitations |
 | --- | --- | --- |
@@ -113,7 +121,11 @@ blocked until upstream #1452 is fully qualified and the final merge is repinned.
 Use the literal returned ID in place of `CAMPAIGN_ID`. Ablation requires no
 SciRust executable. A generic consumer can select exact batches with
 `--selections selectors.json`, an array of `{campaign,step,output}` records,
-or supply a complete observation envelope using `--observations`. Direct
+or supply a complete observation envelope using `--observations`. External
+non-executing plans may declare `response` as `{kind: "declared-external/v1",
+name, implementation_sha256, configuration_sha256}` (the latter two are exact
+SHA-256 strings). Their catalogue collector requires a separately qualified
+adapter; this release accepts their explicit observation envelope only. Direct
 observation provenance is explicitly a caller assertion. The test module shows
 that envelope and exercises it against independent analytic references.
 
@@ -128,12 +140,14 @@ denominators, source references, costs, implementation identity and
 ## Executed qualification
 
 `scripts/test_tdi_sensitivity.py` requires the actual SciRust binary and Hub daemon
-and uses the optional Python profile. Five test methods cover three real CLI/Hub
+and uses the optional Python profile. Six test methods cover three real CLI/Hub
 campaigns, Morris and Sobol differences against official SALib analyzers on the
 Ishigami control (tolerance 5e-12), analytic additive shares (absolute tolerance
 0.015 at N=512), declared ablation effects, deterministic regeneration, incomplete
 and permuted inputs, duplicate sources, invalid domains/seeds/units/budgets and
-file overwrite refusal. Numerical agreement is not a universal estimator proof.
+file overwrite refusal. Two additionally executed, deliberately altered Hub
+workflows prove that substituted coordinates and a changed function are rejected
+before analysis. Numerical agreement is not a universal estimator proof.
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts \

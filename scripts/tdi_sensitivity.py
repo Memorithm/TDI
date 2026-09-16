@@ -27,13 +27,27 @@ SAMPLERS = {"SALib": "1.5.2", "numpy": "2.5.3", "scipy": "1.18.1"}
 def protocol(value):
     """Validate the complete design and declared budget before sampling."""
     fields = {"schema", "purpose", "domain", "name", "method", "factors", "output_unit",
-              "samples", "seed", "max_evaluations", "missing", "assumptions"}
+              "samples", "seed", "max_evaluations", "missing", "assumptions", "response"}
     if (not isinstance(value, dict) or set(value) != fields or type(value["schema"]) is not int
             or value["schema"] != 1 or value["purpose"] != "exploratory-sensitivity"
             or value["domain"] not in ("Development", "Validation")):
         raise durable.ContractError("invalid non-final sensitivity protocol")
     p = copy.deepcopy(value)
     label(p["name"]); label(p["output_unit"])
+    response = p["response"]
+    if not isinstance(response, dict):
+        raise durable.ContractError("the response function must be declared before sampling")
+    if response.get("kind") == "public-analytic/v1":
+        if set(response) != {"kind", "function"} or response["function"] not in ("additive", "ishigami"):
+            raise durable.ContractError("invalid public analytic response")
+    elif response.get("kind") == "declared-external/v1":
+        if set(response) != {"kind", "name", "implementation_sha256", "configuration_sha256"}:
+            raise durable.ContractError("invalid declared external response")
+        label(response["name"])
+        for field in ("implementation_sha256", "configuration_sha256"):
+            graphs._sha256(response[field], field)
+    else:
+        raise durable.ContractError("unsupported response contract")
     if p["method"] not in ("morris", "sobol", "ablation"):
         raise durable.ContractError("unsupported sensitivity method")
     if p["missing"] != "reject-incomplete":
@@ -118,15 +132,19 @@ def make_plan(value):
     protocol_id = identity("tdi-sensitivity-protocol/v1", p)
     rows = [{"id": identity("tdi-sensitivity-row/v1", {"protocol": protocol_id, "ordinal": i, "normalized": row}),
              "ordinal": i, "normalized": row, "values": physical[i]} for i, row in enumerate(normalized)]
+    implementation = p["response"]
+    if implementation["kind"] == "public-analytic/v1":
+        from tdi_sensitivity_fixture import deployment
+        implementation = deployment()
     plan = {"schema": 1, "kind": "tdi-sensitivity-plan", "protocol": p, "protocol_identity": protocol_id,
-            "generator": generator, "rows": rows}
+            "generator": generator, "response_implementation": implementation, "rows": rows}
     plan["identity"] = identity("tdi-sensitivity-plan/v1", plan)
     return plan
 
 
 def validate_plan(value):
     """Regenerate and compare the entire plan before preparing or analyzing it."""
-    if not isinstance(value, dict) or set(value) != {"schema", "kind", "protocol", "protocol_identity", "generator", "rows", "identity"}:
+    if not isinstance(value, dict) or set(value) != {"schema", "kind", "protocol", "protocol_identity", "generator", "response_implementation", "rows", "identity"}:
         raise durable.ContractError("invalid sensitivity plan envelope")
     p = make_plan(value["protocol"])
     if value != p:
@@ -138,10 +156,14 @@ def collect(store, plan, selections):
     """Select verified terminal catalogue batches, preserving every row identity.
 
     A selection names campaign/step/output. The artifact's payload must echo
-    the full plan identity, row IDs and evaluated coordinate vectors. Failed or
-    missing batches are rejected; callers inspect unchanged campaign evidence.
+    the full plan identity, ordered row IDs and evaluated coordinates. Failed or missing batches are
+    rejected; callers inspect their unchanged campaign evidence for diagnostics.
     """
     plan = validate_plan(plan)
+    if plan["protocol"]["response"]["kind"] != "public-analytic/v1":
+        raise durable.ContractError("external response collection requires a separately qualified adapter; direct observations remain caller assertions")
+    from tdi_sensitivity_fixture import build_campaign
+    _, expected_spec = build_campaign(plan)
     if not isinstance(selections, list) or not 1 <= len(selections) <= 128:
         raise durable.ContractError("requires 1..128 batch selectors")
     rows, seen = {}, set()
@@ -156,6 +178,8 @@ def collect(store, plan, selections):
         seen.add(key)
         if key[0] not in records:
             record = store.get(key[0]); spec = runtime.canonical_campaign(record["spec"])
+            if spec != expected_spec:
+                raise durable.ContractError("selected campaign differs from the frozen response, coordinates or component")
             if spec["domain"] != plan["protocol"]["domain"] or record["phase"] not in ("completed", "failed", "cancelled", "imported"):
                 raise durable.ContractError("sensitivity campaign is incomplete or in another domain")
             state, steps = runtime.validated_snapshot(spec, record["snapshot"])
@@ -176,20 +200,18 @@ def collect(store, plan, selections):
         batch = evidence["json"]
         if (not isinstance(batch, dict) or batch.get("plan_identity") != plan["identity"]
                 or batch.get("output_unit") != plan["protocol"]["output_unit"]
+                or batch.get("function") != plan["protocol"]["response"]["function"]
                 or batch.get("status") != "SensitivityEvaluated" or not isinstance(batch.get("rows"), list)
                 or not 1 <= len(batch["rows"]) <= 32):
             raise durable.ContractError("sensitivity result plan/unit/schema mismatch")
         for index, row in enumerate(batch["rows"]):
-            if (not isinstance(row, dict) or set(row) != {"id", "ordinal", "values", "value"}
-                    or type(row["ordinal"]) is not int or not 0 <= row["ordinal"] < len(plan["rows"])):
+            if not isinstance(row, dict) or set(row) != {"id", "ordinal", "values", "value"} or type(row["ordinal"]) is not int or not 0 <= row["ordinal"] < len(plan["rows"]):
                 raise durable.ContractError("invalid sensitivity response row")
             expected = plan["rows"][row["ordinal"]]
-            expected_values = [repr(x) for x in expected["values"]]
-            if row["id"] != expected["id"] or row["values"] != expected_values or row["id"] in rows:
-                raise durable.ContractError("duplicate, unplanned or coordinate-mismatched sensitivity response")
-            rows[row["id"]] = {"id": row["id"], "ordinal": row["ordinal"], "value": finite(row["value"]),
-                "source": {**selection, "artifact_identity": evidence["artifact_identity"],
-                           "provenance_identity": evidence["provenance_identity"], "pointer": f"/rows/{index}/value"}}
+            if row["id"] != expected["id"] or row["values"] != [repr(x) for x in expected["values"]] or row["id"] in rows:
+                raise durable.ContractError("duplicate or unplanned sensitivity response")
+            rows[row["id"]] = {"id": row["id"], "ordinal": row["ordinal"], "value": finite(row["value"]), "source": {**selection,
+                "artifact_identity": evidence["artifact_identity"], "provenance_identity": evidence["provenance_identity"], "pointer": f"/rows/{index}/value"}}
         costs.append({**selection, "measurements": batch.get("cost_measurements"),
                       "status": "recorded" if batch.get("cost_measurements") is not None else "unavailable"})
     if len(rows) != len(plan["rows"]):
