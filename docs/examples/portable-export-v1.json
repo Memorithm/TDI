@@ -1,0 +1,75 @@
+{
+  "artifacts": [
+    {
+      "access_class": "development",
+      "media_type": "text/plain; charset=utf-8",
+      "name": "input.txt",
+      "producer": null,
+      "role": "input",
+      "schema": 1,
+      "sha256": "cec961afc611ca290796c2cc9500015899b0f29df0e3c00de54e797cec228c92",
+      "size_bytes": 30
+    },
+    {
+      "access_class": "development",
+      "media_type": "text/plain; charset=utf-8",
+      "name": "result.txt",
+      "producer": {
+        "attempt_id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "experiment_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "plan_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "scientific_result_id": "5555555555555555555555555555555555555555555555555555555555555555",
+        "step_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "trial_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "role": "result",
+      "schema": 1,
+      "sha256": "7f7c33a035184c88261c03af30f6c984a28e51f2bb7c6d7d32bf3ba745e643ef",
+      "size_bytes": 31
+    }
+  ],
+  "experiment_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "kind": "tdi-portable-export",
+  "plan_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "provenance": [
+    {
+      "adapter_identity": "fixture-adapter/v1",
+      "attempt_id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "backend_identity": "fixture-backend/v1",
+      "checkpoint_id": null,
+      "dependencies": [
+        {
+          "identity": "runtime:fixture",
+          "name": "runtime"
+        },
+        {
+          "identity": "source:fixture",
+          "name": "tdi"
+        }
+      ],
+      "environment_identity": "fixture-environment/v1",
+      "experiment_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "inputs": [
+        {
+          "artifact_identity": "1af547d8713a6fa201a025b891cf881ded63fb0f9145f49d166a4ede25b00e73",
+          "sha256": "cec961afc611ca290796c2cc9500015899b0f29df0e3c00de54e797cec228c92"
+        }
+      ],
+      "outputs": [
+        {
+          "artifact_identity": "c8a2a1a80fa7b24df2bf954b3528ca779968e0066046e93e25899e48a2da989f",
+          "sha256": "7f7c33a035184c88261c03af30f6c984a28e51f2bb7c6d7d32bf3ba745e643ef"
+        }
+      ],
+      "plan_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "schema": 1,
+      "scientific_result_id": "5555555555555555555555555555555555555555555555555555555555555555",
+      "step_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "trial_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  ],
+  "roots": [
+    "220702f8d6e5841a75c5d1339bf168016ad733568f403739c736a5643c2ba2a9"
+  ],
+  "schema": 1
+}
