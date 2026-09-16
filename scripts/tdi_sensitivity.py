@@ -191,7 +191,7 @@ def collect(store, plan, selections):
         found = store.db.execute("SELECT evidence FROM results WHERE campaign=? AND step=? AND output=?", key).fetchone()
         if step is None or step["state"] != "succeeded" or found is None or key[2] not in record["spec"]["outputs"].get(key[1], {}):
             raise durable.ContractError("incomplete sensitivity batch; inspect the source campaign")
-        evidence = durable.strict_json(found[0], max_items=100000)
+        evidence = store.result(*key)
         descriptor = artifacts.canonical_artifact(evidence["descriptor"])
         if (descriptor["access_class"] != plan["protocol"]["domain"].lower()
                 or artifacts.artifact_identity(descriptor) != evidence["artifact_identity"]
