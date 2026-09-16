@@ -157,27 +157,84 @@ def _canonical_admission(admission, expected):
     }
 
 
-def bind_exact_workflow_admission(graph, workflow_response, *, artifact_bindings):
+def _root_artifact_digests(graph_value):
+    digests = set()
+    for step in graph_value["steps"]:
+        for source in step["inputs"].values():
+            if source["kind"] == "artifact":
+                digests.add(source["sha256"])
+    return digests
+
+
+def _canonical_root_artifact_bindings(graph_value, bindings):
+    """Prove every Graph/v1 root digest maps to the exact Hub artifact used.
+
+    The existing G1 HubArtifactBinding/v1 is the qualified digest-translation
+    evidence. G3 accepts no bare digest→UUID map because such a map cannot prove
+    that the Hub artifact selected for WorkflowSpec actually has Graph/v1's
+    declared portable SHA-256.
+    """
+    if not isinstance(bindings, dict):
+        raise HubAdmissionContractError("root_artifact_bindings must be an object")
+    expected = _root_artifact_digests(graph_value)
+    actual = set(bindings)
+    if actual != expected:
+        raise HubAdmissionContractError(
+            f"root artifact binding coverage mismatch; missing={sorted(expected - actual)!r}, "
+            f"extra={sorted(actual - expected)!r}"
+        )
+    canonical = {}
+    artifact_ids = {}
+    for digest in sorted(expected):
+        if not isinstance(digest, str) or _HEX64.fullmatch(digest) is None:
+            raise HubAdmissionContractError("Graph/v1 root artifact digest must be lowercase SHA-256")
+        try:
+            binding = hub_edge.canonical_hub_artifact_binding(bindings[digest])
+        except hub_edge.HubEdgeContractError as exc:
+            raise HubAdmissionContractError(str(exc)) from exc
+        if binding["descriptor"]["raw_sha256"] != digest:
+            raise HubAdmissionContractError(
+                "root HubArtifactBinding/v1 digest does not match Graph/v1 root artifact digest"
+            )
+        canonical[digest] = binding
+        artifact_ids[digest] = binding["hub_artifact_id"]
+    return canonical, artifact_ids
+
+
+def _json_equal(left, right):
+    """Compare JSON with type fidelity (`1`, `1.0`, and `true` are distinct)."""
+    try:
+        return experiment.canonical(left) == experiment.canonical(right)
+    except experiment.ExperimentContractError as exc:
+        raise HubAdmissionContractError(str(exc)) from exc
+
+
+def bind_exact_workflow_admission(graph, workflow_response, *, root_artifact_bindings):
     """Bind Graph/v1 to one Hub workflow admitted with exact registry pins.
 
     The full declarative WorkflowSpec must equal TDI's structural compilation,
     including component ids/capabilities, parameters, inputs, dependencies and
-    limits. The separately persisted admission envelope must then match every
-    Graph/v1 component version, manifest digest and capability-contract version.
+    limits. Every root artifact mapping must be proven by qualified G1
+    HubArtifactBinding/v1 evidence. The separately persisted admission envelope
+    must then match every Graph/v1 component version, manifest digest and
+    capability-contract version.
 
     ``execution_authorized`` means only that the pinned Hub boundary admitted
     this exact workflow for execution. It never authorizes a TDI scientific
     stage, holdout, claim or verdict.
     """
     graph_value = execution_graph.canonical_graph(graph)
+    root_bindings, artifact_ids = _canonical_root_artifact_bindings(
+        graph_value, root_artifact_bindings
+    )
     preview = execution_graph.compile_hub_workflow_preview(
         graph_value,
-        artifact_bindings=artifact_bindings,
+        artifact_bindings=artifact_ids,
     )
     response = _canonical_workflow_record_projection(workflow_response)
     if response["name"] != graph_value["name"]:
         raise HubAdmissionContractError("Hub workflow name does not match TDI Graph/v1")
-    if response["spec"] != preview["workflow"]:
+    if not _json_equal(response["spec"], preview["workflow"]):
         raise HubAdmissionContractError("Hub workflow spec does not exactly match TDI Graph/v1 compilation")
     admission = _canonical_admission(response["admission"], _expected_admission(graph_value))
     return {
@@ -190,6 +247,10 @@ def bind_exact_workflow_admission(graph, workflow_response, *, artifact_bindings
         "graph_identity": execution_graph.graph_identity(graph_value),
         "workflow_spec_identity": _digest("tdi-hub-workflow-spec/v1", preview["workflow"]),
         "admission_identity": _digest("tdi-hub-workflow-admission/v1", admission),
+        "graph": graph_value,
+        "workflow_spec": preview["workflow"],
+        "admission": admission,
+        "root_artifact_bindings": root_bindings,
         "admitted_steps": sorted(admission["steps"]),
         "execution_authorized": True,
         "scientific_stage_authorized": False,
@@ -197,7 +258,7 @@ def bind_exact_workflow_admission(graph, workflow_response, *, artifact_bindings
 
 
 def canonical_workflow_admission_binding(binding):
-    """Validate HubWorkflowAdmissionBinding/v1 without granting science authority."""
+    """Recompute HubWorkflowAdmissionBinding/v1 evidence before accepting it."""
     _exact(
         binding,
         {
@@ -210,6 +271,10 @@ def canonical_workflow_admission_binding(binding):
             "graph_identity",
             "workflow_spec_identity",
             "admission_identity",
+            "graph",
+            "workflow_spec",
+            "admission",
+            "root_artifact_bindings",
             "admitted_steps",
             "execution_authorized",
             "scientific_stage_authorized",
@@ -226,26 +291,45 @@ def canonical_workflow_admission_binding(binding):
         raise HubAdmissionContractError("Hub workflow model version mismatch")
     if binding["admission_schema_version"] != HUB_WORKFLOW_ADMISSION_SCHEMA_VERSION:
         raise HubAdmissionContractError("Hub workflow admission schema version mismatch")
-    for field in ("graph_identity", "workflow_spec_identity", "admission_identity"):
+
+    try:
+        graph_value = execution_graph.canonical_graph(binding["graph"])
+    except execution_graph.GraphContractError as exc:
+        raise HubAdmissionContractError(str(exc)) from exc
+    root_bindings, artifact_ids = _canonical_root_artifact_bindings(
+        graph_value, binding["root_artifact_bindings"]
+    )
+    preview = execution_graph.compile_hub_workflow_preview(
+        graph_value,
+        artifact_bindings=artifact_ids,
+    )
+    if not _json_equal(binding["workflow_spec"], preview["workflow"]):
+        raise HubAdmissionContractError("embedded Hub workflow spec does not match embedded TDI Graph/v1")
+    admission = _canonical_admission(binding["admission"], _expected_admission(graph_value))
+
+    graph_identity = execution_graph.graph_identity(graph_value)
+    workflow_spec_identity = _digest("tdi-hub-workflow-spec/v1", preview["workflow"])
+    admission_identity = _digest("tdi-hub-workflow-admission/v1", admission)
+    expected_identities = {
+        "graph_identity": graph_identity,
+        "workflow_spec_identity": workflow_spec_identity,
+        "admission_identity": admission_identity,
+    }
+    for field, expected in expected_identities.items():
         value = binding[field]
         if not isinstance(value, str) or _HEX64.fullmatch(value) is None:
             raise HubAdmissionContractError(f"{field} must be lowercase SHA-256")
-    steps = binding["admitted_steps"]
-    if not isinstance(steps, list) or not steps:
-        raise HubAdmissionContractError("admitted_steps must be a non-empty list")
-    canonical_steps = []
-    seen = set()
-    for step in steps:
+        if value != expected:
+            raise HubAdmissionContractError(f"{field} does not match embedded admission evidence")
+
+    expected_steps = sorted(admission["steps"])
+    if binding["admitted_steps"] != expected_steps:
+        raise HubAdmissionContractError("admitted_steps does not match embedded admission evidence")
+    for step in expected_steps:
         try:
-            canonical = hub_edge._hub_name(step, "admitted workflow step")
+            hub_edge._hub_name(step, "admitted workflow step")
         except hub_edge.HubEdgeContractError as exc:
             raise HubAdmissionContractError(str(exc)) from exc
-        if canonical in seen:
-            raise HubAdmissionContractError("admitted_steps contains a duplicate")
-        seen.add(canonical)
-        canonical_steps.append(canonical)
-    if canonical_steps != sorted(canonical_steps):
-        raise HubAdmissionContractError("admitted_steps must use canonical sorted order")
     if binding["execution_authorized"] is not True:
         raise HubAdmissionContractError("exact Hub admission binding requires execution_authorized=true")
     if binding["scientific_stage_authorized"] is not False:
@@ -257,10 +341,14 @@ def canonical_workflow_admission_binding(binding):
         "workflow": workflow,
         "workflow_model_version": HUB_WORKFLOW_MODEL_VERSION,
         "admission_schema_version": HUB_WORKFLOW_ADMISSION_SCHEMA_VERSION,
-        "graph_identity": binding["graph_identity"],
-        "workflow_spec_identity": binding["workflow_spec_identity"],
-        "admission_identity": binding["admission_identity"],
-        "admitted_steps": canonical_steps,
+        "graph_identity": graph_identity,
+        "workflow_spec_identity": workflow_spec_identity,
+        "admission_identity": admission_identity,
+        "graph": graph_value,
+        "workflow_spec": preview["workflow"],
+        "admission": admission,
+        "root_artifact_bindings": root_bindings,
+        "admitted_steps": expected_steps,
         "execution_authorized": True,
         "scientific_stage_authorized": False,
     }
@@ -363,7 +451,7 @@ def canonical_execution_authorized_artifact_binding(binding):
         "hub_repository": HUB_REPOSITORY,
         "hub_admission_source_sha": source,
         "workflow": workflow,
-        "step_key": binding["step_key"],
+        "step_key": artifact_binding["step_key"],
         "authoritative_artifact_binding_identity": expected_artifact_identity,
         "workflow_admission_binding_identity": expected_admission_identity,
         "authoritative_artifact_binding": artifact_binding,
