@@ -26,6 +26,38 @@ pub struct DeltaPredicate {
     pub threshold: f64,
 }
 
+/// Ordered Boolean observations forming one temporal experience template.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BooleanSequence {
+    frames: Vec<BooleanState>,
+}
+
+impl BooleanSequence {
+    /// Construct an ordered sequence. Empty sequences are allowed for explicit boundary tests.
+    #[must_use]
+    pub fn new(frames: Vec<BooleanState>) -> Self {
+        Self { frames }
+    }
+
+    /// Ordered Boolean frames.
+    #[must_use]
+    pub fn frames(&self) -> &[BooleanState] {
+        &self.frames
+    }
+
+    /// Number of frames.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.frames.len()
+    }
+
+    /// Whether the sequence has no frames.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.frames.is_empty()
+    }
+}
+
 /// Temporal predicate validation failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TemporalError {
@@ -93,8 +125,8 @@ impl std::error::Error for TemporalError {}
 
 #[cfg(test)]
 mod tests {
-    use super::{DeltaDirection, DeltaPredicate, encode_temporal};
-    use crate::experimental::tdi2_intuition::{NumericState, PredicateId};
+    use super::{BooleanSequence, DeltaDirection, DeltaPredicate, encode_temporal};
+    use crate::experimental::tdi2_intuition::{BooleanState, NumericState, PredicateId};
 
     #[test]
     fn increase_predicate_detects_direction() {
@@ -122,5 +154,13 @@ mod tests {
         ];
         let encoded = encode_temporal(&previous, &current, &predicates).expect("encode");
         assert_eq!(encoded.predicates(), &[PredicateId::new(1), PredicateId::new(2)]);
+    }
+
+    #[test]
+    fn boolean_sequence_preserves_temporal_order() {
+        let first = BooleanState::new(vec![PredicateId::new(1)]);
+        let second = BooleanState::new(vec![PredicateId::new(2)]);
+        let sequence = BooleanSequence::new(vec![first.clone(), second.clone()]);
+        assert_eq!(sequence.frames(), &[first, second]);
     }
 }
