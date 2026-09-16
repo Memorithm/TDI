@@ -25,6 +25,7 @@ MAX_DEPTH = 16
 _KEY = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}\Z")
 _HEX40 = re.compile(r"[0-9a-f]{40}\Z")
 _HEX64 = re.compile(r"[0-9a-f]{64}\Z")
+_CAP_SEGMENT = re.compile(r"[a-z][a-z0-9_]{0,63}\Z")
 
 
 class ExecutionGraphError(ValueError):
@@ -52,6 +53,16 @@ def _text(value, name, *, max_bytes=16_384):
 def _key(value, name):
     if not isinstance(value, str) or _KEY.fullmatch(value) is None:
         raise ExecutionGraphError(f"{name} must match [a-z0-9][a-z0-9_-]{{0,63}}")
+    return value
+
+
+def _capability(value, name):
+    value = _text(value, name, max_bytes=128)
+    segments = value.split(".")
+    if not segments or any(_CAP_SEGMENT.fullmatch(segment) is None for segment in segments):
+        raise ExecutionGraphError(
+            f"{name} must use Hub CapabilityName grammar [a-z][a-z0-9_]* dot-separated"
+        )
     return value
 
 
@@ -231,7 +242,7 @@ def canonical_graph(graph):
         if key in seen_steps:
             raise ExecutionGraphError("duplicate graph step key")
         component_alias = _key(raw["component_alias"], f"steps[{index}].component_alias")
-        capability = _text(raw["capability"], f"steps[{index}].capability", max_bytes=256)
+        capability = _capability(raw["capability"], f"steps[{index}].capability")
         _safe_json(raw["parameters"], f"steps[{index}].parameters")
         if not isinstance(raw["inputs"], dict) or len(raw["inputs"]) > MAX_INPUTS:
             raise ExecutionGraphError("step inputs must be a bounded object")
