@@ -4,7 +4,9 @@
 
 use super::tdi2_intuition_evaluation::EvaluationSummary;
 use super::tdi2_intuition_inference::IntuitionOutcome;
-use super::tdi2_intuition_tasks::{SyntheticCase, motif_retrieval_case};
+use super::tdi2_intuition_tasks::{
+    SyntheticCase, context_reversal_pair, motif_retrieval_case,
+};
 
 /// Allowed non-final experimental domains for this harness.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -20,11 +22,16 @@ pub enum CampaignDomain {
 pub enum CampaignError {
     /// Requested case-id range exceeds the representable u32 domain.
     CaseIdOverflow,
+    /// Requested output case count overflows usize.
+    CaseCountOverflow,
 }
 
 impl core::fmt::Display for CampaignError {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        formatter.write_str("TDI-2.1 campaign case-id range overflows u32")
+        match self {
+            Self::CaseIdOverflow => formatter.write_str("TDI-2.1 campaign case-id range overflows u32"),
+            Self::CaseCountOverflow => formatter.write_str("TDI-2.1 campaign case count overflows usize"),
+        }
     }
 }
 impl std::error::Error for CampaignError {}
@@ -56,11 +63,25 @@ pub fn motif_cases(start: u32, count: usize) -> Result<Vec<SyntheticCase>, Campa
     Ok(cases)
 }
 
+/// Materialize paired context-reversal cases for a checked contiguous id range.
+pub fn context_cases(start: u32, pair_count: usize) -> Result<Vec<SyntheticCase>, CampaignError> {
+    let capacity = pair_count
+        .checked_mul(2)
+        .ok_or(CampaignError::CaseCountOverflow)?;
+    let mut cases = Vec::with_capacity(capacity);
+    for offset in 0..pair_count {
+        let offset = u32::try_from(offset).map_err(|_| CampaignError::CaseIdOverflow)?;
+        let id = start.checked_add(offset).ok_or(CampaignError::CaseIdOverflow)?;
+        cases.extend(context_reversal_pair(id));
+    }
+    Ok(cases)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{CampaignDomain, motif_cases, run_synthetic_campaign};
+    use super::{CampaignDomain, context_cases, motif_cases, run_synthetic_campaign};
     use crate::experimental::tdi2_intuition_inference::IntuitionOutcome;
-    use crate::experimental::tdi2_intuition_tasks::motif_retrieval_case;
+    use crate::experimental::tdi2_intuition_tasks::{context_reversal_pair, motif_retrieval_case};
 
     #[test]
     fn campaign_preserves_explicit_abstention() {
@@ -78,5 +99,14 @@ mod tests {
         let cases = motif_cases(10, 3).expect("bounded range");
         assert_eq!(cases[0], motif_retrieval_case(10));
         assert_eq!(cases[2], motif_retrieval_case(12));
+    }
+
+    #[test]
+    fn context_range_preserves_pair_adjacency() {
+        let cases = context_cases(4, 2).expect("bounded range");
+        let first = context_reversal_pair(4);
+        assert_eq!(cases.len(), 4);
+        assert_eq!(cases[0], first[0]);
+        assert_eq!(cases[1], first[1]);
     }
 }
