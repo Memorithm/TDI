@@ -1,0 +1,42 @@
+name: TDI-22.2 deterministic generator
+
+on:
+  pull_request:
+    paths:
+      - 'tdi-ai/src/tdi22_generator.rs'
+      - 'tdi-ai/src/tdi22_eval.rs'
+      - 'tdi-ai/src/experimental.rs'
+      - 'scripts/check-tdi22.2-generator.sh'
+      - '.github/workflows/tdi22.2-generator.yml'
+      - 'docs/TDI-22.1*'
+  push:
+    branches:
+      - main
+    paths:
+      - 'tdi-ai/src/tdi22_generator.rs'
+      - 'tdi-ai/src/tdi22_eval.rs'
+      - 'tdi-ai/src/experimental.rs'
+      - 'scripts/check-tdi22.2-generator.sh'
+      - '.github/workflows/tdi22.2-generator.yml'
+      - 'docs/TDI-22.1*'
+
+permissions:
+  contents: read
+
+jobs:
+  generator:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Check TDI-22.2 generator
+        run: bash scripts/check-tdi22.2-generator.sh
+      - name: Clippy TDI AI experimental surface
+        run: cargo clippy --locked -p tdi-ai --all-targets --features experimental -- -D warnings

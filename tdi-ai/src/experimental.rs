@@ -56,5 +56,7 @@ pub mod tdi21_stream;
 pub mod tdi21_tasks;
 #[path = "tdi22_eval.rs"]
 pub mod tdi22_eval;
+#[path = "tdi22_generator.rs"]
+pub mod tdi22_generator;
 #[path = "tdi22_torsor.rs"]
 pub mod tdi22_torsor;
