@@ -60,3 +60,5 @@ pub mod tdi22_eval;
 pub mod tdi22_generator;
 #[path = "tdi22_torsor.rs"]
 pub mod tdi22_torsor;
+#[path = "tdi23_categorical.rs"]
+pub mod tdi23_categorical;
