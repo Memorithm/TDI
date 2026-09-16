@@ -13,6 +13,7 @@ FREEZE_TEMPLATE="docs/tdi23/tdi23.0-stage0-freeze.template.json"
 FREEZE_VALIDATOR="scripts/check-tdi23.0-freeze-template.py"
 CATEGORICAL_SRC="tdi-ai/src/tdi23_categorical.rs"
 EXPERIMENTAL_FACADE="tdi-ai/src/experimental.rs"
+WORKFLOW=".github/workflows/tdi23-stage0-bootstrap.yml"
 
 for file in \
     "$PROGRAMME" \
@@ -21,7 +22,8 @@ for file in \
     "$FREEZE_TEMPLATE" \
     "$FREEZE_VALIDATOR" \
     "$CATEGORICAL_SRC" \
-    "$EXPERIMENTAL_FACADE"; do
+    "$EXPERIMENTAL_FACADE" \
+    "$WORKFLOW"; do
     test -s "$file" || fail "missing required Stage-0 surface: $file"
 done
 
@@ -35,6 +37,8 @@ grep -Fq 'tdi23-real-fdhilb-dagger-v1' "$CATEGORICAL_SRC" \
     || fail "versioned categorical contract missing"
 grep -Fq 'pub mod tdi23_categorical;' "$EXPERIMENTAL_FACADE" \
     || fail "TDI-23 module is not exposed through experimental facade"
+grep -Fq 'bash scripts/check-tdi23-stage0-bootstrap.sh' "$WORKFLOW" \
+    || fail "dedicated Stage-0 workflow no longer invokes the bootstrap gate"
 
 python3 "$FREEZE_VALIDATOR" "$FREEZE_TEMPLATE" --self-test
 
