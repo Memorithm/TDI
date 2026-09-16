@@ -111,9 +111,10 @@ def execute_local_admitted(client, store, spec, roots, worker, worker_sha256, so
 def _execute_local_admitted(client, store, spec, roots, worker, worker_sha256, source_commit, policy):
     """Admit and execute with durable recovery intent and no ambiguous redispatch.
 
-    On retry an existing target keeps its exact width. If current resources no
-    longer admit that width, execution stops; cancel/replan explicitly. Already
-    dispatched attempts are only reconciled. No workload parameters are changed.
+    On retry an existing target keeps its exact width and root bindings. If
+    current resources no longer admit that width, execution stops; cancel/replan
+    explicitly. Already dispatched attempts are only reconciled. No workload
+    parameters are changed and admission is never applied retroactively.
     """
     spec = runtime.canonical_campaign(spec)
     _policy(policy)
@@ -124,13 +125,16 @@ def _execute_local_admitted(client, store, spec, roots, worker, worker_sha256, s
     if not local or len(spec["graph"]["steps"]) > 256:
         raise durable.ContractError("resource admission requires a local Hub and at most 256 process steps")
     original = store.create(spec, client.endpoint)
-    binding = {"policy": policy, "elastic_binary_sha256": worker_sha256, "elastic_source_commit": source_commit}
+    binding = {"policy": policy, "elastic_binary_sha256": worker_sha256, "elastic_source_commit": source_commit,
+               "root_bindings_identity": identity("tdi-resource-root-bindings/v1", roots)}
     row = store.db.execute("SELECT payload FROM events WHERE campaign=? AND kind='resource-dispatch' ORDER BY sequence DESC LIMIT 1", (original,)).fetchone()
     existing = durable.strict_json(row[0]) if row else None
     if existing and existing["binding"] != binding:
-        raise durable.ContractError("resource policy/executable changed; existing dispatch must be reconciled")
+        raise durable.ContractError("resource policy/executable/root bindings changed; existing dispatch must be reconciled")
     target = store.get(existing["campaign"] if existing else original)
-    if target["phase"] not in ("prepared", "admitted"):
+    if not existing and target["phase"] != "prepared":
+        raise durable.ContractError("campaign was already dispatched without a resource-admission binding")
+    if existing and target["phase"] not in ("prepared", "admitted"):
         return dict(runtime.execute(client, store, target["id"]), resource_reconciled=True)
     # Pin the actual local process component surfaces before sampling freshness.
     seen = set()
