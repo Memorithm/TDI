@@ -3,7 +3,7 @@
 //! This module deliberately excludes protected/final holdout access.
 
 use super::tdi2_intuition_analogy_tasks::{AnalogyCase, analogy_case};
-use super::tdi2_intuition_evaluation::EvaluationSummary;
+use super::tdi2_intuition_evaluation::{EvaluationSummary, PairedComparison};
 use super::tdi2_intuition_inference::IntuitionOutcome;
 use super::tdi2_intuition_tasks::{
     SyntheticCase, TemporalCase, context_reversal_pair, motif_retrieval_case, temporal_trend_case,
@@ -51,6 +51,34 @@ where
         summary.observe(case, infer(case));
     }
     summary
+}
+
+fn outcome_is_correct(case: &SyntheticCase, outcome: IntuitionOutcome) -> bool {
+    matches!(
+        outcome,
+        IntuitionOutcome::Selected { template_id, .. } if template_id == case.expected_template()
+    )
+}
+
+/// Compare intuition and a baseline on the identical ordered case list.
+pub fn run_paired_campaign<FI, FB>(
+    _domain: CampaignDomain,
+    cases: &[SyntheticCase],
+    mut intuition: FI,
+    mut baseline: FB,
+) -> PairedComparison
+where
+    FI: FnMut(&SyntheticCase) -> IntuitionOutcome,
+    FB: FnMut(&SyntheticCase) -> IntuitionOutcome,
+{
+    let mut comparison = PairedComparison::default();
+    for case in cases {
+        comparison.observe(
+            outcome_is_correct(case, intuition(case)),
+            outcome_is_correct(case, baseline(case)),
+        );
+    }
+    comparison
 }
 
 /// Materialize a deterministic contiguous motif-retrieval campaign.
@@ -103,8 +131,8 @@ pub fn analogy_cases(start: u32, count: usize) -> Result<Vec<AnalogyCase>, Campa
 #[cfg(test)]
 mod tests {
     use super::{
-        CampaignDomain, analogy_cases, context_cases, motif_cases, run_synthetic_campaign,
-        temporal_cases,
+        CampaignDomain, analogy_cases, context_cases, motif_cases, run_paired_campaign,
+        run_synthetic_campaign, temporal_cases,
     };
     use crate::experimental::tdi2_intuition_analogy_tasks::analogy_case;
     use crate::experimental::tdi2_intuition_inference::IntuitionOutcome;
@@ -121,6 +149,23 @@ mod tests {
         assert_eq!(summary.total(), 2);
         assert_eq!(summary.abstained(), 2);
         assert_eq!(summary.coverage(), Some(0.0));
+    }
+
+    #[test]
+    fn paired_campaign_preserves_case_pairing() {
+        let cases = motif_cases(0, 2).expect("range");
+        let comparison = run_paired_campaign(
+            CampaignDomain::Development,
+            &cases,
+            |case| IntuitionOutcome::Selected {
+                template_id: case.expected_template(),
+                weight: 1.0,
+                support: 1,
+            },
+            |_| IntuitionOutcome::InsufficientExperience,
+        );
+        assert_eq!(comparison.intuition_only, 2);
+        assert_eq!(comparison.baseline_only, 0);
     }
 
     #[test]
