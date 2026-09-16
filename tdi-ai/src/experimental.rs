@@ -64,6 +64,8 @@ pub mod tdi2_intuition_tasks;
 pub mod tdi2_intuition_trace;
 #[path = "tdi2_intuition_transfer.rs"]
 pub mod tdi2_intuition_transfer;
+#[path = "tdi2_intuition_transfer_eval.rs"]
+pub mod tdi2_intuition_transfer_eval;
 #[path = "tdi2_intuition_weight.rs"]
 pub mod tdi2_intuition_weight;
 #[path = "tdi21_boolean_relational.rs"]
