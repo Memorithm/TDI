@@ -8,6 +8,7 @@ bash scripts/check-tdi22-freeze.sh
 
 required=(
   docs/TDI-22.1-PREREGISTRATION.md
+  docs/TDI-22.1-ARM-CONTRACT.md
   docs/TDI-22.1-STATUS.md
 )
 for path in "${required[@]}"; do
@@ -20,6 +21,9 @@ grep -Fq 'F2 — generic six-dimensional bilinear retrieval' docs/TDI-22.1-PRERE
 grep -Fq 'F3 — position-nuisance associative retrieval' docs/TDI-22.1-PREREGISTRATION.md
 grep -Fq 'tdi22/dev/v1' docs/TDI-22.1-PREREGISTRATION.md
 grep -Fq 'tdi22/validation/v1' docs/TDI-22.1-PREREGISTRATION.md
+grep -Fq 'score_T0 = v.R + omega.M(P)' docs/TDI-22.1-ARM-CONTRACT.md
+grep -Fq 'score_T4 = v.R + omega.C' docs/TDI-22.1-ARM-CONTRACT.md
+grep -Fq 'score_T3 - score_T4 = (Q x omega).R' docs/TDI-22.1-ARM-CONTRACT.md
 grep -Fq 'TDI-22.2 execution blocked' docs/TDI-22.1-STATUS.md
 
 # Preregistration must precede any TDI-22.2 evaluator/result surface.
