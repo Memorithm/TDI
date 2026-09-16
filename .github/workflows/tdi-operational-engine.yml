@@ -50,6 +50,9 @@ jobs:
   real-worker:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: integration-tdi
     env:
       PYTHONDONTWRITEBYTECODE: '1'
       PYTHONPATH: scripts
@@ -58,6 +61,8 @@ jobs:
       RUSTFLAGS: '-C debuginfo=0'
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: integration-tdi
       - uses: actions/checkout@v4
         with:
           repository: Memorithm/scirust-hub
@@ -66,12 +71,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.89.0
-      - name: Build actual Hub and TDI library worker
-        run: |
-          cargo build --locked --manifest-path integration-hub/Cargo.toml -p scirust-hubd -p scirust-hub-worker
-          cargo build --locked -p tdi-ai --example durable_worker
+      - name: Build actual Hub outside TDI's offline vendoring configuration
+        working-directory: integration-hub
+        run: cargo build --locked -p scirust-hubd -p scirust-hub-worker
+      - name: Build actual TDI library worker with TDI's own configuration
+        run: cargo build --locked -p tdi-ai --example durable_worker
       - name: Run real HTTP, process, SQLite, restart, cancellation, export and cache scenarios
         env:
           TDI_HUBD_BIN: ${{ github.workspace }}/integration-hub/target/debug/scirust-hubd
-          TDI_DURABLE_WORKER: ${{ github.workspace }}/target/debug/examples/durable_worker
+          TDI_DURABLE_WORKER: ${{ github.workspace }}/integration-tdi/target/debug/examples/durable_worker
         run: python3 -m unittest -v scripts/test_tdi_engine_integration.py
