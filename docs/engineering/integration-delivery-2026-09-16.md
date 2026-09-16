@@ -79,12 +79,14 @@ used here as retroactive exact-head qualification evidence.
 
 At the 2026-09-16 23:31 UTC resync, `main` advanced again through TDI-2.1
 PRs #414, #415 and #416 to `0fd3946065fa25e74ee3d3ac0e6d8e93363e620b`;
-#413 was merged forward through that state without conflicts. The current main
-snapshot fails Rust 1.97.1 `cargo fmt --all -- --check` in
-`tdi-ai/src/tdi2_intuition_experience.rs`; repair PR #417 contains only the
-canonical formatter delta and remains exact-head gated. Until that repair is
-qualified and merged, the inherited formatting failure is an explicit release
-blocker rather than a successful #413 qualification.
+#413 was merged forward through that state without conflicts. That snapshot had
+a Rust 1.97.1 formatting regression in `tdi2_intuition_experience.rs`. PR #419
+subsequently landed the canonical formatter result; the duplicate repair #417
+was closed without merge. At the current resync, `main` is
+`c809ef34e22df7c90843b5946408e45f4ef5ac3d` through #423 and
+`cargo +1.97.1 fmt --all -- --check` passes. This removes the inherited format
+blocker only; it does not promote any research result or clear the remaining
+exact-head/upstream release blockers.
 
 | Repository / PR | Exact head | Observed checks | Consequence |
 | --- | --- | --- | --- |
