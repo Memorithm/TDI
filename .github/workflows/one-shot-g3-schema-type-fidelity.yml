@@ -1,0 +1,107 @@
+name: One-shot G3 schema type fidelity
+
+on:
+  push:
+    branches: [fix/g3-schema-type-fidelity]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/g3-schema-type-fidelity
+      - name: Harden G3 integer version surfaces
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          graph_path = Path('scripts/tdi_execution_graph.py')
+          text = graph_path.read_text()
+          replacements = {
+              '    if value["workflow_schema_version"] != HUB_WORKFLOW_SCHEMA_VERSION:\n': (
+                  '    if (\n'
+                  '        type(value["workflow_schema_version"]) is not int\n'
+                  '        or value["workflow_schema_version"] != HUB_WORKFLOW_SCHEMA_VERSION\n'
+                  '    ):\n'
+              ),
+              '    if graph["schema"] != GRAPH_SCHEMA:\n': (
+                  '    if type(graph["schema"]) is not int or graph["schema"] != GRAPH_SCHEMA:\n'
+              ),
+          }
+          for old, new in replacements.items():
+              if text.count(old) != 1:
+                  raise SystemExit(f'unexpected execution-graph replacement count for {old!r}: {text.count(old)}')
+              text = text.replace(old, new)
+          graph_path.write_text(text)
+
+          admission_path = Path('scripts/tdi_hub_admission_contract.py')
+          text = admission_path.read_text()
+          replacements = {
+              '    if admission["schema_version"] != HUB_WORKFLOW_ADMISSION_SCHEMA_VERSION:\n': (
+                  '    if (\n'
+                  '        type(admission["schema_version"]) is not int\n'
+                  '        or admission["schema_version"] != HUB_WORKFLOW_ADMISSION_SCHEMA_VERSION\n'
+                  '    ):\n'
+              ),
+              '    if binding["schema"] != HUB_WORKFLOW_ADMISSION_BINDING_SCHEMA:\n': (
+                  '    if (\n'
+                  '        type(binding["schema"]) is not int\n'
+                  '        or binding["schema"] != HUB_WORKFLOW_ADMISSION_BINDING_SCHEMA\n'
+                  '    ):\n'
+              ),
+              '    if binding["admission_schema_version"] != HUB_WORKFLOW_ADMISSION_SCHEMA_VERSION:\n': (
+                  '    if (\n'
+                  '        type(binding["admission_schema_version"]) is not int\n'
+                  '        or binding["admission_schema_version"] != HUB_WORKFLOW_ADMISSION_SCHEMA_VERSION\n'
+                  '    ):\n'
+              ),
+          }
+          for old, new in replacements.items():
+              if text.count(old) != 1:
+                  raise SystemExit(f'unexpected admission replacement count for {old!r}: {text.count(old)}')
+              text = text.replace(old, new)
+          admission_path.write_text(text)
+
+          graph_test = Path('scripts/test_tdi_execution_graph.py')
+          text = graph_test.read_text()
+          anchor = '''    def test_workflow_name_matches_pinned_hub_boundary(self):\n'''
+          test = '''    def test_identity_version_fields_reject_boolean_aliases(self):\n        a = fixture()\n        a["schema"] = True\n        with self.assertRaisesRegex(graph.ExecutionGraphError, "execution graph schema"):\n            graph.canonical_graph(a)\n\n        a = fixture()\n        a["hub_contract"]["workflow_schema_version"] = True\n        with self.assertRaisesRegex(graph.ExecutionGraphError, "Hub workflow schema version"):\n            graph.canonical_graph(a)\n\n'''
+          if text.count(anchor) != 1:
+              raise SystemExit('unexpected graph-test anchor count')
+          text = text.replace(anchor, test + anchor)
+          graph_test.write_text(text)
+
+          admission_test = Path('scripts/test_tdi_hub_admission_contract.py')
+          text = admission_test.read_text()
+          anchor = '''    def test_each_registry_pin_must_match_graph(self):\n'''
+          test = '''    def test_g3_identity_version_fields_reject_boolean_aliases(self):\n        response = workflow_response()\n        response["admission"]["schema_version"] = True\n        with self.assertRaisesRegex(\n            admission.HubAdmissionContractError, "workflow admission schema version"\n        ):\n            admission.bind_exact_workflow_admission(\n                fixture_graph(), response, root_artifact_bindings=root_artifact_bindings()\n            )\n\n        binding = bind_fixture()\n        binding["schema"] = True\n        with self.assertRaisesRegex(\n            admission.HubAdmissionContractError, "workflow admission binding schema"\n        ):\n            admission.canonical_workflow_admission_binding(binding)\n\n        binding = bind_fixture()\n        binding["admission_schema_version"] = True\n        with self.assertRaisesRegex(\n            admission.HubAdmissionContractError, "workflow admission schema version mismatch"\n        ):\n            admission.canonical_workflow_admission_binding(binding)\n\n'''
+          if text.count(anchor) != 1:
+              raise SystemExit('unexpected admission-test anchor count')
+          text = text.replace(anchor, test + anchor)
+          admission_test.write_text(text)
+          PY
+      - name: Run focused G3 regressions
+        run: |
+          PYTHONPATH=scripts python3 -m py_compile \
+            scripts/tdi_execution_graph.py \
+            scripts/tdi_hub_admission_contract.py \
+            scripts/test_tdi_execution_graph.py \
+            scripts/test_tdi_hub_admission_contract.py
+          PYTHONPATH=scripts python3 -m unittest \
+            scripts/test_tdi_execution_graph.py \
+            scripts/test_tdi_hub_admission_contract.py -v
+      - name: Commit qualified source correction
+        run: |
+          git config user.name 'ZEKRITI TAREK'
+          git config user.email 'contact@checkupauto.fr'
+          git rm .github/workflows/one-shot-g3-schema-type-fidelity.yml
+          git add scripts/tdi_execution_graph.py scripts/tdi_hub_admission_contract.py \
+            scripts/test_tdi_execution_graph.py scripts/test_tdi_hub_admission_contract.py
+          git commit -m 'fix(engine): harden G3 schema type fidelity'
+          git push origin HEAD:fix/g3-schema-type-fidelity
