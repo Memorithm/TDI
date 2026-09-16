@@ -54,5 +54,7 @@ pub mod tdi21_sequence_materializer;
 pub mod tdi21_stream;
 #[path = "tdi21_boolean_tasks.rs"]
 pub mod tdi21_tasks;
+#[path = "tdi22_eval.rs"]
+pub mod tdi22_eval;
 #[path = "tdi22_torsor.rs"]
 pub mod tdi22_torsor;
