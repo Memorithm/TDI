@@ -2,6 +2,14 @@
 
 Status: candidate until its pull request is fully qualified on the exact final head.
 
+The descriptor must advertise exactly `elastic.hub.run`, the `operator-config`
+input and `runtime-evidence` output. Their identities are ordinary SHA-256 of
+`crates/elastic-runtime/src/operator_config.rs` and
+`crates/elastic-runtime/src/evidence.rs`, respectively, at the audited revision.
+These are schema-owner implementation pins, not hashes of a particular
+configuration or result. Empty, unrelated, or actuation-specific declarations
+are rejected. Non-scalar domains and modes return the typed contract error.
+
 This slice consumes the qualified common `PartnerAdapter/v1` / `AdmittedPartnerStep/v1` boundary and binds a TDI-owned non-actuating resource-control request to the process contract published by ElasticXxx. It does not execute ElasticXxx and does not reproduce ElasticXxx runtime semantics.
 
 ## Audited ElasticXxx contract
