@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import re
 import uuid
+import unicodedata
 
 import tdi_artifact_contract as artifact
 import tdi_experiment_contract as experiment
@@ -91,6 +92,17 @@ def _canonical_uuid(value, name):
 def _hub_name(value, name):
     if not isinstance(value, str) or _HUB_NAME.fullmatch(value) is None:
         raise HubEdgeContractError(f"{name} must match [a-z0-9][a-z0-9_-]{{0,63}}")
+    return value
+
+
+def _hub_output_name(value, name):
+    if not isinstance(value, str):
+        raise HubEdgeContractError(f"{name} must be a string")
+    size = len(value.encode("utf-8"))
+    if size == 0 or size > 128:
+        raise HubEdgeContractError(f"{name} must be 1..=128 UTF-8 bytes")
+    if any(ch.isspace() or unicodedata.category(ch) == "Cc" for ch in value):
+        raise HubEdgeContractError(f"{name} must not contain whitespace/control characters")
     return value
 
 
@@ -235,7 +247,7 @@ def canonical_authoritative_publication_response(response):
         )
     canonical_outputs = {}
     for name, artifact_id in sorted(outputs.items()):
-        label = _hub_name(name, "Hub publication output label")
+        label = _hub_output_name(name, "Hub publication output label")
         canonical_outputs[label] = _canonical_uuid(artifact_id, f"Hub publication output {label!r} artifact id")
     return {
         "schema_version": HUB_PUBLICATION_FENCE_SCHEMA,
@@ -270,7 +282,7 @@ def bind_authoritative_publication(
     publication = canonical_authoritative_publication_response(publication_response)
     expected_workflow = _canonical_uuid(expected_workflow, "expected Hub workflow id")
     expected_step_key = _hub_name(expected_step_key, "expected Hub workflow step key")
-    expected_output = _hub_name(expected_output, "expected Hub output label")
+    expected_output = _hub_output_name(expected_output, "expected Hub output label")
     if publication["workflow"] != expected_workflow:
         raise HubEdgeContractError("authoritative publication workflow does not match expected lineage")
     if publication["step_key"] != expected_step_key:
@@ -341,7 +353,7 @@ def canonical_authoritative_hub_artifact_binding(binding):
     step_key = _hub_name(binding["step_key"], "Hub workflow step key")
     attempt = _canonical_uuid(binding["attempt"], "Hub attempt id")
     generation = _canonical_decimal_u64(binding["generation"], "Hub publication generation")
-    output_label = _hub_name(binding["output_label"], "Hub publication output label")
+    output_label = _hub_output_name(binding["output_label"], "Hub publication output label")
     hub_artifact_id = _canonical_uuid(binding["hub_artifact_id"], "Hub artifact id")
     artifact_binding = canonical_hub_artifact_binding(binding["artifact_binding"])
     artifact_binding_identity = _hex(

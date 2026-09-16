@@ -169,8 +169,8 @@ class HubEdgeContractTests(unittest.TestCase):
         with self.assertRaisesRegex(hub.HubEdgeContractError, "outputs must be an object"):
             hub.canonical_authoritative_publication_response(value)
 
-        value = self.publication(outputs={"Bad.Label": self.ARTIFACT})
-        with self.assertRaisesRegex(hub.HubEdgeContractError, "must match"):
+        value = self.publication(outputs={"bad label": self.ARTIFACT})
+        with self.assertRaisesRegex(hub.HubEdgeContractError, "whitespace/control"):
             hub.canonical_authoritative_publication_response(value)
 
         outputs = {
@@ -180,6 +180,32 @@ class HubEdgeContractTests(unittest.TestCase):
         value = self.publication(outputs=outputs)
         with self.assertRaisesRegex(hub.HubEdgeContractError, "exceed pinned bound"):
             hub.canonical_authoritative_publication_response(value)
+
+    def test_publication_output_labels_follow_hub_graph_grammar(self):
+        portable = hub.bind_portable_artifact(self.descriptor(), self.response())
+        label = "file:result"
+        publication = self.publication(outputs={label: self.ARTIFACT})
+        canonical = hub.canonical_authoritative_publication_response(publication)
+        self.assertEqual({label: self.ARTIFACT}, canonical["outputs"])
+        binding = hub.bind_authoritative_publication(
+            portable,
+            publication,
+            expected_workflow=self.WORKFLOW,
+            expected_step_key="emit",
+            expected_output=label,
+        )
+        self.assertEqual(label, binding["output_label"])
+        self.assertEqual(binding, hub.canonical_authoritative_hub_artifact_binding(binding))
+
+        longest = "x" * 128
+        accepted = hub.canonical_authoritative_publication_response(
+            self.publication(outputs={longest: self.ARTIFACT})
+        )
+        self.assertIn(longest, accepted["outputs"])
+        with self.assertRaisesRegex(hub.HubEdgeContractError, "1..=128"):
+            hub.canonical_authoritative_publication_response(
+                self.publication(outputs={"x" * 129: self.ARTIFACT})
+            )
 
     def test_publication_lineage_mismatch_fails_closed(self):
         portable = hub.bind_portable_artifact(self.descriptor(), self.response())
