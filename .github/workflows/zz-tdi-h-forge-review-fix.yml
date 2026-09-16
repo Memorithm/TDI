@@ -1,0 +1,65 @@
+name: TDI Lot H Forge P2 one-shot fix
+
+on:
+  push:
+    branches: [industrialize/forge-partner-h1]
+    paths:
+      - '.github/workflows/zz-tdi-h-forge-review-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: industrialize/forge-partner-h1
+      - name: Bind exact Forge protocol identity and Hub capability
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('scripts/tdi_forge_partner_contract.py')
+          s = p.read_text()
+          old = 'FORGE_PROTOCOL_NAME = "forge.scientific-external-domain"\nFORGE_PROTOCOL_VERSION = 1\n'
+          new = old + 'FORGE_PROTOCOL_SCHEMA_IDENTITY = "af22223b02dbc26ed19dd916cb84eb0f64f6ba2df570a9458aab80489882d14c"\nFORGE_HUB_CAPABILITY = "tdi.evaluate"\nFORGE_HUB_CAPABILITY_CONTRACT_VERSION = "1.1.0"\n'
+          assert s.count(old) == 1
+          s = s.replace(old, new)
+          old = '''    if (\n        adapter["protocol"]["name"] != FORGE_PROTOCOL_NAME\n        or adapter["protocol"]["version"] != FORGE_PROTOCOL_VERSION\n    ):\n        raise ForgePartnerContractError(\n            "Forge adapter protocol does not match the audited scientific-domain contract"\n        )\n\n    forge = value["forge"]\n'''
+          new = '''    if (\n        adapter["protocol"]["name"] != FORGE_PROTOCOL_NAME\n        or adapter["protocol"]["version"] != FORGE_PROTOCOL_VERSION\n        or adapter["protocol"]["schema_identity"] != FORGE_PROTOCOL_SCHEMA_IDENTITY\n    ):\n        raise ForgePartnerContractError(\n            "Forge adapter protocol does not match the audited scientific-domain contract"\n        )\n    if (\n        adapter["hub_component"]["capability"] != FORGE_HUB_CAPABILITY\n        or adapter["hub_component"]["capability_contract_version"]\n        != FORGE_HUB_CAPABILITY_CONTRACT_VERSION\n    ):\n        raise ForgePartnerContractError(\n            "Forge adapter Hub capability does not match the qualified evaluation boundary"\n        )\n\n    forge = value["forge"]\n'''
+          assert s.count(old) == 1
+          s = s.replace(old, new)
+          p.write_text(s)
+
+          p = Path('scripts/test_tdi_forge_partner_contract.py')
+          s = p.read_text()
+          old = '        "schema_identity": SHA("d"),\n'
+          new = '        "schema_identity": forge.FORGE_PROTOCOL_SCHEMA_IDENTITY,\n'
+          assert s.count(old) == 1
+          s = s.replace(old, new)
+          old = '''        value = contract()\n        value["partner_step"]["adapter"]["protocol"]["name"] = "forge.other"\n        value["partner_step"] = partner.bind_admitted_partner_step(\n            value["partner_step"]["adapter"],\n            hub_fixture.bind_fixture(),\n            step_key="evaluate",\n        )\n        with self.assertRaisesRegex(\n            forge.ForgePartnerContractError, "protocol does not match"\n        ):\n            forge.canonical_forge_search_contract(value)\n'''
+          new = '''        for field, changed in (\n            ("name", "forge.other"),\n            ("version", 2),\n            ("schema_identity", SHA("e")),\n        ):\n            value = contract()\n            value["partner_step"]["adapter"]["protocol"][field] = changed\n            value["partner_step"] = partner.bind_admitted_partner_step(\n                value["partner_step"]["adapter"],\n                hub_fixture.bind_fixture(),\n                step_key="evaluate",\n            )\n            with self.subTest(field=field), self.assertRaisesRegex(\n                forge.ForgePartnerContractError, "protocol does not match"\n            ):\n                forge.canonical_forge_search_contract(value)\n\n        value = contract()\n        value["partner_step"] = partner.bind_admitted_partner_step(\n            {\n                **value["partner_step"]["adapter"],\n                "hub_component": {\n                    **value["partner_step"]["adapter"]["hub_component"],\n                    "capability": "tdi.prepare",\n                    "capability_contract_version": "1.0.0",\n                },\n            },\n            hub_fixture.bind_fixture(),\n            step_key="prepare",\n        )\n        with self.assertRaisesRegex(\n            forge.ForgePartnerContractError, "Hub capability does not match"\n        ):\n            forge.canonical_forge_search_contract(value)\n'''
+          assert s.count(old) == 1
+          s = s.replace(old, new)
+          p.write_text(s)
+
+          p = Path('docs/engineering/lot-h-forge-search.md')
+          s = p.read_text()
+          old = '- protocol name `forge.scientific-external-domain`, version 1.\n'
+          new = '- protocol name `forge.scientific-external-domain`, version 1, with TDI protocol schema identity `af22223b02dbc26ed19dd916cb84eb0f64f6ba2df570a9458aab80489882d14c`;\n- admitted Hub capability `tdi.evaluate` at capability-contract version `1.1.0`.\n'
+          assert s.count(old) == 1
+          s = s.replace(old, new)
+          p.write_text(s)
+
+          Path('.github/workflows/zz-tdi-h-forge-review-fix.yml').unlink()
+          PY
+      - name: Commit P2 correction
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/tdi_forge_partner_contract.py scripts/test_tdi_forge_partner_contract.py docs/engineering/lot-h-forge-search.md .github/workflows/zz-tdi-h-forge-review-fix.yml
+          git commit -m 'fix(engine): bind exact Forge protocol and Hub capability'
+          git push origin HEAD:industrialize/forge-partner-h1
