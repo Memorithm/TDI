@@ -2,6 +2,7 @@
 
 use super::tdi2_intuition::{BooleanState, PredicateId};
 use super::tdi2_intuition_relations::{RelationError, RelationalTemplate};
+use super::tdi2_intuition_selection::Candidate;
 
 /// Remove a frozen set of context predicates from one Boolean query.
 #[must_use]
@@ -27,11 +28,26 @@ pub fn remove_relations(template: &RelationalTemplate) -> Result<RelationalTempl
     RelationalTemplate::new(template.base().clone(), Vec::new())
 }
 
+/// Remove experience-strength ranking while preserving the exact candidate set.
+///
+/// All candidates receive the same weight and are ordered by template id. Historical
+/// support is retained only for reporting, not ordering.
+#[must_use]
+pub fn equalize_experience_weights(candidates: &[Candidate]) -> Vec<Candidate> {
+    let mut result = candidates
+        .iter()
+        .map(|candidate| Candidate::new(candidate.template_id(), 1.0, candidate.support()))
+        .collect::<Vec<_>>();
+    result.sort_unstable_by_key(|candidate| candidate.template_id());
+    result
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{remove_context, remove_relations};
+    use super::{equalize_experience_weights, remove_context, remove_relations};
     use crate::experimental::tdi2_intuition::{BooleanState, PredicateId, RoleId, Template, TemplateId};
     use crate::experimental::tdi2_intuition_relations::{RelationId, RelationalTemplate, RoleRelation};
+    use crate::experimental::tdi2_intuition_selection::Candidate;
 
     #[test]
     fn context_ablation_preserves_non_context_structure() {
@@ -62,5 +78,17 @@ mod tests {
         let ablated = remove_relations(&template).expect("ablation");
         assert_eq!(ablated.base(), &base);
         assert!(ablated.relations().is_empty());
+    }
+
+    #[test]
+    fn weight_ablation_removes_experience_ordering() {
+        let candidates = [
+            Candidate::new(TemplateId::new(9), 10.0, 100),
+            Candidate::new(TemplateId::new(2), 1.0, 1),
+        ];
+        let ablated = equalize_experience_weights(&candidates);
+        assert_eq!(ablated[0].template_id(), TemplateId::new(2));
+        assert_eq!(ablated[0].weight(), 1.0);
+        assert_eq!(ablated[1].weight(), 1.0);
     }
 }
