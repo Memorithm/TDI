@@ -2,6 +2,7 @@
 
 use super::tdi2_intuition::BooleanState;
 use super::tdi2_intuition_inference::IntuitionOutcome;
+use super::tdi2_intuition_relations::RelationalTemplate;
 use super::tdi2_intuition_selection::Candidate;
 
 /// Immutable trace of one inference decision.
@@ -35,11 +36,7 @@ impl InferenceTrace {
                 )
             })
             .collect();
-        Self {
-            predicate_ids,
-            candidate_records,
-            outcome,
-        }
+        Self { predicate_ids, candidate_records, outcome }
     }
 
     /// Stable textual record suitable for artifact hashing by the surrounding TDI harness.
@@ -58,11 +55,7 @@ impl InferenceTrace {
             .collect::<Vec<_>>()
             .join(",");
         let outcome = match self.outcome {
-            IntuitionOutcome::Selected {
-                template_id,
-                weight,
-                support,
-            } => format!(
+            IntuitionOutcome::Selected { template_id, weight, support } => format!(
                 "selected:{}:{:016x}:{}",
                 template_id.raw(),
                 weight.to_bits(),
@@ -77,16 +70,60 @@ impl InferenceTrace {
 
     /// Captured outcome.
     #[must_use]
-    pub const fn outcome(&self) -> IntuitionOutcome {
-        self.outcome
-    }
+    pub const fn outcome(&self) -> IntuitionOutcome { self.outcome }
+}
+
+/// Canonical structural record that intentionally excludes the template id and evidence.
+///
+/// Two templates with the same returned record are structurally equivalent for
+/// Boolean applicability and role-relation transfer, even if they have different ids.
+#[must_use]
+pub fn template_structure_record(template: &RelationalTemplate) -> String {
+    let required = template
+        .base()
+        .required()
+        .iter()
+        .map(|predicate| predicate.raw().to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    let forbidden = template
+        .base()
+        .forbidden()
+        .iter()
+        .map(|predicate| predicate.raw().to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    let roles = template
+        .base()
+        .roles()
+        .iter()
+        .map(|role| role.raw().to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    let relations = template
+        .relations()
+        .iter()
+        .map(|relation| {
+            format!(
+                "{}:{}:{}",
+                relation.left().raw(),
+                relation.relation().raw(),
+                relation.right().raw()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "tdi2.1-template-structure-v1;required={required};forbidden={forbidden};roles={roles};relations={relations}"
+    )
 }
 
 #[cfg(test)]
 mod tests {
-    use super::InferenceTrace;
-    use crate::experimental::tdi2_intuition::{BooleanState, PredicateId, TemplateId};
+    use super::{InferenceTrace, template_structure_record};
+    use crate::experimental::tdi2_intuition::{BooleanState, PredicateId, RoleId, Template, TemplateId};
     use crate::experimental::tdi2_intuition_inference::IntuitionOutcome;
+    use crate::experimental::tdi2_intuition_relations::{RelationId, RelationalTemplate, RoleRelation};
     use crate::experimental::tdi2_intuition_selection::Candidate;
 
     #[test]
@@ -103,5 +140,24 @@ mod tests {
         assert_eq!(left, right);
         assert!(left.contains("predicates=2,9"));
         assert!(left.contains("selected:7"));
+    }
+
+    #[test]
+    fn structural_record_ignores_template_identity() {
+        let make = |id| {
+            let base = Template::new(
+                TemplateId::new(id),
+                vec![PredicateId::new(1)],
+                Vec::new(),
+                vec![RoleId::new(1), RoleId::new(2)],
+            )
+            .expect("template");
+            RelationalTemplate::new(
+                base,
+                vec![RoleRelation::new(RoleId::new(1), RelationId::new(3), RoleId::new(2))],
+            )
+            .expect("relation")
+        };
+        assert_eq!(template_structure_record(&make(1)), template_structure_record(&make(9)));
     }
 }
