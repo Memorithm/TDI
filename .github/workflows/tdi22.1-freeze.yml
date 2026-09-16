@@ -27,6 +27,7 @@ on:
 permissions:
   contents: read
 
+# This workflow is intentionally narrow: it qualifies the frozen non-final TDI-22.1 protocol.
 jobs:
   freeze-integrity:
     runs-on: ubuntu-24.04
