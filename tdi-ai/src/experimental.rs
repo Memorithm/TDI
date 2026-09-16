@@ -32,6 +32,8 @@ pub mod tdi2_intuition;
 pub mod tdi2_intuition_matching;
 #[path = "tdi2_intuition_reliability.rs"]
 pub mod tdi2_intuition_reliability;
+#[path = "tdi2_intuition_weight.rs"]
+pub mod tdi2_intuition_weight;
 #[path = "tdi21_boolean_relational.rs"]
 pub mod tdi21;
 #[path = "tdi21_anf_search.rs"]
