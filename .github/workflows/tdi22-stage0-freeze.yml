@@ -4,8 +4,12 @@ on:
   pull_request:
     paths:
       - 'docs/TDI-22*'
-      - 'tdi-ai/src/tdi22_torsor.rs'
-      - 'tdi-ai/tests/tdi22_torsor_properties.rs'
+      - 'tdi-ai/src/tdi22*.rs'
+      - 'tdi-ai/src/tdi-22*.rs'
+      - 'tdi-ai/tests/tdi22*.rs'
+      - 'tdi-ai/tests/tdi-22*.rs'
+      - 'results/**'
+      - 'artifacts/**'
       - 'scripts/check-tdi22-bootstrap.sh'
       - 'scripts/check-tdi22-freeze.sh'
       - '.github/workflows/tdi22-torsor-bootstrap.yml'
@@ -15,8 +19,12 @@ on:
       - main
     paths:
       - 'docs/TDI-22*'
-      - 'tdi-ai/src/tdi22_torsor.rs'
-      - 'tdi-ai/tests/tdi22_torsor_properties.rs'
+      - 'tdi-ai/src/tdi22*.rs'
+      - 'tdi-ai/src/tdi-22*.rs'
+      - 'tdi-ai/tests/tdi22*.rs'
+      - 'tdi-ai/tests/tdi-22*.rs'
+      - 'results/**'
+      - 'artifacts/**'
       - 'scripts/check-tdi22-bootstrap.sh'
       - 'scripts/check-tdi22-freeze.sh'
       - '.github/workflows/tdi22-torsor-bootstrap.yml'
