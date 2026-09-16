@@ -174,11 +174,10 @@ pub fn evaluate_relational_episode(
     })
 }
 
-fn same_episode_content(left: &RelationalEpisode, right: &RelationalEpisode) -> bool {
-    left.case_id == right.case_id
-        && left.facts == right.facts
-        && left.query == right.query
-        && left.expected == right.expected
+/// Compare only what the candidate can observe. Split metadata, case IDs and
+/// evaluator-owned expected answers are deliberately excluded.
+fn same_candidate_input(left: &RelationalEpisode, right: &RelationalEpisode) -> bool {
+    left.facts == right.facts && left.query == right.query
 }
 
 #[must_use]
@@ -190,7 +189,7 @@ pub fn exact_split_overlap(
         validation
             .episodes()
             .iter()
-            .any(|right| same_episode_content(left, right))
+            .any(|right| same_candidate_input(left, right))
     })
 }
 
@@ -199,10 +198,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn overlap_detection_ignores_only_the_split_marker() {
+    fn overlap_detection_ignores_all_evaluator_metadata() {
         let development = DevelopmentRelationalSet::v1();
         let mut copied = development.episodes()[0].clone();
         copied.split = RelationalSplit::Validation;
+        copied.case_id = 99;
+        copied.expected = RelationalRead::Miss;
         let validation = ValidationRelationalSet(vec![copied]);
         assert!(exact_split_overlap(&development, &validation));
     }
