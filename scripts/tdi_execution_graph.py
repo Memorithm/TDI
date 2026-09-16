@@ -67,6 +67,25 @@ def _capability(value, name):
     return value
 
 
+def _version(value, name):
+    value = _text(value, name, max_bytes=64)
+    core, sep, prerelease = value.partition("-")
+    numbers = core.split(".")
+    if len(numbers) != 3:
+        raise ExecutionGraphError(f"{name} must have exactly three numeric components")
+    for number in numbers:
+        if not number or not number.isascii() or not number.isdigit():
+            raise ExecutionGraphError(f"{name} has an invalid numeric component")
+        if len(number) > 1 and number.startswith("0"):
+            raise ExecutionGraphError(f"{name} numeric components must not have leading zeros")
+    if sep:
+        if not prerelease or any(
+            not (ch.isascii() and (ch.isalnum() or ch in ".-")) for ch in prerelease
+        ):
+            raise ExecutionGraphError(f"{name} has an invalid prerelease")
+    return value
+
+
 def _sha256(value, name):
     if not isinstance(value, str) or _HEX64.fullmatch(value) is None:
         raise ExecutionGraphError(f"{name} must be lowercase SHA-256")
@@ -225,13 +244,17 @@ def canonical_graph(graph):
     normalized_steps = []
     seen_steps = set()
     outputs_by_step = {}
+    component_pins = {}
     for index, raw in enumerate(graph["steps"]):
         _exact(
             raw,
             {
                 "key",
                 "component_alias",
+                "component_version",
+                "component_manifest_digest",
                 "capability",
+                "capability_contract_version",
                 "parameters",
                 "inputs",
                 "outputs",
@@ -245,7 +268,18 @@ def canonical_graph(graph):
         if key in seen_steps:
             raise ExecutionGraphError("duplicate graph step key")
         component_alias = _key(raw["component_alias"], f"steps[{index}].component_alias")
+        component_version = _version(raw["component_version"], f"steps[{index}].component_version")
+        component_manifest_digest = _sha256(
+            raw["component_manifest_digest"], f"steps[{index}].component_manifest_digest"
+        )
         capability = _capability(raw["capability"], f"steps[{index}].capability")
+        capability_contract_version = _version(
+            raw["capability_contract_version"], f"steps[{index}].capability_contract_version"
+        )
+        pin = (component_version, component_manifest_digest)
+        if component_alias in component_pins and component_pins[component_alias] != pin:
+            raise ExecutionGraphError("one component alias cannot resolve to multiple component pins")
+        component_pins[component_alias] = pin
         _safe_json(raw["parameters"], f"steps[{index}].parameters")
         if not isinstance(raw["inputs"], dict) or len(raw["inputs"]) > MAX_INPUTS:
             raise ExecutionGraphError("step inputs must be a bounded object")
@@ -294,7 +328,10 @@ def canonical_graph(graph):
         normalized_steps.append({
             "key": key,
             "component_alias": component_alias,
+            "component_version": component_version,
+            "component_manifest_digest": component_manifest_digest,
             "capability": capability,
+            "capability_contract_version": capability_contract_version,
             "parameters": copy.deepcopy(raw["parameters"]),
             "inputs": normalized_inputs,
             "outputs": outputs,
@@ -332,24 +369,50 @@ def step_identity(graph, key):
     raise ExecutionGraphError(f"unknown graph step {key!r}")
 
 
-def compile_hub_workflow(graph, *, component_bindings, artifact_bindings):
-    """Compile Graph/v1 into Hub WorkflowSpec/v1 without implementing scheduling.
+def compile_hub_workflow_preview(graph, *, component_bindings, artifact_bindings):
+    """Compile Graph/v1 into a non-executable Hub WorkflowSpec preview.
 
-    `component_bindings` maps TDI aliases to already-registered Hub ComponentId
-    strings. `artifact_bindings` maps TDI content SHA-256 identities to immutable
-    Hub ArtifactId strings. This function does not register, execute or retry work.
+    Hub WorkflowSpec/v1 contains ComponentId but does not atomically bind a
+    component version/manifest at submission. Therefore this adapter cannot
+    authorize execution: it emits the structural workflow plus the exact pins
+    a later versioned Hub edge must enforce.
     """
     value = canonical_graph(graph)
     if not isinstance(component_bindings, dict) or not isinstance(artifact_bindings, dict):
         raise ExecutionGraphError("Hub bindings must be dictionaries")
     steps = []
+    component_pins = {}
+    capability_pins = []
     for step in value["steps"]:
-        component = component_bindings.get(step["component_alias"])
-        if component is None:
+        binding = component_bindings.get(step["component_alias"])
+        if binding is None:
             raise ExecutionGraphError(
                 f"missing Hub component binding for alias {step['component_alias']!r}"
             )
-        _hub_uuid(component, f"Hub component binding for {step['component_alias']}")
+        _exact(
+            binding,
+            {"component_id", "component_version", "manifest_digest"},
+            f"Hub component binding for {step['component_alias']}",
+        )
+        component = _hub_uuid(
+            binding["component_id"], f"Hub component binding for {step['component_alias']}"
+        )
+        if _version(binding["component_version"], "Hub component version") != step["component_version"]:
+            raise ExecutionGraphError("Hub component version binding does not match graph pin")
+        if _sha256(binding["manifest_digest"], "Hub component manifest digest") != step["component_manifest_digest"]:
+            raise ExecutionGraphError("Hub component manifest binding does not match graph pin")
+        component_pins[step["component_alias"]] = {
+            "alias": step["component_alias"],
+            "component_id": component,
+            "component_version": step["component_version"],
+            "manifest_digest": step["component_manifest_digest"],
+        }
+        capability_pins.append({
+            "step_key": step["key"],
+            "component_alias": step["component_alias"],
+            "capability": step["capability"],
+            "contract_version": step["capability_contract_version"],
+        })
         inputs = {}
         for name, source in step["inputs"].items():
             if source["kind"] == "artifact":
@@ -373,9 +436,18 @@ def compile_hub_workflow(graph, *, component_bindings, artifact_bindings):
             "timeout_ms": step["timeout_milliseconds"],
             "after": list(step["after"]),
         })
-    return {
+    workflow = {
         "schema_version": value["hub_contract"]["workflow_schema_version"],
         "name": value["name"],
         "max_concurrency": value["max_concurrency"],
         "steps": steps,
+    }
+    return {
+        "schema": 1,
+        "kind": "tdi-hub-workflow-preview",
+        "execution_authorized": False,
+        "hub_contract": copy.deepcopy(value["hub_contract"]),
+        "workflow": workflow,
+        "component_pins": sorted(component_pins.values(), key=lambda item: item["alias"]),
+        "capability_pins": capability_pins,
     }
