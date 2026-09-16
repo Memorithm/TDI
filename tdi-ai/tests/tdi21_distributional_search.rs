@@ -8,11 +8,7 @@ use tdi_ai::experimental::tdi21_distributional_search::{
     DistributionalSearchError, evaluate_distributional_validation, fit_distributional_anf,
 };
 
-fn sample(
-    assignment: u64,
-    admit_succeeds: bool,
-    inhibit_succeeds: bool,
-) -> AdmissionOutcomeSample {
+fn sample(assignment: u64, admit_succeeds: bool, inhibit_succeeds: bool) -> AdmissionOutcomeSample {
     AdmissionOutcomeSample {
         assignment,
         admit_succeeds,
@@ -75,14 +71,8 @@ fn repeated_samples_retain_unit_weight_in_development_selection() {
 
 #[test]
 fn identifiable_two_state_distribution_recovers_x0_policy() {
-    let development = DevelopmentAdmissionSet::new(
-        1,
-        &[
-            sample(0, false, true),
-            sample(1, true, false),
-        ],
-    )
-    .unwrap();
+    let development =
+        DevelopmentAdmissionSet::new(1, &[sample(0, false, true), sample(1, true, false)]).unwrap();
     let result = fit_distributional_anf(&development, envelope(1, 1, 4)).unwrap();
 
     assert!(!result.program().constant());
@@ -141,33 +131,15 @@ fn restricted_policy_family_exposes_policy_form_error_above_feature_floor() {
 
 #[test]
 fn validation_is_post_selection_and_cannot_refit_the_policy() {
-    let development = DevelopmentAdmissionSet::new(
-        1,
-        &[
-            sample(0, false, true),
-            sample(1, true, false),
-        ],
-    )
-    .unwrap();
+    let development =
+        DevelopmentAdmissionSet::new(1, &[sample(0, false, true), sample(1, true, false)]).unwrap();
     let result = fit_distributional_anf(&development, envelope(1, 1, 4)).unwrap();
     let before = result.clone();
 
-    let agreeing = ValidationAdmissionSet::new(
-        1,
-        &[
-            sample(0, false, true),
-            sample(1, true, false),
-        ],
-    )
-    .unwrap();
-    let reversed = ValidationAdmissionSet::new(
-        1,
-        &[
-            sample(0, true, false),
-            sample(1, false, true),
-        ],
-    )
-    .unwrap();
+    let agreeing =
+        ValidationAdmissionSet::new(1, &[sample(0, false, true), sample(1, true, false)]).unwrap();
+    let reversed =
+        ValidationAdmissionSet::new(1, &[sample(0, true, false), sample(1, false, true)]).unwrap();
 
     let agreeing_score = evaluate_distributional_validation(&result, &agreeing).unwrap();
     let reversed_score = evaluate_distributional_validation(&result, &reversed).unwrap();
