@@ -1,8 +1,10 @@
 //! Typed deterministic relational tasks for TDI-21 development.
 //!
-//! Expected answers remain evaluator-side. Candidate execution receives only
-//! explicit bindings and a bounded relation path query. Development and
-//! Validation use disjoint identifier namespaces while preserving task topology.
+//! Expected answers remain evaluator-side and are derived from an independent
+//! exact dictionary, not hand-authored in task fixtures. Candidate execution
+//! receives only explicit bindings and a bounded relation path query.
+
+use std::collections::BTreeMap;
 
 use super::tdi21_relational_binding::{
     RelationalBinder, RelationalConfig, RelationalError, RelationalRead, RelationalWork,
@@ -105,34 +107,49 @@ fn fact(relation: u64, subject: u64, object: u64) -> RelationalFact {
     }
 }
 
+fn derive_expected(facts: &[RelationalFact], query: &RelationalQuery) -> RelationalRead {
+    let mut oracle = BTreeMap::new();
+    for fact in facts {
+        oracle.insert((fact.relation, fact.subject), fact.object);
+    }
+    let mut current = query.subject;
+    for &relation in &query.relations {
+        let Some(&next) = oracle.get(&(relation, current)) else {
+            return RelationalRead::Miss;
+        };
+        current = next;
+    }
+    RelationalRead::Hit(current)
+}
+
 fn episode(
     split: RelationalSplit,
     case_id: u8,
     facts: Vec<RelationalFact>,
     relations: Vec<u64>,
     subject: u64,
-    expected: u64,
 ) -> RelationalEpisode {
+    let query = RelationalQuery { relations, subject };
+    let expected = derive_expected(&facts, &query);
     RelationalEpisode {
         split,
         case_id,
         facts,
-        query: RelationalQuery { relations, subject },
-        expected: RelationalRead::Hit(expected),
+        query,
+        expected,
     }
 }
 
 fn build_split(split: RelationalSplit) -> Vec<RelationalEpisode> {
     let (e, r) = namespace(split);
     vec![
-        episode(split, 0, vec![fact(r[0], e[0], e[1])], vec![r[0]], e[0], e[1]),
+        episode(split, 0, vec![fact(r[0], e[0], e[1])], vec![r[0]], e[0]),
         episode(
             split,
             1,
             vec![fact(r[0], e[0], e[1]), fact(r[1], e[1], e[2])],
             vec![r[0], r[1]],
             e[0],
-            e[2],
         ),
         episode(
             split,
@@ -144,7 +161,6 @@ fn build_split(split: RelationalSplit) -> Vec<RelationalEpisode> {
             ],
             vec![r[0], r[1], r[2]],
             e[0],
-            e[3],
         ),
         episode(
             split,
@@ -157,7 +173,6 @@ fn build_split(split: RelationalSplit) -> Vec<RelationalEpisode> {
             ],
             vec![r[0], r[1]],
             e[0],
-            e[2],
         ),
     ]
 }
@@ -212,5 +227,15 @@ mod tests {
         copied.expected = RelationalRead::Miss;
         let validation = ValidationRelationalSet(vec![copied]);
         assert!(exact_split_overlap(&development, &validation));
+    }
+
+    #[test]
+    fn evaluator_oracle_derives_missing_paths_without_candidate_execution() {
+        let facts = [fact(1, 2, 3)];
+        let query = RelationalQuery {
+            relations: vec![1, 2],
+            subject: 2,
+        };
+        assert_eq!(derive_expected(&facts, &query), RelationalRead::Miss);
     }
 }
