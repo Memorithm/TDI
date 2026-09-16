@@ -23,6 +23,8 @@ FORGE_REPOSITORY = "Memorithm/Forge"
 FORGE_SOURCE_SHA = "8946e702e697c144c85e0fb166a21fe759cdae46"
 FORGE_EXTERNAL_DOMAIN_SCHEMA_VERSION = 1
 FORGE_SCIENTIFIC_DOMAIN_SCHEMA_VERSION = 1
+FORGE_PROTOCOL_NAME = "forge.scientific-external-domain"
+FORGE_PROTOCOL_VERSION = 1
 
 MAX_LIST_ITEMS = 128
 MAX_TEXT_BYTES = 512
@@ -110,7 +112,7 @@ def _canonical_upstream(value):
         len(parts) != 2
         or not all(parts)
         or any(
-            not all(ch.isalnum() or ch in "._-" for ch in component)
+            not all(ch.isascii() and (ch.isalnum() or ch in "._-") for ch in component)
             for component in parts
         )
     ):
@@ -258,6 +260,13 @@ def canonical_forge_search_contract(value):
     if adapter["source_sha"] != FORGE_SOURCE_SHA:
         raise ForgePartnerContractError(
             "Forge adapter source does not match the audited Forge source"
+        )
+    if (
+        adapter["protocol"]["name"] != FORGE_PROTOCOL_NAME
+        or adapter["protocol"]["version"] != FORGE_PROTOCOL_VERSION
+    ):
+        raise ForgePartnerContractError(
+            "Forge adapter protocol does not match the audited scientific-domain contract"
         )
 
     forge = value["forge"]

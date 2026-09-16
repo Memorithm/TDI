@@ -133,6 +133,18 @@ class ForgePartnerContractTests(unittest.TestCase):
         ):
             forge.canonical_forge_search_contract(value)
 
+        value = contract()
+        value["partner_step"]["adapter"]["protocol"]["name"] = "forge.other"
+        value["partner_step"] = partner.bind_admitted_partner_step(
+            value["partner_step"]["adapter"],
+            hub_fixture.bind_fixture(),
+            step_key="evaluate",
+        )
+        with self.assertRaisesRegex(
+            forge.ForgePartnerContractError, "protocol does not match"
+        ):
+            forge.canonical_forge_search_contract(value)
+
     def test_forge_source_and_schema_pins_fail_closed(self):
         value = contract()
         value["forge"]["source_sha"] = "f" * 40
@@ -151,6 +163,14 @@ class ForgePartnerContractTests(unittest.TestCase):
                 forge.ForgePartnerContractError, "must be the integer 1"
             ):
                 forge.canonical_forge_search_contract(value)
+
+    def test_upstream_repository_matches_forge_ascii_owner_name_grammar(self):
+        value = contract()
+        value["upstream"]["repository"] = "Mémorithm/TDI"
+        with self.assertRaisesRegex(
+            forge.ForgePartnerContractError, "owner/name syntax"
+        ):
+            forge.canonical_forge_search_contract(value)
 
     def test_development_and_validation_sources_must_be_nonempty_and_disjoint(self):
         for field in ("generation_sources", "verification_sources"):
