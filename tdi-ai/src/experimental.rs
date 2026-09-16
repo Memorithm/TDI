@@ -28,6 +28,8 @@ pub mod boolean_policy_synthesis;
 pub mod development_campaign;
 #[path = "tdi2_intuition.rs"]
 pub mod tdi2_intuition;
+#[path = "tdi2_intuition_ablations.rs"]
+pub mod tdi2_intuition_ablations;
 #[path = "tdi2_intuition_aggregation.rs"]
 pub mod tdi2_intuition_aggregation;
 #[path = "tdi2_intuition_analogy_tasks.rs"]
