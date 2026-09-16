@@ -208,6 +208,9 @@ def hub_case(root, count, concurrency, hubd, worker):
             rows = store.results(campaign)
             payload_bytes = sum(r['evidence']['descriptor']['size_bytes'] for r in rows)
             evidence_bytes = sum(len(durable.canonical(r['evidence']).encode()) for r in rows)
+            stored_result_bytes = store.db.execute('SELECT SUM(length(CAST(evidence AS BLOB))) FROM results WHERE campaign=?', (campaign,)).fetchone()[0]
+            has_shared = store.db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='shared_proofs'").fetchone()
+            shared_proof_bytes = store.db.execute('SELECT COALESCE(SUM(length(CAST(payload AS BLOB))),0) FROM shared_proofs').fetchone()[0] if has_shared else 0
             evidence = rows[0]['evidence']
             def rehash():
                 for _ in range(128):
@@ -225,6 +228,8 @@ def hub_case(root, count, concurrency, hubd, worker):
                 "provenance_128_hashes": provenance, "local_otlp_prepare": observability,
                 "otlp_plan_bytes": receipt_bytes, "remote_export_delivery": None,
                 "verified_outputs": len(rows), "artifact_payload_bytes": payload_bytes, "catalogue_evidence_json_bytes": evidence_bytes,
+                "stored_result_json_bytes": stored_result_bytes, "shared_proof_json_bytes": shared_proof_bytes,
+                "total_stored_evidence_json_bytes": stored_result_bytes + shared_proof_bytes,
                 "transfer_before_restart": transfer_before_restart, "transfer_total": client.counts,
                 "scope": "real public counter/verify workers; execution includes Hub scheduling and TDI G3 verification; OTLP encoding/persistence only, no remote collector"}
     finally:
@@ -240,9 +245,11 @@ def catalogue_case(root, count):
             for i in range(count):
                 store.create({"kind": "synthetic-benchmark-catalogue-record", "index": i}, 'http://127.0.0.1:8477')
         _, writing = measure(populate)
-        query = "SELECT id,phase,workflow,created_ns FROM campaigns WHERE (? IS NULL OR phase=?) ORDER BY created_ns,id LIMIT ? OFFSET ?"
-        parameters = ('prepared', 'prepared', 50, max(0, count - 50))
-        plan = [list(row) for row in store.db.execute('EXPLAIN QUERY PLAN ' + query, parameters)]
+        statements = []; store.db.set_trace_callback(statements.append)
+        store.list(after=max(0, count - 50), limit=50, phase='prepared')
+        store.db.set_trace_callback(None)
+        query = next(sql for sql in statements if sql.startswith('SELECT id,phase'))
+        plan = [list(row) for row in store.db.execute('EXPLAIN QUERY PLAN ' + query)]
         def queries():
             for _ in range(64):
                 rows = store.list(after=max(0, count - 50), limit=50, phase='prepared')
