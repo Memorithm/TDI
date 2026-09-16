@@ -1,0 +1,65 @@
+name: TDI public attention adapters
+on:
+  pull_request:
+    paths: ['integrations/attention-probe/**', 'scripts/tdi_*', 'scripts/test_tdi_*', '.github/workflows/tdi-attention-adapters.yml']
+  push:
+    branches: [main]
+    paths: ['integrations/attention-probe/**', 'scripts/tdi_*', 'scripts/test_tdi_*', '.github/workflows/tdi-attention-adapters.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tdi-attention-adapters-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  public-software:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_BUILD_JOBS: '2'
+      RUSTFLAGS: '-C debuginfo=0'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          path: integration-tdi
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: Memorithm/scirust-hub
+          ref: ccdcb99a4573dbefb944af0df713101b100b5f78
+          persist-credentials: false
+          path: integration-hub
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: Memorithm/NNIS
+          ref: 5436736002834dd6dd7d5ace8c1c044b47aed18f
+          persist-credentials: false
+          path: integration-nnis
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+      - run: cargo build --locked -p scirust-hubd -p scirust-hub-worker
+        working-directory: integration-hub
+      - name: Default software build, format and lint
+        working-directory: integration-tdi
+        run: |
+          cargo fmt --manifest-path integrations/attention-probe/Cargo.toml -- --check
+          cargo build --locked --manifest-path integrations/attention-probe/Cargo.toml
+          cargo clippy --locked --manifest-path integrations/attention-probe/Cargo.toml --all-targets -- -D warnings
+      - name: Actual public numerical and catalogue qualification
+        working-directory: integration-tdi
+        env:
+          PYTHONPATH: scripts
+          TDI_HUBD_BIN: ${{ github.workspace }}/integration-hub/target/debug/scirust-hubd
+          TDI_ATTENTION_PROBE: ${{ github.workspace }}/integration-tdi/integrations/attention-probe/target/debug/tdi-attention-probe
+          TDI_NNIS_CHECKOUT: ${{ github.workspace }}/integration-nnis
+        run: python3 -m unittest -v scripts/test_tdi_attention_integration.py scripts/test_tdi_flat_partner_contract.py scripts/test_tdi_nnis_partner_contract.py
+      - name: Optional NNIS compile and lint only; no physical qualification
+        working-directory: integration-tdi
+        run: |
+          cargo build --locked --manifest-path integrations/attention-probe/Cargo.toml --features nnis-cuda
+          cargo clippy --locked --manifest-path integrations/attention-probe/Cargo.toml --all-targets --all-features -- -D warnings
