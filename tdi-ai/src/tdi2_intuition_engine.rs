@@ -51,7 +51,10 @@ impl IntuitionEngine {
 
 impl Default for IntuitionEngine {
     fn default() -> Self {
-        Self::new(ExperienceWeightPolicy::default(), InferencePolicy::default())
+        Self::new(
+            ExperienceWeightPolicy::default(),
+            InferencePolicy::default(),
+        )
     }
 }
 

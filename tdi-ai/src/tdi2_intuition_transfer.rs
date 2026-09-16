@@ -95,7 +95,12 @@ impl RoleMap {
         mut bindings: Vec<RoleBinding>,
     ) -> Result<Self, TransferError> {
         for binding in &bindings {
-            if template.base().roles().binary_search(&binding.role()).is_err() {
+            if template
+                .base()
+                .roles()
+                .binary_search(&binding.role())
+                .is_err()
+            {
                 return Err(TransferError::UnknownRole {
                     role: binding.role(),
                 });
@@ -110,7 +115,10 @@ impl RoleMap {
             return Err(TransferError::DuplicateRole { role });
         }
 
-        let mut entities = bindings.iter().map(|binding| binding.entity()).collect::<Vec<_>>();
+        let mut entities = bindings
+            .iter()
+            .map(|binding| binding.entity())
+            .collect::<Vec<_>>();
         entities.sort_unstable();
         if let Some(entity) = entities
             .windows(2)
