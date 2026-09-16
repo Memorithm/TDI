@@ -68,7 +68,6 @@ fn consistent_identifier_renaming_preserves_relational_structure() {
     assert_eq!(first.compose2(1, 2, 3).unwrap(), RelationalRead::Hit(9));
 
     let mut renamed = RelationalBinder::new(config(64)).unwrap();
-    // Entity permutation: 3->31, 5->47, 9->83. Relation permutation: 1->6, 2->4.
     renamed.bind(6, 31, 47).unwrap();
     renamed.bind(4, 47, 83).unwrap();
     assert_eq!(renamed.compose2(6, 4, 31).unwrap(), RelationalRead::Hit(83));
@@ -87,20 +86,20 @@ fn irrelevant_relations_do_not_change_an_existing_two_hop_answer_without_evictio
 }
 
 #[test]
-fn bounded_memory_can_lose_relations_and_failure_remains_visible() {
+fn bounded_memory_loss_is_explicit_not_a_false_hit() {
     let mut binder = RelationalBinder::new(config(2)).unwrap();
     binder.bind(1, 3, 5).unwrap();
     binder.bind(2, 5, 9).unwrap();
     binder.bind(3, 7, 11).unwrap();
-    let answer = binder.compose2(1, 2, 3).unwrap();
-    assert!(matches!(answer, RelationalRead::Hit(9) | RelationalRead::Miss));
+    assert_eq!(binder.compose2(1, 2, 3).unwrap(), RelationalRead::Miss);
     assert!(binder.counters().work.memory_replacements > 0);
     assert_eq!(binder.counters().work.pairwise_comparisons, 0);
 }
 
 #[test]
-fn relation_path_length_is_explicitly_bounded() {
+fn relation_path_length_and_identifiers_are_validated_before_reads() {
     let mut binder = RelationalBinder::new(config(32)).unwrap();
+    let before = binder.counters();
     assert_eq!(
         binder.compose_path(&[], 1),
         Err(RelationalError::EmptyRelationPath)
@@ -110,7 +109,26 @@ fn relation_path_length_is_explicitly_bounded() {
         binder.compose_path(&too_long, 1),
         Err(RelationalError::TooManyCompositionHops)
     );
-    assert_eq!(binder.counters().work.memory_reads, 0);
+    assert_eq!(
+        binder.compose_path(&[1, 256], 1),
+        Err(RelationalError::RelationOutOfRange)
+    );
+    assert_eq!(binder.counters(), before);
+}
+
+#[test]
+fn insufficient_event_budget_rejects_the_whole_path_before_reads() {
+    let mut cfg = config(32);
+    cfg.stream.max_events = 3;
+    let mut binder = RelationalBinder::new(cfg).unwrap();
+    binder.bind(1, 3, 5).unwrap();
+    binder.bind(2, 5, 9).unwrap();
+    let before = binder.counters();
+    assert_eq!(
+        binder.compose2(1, 2, 3),
+        Err(RelationalError::EventBudgetExhausted)
+    );
+    assert_eq!(binder.counters(), before);
 }
 
 #[test]
