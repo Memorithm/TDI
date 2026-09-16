@@ -31,7 +31,7 @@ pub fn diagnose_novelty(store: &ExperienceStore, state: &BooleanState) -> Novelt
         if matched.is_exact() {
             exact_applicable += 1;
         }
-        let fraction = matched.match_fraction();
+        let fraction = matched.score();
         best_partial_match = Some(best_partial_match.map_or(fraction, |current| current.max(fraction)));
     }
     NoveltyDiagnostic { exact_applicable, best_partial_match }
