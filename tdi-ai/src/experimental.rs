@@ -32,6 +32,8 @@ pub mod tdi2_intuition;
 pub mod tdi2_intuition_aggregation;
 #[path = "tdi2_intuition_baselines.rs"]
 pub mod tdi2_intuition_baselines;
+#[path = "tdi2_intuition_calibration.rs"]
+pub mod tdi2_intuition_calibration;
 #[path = "tdi2_intuition_consolidation.rs"]
 pub mod tdi2_intuition_consolidation;
 #[path = "tdi2_intuition_engine.rs"]
