@@ -30,6 +30,8 @@ pub mod development_campaign;
 pub mod tdi2_intuition;
 #[path = "tdi2_intuition_aggregation.rs"]
 pub mod tdi2_intuition_aggregation;
+#[path = "tdi2_intuition_analogy_tasks.rs"]
+pub mod tdi2_intuition_analogy_tasks;
 #[path = "tdi2_intuition_baselines.rs"]
 pub mod tdi2_intuition_baselines;
 #[path = "tdi2_intuition_calibration.rs"]
