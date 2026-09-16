@@ -30,6 +30,8 @@ pub mod development_campaign;
 pub mod tdi2_intuition;
 #[path = "tdi2_intuition_matching.rs"]
 pub mod tdi2_intuition_matching;
+#[path = "tdi2_intuition_relations.rs"]
+pub mod tdi2_intuition_relations;
 #[path = "tdi2_intuition_reliability.rs"]
 pub mod tdi2_intuition_reliability;
 #[path = "tdi2_intuition_weight.rs"]
