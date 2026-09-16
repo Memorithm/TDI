@@ -1,6 +1,6 @@
 # TDI portable artifact, provenance, export, and cache contract
 
-Status: Lot F candidate. This contract is infrastructure only. It does not authorize a scientific stage, a retry, publication, or a protected/final decision.
+Status: Lot F contract layer qualified by PR #261 on final exact head `dceb67d4a9c49ce293c08347cab61db0f3347871`, merged as `494240ebc5cd8d9418ce8c174dd65a4bc4e17651`. This contract is infrastructure only. It does not authorize a scientific stage, a retry, publication, or a protected/final decision.
 
 ## Ownership boundary
 
@@ -41,7 +41,7 @@ The boolean authorization is not derived here. This module therefore cannot open
 
 ## Qualification
 
-Candidate qualification is:
+PR #261 qualified the contract checks on final exact head `dceb67d4a9c49ce293c08347cab61db0f3347871` before merge `494240ebc5cd8d9418ce8c174dd65a4bc4e17651`:
 
 ```bash
 PYTHONPATH=scripts python3 -m py_compile \
@@ -51,8 +51,8 @@ PYTHONPATH=scripts python3 -m unittest \
   scripts/test_tdi_artifact_contract.py -v
 ```
 
-The dedicated `TDI artifact and provenance contracts` workflow runs the same checks on the exact PR head.
+The dedicated `TDI artifact and provenance contracts` workflow executed the same checks successfully on that exact PR head.
 
-## Remaining Lot F work
+## Remaining integration work
 
-This tranche defines portable descriptors, provenance, export verification, and exact-cache semantics. It does **not** yet provide an authoritative Hub publication edge, physical CAS/registry integration, distributed fencing, or a durable cache index. Those remain later lots and must preserve the Hub/TDI ownership split.
+The qualified Lot F contract layer defines portable descriptors, provenance, export verification, and exact-cache semantics. It still does **not** provide an authoritative Hub publication edge, physical CAS/registry integration, distributed fencing, or a durable cache index. Those are later industrialization lots and must preserve the Hub/TDI ownership split. In particular, TDI must remain fail-closed for authoritative remote publication until Hub-owned attempt fencing/generation semantics are qualified.
