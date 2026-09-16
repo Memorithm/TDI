@@ -24,7 +24,7 @@ def fixture():
             {
                 "key": "prepare",
                 "component_alias": "tdi-runner",
-                "capability": "tdi.prepare@1.0.0",
+                "capability": "tdi.prepare",
                 "parameters": {"mode": "fixture", "count": 2},
                 "inputs": {"spec": {"kind": "artifact", "sha256": SHA("1")}},
                 "outputs": ["file:prepared", "file:checkpoint"],
@@ -35,7 +35,7 @@ def fixture():
             {
                 "key": "evaluate",
                 "component_alias": "tdi-runner",
-                "capability": "tdi.evaluate@1.0.0",
+                "capability": "tdi.evaluate",
                 "parameters": {"mode": "fixture"},
                 "inputs": {
                     "prepared": {"kind": "step", "step": "prepare", "output": "file:prepared"},
@@ -86,6 +86,12 @@ class Tests(unittest.TestCase):
             graph.canonical_graph(a)
         a = fixture()
         a["steps"][0]["parameters"]["x"] = 2**53
+        with self.assertRaises(graph.ExecutionGraphError):
+            graph.canonical_graph(a)
+
+    def test_capability_must_match_hub_grammar(self):
+        a = fixture()
+        a["steps"][0]["capability"] = "tdi.prepare@1.0.0"
         with self.assertRaises(graph.ExecutionGraphError):
             graph.canonical_graph(a)
 
