@@ -1,8 +1,9 @@
 """Versioned checkpoint identity and exact-resume validation for TDI engine trials.
 
-Checkpoint manifests bind scientific/execution identity, causal progress, RNG stream
-coordinates, immutable input artifacts and one content-addressed state artifact.
-This module never authorizes a scientific stage and never decides retry policy.
+Checkpoint manifests bind scientific/execution identity, frozen logical budgets,
+causal progress, RNG stream coordinates, immutable input artifacts and one
+content-addressed state artifact. This module never authorizes a scientific stage
+and never decides retry policy.
 """
 from __future__ import annotations
 
@@ -118,7 +119,13 @@ def _canonical_streams(records):
 
 
 def canonical_checkpoint(manifest):
-    """Validate and canonicalize a CheckpointManifest/v1 for identity hashing."""
+    """Validate and canonicalize a CheckpointManifest/v1 for identity hashing.
+
+    Frozen step/observation budgets are carried by the manifest itself so a
+    resume boundary cannot silently reinterpret progress under wider caller
+    limits. The owning engine still has to supply the same plan-derived budgets
+    to ``validate_resume``.
+    """
     _exact(
         manifest,
         {
@@ -132,6 +139,7 @@ def canonical_checkpoint(manifest):
             "backend_identity",
             "seed_decimal",
             "checkpoint_ordinal",
+            "budgets",
             "progress",
             "rng_streams",
             "input_artifacts",
@@ -151,6 +159,14 @@ def canonical_checkpoint(manifest):
     _parse_seed(manifest["seed_decimal"])
     _safe_integer(manifest["checkpoint_ordinal"], "checkpoint_ordinal")
 
+    budgets = _exact(
+        manifest["budgets"],
+        {"max_steps", "max_observations"},
+        "checkpoint budgets",
+    )
+    _safe_integer(budgets["max_steps"], "budgets.max_steps")
+    _safe_integer(budgets["max_observations"], "budgets.max_observations")
+
     progress = _exact(
         manifest["progress"],
         {"completed_steps", "completed_observations"},
@@ -158,6 +174,12 @@ def canonical_checkpoint(manifest):
     )
     _safe_integer(progress["completed_steps"], "progress.completed_steps")
     _safe_integer(progress["completed_observations"], "progress.completed_observations")
+    if progress["completed_steps"] > budgets["max_steps"]:
+        raise CheckpointContractError("checkpoint completed_steps exceeds embedded frozen budget")
+    if progress["completed_observations"] > budgets["max_observations"]:
+        raise CheckpointContractError(
+            "checkpoint completed_observations exceeds embedded frozen budget"
+        )
 
     state = _exact(manifest["state"], {"sha256", "media_type", "size_bytes"}, "checkpoint state")
     _sha256(state["sha256"], "state.sha256")
@@ -175,6 +197,10 @@ def canonical_checkpoint(manifest):
         "backend_identity": manifest["backend_identity"],
         "seed_decimal": manifest["seed_decimal"],
         "checkpoint_ordinal": manifest["checkpoint_ordinal"],
+        "budgets": {
+            "max_steps": budgets["max_steps"],
+            "max_observations": budgets["max_observations"],
+        },
         "progress": {
             "completed_steps": progress["completed_steps"],
             "completed_observations": progress["completed_observations"],
@@ -213,8 +239,9 @@ def validate_resume(
     """Fail closed unless a checkpoint is an exact resume of the declared step.
 
     RNG counters may advance and state bytes naturally differ between checkpoints,
-    but stream identities, immutable inputs and every caller-owned identity must
-    match exactly. The function does not authorize a retry or a scientific stage.
+    but stream identities, immutable inputs, frozen budgets and every caller-owned
+    identity must match exactly. The function does not authorize a retry or a
+    scientific stage.
     """
     value = canonical_checkpoint(manifest)
     expected = {
@@ -244,6 +271,9 @@ def validate_resume(
 
     _safe_integer(max_steps, "max_steps")
     _safe_integer(max_observations, "max_observations")
+    expected_budgets = {"max_steps": max_steps, "max_observations": max_observations}
+    if value["budgets"] != expected_budgets:
+        raise CheckpointContractError("checkpoint frozen budget binding mismatch")
     if value["progress"]["completed_steps"] > max_steps:
         raise CheckpointContractError("checkpoint completed_steps exceeds frozen budget")
     if value["progress"]["completed_observations"] > max_observations:
