@@ -39,10 +39,12 @@ grep -Fq 'CANDIDATE PREPARATION / DRAFT PR / BLOCKED ON TDI-23.1 FREEZE' "$STATU
 grep -Fq 'bash scripts/check-tdi23.2-rewrite.sh' "$WORKFLOW" \
     || fail "dedicated workflow no longer invokes the TDI-23.2 gate"
 
-if grep -Eiq \
-    'rewrite search is authorized|recursive rewriting is authorized|reassociation is authorized|tensor.*rewrite is authorized|direct[- ]sum.*rewrite is authorized|approximate equivalence is authorized|FLAT-ATTENTION integration is authorized|confirmatory execution is authorized|final execution is authorized' \
-    "$SCOPE" "$STATUS" "$REWRITE_SRC"; then
-    fail "scientific-boundary gate rejected an unsupported positive claim"
+# Reject affirmative authorization claims only. Required statements such as
+# "No FLAT-ATTENTION integration is authorized" must remain valid evidence of
+# the fail-closed boundary rather than triggering this guard themselves.
+FORBIDDEN_AFFIRMATIVE='^[[:space:]]*([-*][[:space:]]*)?(rewrite search|recursive rewriting|reassociation|tensor(-product)? rewrites?|direct[- ]sum rewrites?|approximate equivalence|FLAT-ATTENTION integration|confirmatory execution|final execution)[[:space:]]+(is|are)[[:space:]]+authorized([[:space:][:punct:]]|$)'
+if grep -Eiq "$FORBIDDEN_AFFIRMATIVE" "$SCOPE" "$STATUS" "$REWRITE_SRC"; then
+    fail "scientific-boundary gate rejected an unsupported affirmative authorization claim"
 fi
 
 cargo fmt --all -- --check
