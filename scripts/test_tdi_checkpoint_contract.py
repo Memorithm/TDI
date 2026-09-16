@@ -18,6 +18,7 @@ def manifest():
         "backend_identity": "linux-cgroup-v2",
         "seed_decimal": str(2**63 + 7),
         "checkpoint_ordinal": 2,
+        "budgets": {"max_steps": 4, "max_observations": 8},
         "progress": {"completed_steps": 4, "completed_observations": 8},
         "rng_streams": [
             {"name": "noise", "stream_id": SHA("e"), "counter_decimal": "9"},
@@ -43,7 +44,7 @@ class Tests(unittest.TestCase):
         b["input_artifacts"].reverse()
         self.assertEqual(checkpoint.checkpoint_identity(a), checkpoint.checkpoint_identity(b))
 
-    def test_state_or_counter_changes_identity(self):
+    def test_state_counter_or_budget_changes_identity(self):
         a = manifest()
         base = checkpoint.checkpoint_identity(a)
         b = copy.deepcopy(a)
@@ -51,6 +52,9 @@ class Tests(unittest.TestCase):
         self.assertNotEqual(base, checkpoint.checkpoint_identity(b))
         b = copy.deepcopy(a)
         b["rng_streams"][0]["counter_decimal"] = "10"
+        self.assertNotEqual(base, checkpoint.checkpoint_identity(b))
+        b = copy.deepcopy(a)
+        b["budgets"]["max_steps"] = 5
         self.assertNotEqual(base, checkpoint.checkpoint_identity(b))
 
     def test_exact_resume_accepts_only_bound_lineage(self):
@@ -113,6 +117,27 @@ class Tests(unittest.TestCase):
         with self.assertRaises(checkpoint.CheckpointContractError):
             checkpoint.validate_resume(
                 a,
+                experiment_id=SHA("a"),
+                plan_id=SHA("b"),
+                trial_id=SHA("c"),
+                step_key="evaluate",
+                step_identity=SHA("d"),
+                adapter_identity="fixture-adapter/v1",
+                backend_identity="linux-cgroup-v2",
+                seed=2**63 + 7,
+                input_artifacts={"config": SHA("2"), "dataset": SHA("1")},
+                rng_stream_ids={"task": SHA("f"), "noise": SHA("e")},
+                max_steps=4,
+                max_observations=8,
+            )
+
+    def test_resume_rejects_frozen_budget_reinterpretation(self):
+        a = manifest()
+        wider = copy.deepcopy(a)
+        wider["budgets"] = {"max_steps": 5, "max_observations": 9}
+        with self.assertRaises(checkpoint.CheckpointContractError):
+            checkpoint.validate_resume(
+                wider,
                 experiment_id=SHA("a"),
                 plan_id=SHA("b"),
                 trial_id=SHA("c"),
