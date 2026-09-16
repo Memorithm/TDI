@@ -386,10 +386,16 @@ mod tests {
     #[test]
     fn tdi23_identity_zero_and_application_controls_are_explicit() {
         let identity = RealLinearMap::identity(3).expect("identity");
-        assert_eq!(identity.apply(&[2.0, -1.0, 4.0]).expect("apply"), [2.0, -1.0, 4.0]);
+        assert_eq!(
+            identity.apply(&[2.0, -1.0, 4.0]).expect("apply"),
+            [2.0, -1.0, 4.0]
+        );
 
         let zero = RealLinearMap::zero(3, 2).expect("zero map");
-        assert_eq!(zero.apply(&[2.0, -1.0, 4.0]).expect("apply"), [0.0, 0.0]);
+        assert_eq!(
+            zero.apply(&[2.0, -1.0, 4.0]).expect("apply"),
+            [0.0, 0.0]
+        );
     }
 
     #[test]
