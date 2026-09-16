@@ -68,14 +68,20 @@ pub enum IntuitionOutcome {
 
 /// Select the highest-ranked admissible candidate or abstain.
 ///
-/// Runtime latency is deliberately absent from this decision rule.
+/// Runtime latency is deliberately absent from this decision rule. Candidate
+/// values injected outside the normal selector fail closed when their weight is
+/// non-finite or negative.
 #[must_use]
 pub fn infer(candidates: &[Candidate], policy: InferencePolicy) -> IntuitionOutcome {
     let Some(candidate) = candidates.first().copied() else {
         return IntuitionOutcome::InsufficientExperience;
     };
 
-    if candidate.support() == 0 || candidate.weight() < policy.min_weight() {
+    if candidate.support() == 0
+        || !candidate.weight().is_finite()
+        || candidate.weight() < 0.0
+        || candidate.weight() < policy.min_weight()
+    {
         return IntuitionOutcome::InsufficientExperience;
     }
 
@@ -107,6 +113,17 @@ mod tests {
             infer(&[candidate], InferencePolicy::default()),
             IntuitionOutcome::InsufficientExperience
         );
+    }
+
+    #[test]
+    fn non_finite_or_negative_candidate_weight_abstains() {
+        for weight in [f64::NAN, f64::INFINITY, -0.1] {
+            let candidate = Candidate::new(TemplateId::new(1), weight, 1);
+            assert_eq!(
+                infer(&[candidate], InferencePolicy::default()),
+                IntuitionOutcome::InsufficientExperience
+            );
+        }
     }
 
     #[test]
