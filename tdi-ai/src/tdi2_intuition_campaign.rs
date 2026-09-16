@@ -5,7 +5,7 @@
 use super::tdi2_intuition_evaluation::EvaluationSummary;
 use super::tdi2_intuition_inference::IntuitionOutcome;
 use super::tdi2_intuition_tasks::{
-    SyntheticCase, context_reversal_pair, motif_retrieval_case,
+    SyntheticCase, TemporalCase, context_reversal_pair, motif_retrieval_case, temporal_trend_case,
 };
 
 /// Allowed non-final experimental domains for this harness.
@@ -77,11 +77,26 @@ pub fn context_cases(start: u32, pair_count: usize) -> Result<Vec<SyntheticCase>
     Ok(cases)
 }
 
+/// Materialize deterministic ordered temporal cases for a checked id range.
+pub fn temporal_cases(start: u32, count: usize) -> Result<Vec<TemporalCase>, CampaignError> {
+    let mut cases = Vec::with_capacity(count);
+    for offset in 0..count {
+        let offset = u32::try_from(offset).map_err(|_| CampaignError::CaseIdOverflow)?;
+        let id = start.checked_add(offset).ok_or(CampaignError::CaseIdOverflow)?;
+        cases.push(temporal_trend_case(id));
+    }
+    Ok(cases)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{CampaignDomain, context_cases, motif_cases, run_synthetic_campaign};
+    use super::{
+        CampaignDomain, context_cases, motif_cases, run_synthetic_campaign, temporal_cases,
+    };
     use crate::experimental::tdi2_intuition_inference::IntuitionOutcome;
-    use crate::experimental::tdi2_intuition_tasks::{context_reversal_pair, motif_retrieval_case};
+    use crate::experimental::tdi2_intuition_tasks::{
+        context_reversal_pair, motif_retrieval_case, temporal_trend_case,
+    };
 
     #[test]
     fn campaign_preserves_explicit_abstention() {
@@ -108,5 +123,12 @@ mod tests {
         assert_eq!(cases.len(), 4);
         assert_eq!(cases[0], first[0]);
         assert_eq!(cases[1], first[1]);
+    }
+
+    #[test]
+    fn temporal_range_is_deterministic_and_contiguous() {
+        let cases = temporal_cases(7, 2).expect("bounded range");
+        assert_eq!(cases[0], temporal_trend_case(7));
+        assert_eq!(cases[1], temporal_trend_case(8));
     }
 }
