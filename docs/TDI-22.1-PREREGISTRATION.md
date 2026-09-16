@@ -14,7 +14,21 @@ All arms operate on the same evaluator-owned episode and receive the same admiss
 
 ### T0 — vector reference
 
-A conventional six-component query/key score. Query and key are represented as two three-component blocks but no Varignon transport or cross product is used. This arm establishes a competent same-width vector baseline.
+T0 is an exact six-component cosine-similarity reference over the flattened query `(v, omega)` and key `(R, C)`. It does not apply Varignon transport or any cross product. Define
+
+`dot_6 = v . R + omega . C`,
+
+`query_norm_2 = v . v + omega . omega`,
+
+`key_norm_2 = R . R + C . C`,
+
+and
+
+`score_T0 = dot_6 / sqrt(query_norm_2 * key_norm_2)`.
+
+The evaluator must reject the record before scoring if either squared norm is zero, non-finite, or if their product/derived square root is non-finite. Arithmetic is performed in the frozen binary64 reference order used by the evaluator; implementations may not substitute an algebraically rearranged normalization without a new protocol version.
+
+T0 is therefore deliberately distinct from T4: T0 normalizes the same six scalar channels by query/key magnitude, whereas T4 uses the raw six-lane dot product `v . R + omega . C`. Because candidate key norms may differ, T0 and T4 need not induce the same ranking. T0 establishes a conventional magnitude-normalized same-width vector baseline; T4 remains the matched raw six-component non-torsor control for the torsor-specific T3 comparison.
 
 ### T1 — torsor value only
 
@@ -42,7 +56,7 @@ Uses the same six scalar query channels and six scalar key channels as T3 and th
 
 `score_T4 = v . R + omega . C`.
 
-T4 therefore controls six-component width and the `(R, C)` key storage while removing the declared Varignon query transport. It is not claimed to match T3's exact arithmetic operation count; operation counts are recorded separately and never hidden inside the quality verdict.
+T4 therefore controls six-component width and the `(R, C)` key storage while removing the declared Varignon query transport. Unlike T0, T4 performs no magnitude normalization. It is not claimed to match T3's exact arithmetic operation count; operation counts are recorded separately and never hidden inside the quality verdict.
 
 ## 3. Task families
 
@@ -96,6 +110,8 @@ Every arm records, without converting these counts into runtime claims:
 - temporary scalar/vector slots required by the reference scoring step;
 - scalar additions;
 - scalar multiplications;
+- square-root evaluations;
+- scalar divisions;
 - cross-product evaluations;
 - dot-product scalar lanes;
 - comparisons used by ranking;
@@ -147,6 +163,7 @@ At minimum, the evaluator must fail closed with typed reasons for:
 - malformed episode;
 - non-finite input component;
 - non-finite derived component;
+- zero or non-finite T0 query/key norm;
 - invalid geometry identifier;
 - out-of-bound coordinate/component/index;
 - missing target;
