@@ -2,7 +2,7 @@
 
 This is the durable engineering handoff for the industrialization programme. It records software evidence only and does not authorize or reinterpret a scientific stage.
 
-**Current exact-head qualification note (2026-09-16):** later Lot-H/operational/export work advanced after several rows below were written. For current qualification state of PRs #279, #283–#288 and active candidates #296/#331, this handoff explicitly delegates to [`industrialization-qualification-audit-2026-09-16.md`](industrialization-qualification-audit-2026-09-16.md). Where an older row below conflicts with that dated exact-head audit, use the audit for current state and retain the older row only as historical programme context. Merge presence alone is not a qualification result.
+**Current exact-head qualification note (2026-09-16):** later Lot-H/operational/export work advanced after several rows below were written. The current default-branch checkpoint for this refresh is `d8785a04d112e732bf92bd115d23640e7bfb60e7` (PR #332). For current qualification state of PRs #279, #283–#288, merged-but-provenance-limited #296/#331, and active candidates #385/#387/#388/#389, this handoff explicitly delegates to [`industrialization-qualification-audit-2026-09-16.md`](industrialization-qualification-audit-2026-09-16.md) plus the exact current PR/workflow state. Where an older row below conflicts with that evidence, use the newer exact-head evidence and retain the older row only as historical programme context. Merge presence alone is not a qualification result.
 
 ## Baseline
 
@@ -56,7 +56,7 @@ This is the durable engineering handoff for the industrialization programme. It 
 | G3 exact workflow execution admission | qualified | PR #272 final head `a336f798ddbc230abc4a38e8233845d6c9b1e47d`, merge `39eb8a566855d017ea0dbb7094168b23c6655037`: full returned exact-head qualification passed after all P1/P2 review findings were corrected and resolved. A combined v3 artifact binding keeps authoritative publication evidence, sets Hub execution admission true and keeps scientific-stage authorization false. |
 | H common partner adapter descriptor | qualified | PR #273 qualifies `PartnerAdapter/v1` + `AdmittedPartnerStep/v1` for ElasticXxx, Forge, SciRust, FLAT-ATTENTION and NNIS on exact admitted Hub steps while granting no holdout, verdict, stage, actuation or partner-execution authority; PR #275 hardens the embedded G3 version-type boundary. |
 | H Forge scientific-search boundary | qualified | PR #277 final head `942156e718c812ff0725f706ecc6adf51ea4a0a7`, merge `183fcd6af2ddfefce4a5708e72f683d14118dbdf`: all returned exact-head workflows succeeded. The contract pins Forge external/scientific domain v1, leak-safe generation/verification/final-holdout identities and authority-free manifest compilation without qualifying execution. |
-| H ElasticXxx resource-control boundary | candidate | PR #279 pins audited ElasticXxx source `50bb85ea84191c01d95e5b4e5e3c81af10e95ebd`, `elastic.hub.run@1.0.0`, OperatorConfig/v1 and runtime-evidence-v1; it admits only observe/plan/dry-run intent and keeps execution/actuation/scientific authority false. Exact-head qualification and review are pending. |
+| H ElasticXxx resource-control boundary | qualified for original #279 contract; later hardening not requalified by this audit | PR #279 final head `29d9f5555483b59c591ccb7d4871e84ac02d677c` merged as `6e2a15a5711f8dc2eb7e77886bbed247aa425e6b`; it admits only observe/plan/dry-run intent and keeps execution/actuation/scientific authority false. PR #288 later hardened root-evidence binding and is present on `main`, but merge presence is not treated here as retroactive exact-head qualification evidence. |
 
 ## Qualification matrix progress
 
@@ -142,6 +142,6 @@ The dedicated `TDI artifact and provenance contracts` workflow succeeded on the 
 
 ## Next
 
-1. Use the dated exact-head audit linked at the top to close qualification evidence for current Lot-H partner boundaries without converting interchange contracts into partner execution, scientific authority, runtime actuation, or performance claims.
-2. Qualify #331 real-library replay adapters and #296/SciRust #1452 shared analysis on their exact final heads; keep #296 unmerged until the reviewed final SciRust source revision is pinned.
-3. Continue measured engine benchmarks, remaining statistics/sensitivity integration, and hardware-specific FLAT/NNIS qualification only when the required physical evidence is available.
+1. Continue Lot H from exact GitHub state: #385 durable Forge search is blocked on the unqualified Forge #39 candidate revision; #389 is stacked on #385 and must not be retargeted/promoted until that dependency qualifies. #388 measured engine benchmarks and #387 sensitivity remain candidates until every applicable workflow succeeds on their exact final heads.
+2. Treat merged #296 as provenance debt, not as final SciRust integration qualification: its pinned SciRust revision was a candidate. Wait for SciRust #1452 to become fully reviewed, exact-head green and merged, then open a corrective TDI pin PR to the resulting final merge SHA and re-run TDI exact-head gates. #331 is merged, but merge presence alone is not retroactive proof of exact-head qualification.
+3. Continue measured engine benchmarks, remaining statistics/sensitivity integration, and hardware-specific FLAT/NNIS qualification only when the required physical evidence is available. Do not convert queued/pending workflows, local passes, merge presence, or unavailable hardware into qualification claims.
