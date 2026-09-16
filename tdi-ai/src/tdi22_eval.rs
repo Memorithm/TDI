@@ -694,7 +694,7 @@ mod tests {
     #[test]
     fn t0_and_t4_fixture_has_nonzero_moment_basis_difference() {
         let query = EvalQuery::new(
-            Twist3::new(v(0.0, 0.0, 0.0), v(1.0, 2.0, 3.0)).unwrap(),
+            Twist3::new(v(0.0, 0.0, 0.0), v(1.0, 0.0, 0.0)).unwrap(),
             Vec3::zero(),
         )
         .unwrap();
