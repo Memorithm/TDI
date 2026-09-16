@@ -233,8 +233,8 @@ def verify_export(manifest, artifacts, provenances, payloads):
 
     Every member must resolve exactly once. Descriptor/provenance identities and
     payload bytes must agree; provenance must refer to the same artifact identity.
-    Access may become more restrictive but never less restrictive than the
-    manifest's declared class.
+    A manifest may make an artifact more restrictive, but never less restrictive
+    than the artifact's own access class.
     """
     value = canonical_export_manifest(manifest)
     if not all(isinstance(mapping, dict) for mapping in (artifacts, provenances, payloads)):
@@ -253,7 +253,7 @@ def verify_export(manifest, artifacts, provenances, payloads):
             raise ArtifactContractError(f"export provenance identity mismatch for {name}")
         if provenance["artifact_identity"] != member["artifact_identity"]:
             raise ArtifactContractError(f"export provenance/artifact binding mismatch for {name}")
-        if rank[artifact["access_class"]] < rank[value["access_class"]]:
+        if rank[value["access_class"]] < rank[artifact["access_class"]]:
             raise ArtifactContractError(f"export weakens artifact access class for {name}")
     return value
 
