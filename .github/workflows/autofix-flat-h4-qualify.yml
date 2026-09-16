@@ -1,0 +1,42 @@
+name: Qualify FLAT H4 candidate
+
+on:
+  push:
+    branches:
+      - industrialize/flat-partner-h4
+
+permissions:
+  contents: write
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: industrialize/flat-partner-h4
+          fetch-depth: 0
+      - name: Run bounded contract qualification
+        run: |
+          PYTHONPATH=scripts python3 -m py_compile \
+            scripts/tdi_experiment_contract.py \
+            scripts/tdi_artifact_contract.py \
+            scripts/tdi_execution_graph.py \
+            scripts/tdi_hub_edge_contract.py \
+            scripts/tdi_hub_admission_contract.py \
+            scripts/tdi_partner_adapter_contract.py \
+            scripts/tdi_flat_partner_contract.py \
+            scripts/test_tdi_hub_admission_contract.py \
+            scripts/test_tdi_partner_adapter_contract.py \
+            scripts/test_tdi_flat_partner_contract.py
+          PYTHONPATH=scripts python3 -m unittest \
+            scripts/test_tdi_hub_admission_contract.py \
+            scripts/test_tdi_partner_adapter_contract.py \
+            scripts/test_tdi_flat_partner_contract.py -v
+      - name: Remove one-shot workflow
+        run: |
+          git config user.name 'ZEKRITI TAREK'
+          git config user.email 'contact@checkupauto.fr'
+          git rm .github/workflows/autofix-flat-h4-qualify.yml
+          git commit -m 'chore(ci): remove FLAT H4 qualification helper'
+          git push origin HEAD:industrialize/flat-partner-h4
