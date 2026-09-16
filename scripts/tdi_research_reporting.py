@@ -182,12 +182,13 @@ def table_rows(report):
     """Project report values into explicit columns, preserving absent intervals."""
     report = validate_report(report)
     if report['kind'] == 'tdi-paired-analysis':
-        columns = ['comparison', 'stratum', 'unit', 'estimate', 'lower', 'upper', 'confidence', 'included_units', 'excluded_units', 'status']
+        columns = ['comparison', 'stratum', 'unit', 'estimate', 'lower', 'upper', 'confidence', 'included_units', 'excluded_units', 'status', 'scope']
         rows = []
         for r in report['results']:
             interval = r['interval'] or {}
-            rows.append([r['comparison']['id'], r['stratum'] or 'all', r['comparison']['unit'],
-                         *[interval.get(k) for k in ('estimate', 'lower', 'upper', 'confidence')], r['included_units'], r['excluded_units'], r['status']])
+            rows.append([r['comparison']['id'], r['stratum'] if r['stratum'] is not None else '', r['comparison']['unit'],
+                         *[interval.get(k) for k in ('estimate', 'lower', 'upper', 'confidence')], r['included_units'], r['excluded_units'], r['status'],
+                         'aggregate' if r['stratum'] is None else 'stratum'])
         return columns, rows
     if report['kind'] == 'tdi-sensitivity-analysis':
         p = report['plan']['protocol']; method = p['method']
@@ -257,7 +258,8 @@ def figure_bytes(report):
             labels = []
             for i, r in enumerate(rows):
                 v = r['interval']
-                label = r['comparison']['id'] + ' / ' + (r['stratum'] or 'all') + ' · n=' + str(r['included_units'])
+                scope = 'aggregate' if r['stratum'] is None else 'stratum: ' + r['stratum']
+                label = r['comparison']['id'] + ' / ' + scope + ' · n=' + str(r['included_units'])
                 if v is not None: label += ' · CI ' + format(100 * v['confidence'], '.3g') + '%'
                 labels.append(label)
                 if v is None: ax.text(.02, i, 'insufficient units', transform=ax.get_yaxis_transform(), va='center')

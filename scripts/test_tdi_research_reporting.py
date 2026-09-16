@@ -163,7 +163,16 @@ class ActualReportTests(unittest.TestCase):
         incomplete['rows'] = [r for r in incomplete['rows'] if r['unit'] != 'u1']
         empty = analyze(protocol, incomplete, self.stats)
         self.assertIn('Unavailable', reporting.report_html(empty))
-        self.assertEqual('insufficient-units', reporting.table_rows(empty)[1][0][-1])
+        self.assertEqual('insufficient-units', reporting.table_rows(empty)[1][0][9])
+        # A legitimate stratum named 'all' is distinct from the aggregate.
+        named = copy.deepcopy(protocol); named['strata'] = ['all']
+        for unit in named['units']: unit['stratum'] = 'all'
+        named_observations = copy.deepcopy(observations)
+        named_observations['protocol_identity'] = identity('tdi-analysis-protocol/v1', named)
+        scoped = analyze(named, named_observations, self.stats)
+        _, scoped_rows = reporting.table_rows(scoped)
+        self.assertEqual([('', 'aggregate'), ('all', 'stratum')], [(r[1], r[-1]) for r in scoped_rows])
+        self.assertIn('aggregate', reporting.report_html(scoped))
         bad = copy.deepcopy(report); bad['results'][0]['included_units'] += 1
         bad['identity'] = identity('tdi-paired-analysis/v1', {k: v for k, v in bad.items() if k != 'identity'})
         with self.assertRaises(durable.ContractError): reporting.validate_report(bad)
