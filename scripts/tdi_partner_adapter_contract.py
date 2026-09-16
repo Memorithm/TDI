@@ -274,6 +274,57 @@ def _graph_step_for_key(admission_binding, step_key):
     raise PartnerAdapterContractError("step_key is not present in admitted Graph/v1")
 
 
+def _require_integer_version(container, key, expected, name):
+    if not isinstance(container, dict):
+        raise PartnerAdapterContractError(f"{name} container must be an object")
+    value = container.get(key)
+    if type(value) is not int or value != expected:
+        raise PartnerAdapterContractError(f"{name} must be the integer {expected}")
+
+
+def _require_type_faithful_g3_versions(binding):
+    """Reject bool-as-int aliases before the qualified G3 validator canonicalizes them."""
+    if not isinstance(binding, dict):
+        raise PartnerAdapterContractError("workflow_admission_binding must be an object")
+    _require_integer_version(
+        binding,
+        "schema",
+        admission.HUB_WORKFLOW_ADMISSION_BINDING_SCHEMA,
+        "workflow admission binding schema",
+    )
+    _require_integer_version(
+        binding,
+        "admission_schema_version",
+        admission.HUB_WORKFLOW_ADMISSION_SCHEMA_VERSION,
+        "workflow admission schema version",
+    )
+    graph = binding.get("graph")
+    _require_integer_version(graph, "schema", execution_graph.GRAPH_SCHEMA, "embedded Graph/v1 schema")
+    if not isinstance(graph, dict):
+        raise PartnerAdapterContractError("embedded Graph/v1 must be an object")
+    hub_contract = graph.get("hub_contract")
+    _require_integer_version(
+        hub_contract,
+        "workflow_schema_version",
+        execution_graph.HUB_WORKFLOW_SCHEMA_VERSION,
+        "embedded Graph/v1 Hub workflow schema version",
+    )
+    workflow_spec = binding.get("workflow_spec")
+    _require_integer_version(
+        workflow_spec,
+        "schema_version",
+        execution_graph.HUB_WORKFLOW_SCHEMA_VERSION,
+        "embedded Hub WorkflowSpec schema version",
+    )
+    embedded_admission = binding.get("admission")
+    _require_integer_version(
+        embedded_admission,
+        "schema_version",
+        admission.HUB_WORKFLOW_ADMISSION_SCHEMA_VERSION,
+        "embedded Hub admission schema version",
+    )
+
+
 def bind_admitted_partner_step(descriptor, workflow_admission_binding, *, step_key):
     """Bind one PartnerAdapter/v1 to an exact G3 Hub-admitted Graph/v1 step.
 
@@ -283,6 +334,7 @@ def bind_admitted_partner_step(descriptor, workflow_admission_binding, *, step_k
     evidence.
     """
     adapter = canonical_partner_adapter(descriptor)
+    _require_type_faithful_g3_versions(workflow_admission_binding)
     try:
         admitted = admission.canonical_workflow_admission_binding(workflow_admission_binding)
     except admission.HubAdmissionContractError as exc:
