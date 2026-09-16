@@ -102,7 +102,7 @@ mod tests {
 
     #[test]
     fn unsupported_candidate_abstains_even_at_zero_threshold() {
-        let candidate = Candidate::from_parts_for_reference(TemplateId::new(1), 0.0, 0);
+        let candidate = Candidate::new(TemplateId::new(1), 0.0, 0);
         assert_eq!(
             infer(&[candidate], InferencePolicy::default()),
             IntuitionOutcome::InsufficientExperience
