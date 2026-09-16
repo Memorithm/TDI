@@ -30,7 +30,8 @@ This is the durable engineering handoff for the industrialization programme. It 
 | D worker response v2 | qualified | PR #253 caller-owned identity/seed binding, authoritative step/observation budget counters and content-addressed result artifacts; exact-head software and real-kernel gates passed. |
 | D cross-language canonical numbers | qualified for v1/v2 scope | JSON-safe identity integers, decimal u64 seeds, timeout normalization, and explicit float exclusion from canonical scientific result values. |
 | E CheckpointManifest/v1 | candidate | content-addressed state plus exact experiment/plan/trial/step/adapter/backend/input/RNG binding and frozen progress-budget validation. |
-| E declarative execution graph | candidate | topological Graph/v1 with per-step identities, exact checkpoint ports and a thin compiler to pinned Hub WorkflowSpec/v1. |
+| E declarative execution graph | candidate | topological Graph/v1 with per-step identities, component version/manifest/capability pins and exact checkpoint ports. |
+| E Hub bridge | structural preview only | `compile_hub_workflow_preview()` validates explicit Hub IDs/pins but returns `execution_authorized: false`; current WorkflowSpec/v1 cannot atomically enforce component version+manifest pins. |
 | E generic scheduling | intentionally delegated | scirust-hub owns ready-set scheduling, retries, cancellation, workflow lifecycle, artifacts, leases and remote transport; TDI does not duplicate them. |
 
 ## Qualification matrix progress
@@ -45,15 +46,15 @@ This is the durable engineering handoff for the industrialization programme. It 
 | Q08 | qualified for declared cgroup-v2 profile | PR #252 real-kernel memory/PID/CPU limits and sibling isolation. |
 | Q09 | partial | unsupported hard VRAM quota fails closed; measured GPU qualification remains. |
 | Q10 | candidate pending Lot-E exact-head qualification | PR #253 qualified plan/trial/attempt identity; Lot E adds exact checkpoint lineage/resume binding. |
-| Q11 | candidate for declarative graph contract | Lot E validates TDI graph semantics and compiles to audited Hub WorkflowSpec/v1; actual generic scheduler remains Hub-owned. |
+| Q11 | candidate for declarative graph semantics only | Lot E validates graph/component/capability pins and structural Hub preview; authoritative Hub execution is blocked until a versioned Hub edge enforces the pins. |
 | Q12 | planned | common adapter SDK remains separate from graph/checkpoint semantics. |
-| Q13-Q14 | partial | legacy journal migration qualified; portable registry/artifact export remains. |
+| Q13-Q14 | partial | legacy journal migration qualified; portable provenance/artifact export remains. |
 | Q15-Q17 | planned | controlled cache and distributed fencing/deduplication. |
 | Q18-Q30 | planned | cross-repository integrations, statistics, CLI/viewer/exports, hardware adapters, docs and final integrated qualification. |
 
 ## Lot-E candidate validation
 
-Local non-privileged qualification currently covers 13 checkpoint/graph contract tests:
+Local non-privileged qualification currently covers 14 checkpoint/graph contract tests:
 
 ```bash
 PYTHONPATH=scripts python3 -m py_compile \
@@ -69,9 +70,11 @@ The existing `TDI engine Linux containment` workflow is extended so these contra
 ## Cross-repository decisions
 
 - TDI declares Rust 1.85; audited scirust-hub declares Rust 1.89. No mandatory direct Rust dependency is introduced for the graph bridge.
-- The Lot-E graph contract pins `Memorithm/scirust-hub` source `4bf6186841e1ea70ed15cd84faf33de9b48429cd`, WorkflowSpec schema `1`, model `1.2.0`, its capability grammar and canonical UUID identifiers.
+- The Lot-E graph contract pins `Memorithm/scirust-hub` source `4bf6186841e1ea70ed15cd84faf33de9b48429cd`, WorkflowSpec schema `1`, model `1.2.0`, capability/version grammar and canonical UUID identifiers.
+- Graph steps additionally pin exact component version, component-manifest digest and capability-contract version. Current Hub WorkflowSpec/v1 cannot enforce those pins atomically during normal workflow submission, so Lot E exposes a non-executable preview only.
 - scirust-hub remains owner of generic DAG scheduling, remote workers, leases, heartbeats, retries, cancellation and artifact transport; TDI remains owner of scientific meaning, checkpoint admissibility and accepted publication.
 - Hub's current remote lease v1 has attempt/lease identity, heartbeat and expiry but no qualified fencing/generation token preventing stale publication after reassignment; distributed fencing remains a later Lot-H requirement.
+- Hub already owns a content-addressed artifact store; Lot F must define portable TDI provenance/export/cache rules rather than duplicate physical CAS storage.
 - ElasticXxx remains owner of generic observe/forecast/plan/validate/act/verify/commit-or-rollback resource policy.
 - Forge remains owner of candidate proposal/search; TDI controls allowed evaluation observations and scientific verdicts.
 - `ExperimentSpec/v1`, CheckpointManifest/v1 and Graph/v1 are infrastructure contracts and must not be used to synthesize or authorize a protected/final series surface.
@@ -79,7 +82,7 @@ The existing `TDI engine Linux containment` workflow is extended so these contra
 ## Next
 
 1. Qualify and merge Lot E on its exact PR head; address review findings before merge.
-2. Add registry, provenance verification, artifact CAS/export and controlled cache without duplicating Hub's generic artifact registry.
-3. Add a real TDI↔Hub capability edge, then qualify fencing/authoritative publication in Hub before distributed execution is promoted.
+2. Add portable provenance/artifact descriptors, export verification and controlled cache semantics without duplicating Hub's generic CAS/registry.
+3. Add a real TDI↔Hub capability edge that atomically enforces component/capability pins, then qualify fencing/authoritative publication before distributed execution is promoted.
 4. Add ElasticXxx, Forge, SciRust, FLAT-ATTENTION and NNIS integrations only through qualified versioned contracts.
 5. Continue statistics/sensitivity, CLI/API/viewer, external exports and measured engine benchmarks.
