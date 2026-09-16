@@ -104,11 +104,26 @@ pub struct NumericState {
     values: Vec<f64>,
 }
 
+/// Validated structural template distilled from accumulated experience.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Template {
+    id: TemplateId,
+    required: Vec<PredicateId>,
+    forbidden: Vec<PredicateId>,
+    roles: Vec<RoleId>,
+}
+
 /// Validation failures in the TDI-2.1 intuition reference path.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum IntuitionError {
     /// A continuous feature was NaN or infinite.
     NonFiniteNumeric { index: usize },
+    /// A template carried no Boolean structural condition.
+    EmptyTemplate,
+    /// One predicate was simultaneously required and forbidden.
+    ContradictoryPredicate { predicate: PredicateId },
+    /// A role occurred more than once in a template role declaration.
+    DuplicateRole { role: RoleId },
 }
 
 impl core::fmt::Display for IntuitionError {
@@ -116,6 +131,15 @@ impl core::fmt::Display for IntuitionError {
         match self {
             Self::NonFiniteNumeric { index } => {
                 write!(formatter, "numeric intuition feature at index {index} is not finite")
+            }
+            Self::EmptyTemplate => formatter.write_str("intuition template has no Boolean condition"),
+            Self::ContradictoryPredicate { predicate } => write!(
+                formatter,
+                "predicate {} is both required and forbidden",
+                predicate.raw()
+            ),
+            Self::DuplicateRole { role } => {
+                write!(formatter, "template role {} is duplicated", role.raw())
             }
         }
     }
@@ -151,9 +175,77 @@ impl NumericState {
     }
 }
 
+impl Template {
+    /// Validate and construct one structural template.
+    pub fn new(
+        id: TemplateId,
+        mut required: Vec<PredicateId>,
+        mut forbidden: Vec<PredicateId>,
+        mut roles: Vec<RoleId>,
+    ) -> Result<Self, IntuitionError> {
+        if required.is_empty() && forbidden.is_empty() {
+            return Err(IntuitionError::EmptyTemplate);
+        }
+
+        required.sort_unstable();
+        required.dedup();
+        forbidden.sort_unstable();
+        forbidden.dedup();
+
+        if let Some(predicate) = required
+            .iter()
+            .copied()
+            .find(|predicate| forbidden.binary_search(predicate).is_ok())
+        {
+            return Err(IntuitionError::ContradictoryPredicate { predicate });
+        }
+
+        roles.sort_unstable();
+        if let Some(role) = roles
+            .windows(2)
+            .find_map(|pair| (pair[0] == pair[1]).then_some(pair[0]))
+        {
+            return Err(IntuitionError::DuplicateRole { role });
+        }
+
+        Ok(Self {
+            id,
+            required,
+            forbidden,
+            roles,
+        })
+    }
+
+    /// Stable template identifier.
+    #[must_use]
+    pub const fn id(&self) -> TemplateId {
+        self.id
+    }
+
+    /// Predicates that must be present for exact applicability.
+    #[must_use]
+    pub fn required(&self) -> &[PredicateId] {
+        &self.required
+    }
+
+    /// Predicates that must be absent for exact applicability.
+    #[must_use]
+    pub fn forbidden(&self) -> &[PredicateId] {
+        &self.forbidden
+    }
+
+    /// Abstract roles used by later transfer operations.
+    #[must_use]
+    pub fn roles(&self) -> &[RoleId] {
+        &self.roles
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{BooleanState, IntuitionError, NumericState, PredicateId};
+    use super::{
+        BooleanState, IntuitionError, NumericState, PredicateId, RoleId, Template, TemplateId,
+    };
 
     #[test]
     fn boolean_state_is_canonical() {
@@ -174,5 +266,38 @@ mod tests {
     fn numeric_state_rejects_non_finite_values() {
         let error = NumericState::new(vec![0.0, f64::NAN]).expect_err("NaN must be rejected");
         assert_eq!(error, IntuitionError::NonFiniteNumeric { index: 1 });
+    }
+
+    #[test]
+    fn template_rejects_boolean_contradictions() {
+        let error = Template::new(
+            TemplateId::new(1),
+            vec![PredicateId::new(4)],
+            vec![PredicateId::new(4)],
+            vec![RoleId::new(0)],
+        )
+        .expect_err("contradictory template must fail closed");
+        assert_eq!(
+            error,
+            IntuitionError::ContradictoryPredicate {
+                predicate: PredicateId::new(4)
+            }
+        );
+    }
+
+    #[test]
+    fn template_canonicalizes_conditions() {
+        let template = Template::new(
+            TemplateId::new(9),
+            vec![PredicateId::new(3), PredicateId::new(1), PredicateId::new(3)],
+            vec![PredicateId::new(8)],
+            vec![RoleId::new(2), RoleId::new(1)],
+        )
+        .expect("valid template");
+        assert_eq!(
+            template.required(),
+            &[PredicateId::new(1), PredicateId::new(3)]
+        );
+        assert_eq!(template.roles(), &[RoleId::new(1), RoleId::new(2)]);
     }
 }
