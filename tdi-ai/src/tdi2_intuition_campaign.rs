@@ -18,6 +18,75 @@ pub enum CampaignDomain {
     Validation,
 }
 
+/// Frozen campaign family identity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CampaignFamily {
+    /// Static motif retrieval with distractors.
+    MotifRetrieval,
+    /// Context-conditioned reversal.
+    ContextReversal,
+    /// Ordered temporal trend.
+    TemporalTrend,
+    /// Novel-identity structural transfer.
+    AnalogyTransfer,
+}
+
+/// Canonical non-final campaign manifest.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CampaignManifest {
+    /// Development or Validation only.
+    pub domain: CampaignDomain,
+    /// Frozen task family.
+    pub family: CampaignFamily,
+    /// First deterministic case identifier.
+    pub start_id: u32,
+    /// Number of case ids requested.
+    pub count: usize,
+    /// Seed reserved for matched stochastic controls.
+    pub control_seed: u64,
+    /// External minimum experience-weight threshold.
+    pub min_weight: f64,
+}
+
+impl CampaignManifest {
+    /// Validate and construct a campaign manifest.
+    pub fn new(
+        domain: CampaignDomain,
+        family: CampaignFamily,
+        start_id: u32,
+        count: usize,
+        control_seed: u64,
+        min_weight: f64,
+    ) -> Result<Self, CampaignError> {
+        if !min_weight.is_finite() || min_weight < 0.0 {
+            return Err(CampaignError::InvalidMinimumWeight);
+        }
+        Ok(Self { domain, family, start_id, count, control_seed, min_weight })
+    }
+
+    /// Stable record suitable for hashing before campaign execution.
+    #[must_use]
+    pub fn canonical_record(self) -> String {
+        let domain = match self.domain {
+            CampaignDomain::Development => "development",
+            CampaignDomain::Validation => "validation",
+        };
+        let family = match self.family {
+            CampaignFamily::MotifRetrieval => "motif-retrieval",
+            CampaignFamily::ContextReversal => "context-reversal",
+            CampaignFamily::TemporalTrend => "temporal-trend",
+            CampaignFamily::AnalogyTransfer => "analogy-transfer",
+        };
+        format!(
+            "tdi2.1-campaign-manifest-v1;domain={domain};family={family};start={};count={};control_seed={};min_weight_bits={:016x}",
+            self.start_id,
+            self.count,
+            self.control_seed,
+            self.min_weight.to_bits()
+        )
+    }
+}
+
 /// Campaign-construction failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CampaignError {
@@ -25,6 +94,8 @@ pub enum CampaignError {
     CaseIdOverflow,
     /// Requested output case count overflows usize.
     CaseCountOverflow,
+    /// External inference threshold must be finite and non-negative.
+    InvalidMinimumWeight,
 }
 
 impl core::fmt::Display for CampaignError {
@@ -32,6 +103,7 @@ impl core::fmt::Display for CampaignError {
         match self {
             Self::CaseIdOverflow => formatter.write_str("TDI-2.1 campaign case-id range overflows u32"),
             Self::CaseCountOverflow => formatter.write_str("TDI-2.1 campaign case count overflows usize"),
+            Self::InvalidMinimumWeight => formatter.write_str("TDI-2.1 minimum weight must be finite and non-negative"),
         }
     }
 }
@@ -94,9 +166,7 @@ pub fn motif_cases(start: u32, count: usize) -> Result<Vec<SyntheticCase>, Campa
 
 /// Materialize paired context-reversal cases for a checked contiguous id range.
 pub fn context_cases(start: u32, pair_count: usize) -> Result<Vec<SyntheticCase>, CampaignError> {
-    let capacity = pair_count
-        .checked_mul(2)
-        .ok_or(CampaignError::CaseCountOverflow)?;
+    let capacity = pair_count.checked_mul(2).ok_or(CampaignError::CaseCountOverflow)?;
     let mut cases = Vec::with_capacity(capacity);
     for offset in 0..pair_count {
         let offset = u32::try_from(offset).map_err(|_| CampaignError::CaseIdOverflow)?;
@@ -131,14 +201,30 @@ pub fn analogy_cases(start: u32, count: usize) -> Result<Vec<AnalogyCase>, Campa
 #[cfg(test)]
 mod tests {
     use super::{
-        CampaignDomain, analogy_cases, context_cases, motif_cases, run_paired_campaign,
-        run_synthetic_campaign, temporal_cases,
+        CampaignDomain, CampaignFamily, CampaignManifest, analogy_cases, context_cases, motif_cases,
+        run_paired_campaign, run_synthetic_campaign, temporal_cases,
     };
     use crate::experimental::tdi2_intuition_analogy_tasks::analogy_case;
     use crate::experimental::tdi2_intuition_inference::IntuitionOutcome;
     use crate::experimental::tdi2_intuition_tasks::{
         context_reversal_pair, motif_retrieval_case, temporal_trend_case,
     };
+
+    #[test]
+    fn campaign_manifest_binds_external_threshold_bits() {
+        let manifest = CampaignManifest::new(
+            CampaignDomain::Validation,
+            CampaignFamily::MotifRetrieval,
+            10,
+            20,
+            7,
+            0.5,
+        )
+        .expect("manifest");
+        let record = manifest.canonical_record();
+        assert!(record.contains("domain=validation"));
+        assert!(record.contains("min_weight_bits=3fe0000000000000"));
+    }
 
     #[test]
     fn campaign_preserves_explicit_abstention() {
