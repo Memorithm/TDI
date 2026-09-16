@@ -156,6 +156,19 @@ def authoritative_artifact_binding(*, workflow=WORKFLOW, step_key="evaluate"):
 
 
 class HubAdmissionContractTests(unittest.TestCase):
+    def test_real_hub_may_omit_only_empty_after_arrays(self):
+        response = workflow_response()
+        for step in response["spec"]["steps"]:
+            if step["after"] == []:
+                del step["after"]
+        self.assertEqual(bind_fixture(), admission.bind_exact_workflow_admission(
+            fixture_graph(), response, root_artifact_bindings=root_artifact_bindings()))
+        for step in response["spec"]["steps"]:
+            step.pop("after", None)
+        with self.assertRaises(admission.HubAdmissionContractError):
+            admission.bind_exact_workflow_admission(
+                fixture_graph(), response, root_artifact_bindings=root_artifact_bindings())
+
     def test_exact_graph_and_hub_admission_are_execution_authorized_only(self):
         value = fixture_graph()
         binding = bind_fixture()
