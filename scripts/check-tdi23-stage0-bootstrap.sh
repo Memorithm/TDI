@@ -60,17 +60,16 @@ if grep -Eiq \
     fail "scientific-boundary gate rejected an unsupported positive claim"
 fi
 
-# Scan complete repository paths, not only basenames. This catches neutral file
-# names placed below forbidden directories such as results/tdi23-final/results.json.
-# Exclude only VCS/build internals; scientific output directories are never pruned.
+# Scan complete repository paths, not only basenames. Allow arbitrary stage
+# qualifiers between the programme identifier and final/confirm markers, e.g.
+# tdi23.0-final, tdi23-1-confirm, or tdi-23.2-final. Exclude only VCS/build
+# internals; scientific output directories are never pruned.
 mapfile -t forbidden < <(
     find . \
         -path './.git' -prune -o \
         -path './target' -prune -o \
-        \( -ipath '*tdi23-final*' -o -ipath '*tdi23_final*' \
-           -o -ipath '*tdi23-confirm*' -o -ipath '*tdi23_confirm*' \
-           -o -ipath '*tdi-23-final*' -o -ipath '*tdi-23_final*' \
-           -o -ipath '*tdi-23-confirm*' -o -ipath '*tdi-23_confirm*' \) \
+        \( -ipath '*tdi23*final*' -o -ipath '*tdi23*confirm*' \
+           -o -ipath '*tdi-23*final*' -o -ipath '*tdi-23*confirm*' \) \
         -print | sort
 )
 if ((${#forbidden[@]} > 0)); then
