@@ -8,7 +8,8 @@
 //!
 //! In particular, coordinate reduction commutes with dagger exactly, while
 //! composition is not assumed to be preserved. The exposed composition-defect
-//! metric makes loss through omitted intermediate coordinates explicit.
+//! metric isolates contributions carried by omitted intermediate coordinates
+//! instead of subtracting two independently accumulated floating-point products.
 
 use core::fmt;
 
@@ -203,6 +204,10 @@ impl CoordinateReduction {
         }
         Ok(())
     }
+
+    fn retains(&self, coordinate: usize) -> bool {
+        self.kept.contains(&coordinate)
+    }
 }
 
 /// Reduce `map : H -> K` to `E_K^dagger map E_H` by coordinate selection.
@@ -291,12 +296,19 @@ pub fn reduction_residual_max_abs(
     max_abs_difference(map, &lifted, "reduction residual")
 }
 
-/// Maximum absolute defect between reducing a composite and composing reductions.
+/// Maximum absolute structural defect contributed by omitted intermediate paths.
 ///
-/// For `first : A -> B` and `second : B -> C`, this compares
-/// `R(second o first)` with `R(second) o R(first)`. A non-zero value is expected
-/// whenever omitted coordinates in the intermediate object carry a contributing
-/// path. Therefore this function is an audit metric, not a functoriality claim.
+/// For `first : A -> B` and `second : B -> C`, exact real arithmetic gives
+///
+/// `R(second o first) - R(second) o R(first)`
+/// `= E_C^dagger second (I_B - P_B) first E_A`.
+///
+/// Stage 0 evaluates the right-hand omitted-path term directly in ambient
+/// coordinate order. It deliberately does not subtract two independently
+/// accumulated floating-point matrix products, which would mix categorical
+/// reduction loss with IEEE-754 reassociation noise when retained coordinates
+/// are permuted. This remains a numerical diagnostic of the declared structural
+/// term, not a general functoriality or exact-floating-point claim.
 pub fn reduction_composition_defect_max_abs(
     first: &RealLinearMap,
     second: &RealLinearMap,
@@ -304,18 +316,42 @@ pub fn reduction_composition_defect_max_abs(
     middle: &CoordinateReduction,
     codomain: &CoordinateReduction,
 ) -> Result<f64, ReductionError> {
-    let reduced_first = reduce_linear_map(first, domain, middle)?;
-    let reduced_second = reduce_linear_map(second, middle, codomain)?;
-    let composed_reductions = reduced_second.compose(&reduced_first)?;
+    domain.validate_map_side(first.domain_dim(), "first domain")?;
+    middle.validate_map_side(first.codomain_dim(), "first codomain")?;
+    middle.validate_map_side(second.domain_dim(), "second domain")?;
+    codomain.validate_map_side(second.codomain_dim(), "second codomain")?;
 
-    let full_composite = second.compose(first)?;
-    let reduced_composite = reduce_linear_map(&full_composite, domain, codomain)?;
-
-    max_abs_difference(
-        &reduced_composite,
-        &composed_reductions,
-        "reduction composition defect",
-    )
+    let mut maximum = 0.0_f64;
+    for output in codomain.kept_coordinates().iter().copied() {
+        for input in domain.kept_coordinates().iter().copied() {
+            let mut omitted_sum = 0.0_f64;
+            for intermediate in 0..middle.ambient_dim() {
+                if middle.retains(intermediate) {
+                    continue;
+                }
+                let left = second.entry(output, intermediate).ok_or(
+                    ReductionError::CoordinateLookupFailure {
+                        row: output,
+                        column: intermediate,
+                    },
+                )?;
+                let right = first.entry(intermediate, input).ok_or(
+                    ReductionError::CoordinateLookupFailure {
+                        row: intermediate,
+                        column: input,
+                    },
+                )?;
+                omitted_sum += left * right;
+                if !omitted_sum.is_finite() {
+                    return Err(ReductionError::NonFiniteDerivedValue {
+                        operation: "omitted-path composition defect",
+                    });
+                }
+            }
+            maximum = maximum.max(omitted_sum.abs());
+        }
+    }
+    Ok(maximum)
 }
 
 fn max_abs_difference(
@@ -415,6 +451,19 @@ mod tests {
 
         let defect =
             reduction_composition_defect_max_abs(&first, &second, &domain, &middle, &codomain)
+                .expect("defect");
+        assert_eq!(defect, 0.0);
+    }
+
+    #[test]
+    fn tdi23_full_middle_permutation_does_not_create_structural_defect() {
+        let first = RealLinearMap::new(1, 3, vec![1.0, 1.0, 1.0]).expect("first");
+        let second = RealLinearMap::new(3, 1, vec![1.0e16, -1.0e16, 1.0]).expect("second");
+        let endpoint = CoordinateReduction::new(1, vec![0]).expect("endpoint");
+        let middle = CoordinateReduction::new(3, vec![0, 2, 1]).expect("permuted full middle");
+
+        let defect =
+            reduction_composition_defect_max_abs(&first, &second, &endpoint, &middle, &endpoint)
                 .expect("defect");
         assert_eq!(defect, 0.0);
     }
