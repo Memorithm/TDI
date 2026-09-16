@@ -26,6 +26,8 @@ pub mod boolean_policy_sensitivity;
 pub mod boolean_policy_synthesis;
 #[path = "development_campaign.rs"]
 pub mod development_campaign;
+#[path = "tdi2_intuition.rs"]
+pub mod tdi2_intuition;
 #[path = "tdi21_boolean_relational.rs"]
 pub mod tdi21;
 #[path = "tdi21_anf_search.rs"]
