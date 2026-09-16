@@ -13,6 +13,8 @@ use super::tdi21_stream::StreamCounters;
 
 pub const RELATIONAL_TASK_SEMANTICS: &str = "tdi21-relational-task-family-v1";
 pub const RELATIONAL_EPISODES_PER_SPLIT: usize = 4;
+pub const RELATIONAL_V1_ENTITY_BITS: u8 = 4;
+pub const RELATIONAL_V1_RELATION_BITS: u8 = 4;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RelationalSplit {
@@ -88,14 +90,14 @@ pub struct RelationalEpisodeOutcome {
     pub relational_work: RelationalWork,
 }
 
-/// Versioned identifier namespaces. Under the v1 reference stream configuration
-/// (128 two-way slots and the TDI-21 relational salt), facts required by one
-/// episode occupy distinct buckets. This isolates relation-composition behavior
-/// from a deterministic eviction confound in the nominal-capacity fixture.
+/// Versioned 4-bit identifier namespaces. The 8-bit `(relation, subject)`
+/// candidate input fits the exact ANF synthesis ceiling while keeping the two
+/// splits disjoint. Under the v1 128-slot reference configuration these facts
+/// occupy distinct buckets, avoiding a capacity-confound in nominal episodes.
 fn namespace(split: RelationalSplit) -> ([u64; 6], [u64; 4]) {
     match split {
         RelationalSplit::Development => ([1, 2, 3, 6, 4, 5], [1, 2, 3, 4]),
-        RelationalSplit::Validation => ([101, 102, 103, 106, 104, 105], [5, 6, 7, 8]),
+        RelationalSplit::Validation => ([9, 10, 11, 14, 12, 13], [9, 10, 11, 12]),
     }
 }
 
