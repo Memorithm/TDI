@@ -25,6 +25,8 @@ check_blob ".github/workflows/tdi22-torsor-bootstrap.yml" "6c53e2fee3023325b649d
 
 test -s "$root/docs/TDI-22.0-FREEZE.md"
 test -s "$root/docs/TDI-22.0-IMPLEMENTATION-GATE.md"
+grep -Fq '## TDI-22.x torsor-attention bootstrap and stage gate' "$root/AGENTS.md"
+grep -Fq 'T3 full-torsor versus T4 matched six-component non-torsor bilinear control' "$root/AGENTS.md"
 
 # Reject premature TDI-22 evidence payloads under either canonical spelling.
 if find "$root/results" "$root/artifacts" -type f \
