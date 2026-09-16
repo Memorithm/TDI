@@ -4,7 +4,7 @@
 
 use super::tdi2_intuition_evaluation::EvaluationSummary;
 use super::tdi2_intuition_inference::IntuitionOutcome;
-use super::tdi2_intuition_tasks::SyntheticCase;
+use super::tdi2_intuition_tasks::{SyntheticCase, motif_retrieval_case};
 
 /// Allowed non-final experimental domains for this harness.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -15,10 +15,21 @@ pub enum CampaignDomain {
     Validation,
 }
 
+/// Campaign-construction failures.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CampaignError {
+    /// Requested case-id range exceeds the representable u32 domain.
+    CaseIdOverflow,
+}
+
+impl core::fmt::Display for CampaignError {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("TDI-2.1 campaign case-id range overflows u32")
+    }
+}
+impl std::error::Error for CampaignError {}
+
 /// Evaluate a fixed case list with a supplied inference closure.
-///
-/// The harness owns only iteration and accounting. It does not mutate memory,
-/// tune thresholds, or inspect any protected holdout.
 pub fn run_synthetic_campaign<F>(
     _domain: CampaignDomain,
     cases: &[SyntheticCase],
@@ -34,9 +45,20 @@ where
     summary
 }
 
+/// Materialize a deterministic contiguous motif-retrieval campaign.
+pub fn motif_cases(start: u32, count: usize) -> Result<Vec<SyntheticCase>, CampaignError> {
+    let mut cases = Vec::with_capacity(count);
+    for offset in 0..count {
+        let offset = u32::try_from(offset).map_err(|_| CampaignError::CaseIdOverflow)?;
+        let id = start.checked_add(offset).ok_or(CampaignError::CaseIdOverflow)?;
+        cases.push(motif_retrieval_case(id));
+    }
+    Ok(cases)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{CampaignDomain, run_synthetic_campaign};
+    use super::{CampaignDomain, motif_cases, run_synthetic_campaign};
     use crate::experimental::tdi2_intuition_inference::IntuitionOutcome;
     use crate::experimental::tdi2_intuition_tasks::motif_retrieval_case;
 
@@ -49,5 +71,12 @@ mod tests {
         assert_eq!(summary.total(), 2);
         assert_eq!(summary.abstained(), 2);
         assert_eq!(summary.coverage(), Some(0.0));
+    }
+
+    #[test]
+    fn motif_range_is_deterministic_and_contiguous() {
+        let cases = motif_cases(10, 3).expect("bounded range");
+        assert_eq!(cases[0], motif_retrieval_case(10));
+        assert_eq!(cases[2], motif_retrieval_case(12));
     }
 }
