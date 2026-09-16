@@ -3,7 +3,7 @@
 //! Inference never calls this module implicitly. A real outcome must first be
 //! observed and classified by the experimental protocol.
 
-use super::tdi2_intuition::TemplateId;
+use super::tdi2_intuition::{BooleanState, PredicateId, Template, TemplateId};
 use super::tdi2_intuition_reliability::{ReliabilityError, ReliabilityEvidence};
 
 /// Empirical validation result for one applied template.
@@ -27,26 +27,32 @@ pub struct ConsolidationUpdate {
 impl ConsolidationUpdate {
     /// Template whose evidence changed.
     #[must_use]
-    pub const fn template_id(self) -> TemplateId {
-        self.template_id
-    }
-
+    pub const fn template_id(self) -> TemplateId { self.template_id }
     /// Evidence before validation.
     #[must_use]
-    pub const fn before(self) -> ReliabilityEvidence {
-        self.before
-    }
-
+    pub const fn before(self) -> ReliabilityEvidence { self.before }
     /// Evidence after validation.
     #[must_use]
-    pub const fn after(self) -> ReliabilityEvidence {
-        self.after
-    }
-
+    pub const fn after(self) -> ReliabilityEvidence { self.after }
     /// Observed validation classification.
     #[must_use]
-    pub const fn outcome(self) -> ValidationOutcome {
-        self.outcome
+    pub const fn outcome(self) -> ValidationOutcome { self.outcome }
+
+    /// Canonical post-outcome record suitable for TDI artifact binding.
+    #[must_use]
+    pub fn canonical_record(self) -> String {
+        let outcome = match self.outcome {
+            ValidationOutcome::Confirmed => "confirmed",
+            ValidationOutcome::Refuted => "refuted",
+        };
+        format!(
+            "tdi2.1-consolidation-v1;template={};before={}:{};after={}:{};outcome={outcome}",
+            self.template_id.raw(),
+            self.before.successes(),
+            self.before.failures(),
+            self.after.successes(),
+            self.after.failures(),
+        )
     }
 }
 
@@ -58,12 +64,7 @@ pub fn consolidate_validation(
 ) -> Result<ConsolidationUpdate, ReliabilityError> {
     let mut after = evidence;
     after.observe(matches!(outcome, ValidationOutcome::Confirmed))?;
-    Ok(ConsolidationUpdate {
-        template_id,
-        before: evidence,
-        after,
-        outcome,
-    })
+    Ok(ConsolidationUpdate { template_id, before: evidence, after, outcome })
 }
 
 /// Structural evolution is deliberately a proposal, not an automatic mutation.
@@ -77,10 +78,96 @@ pub enum StructuralReview {
     ConsiderCreation,
 }
 
+/// Polarity of one Boolean clause in a template.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClausePolarity {
+    /// Predicate must be present.
+    Required,
+    /// Predicate must be absent.
+    Forbidden,
+}
+
+/// One review-only candidate that removes exactly one Boolean condition.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GeneralizationProposal {
+    /// Existing template under review.
+    pub template_id: TemplateId,
+    /// Predicate proposed for removal.
+    pub predicate: PredicateId,
+    /// Clause polarity in the source template.
+    pub polarity: ClausePolarity,
+}
+
+/// One review-only candidate that adds a Boolean condition excluding one counterexample.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SpecializationProposal {
+    /// Existing template under review.
+    pub template_id: TemplateId,
+    /// Predicate proposed as a discriminator.
+    pub predicate: PredicateId,
+    /// Proposed polarity that would exclude the supplied counterexample.
+    pub polarity: ClausePolarity,
+}
+
+/// Enumerate one-literal generalizations without mutating the template.
+#[must_use]
+pub fn one_literal_generalizations(template: &Template) -> Vec<GeneralizationProposal> {
+    let total = template.required().len() + template.forbidden().len();
+    if total <= 1 {
+        return Vec::new();
+    }
+    template
+        .required()
+        .iter()
+        .copied()
+        .map(|predicate| GeneralizationProposal {
+            template_id: template.id(),
+            predicate,
+            polarity: ClausePolarity::Required,
+        })
+        .chain(template.forbidden().iter().copied().map(|predicate| GeneralizationProposal {
+            template_id: template.id(),
+            predicate,
+            polarity: ClausePolarity::Forbidden,
+        }))
+        .collect()
+}
+
+/// Enumerate single-predicate specializations that would exclude one refuted state.
+#[must_use]
+pub fn counterexample_specializations(
+    template: &Template,
+    counterexample: &BooleanState,
+    candidate_predicates: &[PredicateId],
+) -> Vec<SpecializationProposal> {
+    let mut candidates = candidate_predicates.to_vec();
+    candidates.sort_unstable();
+    candidates.dedup();
+    candidates
+        .into_iter()
+        .filter(|predicate| {
+            template.required().binary_search(predicate).is_err()
+                && template.forbidden().binary_search(predicate).is_err()
+        })
+        .map(|predicate| SpecializationProposal {
+            template_id: template.id(),
+            predicate,
+            polarity: if counterexample.contains(predicate) {
+                ClausePolarity::Forbidden
+            } else {
+                ClausePolarity::Required
+            },
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{StructuralReview, ValidationOutcome, consolidate_validation};
-    use crate::experimental::tdi2_intuition::TemplateId;
+    use super::{
+        ClausePolarity, StructuralReview, ValidationOutcome, consolidate_validation,
+        counterexample_specializations, one_literal_generalizations,
+    };
+    use crate::experimental::tdi2_intuition::{BooleanState, PredicateId, Template, TemplateId};
     use crate::experimental::tdi2_intuition_reliability::ReliabilityEvidence;
 
     #[test]
@@ -107,15 +194,55 @@ mod tests {
     }
 
     #[test]
+    fn consolidation_record_binds_before_and_after_evidence() {
+        let update = consolidate_validation(
+            TemplateId::new(3),
+            ReliabilityEvidence::new(4, 2),
+            ValidationOutcome::Confirmed,
+        )
+        .expect("update");
+        let record = update.canonical_record();
+        assert!(record.contains("before=4:2"));
+        assert!(record.contains("after=5:2"));
+    }
+
+    #[test]
     fn structural_changes_remain_review_proposals() {
-        let review = StructuralReview::ConsiderGeneralization {
-            template_id: TemplateId::new(8),
-        };
-        assert_eq!(
-            review,
-            StructuralReview::ConsiderGeneralization {
-                template_id: TemplateId::new(8)
-            }
+        let review = StructuralReview::ConsiderGeneralization { template_id: TemplateId::new(8) };
+        assert_eq!(review, StructuralReview::ConsiderGeneralization { template_id: TemplateId::new(8) });
+    }
+
+    #[test]
+    fn generalization_proposals_remove_only_one_clause_at_a_time() {
+        let template = Template::new(
+            TemplateId::new(9),
+            vec![PredicateId::new(1), PredicateId::new(2)],
+            vec![PredicateId::new(7)],
+            Vec::new(),
+        )
+        .expect("template");
+        let proposals = one_literal_generalizations(&template);
+        assert_eq!(proposals.len(), 3);
+        assert_eq!(proposals[0].polarity, ClausePolarity::Required);
+    }
+
+    #[test]
+    fn specialization_polarity_excludes_counterexample() {
+        let template = Template::new(
+            TemplateId::new(4),
+            vec![PredicateId::new(1)],
+            Vec::new(),
+            Vec::new(),
+        )
+        .expect("template");
+        let state = BooleanState::new(vec![PredicateId::new(1), PredicateId::new(8)]);
+        let proposals = counterexample_specializations(
+            &template,
+            &state,
+            &[PredicateId::new(8), PredicateId::new(9)],
         );
+        assert_eq!(proposals.len(), 2);
+        assert_eq!(proposals[0].polarity, ClausePolarity::Forbidden);
+        assert_eq!(proposals[1].polarity, ClausePolarity::Required);
     }
 }

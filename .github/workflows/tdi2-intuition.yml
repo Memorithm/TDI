@@ -5,6 +5,8 @@ on:
       - "tdi-ai/src/tdi2_intuition*.rs"
       - "tdi-ai/src/experimental.rs"
       - "tdi-ai/tests/tdi2_intuition*.rs"
+      - "tdi-ai/examples/tdi2_intuition*.rs"
+      - "tdi-ai/Cargo.toml"
       - ".github/workflows/tdi2-intuition.yml"
   push:
     branches: [main]
@@ -12,6 +14,8 @@ on:
       - "tdi-ai/src/tdi2_intuition*.rs"
       - "tdi-ai/src/experimental.rs"
       - "tdi-ai/tests/tdi2_intuition*.rs"
+      - "tdi-ai/examples/tdi2_intuition*.rs"
+      - "tdi-ai/Cargo.toml"
       - ".github/workflows/tdi2-intuition.yml"
 permissions:
   contents: read
@@ -27,6 +31,7 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --locked -p tdi-ai --all-targets --all-features -- -D warnings
       - run: cargo test --locked -p tdi-ai --all-features
+      - run: cargo run --locked -p tdi-ai --example tdi2_intuition_development --features experimental
   experimental-msrv:
     runs-on: ubuntu-latest
     steps:

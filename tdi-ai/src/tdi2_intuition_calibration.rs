@@ -37,8 +37,18 @@ impl core::fmt::Display for CalibrationError {
         }
     }
 }
-
 impl std::error::Error for CalibrationError {}
+
+fn validate_observations(observations: &[CalibrationObservation]) -> Result<(), CalibrationError> {
+    if observations.iter().any(|observation| {
+        !observation.predicted.is_finite()
+            || observation.predicted < 0.0
+            || observation.predicted > 1.0
+    }) {
+        return Err(CalibrationError::InvalidPrediction);
+    }
+    Ok(())
+}
 
 /// Compute non-empty equal-width calibration bins.
 pub fn calibration_bins(
@@ -48,13 +58,7 @@ pub fn calibration_bins(
     if bins == 0 {
         return Err(CalibrationError::ZeroBins);
     }
-    if observations.iter().any(|observation| {
-        !observation.predicted.is_finite()
-            || observation.predicted < 0.0
-            || observation.predicted > 1.0
-    }) {
-        return Err(CalibrationError::InvalidPrediction);
-    }
+    validate_observations(observations)?;
 
     let mut counts = vec![0usize; bins];
     let mut prediction_sums = vec![0.0f64; bins];
@@ -103,9 +107,28 @@ pub fn expected_calibration_error(
     ))
 }
 
+/// Mean Brier score for probability-like reliability estimates.
+pub fn brier_score(
+    observations: &[CalibrationObservation],
+) -> Result<Option<f64>, CalibrationError> {
+    validate_observations(observations)?;
+    if observations.is_empty() {
+        return Ok(None);
+    }
+    let sum = observations
+        .iter()
+        .map(|observation| {
+            let target = f64::from(u8::from(observation.correct));
+            let error = observation.predicted - target;
+            error * error
+        })
+        .sum::<f64>();
+    Ok(Some(sum / observations.len() as f64))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{CalibrationObservation, expected_calibration_error};
+    use super::{CalibrationObservation, brier_score, expected_calibration_error};
 
     #[test]
     fn perfectly_calibrated_two_bin_fixture_has_zero_error() {
@@ -114,5 +137,12 @@ mod tests {
             CalibrationObservation { predicted: 1.0, correct: true },
         ];
         assert_eq!(expected_calibration_error(&observations, 2), Ok(Some(0.0)));
+        assert_eq!(brier_score(&observations), Ok(Some(0.0)));
+    }
+
+    #[test]
+    fn half_confidence_has_quarter_brier_error() {
+        let observations = [CalibrationObservation { predicted: 0.5, correct: true }];
+        assert_eq!(brier_score(&observations), Ok(Some(0.25)));
     }
 }
