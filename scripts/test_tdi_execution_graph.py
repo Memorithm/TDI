@@ -89,6 +89,12 @@ class Tests(unittest.TestCase):
         with self.assertRaises(graph.ExecutionGraphError):
             graph.canonical_graph(a)
 
+    def test_hub_source_contract_is_exactly_pinned(self):
+        a = fixture()
+        a["hub_contract"]["source_commit"] = "0" * 40
+        with self.assertRaises(graph.ExecutionGraphError):
+            graph.canonical_graph(a)
+
     def test_capability_must_match_hub_grammar(self):
         a = fixture()
         a["steps"][0]["capability"] = "tdi.prepare@1.0.0"
