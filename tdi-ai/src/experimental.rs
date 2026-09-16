@@ -50,6 +50,8 @@ pub mod tdi2_intuition_inference;
 pub mod tdi2_intuition_margin;
 #[path = "tdi2_intuition_matching.rs"]
 pub mod tdi2_intuition_matching;
+#[path = "tdi2_intuition_predicates.rs"]
+pub mod tdi2_intuition_predicates;
 #[path = "tdi2_intuition_relations.rs"]
 pub mod tdi2_intuition_relations;
 #[path = "tdi2_intuition_reliability.rs"]
