@@ -540,27 +540,58 @@ agent_operating_protocol:
     holdout merely to reconcile roadmap drift.
 
 research_engine_statistics_bridge_2026_09_16:
-  status: implemented_non_final_pending_exact_head_ci_and_integration
+  status: implemented_non_final_pending_exact_head_ci_and_final_dependency_pin
   contract: scirust-research-stats-json/v1
   numerical_owner: Memorithm/scirust
   protocol_and_report_owner: Memorithm/TDI
   source_pull_request: https://github.com/Memorithm/scirust/pull/1452
-  source_revision: 052da3e48a5bd95f3ef252a2c5ecbb5cfcf5132c
-  consumer_pull_request: https://github.com/Memorithm/TDI/pull/296
-  consumer_revision: c32119958f817d5a9f89eeb7834060e00760da66
+  source_revision: fdd4cf626e9171c935af05f6344e62c41766a365
+  merged_consumer_pull_request: https://github.com/Memorithm/TDI/pull/296
+  merged_consumer_revision: 29294e801234e858e122bf32ed694acbb3190d54
+  current_consumer_dependency_pin: 06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0
+  sensitivity_consumer_pull_request: https://github.com/Memorithm/TDI/pull/387
+  sensitivity_consumer_revision: 54dff997ede3b948b420ab0c021af2933334ad63
   implemented:
-    - bounded_paired_mean_percentile_bootstrap_and_Holm_adjustment
-    - bounded_Morris_elementary_effects_and_Saltelli_2010_first_total_Sobol
-    - TDI_declared_equal_weight_units_paired_repeats_exclusions_and_provenance_reports
-    - actual_Hub_Rust_counter_catalogue_SciRust_process_CLI_consumer
+    - paired_mean_percentile_bootstrap_with_compensated_mean_and_Holm_adjustment
+    - bounded_Morris_effects_and_Saltelli_2010_first_total_Sobol
+    - explicit_TDI_units_paired_repeats_exclusions_and_provenance
+    - deterministic_SALib_1_5_2_sampling_and_declared_ablation_plans
+    - actual_Hub_analytic_batches_with_frozen_response_component_and_coordinate_binding
+    - actual_Rust_SciRust_process_consumption_and_independent_SALib_SciPy_references
   local_evidence:
-    - 139_SciRust_unit_property_tests_and_35_doctests_pass
-    - SciRust_stats_all_target_clippy_and_pinned_nightly_formatter_pass
+    - SciRust_stats_Rust_1_89_tests_docs_clippy_and_pinned_formatter_pass
     - independent_SciPy_1_18_1_and_SALib_1_5_2_synthetic_differentials_pass
-    - six_TDI_protocol_analysis_and_actual_consumer_tests_pass
-  limitations:
-    - final_consumer_source_pin_must_follow_reviewed_and_CI_qualified_upstream_revision
-    - no_universal_bootstrap_coverage_or_cross_platform_bitwise_claim
-    - no_hardware_performance_or_ML_maturity_score_increase
-    - source_revision_declaration_is_not_a_reproducible_build_attestation
-    - all_frozen_TDI_stage_and_protected_payload_boundaries_remain_in_force
+    - fourteen_TDI_sensitivity_paired_analysis_and_real_Hub_test_methods_pass
+    - altered_Hub_coordinates_and_response_function_are_executed_then_rejected_by_collection
+  qualification_limits:
+    - merged_TDI_296_does_not_establish_final_integration_qualification
+    - final_SciRust_merge_pin_and_each_consumer_exact_head_gates_are_still_required
+    - queued_pending_or_unrelated_SHA_checks_are_not_success_evidence
+    - source_declarations_and_observed_binary_hashes_are_not_build_attestations
+    - no_final_research_model_hardware_performance_or_ML_maturity_promotion
+
+research_engine_operational_frontier_2026_09_16:
+  status: implemented_slices_with_explicit_remaining_qualification
+  ownership:
+    scheduling_leases_and_CAS: Memorithm/scirust-hub
+    candidate_proposals_and_Pareto: Memorithm/Forge
+    numerical_estimators: Memorithm/scirust
+    runtime_resource_control: Memorithm/ElasticXxx
+    scientific_semantics_and_evidence: Memorithm/TDI
+  published_slices:
+    - TDI_331_real_finite_and_Jacobi_replay_SDK_merged_current_CI_evidence_incomplete
+    - ElasticXxx_95_actual_capacity_admission_and_TDI_341_consumer_merged_current_CI_evidence_incomplete
+    - TDI_385_durable_Forge_Hub_search_candidate_at_135fc20520fed390d23e78f6374a6a0207a26a4d
+    - TDI_387_Morris_Sobol_ablation_candidate_at_54dff997ede3b948b420ab0c021af2933334ad63
+    - TDI_388_measured_engine_benchmarks_candidate_at_fdd0f57dc3f5fe885601229b9c2d570e54b35635
+    - TDI_389_shared_admission_proofs_and_schema_4_candidate_at_13d46681f8a9f629680eb9c9b77180bf5db8484b
+  measured_scope:
+    - serial_public_software_cases_with_real_Hub_workers_and_recorded_repetitions
+    - zero_full_history_scans_during_journal_append
+    - 16_trial_32_output_shared_storage_150890_bytes_versus_1328144_reconstructed_JSON_bytes
+    - visible_filesystem_fsync_volatile_does_not_qualify_power_loss_durability
+  remaining:
+    - richer_readonly_consultation_reports_and_figure_exports
+    - remaining_permitted_FLAT_NNIS_adapters_with_explicit_hardware_gates
+    - latest_exact_head_CI_review_final_dependency_pins_and_post_merge_checks
+  authority: no_change_to_any_scientific_stage_or_protected_payload_boundary
