@@ -23,6 +23,7 @@ import urllib.error
 import urllib.request
 import uuid
 
+import tdi_artifact_contract as artifacts
 import tdi_engine_archive as archive
 import tdi_engine_runtime as runtime
 from tdi_engine_store import EngineStore, identity
@@ -134,6 +135,29 @@ class OperationalIntegrationTests(unittest.TestCase):
         self.assertEqual(4, receipt["members"])
         self.assertEqual(4, self.cli("verify", bundle_path, "--expected-identity", receipt["identity"])["verified_members"])
         bundle = json.loads(bundle_path.read_text())
+        lineage_mutations = (
+            ("plan_id", "f" * 64),
+            ("step_identity", "e" * 64),
+            ("trial_id", "d" * 64),
+            ("attempt_id", "c" * 64),
+            ("inputs", [{"name": "graph", "identity": "b" * 64}]),
+            ("dependencies", [{"name": "admission", "identity": "a" * 64}]),
+        )
+        for field, changed_value in lineage_mutations:
+            forged = copy.deepcopy(bundle)
+            evidence = forged["members"][0]["evidence"]
+            evidence["provenance"][field] = changed_value
+            evidence["provenance_identity"] = artifacts.provenance_identity(
+                artifacts.canonical_provenance(evidence["provenance"])
+            )
+            forged["identity"] = identity(
+                "tdi-evidence-bundle/v1",
+                {k: v for k, v in forged.items() if k != "identity"},
+            )
+            with self.subTest(provenance_field=field), self.assertRaisesRegex(
+                durable.ContractError, "provenance policy"
+            ):
+                archive.verify_bundle(forged)
         corrupt = copy.deepcopy(bundle)
         corrupt["members"].pop()
         corrupt["identity"] = identity("tdi-evidence-bundle/v1", {k: v for k, v in corrupt.items() if k != "identity"})
