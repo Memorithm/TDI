@@ -1,0 +1,55 @@
+name: One-shot mark Lot G1 qualified
+
+on:
+  push:
+    branches:
+      - industrialize/hub-portable-artifact-g1-qualified
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: industrialize/hub-portable-artifact-g1-qualified
+          fetch-depth: 0
+      - name: Record exact-head G1 qualification
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('docs/engineering/industrialization-status.md')
+          text = path.read_text()
+          baseline = '- Hub portable-artifact prerequisite: `Memorithm/scirust-hub` PR #47 merged as `9f666225b186fbca6160dd34068aea1c9af57040`; the qualified endpoint re-verifies stored bytes against Hub digest and size before returning ordinary SHA-256, with bounded portable-digest scan concurrency.\n'
+          addition = baseline + '- Lot G1 portable artifact binding: PR #264, final head `1d5e0d3df339ab18309b400cb7b2fbe867d48218`, merged `25292997f5ee30529e8fea08c09375d8158416bf` after all returned applicable exact-head workflows succeeded, including the dedicated `TDI Hub edge contracts` gate; no unresolved review thread remained.\n'
+          if baseline not in text:
+              raise SystemExit('baseline marker missing')
+          text = text.replace(baseline, addition, 1)
+          text = text.replace(
+              '| G1 Hub portable artifact binding | candidate | `HubArtifactBinding/v1` pins the qualified Hub #47 source, Hub artifact id/domain digest, exact TDI ArtifactDescriptor identity and raw-SHA256/size agreement; execution and authoritative publication are hard-false. |',
+              '| G1 Hub portable artifact binding | qualified | PR #264 qualifies `HubArtifactBinding/v1` against the pinned Hub #47 source: Hub artifact id/domain digest plus exact TDI ArtifactDescriptor identity and raw-SHA256/size agreement. Execution and authoritative publication remain hard-false. |',
+              1,
+          )
+          text = text.replace(
+              '| Q16-Q17 | candidate / blocked | portable artifact translation is now represented by the fail-closed G1 contract pinned to Hub #47; execution/publication remain unauthorized until Hub-owned durable fencing/generation (issue #46) and atomic authoritative publication are qualified. |',
+              '| Q16 | qualified for portable artifact identity translation | PR #264 exact-head qualification passed for the fail-closed G1 contract pinned to Hub #47; it verifies portable raw-SHA256/size translation and source/repository pins while granting no execution or publication authority. |\n| Q17 | blocked | authoritative publication remains unauthorized until Hub-owned durable fencing/generation (issue #46) and atomic publication are qualified. |',
+              1,
+          )
+          text = text.replace(
+              '1. Qualify the G1 portable-artifact binding against Hub #47 while keeping `execution_authorized=false` and `publication_authoritative=false`; component/capability pins still require an atomic authoritative edge.\n2. Implement and qualify Hub issue #46 in Hub-owned orchestration: durable monotone fencing/generation plus atomic authoritative publication across retry, cancellation and restart. Only then may TDI advance the real edge.\n3. Add ElasticXxx, Forge, SciRust, FLAT-ATTENTION and NNIS integrations only through qualified versioned contracts.\n4. Continue statistics/sensitivity, CLI/API/viewer, external exports and measured engine benchmarks.\n',
+              '1. Implement and qualify Hub issue #46 in Hub-owned orchestration: durable monotone fencing/generation plus atomic authoritative publication across retry, cancellation and restart. Only then may TDI advance G2 to an authoritative edge.\n2. After that Hub boundary is qualified, bind exact component/capability pins and publication authority without duplicating Hub scheduling, leases or storage in TDI.\n3. Add ElasticXxx, Forge, SciRust, FLAT-ATTENTION and NNIS integrations only through qualified versioned contracts.\n4. Continue statistics/sensitivity, CLI/API/viewer, external exports and measured engine benchmarks.\n',
+              1,
+          )
+          path.write_text(text)
+          PY
+          PYTHONPATH=scripts python3 -m unittest scripts/test_tdi_hub_edge_contract.py scripts/test_tdi_artifact_contract.py -v
+          rm .github/workflows/oneshot-g1-qualified-status.yml
+          git config user.name 'ZEKRITI TAREK'
+          git config user.email 'contact@checkupauto.fr'
+          git add -A
+          git commit -m 'docs(engine): record qualified Lot G1 portable bridge'
+          git push origin HEAD:industrialize/hub-portable-artifact-g1-qualified
