@@ -2,6 +2,8 @@
 
 Status: **candidate / non-executing / no scientific authority**
 
+Tracking PR: **#283**. This status remains candidate until every applicable workflow succeeds on the exact final head and material review findings are resolved.
+
 This slice defines the TDI-owned interchange boundary for proposing a genuinely reusable mathematical or representation primitive to `Memorithm/scirust`. It does not copy SciRust implementation code into TDI, execute SciRust, modify a SciRust branch, or authorize promotion.
 
 ## Audited SciRust source
