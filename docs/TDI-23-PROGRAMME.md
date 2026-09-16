@@ -123,17 +123,19 @@ These are algebra/implementation checks, not evidence that categorical attention
 
 The TDI-23.1 development scaffold is allowed to establish only bounded grammar and legality facts:
 
-1. objects and nodes have stable local identities;
-2. concrete linear maps bind exact domain/codomain objects and matching dimensions;
-3. composition requires exact middle-object identity, not dimension equality alone;
-4. identity and boundary-free dagger lower back to the Stage-0 linear carrier;
-5. direct sum and tensor product remain distinct and use additive versus multiplicative dimensions;
-6. softmax, Boolean, `F2`, ANF/Zhegalkin, and max-plus appear only as explicit opaque boundaries in this slice;
-7. linear evaluation and dagger fail closed across those boundaries;
-8. coordinate reductions are explicit object annotations rather than implicit graph rewrites;
-9. reduced lowering fails when endpoint annotations are missing;
-10. composition-defect auditing delegates to the Stage-0 omitted-middle-path structural diagnostic;
-11. no rewrite search, FLAT integration, comparative attention experiment, or final execution is authorised by the IR scaffold.
+1. object/node handles are bound to the IR instance that created them; foreign handles fail closed even when a numeric slot exists in the receiving graph;
+2. the mutable IR is not clonable in this slice, preventing divergent instances from sharing one ownership token;
+3. concrete linear maps bind exact domain/codomain objects and matching dimensions;
+4. composition requires exact middle-object identity, not dimension equality alone;
+5. identity and boundary-free dagger lower back to the Stage-0 linear carrier;
+6. direct sum and tensor product remain distinct and use additive versus multiplicative dimensions;
+7. softmax, Boolean, `F2`, ANF/Zhegalkin, and max-plus appear only as explicit opaque boundaries in this slice;
+8. linear evaluation and dagger fail closed across those boundaries;
+9. coordinate reductions are explicit object annotations rather than implicit graph rewrites;
+10. reduced lowering fails when endpoint annotations are missing;
+11. composition-defect auditing delegates to the Stage-0 omitted-middle-path structural diagnostic;
+12. the process-local owner token is not a stable serialized/provenance graph identifier;
+13. no rewrite search, FLAT integration, comparative attention experiment, or final execution is authorised by the IR scaffold.
 
 ## Required controls for later evaluator stages
 
