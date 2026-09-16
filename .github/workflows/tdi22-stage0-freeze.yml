@@ -3,6 +3,7 @@ name: TDI-22 Stage-0 freeze integrity
 on:
   pull_request:
     paths:
+      - 'AGENTS.md'
       - 'docs/TDI-22*'
       - 'tdi-ai/src/tdi22*.rs'
       - 'tdi-ai/src/tdi-22*.rs'
@@ -18,6 +19,7 @@ on:
     branches:
       - main
     paths:
+      - 'AGENTS.md'
       - 'docs/TDI-22*'
       - 'tdi-ai/src/tdi22*.rs'
       - 'tdi-ai/src/tdi-22*.rs'
