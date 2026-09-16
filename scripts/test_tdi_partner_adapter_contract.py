@@ -24,11 +24,7 @@ def descriptor(kind="forge"):
         "repository": repository,
         "source_sha": SOURCE,
         "role": role,
-        "protocol": {
-            "name": "tdi.partner.fixture",
-            "version": 1,
-            "schema_identity": SHA("d"),
-        },
+        "protocol": {"name": "tdi.partner.fixture", "version": 1, "schema_identity": SHA("d")},
         "hub_component": {
             "component_id": hub_fixture.COMPONENT,
             "component_version": "1.2.3",
@@ -41,9 +37,7 @@ def descriptor(kind="forge"):
             {"name": "request", "schema": 1, "identity": SHA("1")},
             {"name": "context", "schema": 2, "identity": SHA("2")},
         ],
-        "outputs": [
-            {"name": "response", "schema": 1, "identity": SHA("3")},
-        ],
+        "outputs": [{"name": "response", "schema": 1, "identity": SHA("3")}],
         "permissions": {
             "read_protected_holdout": False,
             "authorize_scientific_stage": False,
@@ -74,9 +68,7 @@ class PartnerAdapterContractTests(unittest.TestCase):
         for field, changed, message in cases:
             value = descriptor()
             value[field] = changed
-            with self.subTest(field=field), self.assertRaisesRegex(
-                partner.PartnerAdapterContractError, message
-            ):
+            with self.subTest(field=field), self.assertRaisesRegex(partner.PartnerAdapterContractError, message):
                 partner.canonical_partner_adapter(value)
 
     def test_schema_versions_require_actual_integers(self):
@@ -84,10 +76,7 @@ class PartnerAdapterContractTests(unittest.TestCase):
         value["schema"] = True
         with self.assertRaisesRegex(partner.PartnerAdapterContractError, "partner adapter schema"):
             partner.canonical_partner_adapter(value)
-
-        binding = partner.bind_admitted_partner_step(
-            descriptor(), hub_fixture.bind_fixture(), step_key="evaluate"
-        )
+        binding = partner.bind_admitted_partner_step(descriptor(), hub_fixture.bind_fixture(), step_key="evaluate")
         binding["schema"] = True
         with self.assertRaisesRegex(partner.PartnerAdapterContractError, "admitted partner step schema"):
             partner.canonical_admitted_partner_step(binding)
@@ -96,11 +85,8 @@ class PartnerAdapterContractTests(unittest.TestCase):
         for field in descriptor()["permissions"]:
             value = descriptor()
             value["permissions"][field] = True
-            with self.subTest(field=field), self.assertRaisesRegex(
-                partner.PartnerAdapterContractError, "grants no authority"
-            ):
+            with self.subTest(field=field), self.assertRaisesRegex(partner.PartnerAdapterContractError, "grants no authority"):
                 partner.canonical_partner_adapter(value)
-
         value = descriptor()
         value["permissions"]["actuate_runtime"] = 0
         with self.assertRaisesRegex(partner.PartnerAdapterContractError, "grants no authority"):
@@ -111,12 +97,10 @@ class PartnerAdapterContractTests(unittest.TestCase):
         value["capabilities"].append("candidate.evaluate")
         with self.assertRaisesRegex(partner.PartnerAdapterContractError, "duplicate capability"):
             partner.canonical_partner_adapter(value)
-
         value = descriptor()
         value["inputs"].append(copy.deepcopy(value["inputs"][0]))
         with self.assertRaisesRegex(partner.PartnerAdapterContractError, "duplicate inputs name"):
             partner.canonical_partner_adapter(value)
-
         value = descriptor()
         value["protocol"]["version"] = True
         with self.assertRaisesRegex(partner.PartnerAdapterContractError, "positive JSON-safe integer"):
@@ -133,16 +117,12 @@ class PartnerAdapterContractTests(unittest.TestCase):
         for field, changed, message in cases:
             value = descriptor()
             value["hub_component"][field] = changed
-            with self.subTest(field=field), self.assertRaisesRegex(
-                partner.PartnerAdapterContractError, message
-            ):
+            with self.subTest(field=field), self.assertRaisesRegex(partner.PartnerAdapterContractError, message):
                 partner.canonical_partner_adapter(value)
 
     def test_adapter_binds_only_to_exact_g3_admitted_step(self):
         admitted = hub_fixture.bind_fixture()
-        binding = partner.bind_admitted_partner_step(
-            descriptor(), admitted, step_key="evaluate"
-        )
+        binding = partner.bind_admitted_partner_step(descriptor(), admitted, step_key="evaluate")
         self.assertEqual(hub_fixture.WORKFLOW, binding["workflow"])
         self.assertEqual(admitted["graph_identity"], binding["graph_identity"])
         self.assertTrue(binding["workflow_execution_admitted"])
@@ -159,7 +139,6 @@ class PartnerAdapterContractTests(unittest.TestCase):
         admitted = hub_fixture.bind_fixture()
         with self.assertRaisesRegex(partner.PartnerAdapterContractError, "not present|not covered"):
             partner.bind_admitted_partner_step(descriptor(), admitted, step_key="missing")
-
         mutations = (
             ("component_id", "33333333-3333-3333-3333-333333333333"),
             ("component_version", "1.2.4"),
@@ -171,39 +150,24 @@ class PartnerAdapterContractTests(unittest.TestCase):
             value = descriptor()
             value["hub_component"][field] = changed
             with self.subTest(field=field), self.assertRaisesRegex(
-                partner.PartnerAdapterContractError,
-                "does not match admitted Graph/v1 step",
+                partner.PartnerAdapterContractError, "does not match admitted Graph/v1 step"
             ):
                 partner.bind_admitted_partner_step(value, admitted, step_key="evaluate")
 
     def test_restored_binding_recomputes_embedded_identities_and_flags(self):
-        binding = partner.bind_admitted_partner_step(
-            descriptor(), hub_fixture.bind_fixture(), step_key="evaluate"
-        )
-        for field in (
-            "graph_identity",
-            "workflow_admission_binding_identity",
-            "partner_adapter_identity",
-        ):
+        binding = partner.bind_admitted_partner_step(descriptor(), hub_fixture.bind_fixture(), step_key="evaluate")
+        for field in ("graph_identity", "workflow_admission_binding_identity", "partner_adapter_identity"):
             changed = copy.deepcopy(binding)
             changed[field] = SHA("f")
-            with self.subTest(field=field), self.assertRaisesRegex(
-                partner.PartnerAdapterContractError, "does not match embedded evidence"
-            ):
+            with self.subTest(field=field), self.assertRaisesRegex(partner.PartnerAdapterContractError, "does not match embedded evidence"):
                 partner.canonical_admitted_partner_step(changed)
-
         for field in (
-            "partner_execution_qualified",
-            "protected_holdout_access_authorized",
-            "scientific_stage_authorized",
-            "scientific_verdict_authorized",
-            "runtime_actuation_authorized",
+            "partner_execution_qualified", "protected_holdout_access_authorized", "scientific_stage_authorized",
+            "scientific_verdict_authorized", "runtime_actuation_authorized",
         ):
             changed = copy.deepcopy(binding)
             changed[field] = True
-            with self.subTest(field=field), self.assertRaisesRegex(
-                partner.PartnerAdapterContractError, "violates the common partner boundary"
-            ):
+            with self.subTest(field=field), self.assertRaisesRegex(partner.PartnerAdapterContractError, "violates the common partner boundary"):
                 partner.canonical_admitted_partner_step(changed)
 
     def test_embedded_g3_version_fields_reject_boolean_aliases(self):
@@ -221,7 +185,21 @@ class PartnerAdapterContractTests(unittest.TestCase):
             for key in path[:-1]:
                 target = target[key]
             target[path[-1]] = True
-            with self.subTest(path=path), self.assertRaisesRegex(
+            with self.subTest(path=path), self.assertRaisesRegex(partner.PartnerAdapterContractError, message):
+                partner.bind_admitted_partner_step(descriptor(), admitted, step_key="evaluate")
+
+    def test_root_artifact_binding_versions_reject_boolean_aliases(self):
+        for nested_descriptor in (False, True):
+            admitted = copy.deepcopy(hub_fixture.bind_fixture())
+            digest = next(iter(admitted["root_artifact_bindings"]))
+            root_binding = admitted["root_artifact_bindings"][digest]
+            if nested_descriptor:
+                root_binding["descriptor"]["schema"] = True
+                message = "root artifact descriptor"
+            else:
+                root_binding["schema"] = True
+                message = "root artifact binding"
+            with self.subTest(nested_descriptor=nested_descriptor), self.assertRaisesRegex(
                 partner.PartnerAdapterContractError, message
             ):
                 partner.bind_admitted_partner_step(descriptor(), admitted, step_key="evaluate")
