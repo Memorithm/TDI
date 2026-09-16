@@ -1,0 +1,37 @@
+name: Agent promote TDI G2 status
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    if: github.head_ref == 'docs/industrialization-g2-qualified'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: docs/industrialization-g2-qualified
+          fetch-depth: 0
+      - name: Promote G2 status
+        run: python3 .agent/promote_g2_status.py
+      - name: Verify no stale candidate marker remains
+        run: |
+          ! grep -F 'Lot G2 authoritative publication binding: PR #270 is candidate' docs/engineering/industrialization-status.md
+          grep -F 'Memorithm/scirust-hub#52' docs/engineering/industrialization-status.md
+      - name: Commit status synchronization
+        shell: bash
+        run: |
+          if git diff --quiet -- docs/engineering/industrialization-status.md; then
+            echo 'No status changes required.'
+            exit 0
+          fi
+          git config user.name "ZEKRITI TAREK"
+          git config user.email "contact@checkupauto.fr"
+          git add docs/engineering/industrialization-status.md
+          git commit -m "docs(engine): qualify Lot G2 publication binding"
+          git push origin HEAD:docs/industrialization-g2-qualified
