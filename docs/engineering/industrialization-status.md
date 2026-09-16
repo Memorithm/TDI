@@ -29,7 +29,7 @@ This is the durable engineering handoff for the industrialization programme. It 
 | D ExperimentSpec / identities | qualified | PR #253 binds question, ExperimentSpec-plan, execution-plan, trial, attempt and scientific-result identities while preserving schemas 1/2. |
 | D worker response v2 | qualified | PR #253 caller-owned identity/seed binding, authoritative step/observation budget counters and content-addressed result artifacts; exact-head software and real-kernel gates passed. |
 | D cross-language canonical numbers | qualified for v1/v2 scope | JSON-safe identity integers, decimal u64 seeds, timeout normalization, and explicit float exclusion from canonical scientific result values. |
-| E CheckpointManifest/v1 | candidate | content-addressed state plus exact experiment/plan/trial/step/adapter/backend/input/RNG binding and frozen progress-budget validation. |
+| E CheckpointManifest/v1 | candidate | content-addressed state plus exact experiment/plan/trial/step/adapter/backend/input/RNG binding; frozen step/observation budgets are embedded in checkpoint identity and enforced against resume inputs. |
 | E declarative execution graph | candidate | topological Graph/v1 with per-step identity binding to exact Hub ComponentId, component version/manifest digest, capability-contract version, inputs, parameters and checkpoint ports. |
 | E pinned Hub structural limits | candidate | Graph/v1 matches audited Hub v1/default limits for max concurrency, step count, input count, serialized parameters, timeout and input-name grammar before producing a preview. |
 | E Hub bridge | structural preview only | `compile_hub_workflow_preview()` emits `execution_authorized: false`; current WorkflowSpec/v1 cannot atomically enforce component/capability pins, registry state or portable-artifact identity. |
@@ -46,7 +46,7 @@ This is the durable engineering handoff for the industrialization programme. It 
 | Q07 | qualified for declared cgroup-v2 profile | PR #252 exact-head real-kernel process-tree cleanup/recovery qualification. |
 | Q08 | qualified for declared cgroup-v2 profile | PR #252 real-kernel memory/PID/CPU limits and sibling isolation. |
 | Q09 | partial | unsupported hard VRAM quota fails closed; measured GPU qualification remains. |
-| Q10 | candidate pending Lot-E exact-head qualification | PR #253 qualified plan/trial/attempt identity; Lot E adds exact checkpoint lineage/resume binding. |
+| Q10 | candidate pending Lot-E exact-head qualification | PR #253 qualified plan/trial/attempt identity; Lot E adds exact checkpoint lineage plus embedded frozen budget binding for resume. |
 | Q11 | candidate for declarative graph semantics only | Lot E validates graph/component/capability pins and pinned Hub structural bounds; authoritative Hub execution is blocked until a versioned Hub edge enforces registry/artifact pins. |
 | Q12 | planned | common adapter SDK remains separate from graph/checkpoint semantics. |
 | Q13-Q14 | partial | legacy journal migration qualified; portable provenance/artifact export remains. |
@@ -55,7 +55,7 @@ This is the durable engineering handoff for the industrialization programme. It 
 
 ## Lot-E candidate validation
 
-Local non-privileged qualification currently covers 16 checkpoint/graph contract tests (5 checkpoint + 11 graph):
+Local non-privileged qualification currently covers 17 checkpoint/graph contract tests (6 checkpoint + 11 graph):
 
 ```bash
 PYTHONPATH=scripts python3 -m py_compile \
@@ -66,7 +66,7 @@ PYTHONPATH=scripts python3 -m unittest \
   scripts/test_tdi_execution_graph.py -v
 ```
 
-The graph regressions include component-id/version/manifest/capability identity sensitivity, single-alias pin consistency, Hub input grammar, max 32 inputs, 16 KiB serialized parameters and the audited 3,600,000 ms timeout bound. The existing `TDI engine Linux containment` workflow executes these contracts alongside all previously qualified engine-contract tests on the exact PR head. The cgroup kernel job remains enabled so Lot E cannot accidentally regress the contained execution foundation.
+Checkpoint regressions cover exact lineage, input/RNG drift, content identity, embedded progress limits and rejection of caller-side budget widening. Graph regressions include component-id/version/manifest/capability identity sensitivity, single-alias pin consistency, Hub input grammar, max 32 inputs, 16 KiB serialized parameters and the audited 3,600,000 ms timeout bound. The existing `TDI engine Linux containment` workflow executes these contracts alongside all previously qualified engine-contract tests on the exact PR head. The cgroup kernel job remains enabled so Lot E cannot accidentally regress the contained execution foundation.
 
 ## Cross-repository decisions
 
