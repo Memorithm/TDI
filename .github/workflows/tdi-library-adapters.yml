@@ -29,15 +29,20 @@ jobs:
       CARGO_BUILD_JOBS: '2'
       RUSTFLAGS: '-C debuginfo=0'
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the exact TDI candidate head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
           path: integration-tdi
-      - uses: actions/checkout@v4
+      - name: Check out the pinned Hub dependency
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           repository: Memorithm/scirust-hub
           ref: ccdcb99a4573dbefb944af0df713101b100b5f78
+          persist-credentials: false
           path: integration-hub
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
         with:
           toolchain: 1.89.0
       - name: Build pinned actual Hub in its own Cargo context
