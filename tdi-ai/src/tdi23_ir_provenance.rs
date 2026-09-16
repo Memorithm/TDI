@@ -182,7 +182,10 @@ impl fmt::Display for ProvenanceError {
                 )
             }
             Self::MissingObjectOrdinal { object } => {
-                write!(formatter, "reachable object {object} has no manifest ordinal")
+                write!(
+                    formatter,
+                    "reachable object {object} has no manifest ordinal"
+                )
             }
             Self::MissingNodeOrdinal { node } => {
                 write!(formatter, "reachable node {node} has no manifest ordinal")
@@ -308,12 +311,11 @@ pub fn canonical_rooted_manifest(
     output.push_str(&format!("root={root_ordinal}\n"));
 
     for (source_index, object_id) in &reachable.objects {
-        let ordinal = object_ordinals
-            .get(source_index)
-            .copied()
-            .ok_or(ProvenanceError::MissingObjectOrdinal {
+        let ordinal = object_ordinals.get(source_index).copied().ok_or(
+            ProvenanceError::MissingObjectOrdinal {
                 object: *source_index,
-            })?;
+            },
+        )?;
         let object = ir.object(*object_id)?;
         output.push_str(&format!(
             "object|{ordinal}|name_hex={}|dim={}|kind={}",
@@ -333,12 +335,11 @@ pub fn canonical_rooted_manifest(
     }
 
     for (source_index, node_id) in &reachable.nodes {
-        let ordinal = node_ordinals
-            .get(source_index)
-            .copied()
-            .ok_or(ProvenanceError::MissingNodeOrdinal {
+        let ordinal = node_ordinals.get(source_index).copied().ok_or(
+            ProvenanceError::MissingNodeOrdinal {
                 node: *source_index,
-            })?;
+            },
+        )?;
         let node = ir.node(*node_id)?;
         output.push_str(&format!(
             "node|{ordinal}|domain={}|codomain={}|op=",
@@ -386,7 +387,7 @@ fn collect_and_validate(
 ) -> Result<Reachable, ProvenanceError> {
     let mut reachable = Reachable::default();
     let mut visiting = BTreeSet::new();
-    let mut validated_nodes = BTreeSet::new();
+    let mut validated_nodes = BTreeMap::new();
     validate_node(
         ir,
         root,
@@ -415,11 +416,11 @@ fn validate_node(
     node_id: NodeId,
     reachable: &mut Reachable,
     visiting: &mut BTreeSet<usize>,
-    validated: &mut BTreeSet<usize>,
+    validated: &mut BTreeMap<usize, bool>,
 ) -> Result<bool, ProvenanceError> {
     let index = node_id.index();
-    if validated.contains(&index) {
-        return contains_boundary(ir, node_id, &mut BTreeSet::new());
+    if let Some(has_boundary) = validated.get(&index) {
+        return Ok(*has_boundary);
     }
     if !visiting.insert(index) {
         return Err(ProvenanceError::ForwardNodeReference {
@@ -492,7 +493,7 @@ fn validate_node(
     };
 
     visiting.remove(&index);
-    validated.insert(index);
+    validated.insert(index, has_boundary);
     Ok(has_boundary)
 }
 
@@ -607,29 +608,6 @@ fn validate_prior_object_reference(
         });
     }
     Ok(())
-}
-
-fn contains_boundary(
-    ir: &CategoricalAttentionIr,
-    node_id: NodeId,
-    visiting: &mut BTreeSet<usize>,
-) -> Result<bool, ProvenanceError> {
-    if !visiting.insert(node_id.index()) {
-        return Err(ProvenanceError::ForwardNodeReference {
-            node: node_id.index(),
-            referenced: node_id.index(),
-        });
-    }
-    let result = match ir.node(node_id)?.kind() {
-        IrNodeKind::LinearMap(_) | IrNodeKind::Identity => false,
-        IrNodeKind::NonlinearBoundary { .. } => true,
-        IrNodeKind::Compose { outer, inner } => {
-            contains_boundary(ir, *outer, visiting)? || contains_boundary(ir, *inner, visiting)?
-        }
-        IrNodeKind::Dagger { source } => contains_boundary(ir, *source, visiting)?,
-    };
-    visiting.remove(&node_id.index());
-    Ok(result)
 }
 
 fn first_boundary(
@@ -779,10 +757,7 @@ mod tests {
 
     #[test]
     fn tdi23_1_manifest_contract_is_versioned() {
-        assert_eq!(
-            ROOTED_MANIFEST_CONTRACT,
-            "tdi23.1-rooted-ir-manifest-v1"
-        );
+        assert_eq!(ROOTED_MANIFEST_CONTRACT, "tdi23.1-rooted-ir-manifest-v1");
     }
 
     #[test]
@@ -878,6 +853,20 @@ mod tests {
         assert_eq!(summary.node_count(), 1);
         assert_eq!(summary.nonlinear_boundary_count(), 1);
         assert_eq!(summary.reduction_annotation_count(), 1);
+    }
+
+    #[test]
+    fn tdi23_1_root_validation_memoizes_reused_dag_nodes() {
+        let mut ir = CategoricalAttentionIr::new();
+        let object = ir.add_atomic_object("H", 1).expect("H");
+        let mut node = ir.add_identity(object).expect("identity");
+        for _ in 0..40 {
+            node = ir.compose(node, node).expect("self composition");
+        }
+
+        let summary = validate_rooted_subgraph(&ir, node).expect("memoized DAG validation");
+        assert_eq!(summary.node_count(), 41);
+        assert_eq!(summary.nonlinear_boundary_count(), 0);
     }
 
     #[test]
