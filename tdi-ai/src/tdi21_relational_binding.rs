@@ -29,6 +29,7 @@ pub enum RelationalError {
     RelationOutOfRange,
     EmptyRelationPath,
     TooManyCompositionHops,
+    EventBudgetExhausted,
     UnexpectedQuiet,
     Stream(StreamError),
 }
@@ -135,7 +136,8 @@ impl RelationalBinder {
 
     /// Follow a bounded relation path without scanning prior events.
     /// Every hop performs one exact-address memory lookup. Missing intermediate
-    /// state terminates the path as an explicit miss.
+    /// state terminates the path as an explicit miss. Contract errors are
+    /// validated before the first lookup so they cannot leave partial evidence.
     pub fn compose_path(
         &mut self,
         relations: &[u64],
@@ -149,6 +151,22 @@ impl RelationalBinder {
         }
         if subject >= self.entity_limit() {
             return Err(RelationalError::EntityOutOfRange);
+        }
+        if relations
+            .iter()
+            .any(|&relation| relation >= self.relation_limit())
+        {
+            return Err(RelationalError::RelationOutOfRange);
+        }
+        let required = u64::try_from(relations.len()).expect("bounded hop count fits u64");
+        if self
+            .stream
+            .counters()
+            .events
+            .checked_add(required)
+            .is_none_or(|events| events > self.config.stream.max_events)
+        {
+            return Err(RelationalError::EventBudgetExhausted);
         }
 
         let mut current = subject;
