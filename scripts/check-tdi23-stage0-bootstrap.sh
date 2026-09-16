@@ -27,7 +27,7 @@ done
 
 grep -Fq 'active Stage 0 bootstrap; not frozen; no confirmatory execution authorised' \
     "$PROGRAMME" || fail "programme Stage-0 status drifted"
-grep -Fq 'softmax is nonlinear' "$PROGRAMME" \
+grep -Fq '`softmax` is nonlinear' "$PROGRAMME" \
     || fail "programme lost explicit nonlinear softmax boundary"
 grep -Fq 'ACTIVE STAGE-0 BOOTSTRAP / NON-FINAL' "$SCOPE" \
     || fail "scope status drifted"
