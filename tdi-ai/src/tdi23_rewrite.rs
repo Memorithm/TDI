@@ -271,8 +271,11 @@ mod tests {
         apply_local_rewrite,
     };
     use crate::experimental::tdi23_categorical::RealLinearMap;
-    use crate::experimental::tdi23_ir::{CategoricalAttentionIr, NonlinearBoundaryKind};
+    use crate::experimental::tdi23_ir::{
+        CategoricalAttentionIr, IrError, NonlinearBoundaryKind,
+    };
     use crate::experimental::tdi23_ir_equivalence::{ComparisonSide, EquivalenceError};
+    use crate::experimental::tdi23_ir_provenance::ProvenanceError;
 
     #[test]
     fn tdi23_2_rewrite_contract_is_versioned() {
@@ -387,6 +390,23 @@ mod tests {
                 rule: RewriteRule::DoubleDagger,
                 ..
             })
+        ));
+    }
+
+    #[test]
+    fn tdi23_2_rewrite_rejects_foreign_root_before_pattern_matching() {
+        let mut left_ir = CategoricalAttentionIr::new();
+        let left_object = left_ir.add_atomic_object("A", 1).expect("left A");
+        let foreign_root = left_ir.add_identity(left_object).expect("left identity");
+
+        let mut right_ir = CategoricalAttentionIr::new();
+        right_ir.add_atomic_object("A", 1).expect("right A");
+
+        assert!(matches!(
+            apply_local_rewrite(&right_ir, foreign_root, RewriteRule::DoubleDagger),
+            Err(RewriteError::Provenance(ProvenanceError::Ir(
+                IrError::ForeignNodeHandle(_)
+            )))
         ));
     }
 
