@@ -10,6 +10,7 @@ import copy
 import hashlib
 import json
 import re
+import unicodedata
 import uuid
 
 import tdi_experiment_contract as experiment
@@ -97,7 +98,7 @@ def _sha256(value, name):
 
 def _output_name(value, name):
     value = _text(value, name, max_bytes=128)
-    if any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in value):
+    if any(ch.isspace() or unicodedata.category(ch) == "Cc" for ch in value):
         raise ExecutionGraphError(f"{name} must not contain whitespace/control characters")
     return value
 
