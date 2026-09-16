@@ -9,7 +9,7 @@ seed and multiplicity. A common seed or repeated row is not proof of independenc
 SciRust owns numerical resampling and sensitivity primitives. TDI owns protocol
 semantics, provenance selection and reports. The integration uses
 `scirust-research-stats-json/v1` at SciRust commit
-`fa6658e60af6d131f63fed40ada1e90ae9e23fea` (PR Memorithm/scirust#1452).
+`06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0` (PR Memorithm/scirust#1452).
 This source is pending upstream integration; use the exact pin for qualification.
 The installed binary's SHA-256 is recorded separately; this is not a build
 attestation. No new numerical Python dependency or TDI Rust MSRV bump is required.
@@ -52,7 +52,7 @@ Build SciRust independently, outside TDI's Cargo configuration directory:
 
 ```bash
 cd ../scirust
-git checkout fa6658e60af6d131f63fed40ada1e90ae9e23fea
+git checkout 06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0
 cargo build --locked -p scirust-stats --example research_stats
 sha256sum target/debug/examples/research_stats
 cd ../TDI
@@ -67,7 +67,7 @@ python3 scripts/tdi_engine.py --catalogue tdi-campaigns.sqlite analyze \
   --protocol protocol.json --selections selections.json \
   --worker ../scirust/target/debug/examples/research_stats \
   --worker-sha256 "$STATS_SHA256" \
-  --source-commit fa6658e60af6d131f63fed40ada1e90ae9e23fea \
+  --source-commit 06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0 \
   --output analysis.json
 ```
 
@@ -102,7 +102,8 @@ The effect is candidate minus reference in the declared metric's units. Costs
 are explicitly unavailable unless measured/selected by a separate qualified
 path; logical counts are not converted to seconds or joules.
 
-Limits: 20000 planned/observed rows, 10000 units, 100 repeats per unit, eight
+Limits: 16 MiB and one million JSON items per selected analysis input, 20000
+planned/observed rows, 10000 units, 100 repeats per unit, eight
 comparisons, sixteen selected strata, 64 source campaigns, 10 million bootstrap
 contributions per request and 20 million for the entire report. The trusted
 process client bounds input and each output stream to 1 MiB and wall time to
@@ -118,7 +119,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts python3 -m unittest -v scripts/test
 
 The second command requires `TDI_SCIRUST_STATS_BIN`, `TDI_SCIRUST_SOURCE_COMMIT`,
 `TDI_HUBD_BIN`, and `TDI_DURABLE_WORKER` to identify actual built executables.
-Missing binaries fail qualification. Six tests pass locally: invalid protocol
+Missing binaries fail qualification. Eight tests pass locally: invalid protocol
 and rows, equal unit weighting, exclusions and family confidence, insufficient
 data, actual shared methods, and Hub→catalogue→CLI→SciRust report generation.
 The last scenario also checks source duplication, cross-domain rejection and

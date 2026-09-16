@@ -21,13 +21,13 @@ from tdi_engine_archive import export_bundle, restore_bundle, verify_bundle
 from tdi_observability import ExportError, EXIT_EXPORT
 
 
-def read_json(path, limit=16 * 1024 * 1024):
+def read_json(path, limit=16 * 1024 * 1024, *, max_items=100_000):
     """Read bounded UTF-8 JSON from an explicitly selected regular file."""
     path = Path(path)
     if path.is_symlink() or not path.is_file():
         raise durable.ContractError("expected an explicit regular non-symlink file")
     with path.open("rb") as stream:
-        return durable.strict_json(stream.read(limit + 1), max_bytes=limit)
+        return durable.strict_json(stream.read(limit + 1), max_bytes=limit, max_items=max_items)
 
 
 def main(argv=None):
@@ -101,17 +101,17 @@ def dispatch(args):
     """Execute one CLI operation; network clients are created only when needed."""
     op = args.operation
     if op in ("analysis-validate", "analyze"):
-        from tdi_research_analysis import canonical_protocol, observations_from_catalogue, analyze
-        protocol = canonical_protocol(read_json(args.protocol))
+        from tdi_research_analysis import MAX_ANALYSIS_ITEMS, canonical_protocol, observations_from_catalogue, analyze
+        protocol = canonical_protocol(read_json(args.protocol, max_items=MAX_ANALYSIS_ITEMS))
         if op == "analysis-validate":
             return {"protocol_identity": identity("tdi-analysis-protocol/v1", protocol), "protocol": protocol}
         from tdi_scirust_client import SciRustStats
         worker = SciRustStats(args.worker, args.worker_sha256, args.source_commit)
         if args.selections:
             with EngineStore(args.catalogue, readonly=True) as store:
-                observations = observations_from_catalogue(store, protocol, read_json(args.selections))
+                observations = observations_from_catalogue(store, protocol, read_json(args.selections, max_items=MAX_ANALYSIS_ITEMS))
         else:
-            observations = read_json(args.observations)
+            observations = read_json(args.observations, max_items=MAX_ANALYSIS_ITEMS)
         report = analyze(protocol, observations, worker)
         atomic_json(args.output, report)
         return {"identity": report["identity"], "output": str(args.output), "results": report["results"], "scientific_verdict": report["scientific_verdict"]}

@@ -7,7 +7,8 @@ import unittest
 
 import tdi_experiment_supervisor as durable
 from tdi_engine_store import identity
-from tdi_research_analysis import canonical_protocol, analyze
+from tdi_research_analysis import MAX_ANALYSIS_ITEMS, canonical_protocol, analyze, _mean
+from tdi_engine import read_json
 from tdi_scirust_client import SciRustStats
 
 
@@ -33,6 +34,20 @@ def fixture():
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_full_row_inventory_has_an_explicit_bounded_parser_budget(self):
+        _, data = fixture()
+        data["rows"] = [data["rows"][0]] * 20_000
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "large.json"
+            path.write_text(durable.canonical(data))
+            with self.assertRaises(durable.ContractError): read_json(path)
+            self.assertEqual(20_000, len(read_json(path, max_items=MAX_ANALYSIS_ITEMS)["rows"]))
+            with self.assertRaises(durable.ContractError): read_json(path, limit=1000, max_items=MAX_ANALYSIS_ITEMS)
+
+    def test_unit_aggregation_preserves_subnormal_and_large_finite_means(self):
+        self.assertEqual(1e-320, _mean([1e-320] * 100))
+        self.assertEqual(1e308, _mean([1e308] * 100))
+        self.assertEqual(1, _mean([1e20, 3, -1e20]))
     def test_rejects_implicit_final_policies_unknown_units_and_unbounded_work(self):
         protocol, _ = fixture()
         for key, value in (("domain", "Confirmation"), ("unit_kind", "row"), ("missing", "ignore"),

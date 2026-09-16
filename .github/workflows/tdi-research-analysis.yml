@@ -33,7 +33,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: Memorithm/scirust
-          ref: fa6658e60af6d131f63fed40ada1e90ae9e23fea
+          ref: 06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0
           path: integration-scirust
       - uses: actions/checkout@v7
         with:
@@ -54,7 +54,7 @@ jobs:
         env:
           PYTHONPATH: scripts
           TDI_SCIRUST_STATS_BIN: ${{ github.workspace }}/integration-scirust/target/debug/examples/research_stats
-          TDI_SCIRUST_SOURCE_COMMIT: fa6658e60af6d131f63fed40ada1e90ae9e23fea
+          TDI_SCIRUST_SOURCE_COMMIT: 06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0
           TDI_HUBD_BIN: ${{ github.workspace }}/integration-hub/target/debug/scirust-hubd
           TDI_DURABLE_WORKER: ${{ github.workspace }}/integration-tdi/target/debug/examples/durable_worker
         run: python3 -m unittest -v scripts/test_tdi_research_analysis.py scripts/test_tdi_analysis_integration.py

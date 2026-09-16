@@ -47,6 +47,21 @@ class RealAnalysisIntegration(unittest.TestCase):
         # Atomic publication refuses to overwrite the original report.
         hub.cli("analyze", "--protocol", protocol_path, "--selections", selections_path, "--worker", binary,
                 "--worker-sha256", durable.file_digest(binary), "--source-commit", os.environ["TDI_SCIRUST_SOURCE_COMMIT"], "--output", report_path, expected_code=22)
+        # Exercise the permitted terminal snapshot shape with an unstarted
+        # declared downstream step omitted. This is a catalogue fault fixture,
+        # not a claim that the completed real workflow subsequently failed.
+        with EngineStore(hub.catalogue) as store:
+            record = store.get(campaign)
+            snapshot = copy.deepcopy(record["snapshot"])
+            snapshot["state"] = "failed"
+            snapshot["steps"] = [s for s in snapshot["steps"] if s["key"] != "run-3"]
+            store.db.execute("UPDATE campaigns SET phase='failed',snapshot=? WHERE id=?", (durable.canonical(snapshot), campaign))
+            store.db.execute("DELETE FROM results WHERE campaign=? AND step='run-3'", (campaign,))
+            store.db.commit()
+            projected = observations_from_catalogue(store, protocol, selections)
+            self.assertEqual("missing", projected["rows"][3]["status"])
+            self.assertEqual("hub-step-not-started", projected["rows"][3]["reason"])
+            self.assertIsNone(projected["rows"][3]["value"])
 
 
 if __name__ == "__main__": unittest.main()

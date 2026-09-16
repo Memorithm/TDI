@@ -16,6 +16,7 @@ import tdi_experiment_supervisor as durable
 from tdi_engine_store import identity
 
 MAX_ROWS = 20_000
+MAX_ANALYSIS_ITEMS = 1_000_000
 
 
 def label(value):
@@ -29,6 +30,15 @@ def finite(value):
             or not math.isfinite(value)):
         raise durable.ContractError("analysis value must be a finite binary64-safe scalar")
     return value
+
+
+def _mean(values):
+    try:
+        total = math.fsum(values)
+    except OverflowError:
+        scale = max(abs(x) for x in values)
+        return finite((math.fsum(x / scale for x in values) / len(values)) * scale)
+    return finite(total / len(values))
 
 
 def canonical_protocol(value):
@@ -147,16 +157,19 @@ def observations_from_catalogue(store, protocol, selections):
             records[campaign] = (record, steps)
         record, steps = records[campaign]
         step = steps.get(selection["step"])
-        if step is None or selection["output"] not in record["spec"]["outputs"].get(selection["step"], {}):
+        if selection["output"] not in record["spec"]["outputs"].get(selection["step"], {}):
             raise durable.ContractError("selected step/output was not declared")
         found = store.db.execute("SELECT evidence FROM results WHERE campaign=? AND step=? AND output=?", (campaign, selection["step"], selection["output"])).fetchone()
         if found is None:
-            if step["state"] == "succeeded":
+            if step is not None and step["state"] == "succeeded":
                 raise durable.ContractError("successful step has no verified result")
+            state = step["state"] if step is not None else "not-started"
             rows.append({**{k: selection[k] for k in ("unit", "replicate", "arm", "metric")},
-                         "status": "technical-error" if step["state"] == "failed" else "missing", "value": None,
-                         "reason": "hub-step-" + step["state"], "source": None})
+                         "status": "technical-error" if state == "failed" else "missing", "value": None,
+                         "reason": "hub-step-" + state, "source": None})
             continue
+        if step is None or step["state"] != "succeeded":
+            raise durable.ContractError("verified result conflicts with terminal step state")
         evidence = durable.strict_json(found[0])
         descriptor = artifacts.canonical_artifact(evidence["descriptor"])
         if (descriptor["access_class"] != p["domain"].lower()
@@ -237,7 +250,7 @@ def analyze(protocol, observations, worker):
                 if reasons:
                     exclusions.append({"unit": unit["id"], "reasons": reasons})
                     continue
-                means = {arm: finite(math.fsum(x / len(v) for x in v)) for arm, v in values.items()}
+                means = {arm: _mean(v) for arm, v in values.items()}
                 included.append({"unit": unit["id"], "reference": means[c["reference"]], "candidate": means[c["candidate"]],
                                  "effect": finite(means[c["candidate"]] - means[c["reference"]]), "paired_repeats": len(unit["replicates"])})
             if exclusions and p["missing"] == "reject-incomplete":
