@@ -16,7 +16,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out the exact TDI candidate head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - run: PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts python3 -m unittest -v scripts.test_tdi_research_analysis.ProtocolTests
   real-consumer:
     runs-on: ubuntu-24.04
@@ -27,20 +31,27 @@ jobs:
       RUSTFLAGS: '-C debuginfo=0'
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out the exact TDI candidate head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
           path: integration-tdi
-      - uses: actions/checkout@v7
+      - name: Check out the pinned SciRust candidate
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           repository: Memorithm/scirust
           ref: 06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0
+          persist-credentials: false
           path: integration-scirust
-      - uses: actions/checkout@v7
+      - name: Check out the pinned Hub dependency
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           repository: Memorithm/scirust-hub
           ref: ccdcb99a4573dbefb944af0df713101b100b5f78
+          persist-credentials: false
           path: integration-hub
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
         with:
           toolchain: 1.89.0
       - run: cargo build --locked -p scirust-stats --example research_stats
