@@ -103,6 +103,14 @@ def _safe_positive_integer(value, name):
     return value
 
 
+def _graph_field(validator, value, name):
+    """Reuse Graph/v1's pinned Hub grammar and normalize its error type."""
+    try:
+        return validator(value, name)
+    except execution_graph.ExecutionGraphError as exc:
+        raise PartnerAdapterContractError(str(exc)) from exc
+
+
 def _canonical_protocol(value):
     _exact(value, {"name", "version", "schema_identity"}, "adapter protocol")
     name = _text(value["name"], "adapter protocol name")
@@ -167,23 +175,32 @@ def _canonical_hub_component(value):
         },
         "Hub component binding",
     )
-    component_id = value["component_id"]
-    if not isinstance(component_id, str):
-        raise PartnerAdapterContractError("Hub component id must be a string")
-    manifest = _sha256(value["manifest_digest"], "Hub component manifest_digest")
-    component_version = _text(value["component_version"], "Hub component version", max_bytes=128)
-    capability = _text(value["capability"], "Hub component capability", max_bytes=128)
-    capability_contract_version = _text(
-        value["capability_contract_version"],
-        "Hub capability contract version",
-        max_bytes=128,
-    )
     return {
-        "component_id": component_id,
-        "component_version": component_version,
-        "manifest_digest": manifest,
-        "capability": capability,
-        "capability_contract_version": capability_contract_version,
+        "component_id": _graph_field(
+            execution_graph._hub_uuid,
+            value["component_id"],
+            "Hub component id",
+        ),
+        "component_version": _graph_field(
+            execution_graph._version,
+            value["component_version"],
+            "Hub component version",
+        ),
+        "manifest_digest": _graph_field(
+            execution_graph._sha256,
+            value["manifest_digest"],
+            "Hub component manifest_digest",
+        ),
+        "capability": _graph_field(
+            execution_graph._capability,
+            value["capability"],
+            "Hub component capability",
+        ),
+        "capability_contract_version": _graph_field(
+            execution_graph._version,
+            value["capability_contract_version"],
+            "Hub capability contract version",
+        ),
     }
 
 
@@ -211,7 +228,7 @@ def canonical_partner_adapter(descriptor):
         },
         "partner adapter",
     )
-    if descriptor["schema"] != PARTNER_ADAPTER_SCHEMA:
+    if type(descriptor["schema"]) is not int or descriptor["schema"] != PARTNER_ADAPTER_SCHEMA:
         raise PartnerAdapterContractError("unsupported partner adapter schema")
     partner = descriptor["partner"]
     if partner not in _PARTNERS:
@@ -223,7 +240,10 @@ def canonical_partner_adapter(descriptor):
         raise PartnerAdapterContractError("partner role does not match the declared partner")
     permissions = descriptor["permissions"]
     _exact(permissions, set(_REQUIRED_PERMISSIONS), "partner adapter permissions")
-    if permissions != _REQUIRED_PERMISSIONS:
+    if any(
+        type(permissions[field]) is not bool or permissions[field] is not required
+        for field, required in _REQUIRED_PERMISSIONS.items()
+    ):
         raise PartnerAdapterContractError("common partner adapter contract grants no authority")
     return {
         "schema": PARTNER_ADAPTER_SCHEMA,
@@ -322,7 +342,7 @@ def canonical_admitted_partner_step(binding):
         },
         "admitted partner step",
     )
-    if binding["schema"] != ADMITTED_PARTNER_STEP_SCHEMA:
+    if type(binding["schema"]) is not int or binding["schema"] != ADMITTED_PARTNER_STEP_SCHEMA:
         raise PartnerAdapterContractError("unsupported admitted partner step schema")
     expected = bind_admitted_partner_step(
         binding["adapter"],
