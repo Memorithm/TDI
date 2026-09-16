@@ -10,6 +10,7 @@ import base64
 import binascii
 
 import tdi_artifact_contract as artifacts
+import tdi_execution_graph as graphs
 import tdi_experiment_supervisor as durable
 import tdi_hub_admission_contract as admission
 import tdi_engine_runtime as runtime
@@ -17,6 +18,30 @@ from tdi_engine_store import identity, atomic_json
 
 MAX_ARCHIVE_BYTES = 16 * 1024 * 1024
 MAX_MEMBERS = 4096
+
+
+def _expected_provenance(spec, bound, source, step_key, artifact_identity):
+    """Recompute the exact lineage emitted by the operational collector."""
+    graph_identity = graphs.graph_identity(spec["graph"])
+    return artifacts.canonical_provenance({
+        "schema": 1,
+        "artifact_identity": artifact_identity,
+        "experiment_id": spec["graph"]["root_plan_id"],
+        "plan_id": graph_identity,
+        "trial_id": identity(
+            "tdi-hub-step/v1", {"workflow": bound["workflow"], "step": step_key}
+        ),
+        "attempt_id": identity("tdi-hub-attempt/v1", source["attempt"]),
+        "step_key": step_key,
+        "step_identity": graphs.step_identity(spec["graph"], step_key),
+        "implementation_identity": runtime.expected_component(spec, step_key),
+        "domain": spec["domain"],
+        "inputs": [{"name": "graph", "identity": graph_identity}],
+        "dependencies": [{
+            "name": "admission",
+            "identity": admission.workflow_admission_binding_identity(bound),
+        }],
+    })
 
 
 def verify_bundle(bundle, *, expected_identity=None):
@@ -104,9 +129,9 @@ def verify_bundle(bundle, *, expected_identity=None):
         if (descriptor["name"] != member["output"] or descriptor["media_type"] != rule["media_type"]
                 or evidence["cache_eligible"] != (rule["cache"] == "deterministic-data")):
             raise durable.ContractError("archived output policy mismatch")
-        if (provenance["domain"] != spec["domain"] or provenance["step_key"] != member["step"]
-                or provenance["implementation_identity"] != runtime.expected_component(spec, member["step"])
-                or provenance["experiment_id"] != spec["graph"]["root_plan_id"]):
+        if provenance != _expected_provenance(
+            spec, bound, source, member["step"], evidence["artifact_identity"]
+        ):
             raise durable.ContractError("archived provenance policy mismatch")
         if not admission._json_equal(durable.strict_json(raw), evidence["json"]):
             raise durable.ContractError("archived JSON projection mismatch")
