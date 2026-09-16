@@ -58,3 +58,11 @@ required-features = ["experimental"]
 [[example]]
 name = "tdi2_intuition_support_scaling"
 required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_evidence_quality"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_threshold_sweep"
+required-features = ["experimental"]
