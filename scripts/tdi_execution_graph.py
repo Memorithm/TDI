@@ -15,6 +15,7 @@ import tdi_experiment_contract as experiment
 
 GRAPH_SCHEMA = 1
 HUB_REPOSITORY = "Memorithm/scirust-hub"
+HUB_SOURCE_COMMIT = "4bf6186841e1ea70ed15cd84faf33de9b48429cd"
 HUB_WORKFLOW_SCHEMA_VERSION = 1
 HUB_WORKFLOW_MODEL_VERSION = "1.2.0"
 MAX_STEPS = 1024
@@ -141,6 +142,8 @@ def _validate_hub_contract(value):
         raise ExecutionGraphError("hub_contract.repository must be Memorithm/scirust-hub")
     if not isinstance(value["source_commit"], str) or _HEX40.fullmatch(value["source_commit"]) is None:
         raise ExecutionGraphError("hub_contract.source_commit must be a lowercase 40-hex Git commit")
+    if value["source_commit"] != HUB_SOURCE_COMMIT:
+        raise ExecutionGraphError("unsupported Hub source commit for Graph/v1 compiler")
     if value["workflow_schema_version"] != HUB_WORKFLOW_SCHEMA_VERSION:
         raise ExecutionGraphError("unsupported Hub workflow schema version")
     if value["workflow_model_version"] != HUB_WORKFLOW_MODEL_VERSION:
