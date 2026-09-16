@@ -84,6 +84,31 @@ pub fn frozen_context_manifest(domain: CampaignDomain) -> CampaignManifest {
     .expect("frozen context manifest constants are valid")
 }
 
+/// Frozen analogy Development case-id start.
+pub const ANALOGY_DEVELOPMENT_START: u32 = 7_000;
+/// Frozen analogy Validation case-id start.
+pub const ANALOGY_VALIDATION_START: u32 = 8_000;
+/// Number of analogy cases per non-final domain.
+pub const ANALOGY_DOMAIN_CASES: usize = 32;
+
+/// Return the frozen analogy manifest for one non-final domain.
+#[must_use]
+pub fn frozen_analogy_manifest(domain: CampaignDomain) -> CampaignManifest {
+    let start_id = match domain {
+        CampaignDomain::Development => ANALOGY_DEVELOPMENT_START,
+        CampaignDomain::Validation => ANALOGY_VALIDATION_START,
+    };
+    CampaignManifest::new(
+        domain,
+        CampaignFamily::AnalogyTransfer,
+        start_id,
+        ANALOGY_DOMAIN_CASES,
+        0,
+        0.0,
+    )
+    .expect("frozen analogy manifest constants are valid")
+}
+
 /// Canonical non-final campaign manifest.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CampaignManifest {
@@ -454,5 +479,14 @@ mod tests {
         let cases = super::transferable_context_cases(development.start_id, development.count)
             .expect("cases");
         assert_eq!(cases.len(), 52);
+    }
+
+    #[test]
+    fn frozen_analogy_populations_are_disjoint() {
+        let development = super::frozen_analogy_manifest(CampaignDomain::Development);
+        let validation = super::frozen_analogy_manifest(CampaignDomain::Validation);
+        assert_eq!(development.count, super::ANALOGY_DOMAIN_CASES);
+        assert_eq!(validation.count, super::ANALOGY_DOMAIN_CASES);
+        assert!(development.start_id + development.count as u32 <= validation.start_id);
     }
 }
