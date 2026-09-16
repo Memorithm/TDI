@@ -44,6 +44,8 @@ pub mod tdi2_intuition_engine;
 pub mod tdi2_intuition_evaluation;
 #[path = "tdi2_intuition_inference.rs"]
 pub mod tdi2_intuition_inference;
+#[path = "tdi2_intuition_margin.rs"]
+pub mod tdi2_intuition_margin;
 #[path = "tdi2_intuition_matching.rs"]
 pub mod tdi2_intuition_matching;
 #[path = "tdi2_intuition_relations.rs"]
