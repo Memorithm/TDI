@@ -1,6 +1,7 @@
 //! Deterministic synthetic task fixtures for TDI-2.1 development/validation.
 
 use super::tdi2_intuition::{BooleanState, PredicateId, TemplateId};
+use super::tdi2_intuition_temporal::BooleanSequence;
 
 /// Frozen synthetic family identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -9,6 +10,8 @@ pub enum TaskFamily {
     MotifRetrieval,
     /// The same base motif maps differently under two explicit contexts.
     ContextReversal,
+    /// Ordered Boolean frames distinguish temporal direction.
+    TemporalTrend,
 }
 
 /// One labelled development/validation case.
@@ -33,6 +36,27 @@ impl SyntheticCase {
     }
 
     /// Template expected by the frozen synthetic construction.
+    #[must_use]
+    pub const fn expected_template(&self) -> TemplateId {
+        self.expected_template
+    }
+}
+
+/// One labelled temporal development/validation case.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TemporalCase {
+    query: BooleanSequence,
+    expected_template: TemplateId,
+}
+
+impl TemporalCase {
+    /// Ordered Boolean temporal query.
+    #[must_use]
+    pub const fn query(&self) -> &BooleanSequence {
+        &self.query
+    }
+
+    /// Expected temporal template identifier.
     #[must_use]
     pub const fn expected_template(&self) -> TemplateId {
         self.expected_template
@@ -75,9 +99,26 @@ pub fn context_reversal_pair(case_id: u32) -> [SyntheticCase; 2] {
     ]
 }
 
+/// Deterministic ordered temporal trend case.
+///
+/// Reversing the frames changes the structure while preserving the same predicate vocabulary.
+#[must_use]
+pub fn temporal_trend_case(case_id: u32) -> TemporalCase {
+    let base = 30_000 + 3 * case_id;
+    let frames = vec![
+        BooleanState::new(vec![PredicateId::new(base)]),
+        BooleanState::new(vec![PredicateId::new(base + 1)]),
+        BooleanState::new(vec![PredicateId::new(base + 2)]),
+    ];
+    TemporalCase {
+        query: BooleanSequence::new(frames),
+        expected_template: TemplateId::new(80_000 + u64::from(case_id)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{TaskFamily, context_reversal_pair, motif_retrieval_case};
+    use super::{TaskFamily, context_reversal_pair, motif_retrieval_case, temporal_trend_case};
 
     #[test]
     fn motif_fixture_is_deterministic() {
@@ -94,5 +135,12 @@ mod tests {
         assert_eq!(right.query().len(), 2);
         assert_eq!(left.query().predicates()[0], right.query().predicates()[0]);
         assert_ne!(left.query().predicates()[1], right.query().predicates()[1]);
+    }
+
+    #[test]
+    fn temporal_fixture_has_frozen_order() {
+        let case = temporal_trend_case(4);
+        assert_eq!(case.query().len(), 3);
+        assert_ne!(case.query().frames()[0], case.query().frames()[2]);
     }
 }
