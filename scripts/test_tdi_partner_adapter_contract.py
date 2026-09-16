@@ -206,6 +206,26 @@ class PartnerAdapterContractTests(unittest.TestCase):
             ):
                 partner.canonical_admitted_partner_step(changed)
 
+    def test_embedded_g3_version_fields_reject_boolean_aliases(self):
+        mutations = (
+            (("schema",), "workflow admission binding schema"),
+            (("admission_schema_version",), "workflow admission schema version"),
+            (("graph", "schema"), "embedded Graph/v1 schema"),
+            (("graph", "hub_contract", "workflow_schema_version"), "embedded Graph/v1 Hub workflow schema"),
+            (("workflow_spec", "schema_version"), "embedded Hub WorkflowSpec schema"),
+            (("admission", "schema_version"), "embedded Hub admission schema"),
+        )
+        for path, message in mutations:
+            admitted = copy.deepcopy(hub_fixture.bind_fixture())
+            target = admitted
+            for key in path[:-1]:
+                target = target[key]
+            target[path[-1]] = True
+            with self.subTest(path=path), self.assertRaisesRegex(
+                partner.PartnerAdapterContractError, message
+            ):
+                partner.bind_admitted_partner_step(descriptor(), admitted, step_key="evaluate")
+
     def test_tampered_g3_evidence_is_revalidated(self):
         admitted = hub_fixture.bind_fixture()
         admitted["graph_identity"] = SHA("f")
