@@ -1,0 +1,30 @@
+name: TDI-23.1 exact equivalence oracle
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tdi23-1-equivalence-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exact-equivalence:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+
+      - name: Verify TDI-23.1 exact equivalence oracle
+        run: bash scripts/check-tdi23.1-equivalence.sh
