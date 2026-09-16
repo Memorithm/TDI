@@ -48,7 +48,21 @@ mod tests {
     fn motif_store_contains_exactly_one_template_per_class() {
         let store = motif_experience_store(3);
         assert_eq!(store.len(), MOTIF_CLASS_COUNT);
-        assert_eq!(store.get(TemplateId::new(1)).expect("template").evidence().successes(), 3);
-        assert_eq!(store.get(TemplateId::new(17)).expect("template").evidence().support(), 3);
+        assert_eq!(
+            store
+                .get(TemplateId::new(1))
+                .expect("template")
+                .evidence()
+                .successes(),
+            3
+        );
+        assert_eq!(
+            store
+                .get(TemplateId::new(17))
+                .expect("template")
+                .evidence()
+                .support(),
+            3
+        );
     }
 }
