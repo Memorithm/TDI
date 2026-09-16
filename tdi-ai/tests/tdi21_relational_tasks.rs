@@ -73,28 +73,42 @@ fn entity_and_relation_identifier_namespaces_do_not_overlap_across_splits() {
     assert!(development_relations.is_disjoint(&validation_relations));
 }
 
+fn assert_episode_accounting(
+    outcome: &tdi_ai::experimental::tdi21_relational_tasks::RelationalEpisodeOutcome,
+    fact_count: usize,
+    hop_count: usize,
+) {
+    assert_eq!(outcome.counters.work.memory_writes, fact_count as u64);
+    assert_eq!(outcome.counters.work.memory_reads, hop_count as u64);
+    assert_eq!(
+        outcome.relational_work.address_derivations,
+        (fact_count + hop_count) as u64
+    );
+    assert_eq!(outcome.counters.work.pairwise_comparisons, 0);
+}
+
 #[test]
 fn all_v1_development_and_validation_episodes_retrieve_the_declared_answer() {
     for development in DevelopmentRelationalSet::v1().episodes() {
         let outcome = evaluate_relational_episode(config(), development).unwrap();
         assert!(outcome.correct, "development case {}", development.case_id);
         assert_eq!(outcome.observed, development.expected());
-        assert_eq!(
-            outcome.counters.work.memory_reads,
-            development.query.relations.len() as u64
+        assert_episode_accounting(
+            &outcome,
+            development.facts.len(),
+            development.query.relations.len(),
         );
-        assert_eq!(outcome.counters.work.pairwise_comparisons, 0);
     }
 
     for validation in ValidationRelationalSet::v1().episodes() {
         let outcome = evaluate_relational_episode(config(), validation).unwrap();
         assert!(outcome.correct, "validation case {}", validation.case_id);
         assert_eq!(outcome.observed, validation.expected());
-        assert_eq!(
-            outcome.counters.work.memory_reads,
-            validation.query.relations.len() as u64
+        assert_episode_accounting(
+            &outcome,
+            validation.facts.len(),
+            validation.query.relations.len(),
         );
-        assert_eq!(outcome.counters.work.pairwise_comparisons, 0);
     }
 }
 
