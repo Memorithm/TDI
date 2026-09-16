@@ -5,7 +5,7 @@
 //! Validation use disjoint identifier namespaces while preserving task topology.
 
 use super::tdi21_relational_binding::{
-    RelationalBinder, RelationalConfig, RelationalError, RelationalRead,
+    RelationalBinder, RelationalConfig, RelationalError, RelationalRead, RelationalWork,
 };
 use super::tdi21_stream::StreamCounters;
 
@@ -83,6 +83,7 @@ pub struct RelationalEpisodeOutcome {
     pub expected: RelationalRead,
     pub correct: bool,
     pub counters: StreamCounters,
+    pub relational_work: RelationalWork,
 }
 
 fn namespace(split: RelationalSplit) -> ([u64; 6], [u64; 4]) {
@@ -171,6 +172,7 @@ pub fn evaluate_relational_episode(
         expected: episode.expected,
         correct: observed == episode.expected,
         counters: binder.counters(),
+        relational_work: binder.relational_work(),
     })
 }
 
