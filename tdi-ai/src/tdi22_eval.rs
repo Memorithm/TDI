@@ -8,7 +8,9 @@
 
 use core::fmt;
 
-use super::tdi22_torsor::{Torsor3, TorsorError, Twist3, Vec3};
+use super::tdi22_torsor::{
+    FactorizedTorsorKey, FactorizedTwistQuery, Torsor3, TorsorError, Twist3, Vec3,
+};
 
 pub const DEVELOPMENT_DOMAIN: u64 = 0x5444_4932_3244_4556;
 pub const VALIDATION_DOMAIN: u64 = 0x5444_4932_3256_414c;
@@ -446,6 +448,33 @@ impl SplitMix64 {
     }
 }
 
+fn factorized_t3_query(query: EvalQuery) -> Result<FactorizedTwistQuery, EvalError> {
+    let factorized = query
+        .twist
+        .factorized_at(query.position)
+        .map_err(EvalError::Algebra)?;
+    bound_vec(
+        factorized.resultant_dual,
+        "factorized_resultant_dual",
+        MAX_COMPONENT_ABS,
+    )?;
+    bound_vec(
+        factorized.moment_dual,
+        "factorized_moment_dual",
+        MAX_COMPONENT_ABS,
+    )?;
+    Ok(factorized)
+}
+
+fn score_t3_factorized(factorized: FactorizedTwistQuery, key: EvalKey) -> Result<f64, EvalError> {
+    factorized
+        .pair(FactorizedTorsorKey {
+            resultant: key.torsor.resultant(),
+            origin_moment: key.origin_moment,
+        })
+        .map_err(EvalError::Algebra)
+}
+
 pub fn score(arm: Arm, query: EvalQuery, key: EvalKey) -> Result<f64, EvalError> {
     let linear = query.twist.linear();
     let angular = query.twist.angular();
@@ -454,25 +483,7 @@ pub fn score(arm: Arm, query: EvalQuery, key: EvalKey) -> Result<f64, EvalError>
     let value = match arm {
         Arm::T0 | Arm::T1 => linear.dot(resultant) + angular.dot(key.torsor.moment()),
         Arm::T4 => linear.dot(resultant) + angular.dot(key.origin_moment),
-        Arm::T3 => {
-            let factorized = query
-                .twist
-                .factorized_at(query.position)
-                .map_err(EvalError::Algebra)?;
-            bound_vec(
-                factorized.resultant_dual,
-                "factorized_resultant_dual",
-                MAX_COMPONENT_ABS,
-            )?;
-            bound_vec(
-                factorized.moment_dual,
-                "factorized_moment_dual",
-                MAX_COMPONENT_ABS,
-            )?;
-            factorized
-                .pair(key.torsor.factorized_key().map_err(EvalError::Algebra)?)
-                .map_err(EvalError::Algebra)?
-        }
+        Arm::T3 => score_t3_factorized(factorized_t3_query(query)?, key)?,
     };
 
     if value.is_finite() {
@@ -511,18 +522,25 @@ pub fn rank_candidates(
         }
     }
 
+    let factorized_t3 = if arm == Arm::T3 {
+        Some(factorized_t3_query(query)?)
+    } else {
+        None
+    };
+
     let mut scored = Vec::with_capacity(candidates.len());
     for candidate in candidates {
-        scored.push((candidate.identity, score(arm, query, *candidate)?));
+        let candidate_score = if let Some(factorized) = factorized_t3 {
+            score_t3_factorized(factorized, *candidate)?
+        } else {
+            score(arm, query, *candidate)?
+        };
+        scored.push((candidate.identity, candidate_score));
     }
     scored.sort_by(|lhs, rhs| rhs.1.total_cmp(&lhs.1));
 
-    if scores_tied(scored[0].1, scored[1].1) {
-        return Err(if arm == Arm::T1 {
-            EvalError::AmbiguousT1Top
-        } else {
-            EvalError::AmbiguousTarget
-        });
+    if arm == Arm::T1 && scores_tied(scored[0].1, scored[1].1) {
+        return Err(EvalError::AmbiguousT1Top);
     }
 
     Ok(Ranking {
@@ -736,6 +754,19 @@ mod tests {
             rank_candidates(Arm::T1, query, &candidates),
             Err(EvalError::AmbiguousT1Top)
         );
+    }
+
+    #[test]
+    fn non_t1_top_ties_remain_admissible() {
+        let query = query(Vec3::zero());
+        let mut candidates = Vec::new();
+        for identity in 0..CANDIDATES_PER_QUERY {
+            candidates.push(key(identity as u16, 1.0, Vec3::zero()));
+        }
+
+        for arm in [Arm::T0, Arm::T3, Arm::T4] {
+            assert!(rank_candidates(arm, query, &candidates).is_ok());
+        }
     }
 
     #[test]
