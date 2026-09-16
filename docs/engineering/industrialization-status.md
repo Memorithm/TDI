@@ -13,6 +13,7 @@ This is the durable engineering handoff for the industrialization programme. It 
 - Lot F: PR #261, final head `dceb67d4a9c49ce293c08347cab61db0f3347871`, merged `494240ebc5cd8d9418ce8c174dd65a4bc4e17651` after all returned applicable exact-head workflows succeeded, including the dedicated artifact/provenance contract gate.
 - Post-Lot-F base: `494240ebc5cd8d9418ce8c174dd65a4bc4e17651`.
 - Hub portable-artifact prerequisite: `Memorithm/scirust-hub` PR #47 merged as `9f666225b186fbca6160dd34068aea1c9af57040`; the qualified endpoint re-verifies stored bytes against Hub digest and size before returning ordinary SHA-256, with bounded portable-digest scan concurrency.
+- Lot G1 portable artifact binding: PR #264, final head `1d5e0d3df339ab18309b400cb7b2fbe867d48218`, merged `25292997f5ee30529e8fea08c09375d8158416bf` after all returned applicable exact-head workflows succeeded, including the dedicated `TDI Hub edge contracts` gate; no unresolved review thread remained.
 - Scientific constraints remain those in `AGENTS.md` and the ecosystem roadmap/overlays.
 
 ## Delivered / candidate capabilities
@@ -42,7 +43,7 @@ This is the durable engineering handoff for the industrialization programme. It 
 | F ExportManifest/v1 | qualified | PR #261 qualifies complete member-set verification, payload verification and monotone access restriction without storage or publication. |
 | F exact-domain cache semantics | qualified | PR #261: cache key binds domain/plan/step/implementation/backend/inputs/parameters; disabled and unauthorized reuse fail closed; no cache store or scientific authorization is implemented. |
 | F physical CAS/registry | intentionally delegated | Hub remains owner of physical content-addressed storage, registry persistence and transport. |
-| G1 Hub portable artifact binding | candidate | `HubArtifactBinding/v1` pins the qualified Hub #47 source, Hub artifact id/domain digest, exact TDI ArtifactDescriptor identity and raw-SHA256/size agreement; execution and authoritative publication are hard-false. |
+| G1 Hub portable artifact binding | qualified | PR #264 qualifies `HubArtifactBinding/v1` against the pinned Hub #47 source: Hub artifact id/domain digest plus exact TDI ArtifactDescriptor identity and raw-SHA256/size agreement. Execution and authoritative publication remain hard-false. |
 | G authoritative publication | blocked | Hub issue #46 still lacks a qualified durable generation/fencing contract atomically guarding authoritative publication across retries/restarts. TDI must not implement that generic lease/fence authority locally. |
 
 ## Qualification matrix progress
@@ -61,7 +62,8 @@ This is the durable engineering handoff for the industrialization programme. It 
 | Q12 | planned | common adapter SDK remains separate from graph/checkpoint semantics. |
 | Q13-Q14 | qualified for portable contract verification | PR #261 exact-head qualification passed for descriptor/provenance/export verification; external export integration remains later work. |
 | Q15 | qualified for contract semantics | PR #261 exact-head qualification passed for exact-domain cache identity/refusal; durable cache index/storage remains outside this module and reuse still requires caller authorization. |
-| Q16-Q17 | candidate / blocked | portable artifact translation is now represented by the fail-closed G1 contract pinned to Hub #47; execution/publication remain unauthorized until Hub-owned durable fencing/generation (issue #46) and atomic authoritative publication are qualified. |
+| Q16 | qualified for portable artifact identity translation | PR #264 exact-head qualification passed for the fail-closed G1 contract pinned to Hub #47; it verifies portable raw-SHA256/size translation and source/repository pins while granting no execution or publication authority. |
+| Q17 | blocked | authoritative publication remains unauthorized until Hub-owned durable fencing/generation (issue #46) and atomic publication are qualified. |
 | Q18-Q30 | planned | cross-repository integrations, statistics, CLI/viewer/exports, hardware adapters, docs and final integrated qualification. |
 
 ## Lot-E qualified validation
@@ -101,7 +103,7 @@ The dedicated `TDI artifact and provenance contracts` workflow succeeded on the 
 
 ## Next
 
-1. Qualify the G1 portable-artifact binding against Hub #47 while keeping `execution_authorized=false` and `publication_authoritative=false`; component/capability pins still require an atomic authoritative edge.
-2. Implement and qualify Hub issue #46 in Hub-owned orchestration: durable monotone fencing/generation plus atomic authoritative publication across retry, cancellation and restart. Only then may TDI advance the real edge.
+1. Implement and qualify Hub issue #46 in Hub-owned orchestration: durable monotone fencing/generation plus atomic authoritative publication across retry, cancellation and restart. Only then may TDI advance G2 to an authoritative edge.
+2. After that Hub boundary is qualified, bind exact component/capability pins and publication authority without duplicating Hub scheduling, leases or storage in TDI.
 3. Add ElasticXxx, Forge, SciRust, FLAT-ATTENTION and NNIS integrations only through qualified versioned contracts.
 4. Continue statistics/sensitivity, CLI/API/viewer, external exports and measured engine benchmarks.
