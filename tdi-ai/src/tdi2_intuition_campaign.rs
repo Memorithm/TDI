@@ -2,6 +2,7 @@
 //!
 //! This module deliberately excludes protected/final holdout access.
 
+use super::tdi2_intuition_analogy_tasks::{AnalogyCase, analogy_case};
 use super::tdi2_intuition_evaluation::EvaluationSummary;
 use super::tdi2_intuition_inference::IntuitionOutcome;
 use super::tdi2_intuition_tasks::{
@@ -88,11 +89,24 @@ pub fn temporal_cases(start: u32, count: usize) -> Result<Vec<TemporalCase>, Cam
     Ok(cases)
 }
 
+/// Materialize deterministic novel-identity analogy cases for a checked id range.
+pub fn analogy_cases(start: u32, count: usize) -> Result<Vec<AnalogyCase>, CampaignError> {
+    let mut cases = Vec::with_capacity(count);
+    for offset in 0..count {
+        let offset = u32::try_from(offset).map_err(|_| CampaignError::CaseIdOverflow)?;
+        let id = start.checked_add(offset).ok_or(CampaignError::CaseIdOverflow)?;
+        cases.push(analogy_case(id));
+    }
+    Ok(cases)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        CampaignDomain, context_cases, motif_cases, run_synthetic_campaign, temporal_cases,
+        CampaignDomain, analogy_cases, context_cases, motif_cases, run_synthetic_campaign,
+        temporal_cases,
     };
+    use crate::experimental::tdi2_intuition_analogy_tasks::analogy_case;
     use crate::experimental::tdi2_intuition_inference::IntuitionOutcome;
     use crate::experimental::tdi2_intuition_tasks::{
         context_reversal_pair, motif_retrieval_case, temporal_trend_case,
@@ -130,5 +144,12 @@ mod tests {
         let cases = temporal_cases(7, 2).expect("bounded range");
         assert_eq!(cases[0], temporal_trend_case(7));
         assert_eq!(cases[1], temporal_trend_case(8));
+    }
+
+    #[test]
+    fn analogy_range_is_deterministic_and_contiguous() {
+        let cases = analogy_cases(3, 2).expect("bounded range");
+        assert_eq!(cases[0], analogy_case(3));
+        assert_eq!(cases[1], analogy_case(4));
     }
 }
