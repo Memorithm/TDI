@@ -39,7 +39,10 @@ jobs:
       PYTHONDONTWRITEBYTECODE: '1'
       PYTHONPATH: scripts
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - name: Validate contracts and transport/storage failure boundaries
         run: |
           python3 -m unittest -v \
@@ -60,15 +63,18 @@ jobs:
       CARGO_BUILD_JOBS: '2'
       RUSTFLAGS: '-C debuginfo=0'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
           path: integration-tdi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: Memorithm/scirust-hub
           ref: ccdcb99a4573dbefb944af0df713101b100b5f78
+          persist-credentials: false
           path: integration-hub
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
         with:
           toolchain: 1.89.0
       - name: Build actual Hub outside TDI's offline vendoring configuration
