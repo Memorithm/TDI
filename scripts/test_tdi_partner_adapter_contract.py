@@ -79,7 +79,20 @@ class PartnerAdapterContractTests(unittest.TestCase):
             ):
                 partner.canonical_partner_adapter(value)
 
-    def test_common_contract_cannot_grant_any_authority(self):
+    def test_schema_versions_require_actual_integers(self):
+        value = descriptor()
+        value["schema"] = True
+        with self.assertRaisesRegex(partner.PartnerAdapterContractError, "partner adapter schema"):
+            partner.canonical_partner_adapter(value)
+
+        binding = partner.bind_admitted_partner_step(
+            descriptor(), hub_fixture.bind_fixture(), step_key="evaluate"
+        )
+        binding["schema"] = True
+        with self.assertRaisesRegex(partner.PartnerAdapterContractError, "admitted partner step schema"):
+            partner.canonical_admitted_partner_step(binding)
+
+    def test_common_contract_cannot_grant_or_coerce_any_authority(self):
         for field in descriptor()["permissions"]:
             value = descriptor()
             value["permissions"][field] = True
@@ -87,6 +100,11 @@ class PartnerAdapterContractTests(unittest.TestCase):
                 partner.PartnerAdapterContractError, "grants no authority"
             ):
                 partner.canonical_partner_adapter(value)
+
+        value = descriptor()
+        value["permissions"]["actuate_runtime"] = 0
+        with self.assertRaisesRegex(partner.PartnerAdapterContractError, "grants no authority"):
+            partner.canonical_partner_adapter(value)
 
     def test_capability_and_contract_sets_are_unique_and_bounded(self):
         value = descriptor()
@@ -103,6 +121,22 @@ class PartnerAdapterContractTests(unittest.TestCase):
         value["protocol"]["version"] = True
         with self.assertRaisesRegex(partner.PartnerAdapterContractError, "positive JSON-safe integer"):
             partner.canonical_partner_adapter(value)
+
+    def test_hub_component_uses_graph_v1_uuid_version_digest_and_capability_grammar(self):
+        cases = (
+            ("component_id", "not-a-uuid", "canonical UUID"),
+            ("component_version", "not-a-version", "three numeric components"),
+            ("manifest_digest", "A" * 64, "lowercase SHA-256"),
+            ("capability", "tdi evaluate", "CapabilityName grammar"),
+            ("capability_contract_version", "1", "three numeric components"),
+        )
+        for field, changed, message in cases:
+            value = descriptor()
+            value["hub_component"][field] = changed
+            with self.subTest(field=field), self.assertRaisesRegex(
+                partner.PartnerAdapterContractError, message
+            ):
+                partner.canonical_partner_adapter(value)
 
     def test_adapter_binds_only_to_exact_g3_admitted_step(self):
         admitted = hub_fixture.bind_fixture()
