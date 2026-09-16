@@ -2,7 +2,7 @@
 
 Status: **candidate / non-executing / no scientific authority**
 
-Tracking PR: **#283**. This status remains candidate until every applicable workflow succeeds on the exact final head and material review findings are resolved.
+Tracking PR: **#283**. The branch was resynchronized after TDI #281 onto default-branch commit `5f365613d466559a46c2de6d940aef8ffdd55da4`; this documentation commit exists to re-run normal exact-head qualification on that integrated base. This status remains candidate until every applicable workflow succeeds on the exact final head and material review findings are resolved.
 
 This slice defines the TDI-owned interchange boundary for proposing a genuinely reusable mathematical or representation primitive to `Memorithm/scirust`. It does not copy SciRust implementation code into TDI, execute SciRust, modify a SciRust branch, or authorize promotion.
 
