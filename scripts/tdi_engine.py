@@ -43,6 +43,10 @@ def main(argv=None):
     p = sub.add_parser("fixture-plan")
     p.add_argument("--worker", type=Path, required=True); p.add_argument("--output", type=Path, required=True)
     p.add_argument("--trials", type=int, default=3); p.add_argument("--domain", choices=("Development", "Validation"), default="Development")
+    p = sub.add_parser("library-fixture-plan")
+    p.add_argument("--worker", type=Path, required=True); p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--adapter", choices=("finite", "jacobi"), required=True)
+    p.add_argument("--trials", type=int, default=2); p.add_argument("--domain", choices=("Development", "Validation"), default="Development")
     p = sub.add_parser("submit"); p.add_argument("spec", type=Path); p.add_argument("--roots", type=Path)
     for verb in ("run", "resume", "cancel", "inspect"):
         p = sub.add_parser(verb); p.add_argument("campaign")
@@ -113,14 +117,18 @@ def dispatch(args):
         serve(args.catalogue, args.port)
         return {"status": "stopped"}
     readonly = op in ("status", "inspect", "compare", "events", "backup", "export", "cache-request", "cache-get", "exports", "inspect-export")
-    if op in ("fixture-plan", "submit", "run", "resume", "cancel", "attach", "export", "restore", "cache-get"):
+    if op in ("fixture-plan", "library-fixture-plan", "submit", "run", "resume", "cancel", "attach", "export", "restore", "cache-get"):
         client = HubClient(args.hub, token=os.environ.get("TDI_HUB_TOKEN"),
                            allow_loopback_http=args.allow_loopback_http, timeout=args.timeout)
-    if op == "fixture-plan":
+    if op in ("fixture-plan", "library-fixture-plan"):
         from tdi_hub_fixture import prepare_fixture
         if args.output.exists() or args.output.is_symlink():
             raise durable.ContractError("fixture plan output already exists")
-        spec = prepare_fixture(client, args.worker, domain=args.domain, trials=args.trials)
+        if op == "library-fixture-plan":
+            from tdi_library_fixture import prepare_library_fixture
+            spec = prepare_library_fixture(client, args.worker, adapter=args.adapter, domain=args.domain, trials=args.trials)
+        else:
+            spec = prepare_fixture(client, args.worker, domain=args.domain, trials=args.trials)
         atomic_json(args.output, spec)
         return {"path": str(args.output), "campaign_identity": identity("tdi-operational-campaign/v1", spec)}
     with EngineStore(args.catalogue, readonly=readonly) as store:
