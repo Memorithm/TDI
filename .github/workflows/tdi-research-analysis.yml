@@ -1,0 +1,60 @@
+name: TDI shared research analysis
+on:
+  pull_request:
+    paths: ['scripts/tdi_*', 'scripts/test_tdi_*', 'tdi-ai/**', 'tdi-core/**', 'Cargo.*', 'docs/engineering/**', '.github/workflows/tdi-research-analysis.yml']
+  push:
+    branches: [main]
+    paths: ['scripts/tdi_*', 'scripts/test_tdi_*', 'tdi-ai/**', 'tdi-core/**', 'Cargo.*', 'docs/engineering/**', '.github/workflows/tdi-research-analysis.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tdi-research-analysis-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  minimal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - run: PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts python3 -m unittest -v scripts.test_tdi_research_analysis.ProtocolTests
+  real-consumer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_BUILD_JOBS: '2'
+      RUSTFLAGS: '-C debuginfo=0'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: integration-tdi
+      - uses: actions/checkout@v7
+        with:
+          repository: Memorithm/scirust
+          ref: fa6658e60af6d131f63fed40ada1e90ae9e23fea
+          path: integration-scirust
+      - uses: actions/checkout@v7
+        with:
+          repository: Memorithm/scirust-hub
+          ref: ccdcb99a4573dbefb944af0df713101b100b5f78
+          path: integration-hub
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.89.0
+      - run: cargo build --locked -p scirust-stats --example research_stats
+        working-directory: integration-scirust
+      - run: cargo build --locked -p scirust-hubd -p scirust-hub-worker
+        working-directory: integration-hub
+      - run: cargo build --locked -p tdi-ai --example durable_worker
+        working-directory: integration-tdi
+      - name: Execute real TDI to SciRust analysis
+        working-directory: integration-tdi
+        env:
+          PYTHONPATH: scripts
+          TDI_SCIRUST_STATS_BIN: ${{ github.workspace }}/integration-scirust/target/debug/examples/research_stats
+          TDI_SCIRUST_SOURCE_COMMIT: fa6658e60af6d131f63fed40ada1e90ae9e23fea
+          TDI_HUBD_BIN: ${{ github.workspace }}/integration-hub/target/debug/scirust-hubd
+          TDI_DURABLE_WORKER: ${{ github.workspace }}/integration-tdi/target/debug/examples/durable_worker
+        run: python3 -m unittest -v scripts/test_tdi_research_analysis.py scripts/test_tdi_analysis_integration.py
