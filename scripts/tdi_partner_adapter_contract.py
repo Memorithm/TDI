@@ -15,9 +15,11 @@ from __future__ import annotations
 import hashlib
 import re
 
+import tdi_artifact_contract as artifact
 import tdi_execution_graph as execution_graph
 import tdi_experiment_contract as experiment
 import tdi_hub_admission_contract as admission
+import tdi_hub_edge_contract as hub_edge
 
 PARTNER_ADAPTER_SCHEMA = 1
 ADMITTED_PARTNER_STEP_SCHEMA = 1
@@ -31,26 +33,11 @@ _CAPABILITY = re.compile(r"[a-z0-9][a-z0-9._:/-]{0,127}\Z")
 _CONTRACT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}\Z")
 
 _PARTNERS = {
-    "elasticxxx": {
-        "repository": "Memorithm/ElasticXxx",
-        "role": "resource-control",
-    },
-    "forge": {
-        "repository": "Memorithm/Forge",
-        "role": "candidate-search",
-    },
-    "scirust": {
-        "repository": "Memorithm/scirust",
-        "role": "math-primitives",
-    },
-    "flat-attention": {
-        "repository": "Memorithm/FLAT-ATTENTION",
-        "role": "attention-execution",
-    },
-    "nnis": {
-        "repository": "Memorithm/NNIS",
-        "role": "hardware-qualification",
-    },
+    "elasticxxx": {"repository": "Memorithm/ElasticXxx", "role": "resource-control"},
+    "forge": {"repository": "Memorithm/Forge", "role": "candidate-search"},
+    "scirust": {"repository": "Memorithm/scirust", "role": "math-primitives"},
+    "flat-attention": {"repository": "Memorithm/FLAT-ATTENTION", "role": "attention-execution"},
+    "nnis": {"repository": "Memorithm/NNIS", "role": "hardware-qualification"},
 }
 
 _REQUIRED_PERMISSIONS = {
@@ -166,74 +153,33 @@ def _canonical_capabilities(values):
 def _canonical_hub_component(value):
     _exact(
         value,
-        {
-            "component_id",
-            "component_version",
-            "manifest_digest",
-            "capability",
-            "capability_contract_version",
-        },
+        {"component_id", "component_version", "manifest_digest", "capability", "capability_contract_version"},
         "Hub component binding",
     )
     return {
-        "component_id": _graph_field(
-            execution_graph._hub_uuid,
-            value["component_id"],
-            "Hub component id",
-        ),
-        "component_version": _graph_field(
-            execution_graph._version,
-            value["component_version"],
-            "Hub component version",
-        ),
-        "manifest_digest": _graph_field(
-            execution_graph._sha256,
-            value["manifest_digest"],
-            "Hub component manifest_digest",
-        ),
-        "capability": _graph_field(
-            execution_graph._capability,
-            value["capability"],
-            "Hub component capability",
-        ),
+        "component_id": _graph_field(execution_graph._hub_uuid, value["component_id"], "Hub component id"),
+        "component_version": _graph_field(execution_graph._version, value["component_version"], "Hub component version"),
+        "manifest_digest": _graph_field(execution_graph._sha256, value["manifest_digest"], "Hub component manifest_digest"),
+        "capability": _graph_field(execution_graph._capability, value["capability"], "Hub component capability"),
         "capability_contract_version": _graph_field(
-            execution_graph._version,
-            value["capability_contract_version"],
-            "Hub capability contract version",
+            execution_graph._version, value["capability_contract_version"], "Hub capability contract version"
         ),
     }
 
 
 def canonical_partner_adapter(descriptor):
-    """Validate and canonicalize PartnerAdapter/v1.
-
-    The permissions object is deliberately all-false. Later partner-specific
-    adapters may prove executable payload semantics, but this common contract
-    never grants protected-data, scientific-verdict, or actuation authority.
-    """
+    """Validate and canonicalize PartnerAdapter/v1 without granting authority."""
     _exact(
         descriptor,
-        {
-            "schema",
-            "partner",
-            "repository",
-            "source_sha",
-            "role",
-            "protocol",
-            "hub_component",
-            "capabilities",
-            "inputs",
-            "outputs",
-            "permissions",
-        },
+        {"schema", "partner", "repository", "source_sha", "role", "protocol", "hub_component", "capabilities", "inputs", "outputs", "permissions"},
         "partner adapter",
     )
     if type(descriptor["schema"]) is not int or descriptor["schema"] != PARTNER_ADAPTER_SCHEMA:
         raise PartnerAdapterContractError("unsupported partner adapter schema")
-    partner = descriptor["partner"]
-    if partner not in _PARTNERS:
+    partner_name = descriptor["partner"]
+    if partner_name not in _PARTNERS:
         raise PartnerAdapterContractError("unsupported TDI partner")
-    profile = _PARTNERS[partner]
+    profile = _PARTNERS[partner_name]
     if descriptor["repository"] != profile["repository"]:
         raise PartnerAdapterContractError("partner repository does not match the declared partner")
     if descriptor["role"] != profile["role"]:
@@ -247,7 +193,7 @@ def canonical_partner_adapter(descriptor):
         raise PartnerAdapterContractError("common partner adapter contract grants no authority")
     return {
         "schema": PARTNER_ADAPTER_SCHEMA,
-        "partner": partner,
+        "partner": partner_name,
         "repository": profile["repository"],
         "source_sha": _sha40(descriptor["source_sha"], "partner source_sha"),
         "role": profile["role"],
@@ -267,8 +213,7 @@ def partner_adapter_identity(descriptor):
 def _graph_step_for_key(admission_binding, step_key):
     if not isinstance(step_key, str):
         raise PartnerAdapterContractError("step_key must be a string")
-    steps = admission_binding["graph"]["steps"]
-    for step in steps:
+    for step in admission_binding["graph"]["steps"]:
         if step["key"] == step_key:
             return step
     raise PartnerAdapterContractError("step_key is not present in admitted Graph/v1")
@@ -283,14 +228,11 @@ def _require_integer_version(container, key, expected, name):
 
 
 def _require_type_faithful_g3_versions(binding):
-    """Reject bool-as-int aliases before the qualified G3 validator canonicalizes them."""
+    """Reject bool-as-int aliases before qualified G1/G3 validators canonicalize them."""
     if not isinstance(binding, dict):
         raise PartnerAdapterContractError("workflow_admission_binding must be an object")
     _require_integer_version(
-        binding,
-        "schema",
-        admission.HUB_WORKFLOW_ADMISSION_BINDING_SCHEMA,
-        "workflow admission binding schema",
+        binding, "schema", admission.HUB_WORKFLOW_ADMISSION_BINDING_SCHEMA, "workflow admission binding schema"
     )
     _require_integer_version(
         binding,
@@ -300,9 +242,7 @@ def _require_type_faithful_g3_versions(binding):
     )
     graph = binding.get("graph")
     _require_integer_version(graph, "schema", execution_graph.GRAPH_SCHEMA, "embedded Graph/v1 schema")
-    if not isinstance(graph, dict):
-        raise PartnerAdapterContractError("embedded Graph/v1 must be an object")
-    hub_contract = graph.get("hub_contract")
+    hub_contract = graph.get("hub_contract") if isinstance(graph, dict) else None
     _require_integer_version(
         hub_contract,
         "workflow_schema_version",
@@ -323,16 +263,27 @@ def _require_type_faithful_g3_versions(binding):
         admission.HUB_WORKFLOW_ADMISSION_SCHEMA_VERSION,
         "embedded Hub admission schema version",
     )
+    root_bindings = binding.get("root_artifact_bindings")
+    if not isinstance(root_bindings, dict):
+        raise PartnerAdapterContractError("root_artifact_bindings must be an object")
+    for digest, root_binding in root_bindings.items():
+        _require_integer_version(
+            root_binding,
+            "schema",
+            hub_edge.HUB_EDGE_SCHEMA,
+            f"root artifact binding {digest!r} schema",
+        )
+        descriptor = root_binding.get("descriptor") if isinstance(root_binding, dict) else None
+        _require_integer_version(
+            descriptor,
+            "schema",
+            artifact.ARTIFACT_SCHEMA,
+            f"root artifact descriptor {digest!r} schema",
+        )
 
 
 def bind_admitted_partner_step(descriptor, workflow_admission_binding, *, step_key):
-    """Bind one PartnerAdapter/v1 to an exact G3 Hub-admitted Graph/v1 step.
-
-    This proves structural identity only. The returned object intentionally says
-    ``partner_execution_qualified=false`` until a later partner-specific slice
-    verifies that repository's real request/response protocol and execution
-    evidence.
-    """
+    """Bind PartnerAdapter/v1 to one exact G3-admitted Graph/v1 step."""
     adapter = canonical_partner_adapter(descriptor)
     _require_type_faithful_g3_versions(workflow_admission_binding)
     try:
@@ -342,15 +293,14 @@ def bind_admitted_partner_step(descriptor, workflow_admission_binding, *, step_k
     if step_key not in admitted["admitted_steps"]:
         raise PartnerAdapterContractError("step_key is not covered by exact Hub admission")
     step = _graph_step_for_key(admitted, step_key)
-    component = adapter["hub_component"]
-    expected = {
+    expected_component = {
         "component_id": step["component_id"],
         "component_version": step["component_version"],
         "manifest_digest": step["component_manifest_digest"],
         "capability": step["capability"],
         "capability_contract_version": step["capability_contract_version"],
     }
-    if experiment.canonical(component) != experiment.canonical(expected):
+    if experiment.canonical(adapter["hub_component"]) != experiment.canonical(expected_component):
         raise PartnerAdapterContractError("partner Hub component does not match admitted Graph/v1 step")
     return {
         "schema": ADMITTED_PARTNER_STEP_SCHEMA,
@@ -376,46 +326,24 @@ def canonical_admitted_partner_step(binding):
     _exact(
         binding,
         {
-            "schema",
-            "workflow",
-            "step_key",
-            "graph_identity",
-            "workflow_admission_binding_identity",
-            "partner_adapter_identity",
-            "adapter",
-            "workflow_admission_binding",
-            "workflow_execution_admitted",
-            "partner_contract_bound",
-            "partner_execution_qualified",
-            "protected_holdout_access_authorized",
-            "scientific_stage_authorized",
-            "scientific_verdict_authorized",
-            "runtime_actuation_authorized",
+            "schema", "workflow", "step_key", "graph_identity", "workflow_admission_binding_identity",
+            "partner_adapter_identity", "adapter", "workflow_admission_binding", "workflow_execution_admitted",
+            "partner_contract_bound", "partner_execution_qualified", "protected_holdout_access_authorized",
+            "scientific_stage_authorized", "scientific_verdict_authorized", "runtime_actuation_authorized",
         },
         "admitted partner step",
     )
     if type(binding["schema"]) is not int or binding["schema"] != ADMITTED_PARTNER_STEP_SCHEMA:
         raise PartnerAdapterContractError("unsupported admitted partner step schema")
     expected = bind_admitted_partner_step(
-        binding["adapter"],
-        binding["workflow_admission_binding"],
-        step_key=binding["step_key"],
+        binding["adapter"], binding["workflow_admission_binding"], step_key=binding["step_key"]
     )
-    for field in (
-        "workflow",
-        "graph_identity",
-        "workflow_admission_binding_identity",
-        "partner_adapter_identity",
-    ):
+    for field in ("workflow", "graph_identity", "workflow_admission_binding_identity", "partner_adapter_identity"):
         if binding[field] != expected[field]:
             raise PartnerAdapterContractError(f"{field} does not match embedded evidence")
     for field in (
-        "workflow_execution_admitted",
-        "partner_contract_bound",
-        "partner_execution_qualified",
-        "protected_holdout_access_authorized",
-        "scientific_stage_authorized",
-        "scientific_verdict_authorized",
+        "workflow_execution_admitted", "partner_contract_bound", "partner_execution_qualified",
+        "protected_holdout_access_authorized", "scientific_stage_authorized", "scientific_verdict_authorized",
         "runtime_actuation_authorized",
     ):
         if binding[field] is not expected[field]:
