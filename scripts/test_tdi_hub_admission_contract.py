@@ -64,13 +64,35 @@ def fixture_graph():
     }
 
 
-def artifact_bindings():
+def _portable_root_binding(digest=SHA("1"), artifact_id=INPUT_ARTIFACT):
+    descriptor = {
+        "schema": 1,
+        "name": "root-spec",
+        "raw_sha256": digest,
+        "size_bytes": 123,
+        "media_type": "application/octet-stream",
+        "access_class": "development",
+    }
+    response = {
+        "id": artifact_id,
+        "hub_digest": "c" * 64,
+        "raw_sha256": digest,
+        "size": 123,
+    }
+    return hub.bind_portable_artifact(descriptor, response)
+
+
+def root_artifact_bindings():
+    return {SHA("1"): _portable_root_binding()}
+
+
+def artifact_ids():
     return {SHA("1"): INPUT_ARTIFACT}
 
 
 def workflow_response(value=None):
     value = value or fixture_graph()
-    preview = graph.compile_hub_workflow_preview(value, artifact_bindings=artifact_bindings())
+    preview = graph.compile_hub_workflow_preview(value, artifact_bindings=artifact_ids())
     canonical = graph.canonical_graph(value)
     pins = {
         step["key"]: {
@@ -89,6 +111,14 @@ def workflow_response(value=None):
         "model_version": "1.2.0",
         "created_at": 1,
     }
+
+
+def bind_fixture():
+    return admission.bind_exact_workflow_admission(
+        fixture_graph(),
+        workflow_response(),
+        root_artifact_bindings=root_artifact_bindings(),
+    )
 
 
 def authoritative_artifact_binding(*, workflow=WORKFLOW, step_key="evaluate"):
@@ -128,20 +158,29 @@ def authoritative_artifact_binding(*, workflow=WORKFLOW, step_key="evaluate"):
 class HubAdmissionContractTests(unittest.TestCase):
     def test_exact_graph_and_hub_admission_are_execution_authorized_only(self):
         value = fixture_graph()
-        binding = admission.bind_exact_workflow_admission(
-            value,
-            workflow_response(value),
-            artifact_bindings=artifact_bindings(),
-        )
+        binding = bind_fixture()
         self.assertEqual(admission.PINNED_HUB_EXACT_ADMISSION_SOURCE, binding["hub_source_sha"])
         self.assertEqual(graph.graph_identity(value), binding["graph_identity"])
         self.assertEqual(["evaluate", "prepare"], binding["admitted_steps"])
+        self.assertEqual(INPUT_ARTIFACT, binding["root_artifact_bindings"][SHA("1")]["hub_artifact_id"])
         self.assertTrue(binding["execution_authorized"])
         self.assertFalse(binding["scientific_stage_authorized"])
         self.assertEqual(binding, admission.canonical_workflow_admission_binding(binding))
         admission.workflow_admission_binding_identity(binding)
 
-    def test_full_workflow_spec_must_equal_tdi_compilation(self):
+    def test_root_artifact_binding_proof_is_required_and_digest_bound(self):
+        with self.assertRaisesRegex(admission.HubAdmissionContractError, "coverage mismatch"):
+            admission.bind_exact_workflow_admission(
+                fixture_graph(), workflow_response(), root_artifact_bindings={}
+            )
+
+        wrong = {SHA("1"): _portable_root_binding(digest=SHA("2"))}
+        with self.assertRaisesRegex(admission.HubAdmissionContractError, "does not match Graph/v1"):
+            admission.bind_exact_workflow_admission(
+                fixture_graph(), workflow_response(), root_artifact_bindings=wrong
+            )
+
+    def test_full_workflow_spec_must_equal_tdi_compilation_with_json_type_fidelity(self):
         for mutate in (
             lambda response: response["spec"]["steps"][0].__setitem__(
                 "component", "33333333-3333-3333-3333-333333333333"
@@ -149,12 +188,14 @@ class HubAdmissionContractTests(unittest.TestCase):
             lambda response: response["spec"]["steps"][0].__setitem__("capability", "tdi.other"),
             lambda response: response["spec"]["steps"][0]["parameters"].__setitem__("mode", "drift"),
             lambda response: response["spec"]["steps"][1].__setitem__("timeout_ms", 1999),
+            lambda response: response["spec"].__setitem__("max_concurrency", 2.0),
+            lambda response: response["spec"]["steps"][0].__setitem__("timeout_ms", True),
         ):
             response = workflow_response()
             mutate(response)
             with self.assertRaisesRegex(admission.HubAdmissionContractError, "spec does not exactly match"):
                 admission.bind_exact_workflow_admission(
-                    fixture_graph(), response, artifact_bindings=artifact_bindings()
+                    fixture_graph(), response, root_artifact_bindings=root_artifact_bindings()
                 )
 
     def test_each_registry_pin_must_match_graph(self):
@@ -170,7 +211,7 @@ class HubAdmissionContractTests(unittest.TestCase):
                 admission.HubAdmissionContractError, "does not match TDI Graph/v1"
             ):
                 admission.bind_exact_workflow_admission(
-                    fixture_graph(), response, artifact_bindings=artifact_bindings()
+                    fixture_graph(), response, root_artifact_bindings=root_artifact_bindings()
                 )
 
     def test_admission_step_coverage_is_exact(self):
@@ -178,7 +219,7 @@ class HubAdmissionContractTests(unittest.TestCase):
         del response["admission"]["steps"]["evaluate"]
         with self.assertRaisesRegex(admission.HubAdmissionContractError, "coverage mismatch"):
             admission.bind_exact_workflow_admission(
-                fixture_graph(), response, artifact_bindings=artifact_bindings()
+                fixture_graph(), response, root_artifact_bindings=root_artifact_bindings()
             )
 
         response = workflow_response()
@@ -187,7 +228,7 @@ class HubAdmissionContractTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(admission.HubAdmissionContractError, "coverage mismatch"):
             admission.bind_exact_workflow_admission(
-                fixture_graph(), response, artifact_bindings=artifact_bindings()
+                fixture_graph(), response, root_artifact_bindings=root_artifact_bindings()
             )
 
     def test_legacy_or_unpinned_workflow_fails_closed(self):
@@ -195,20 +236,35 @@ class HubAdmissionContractTests(unittest.TestCase):
         response["admission"] = None
         with self.assertRaisesRegex(admission.HubAdmissionContractError, "exact admission pins"):
             admission.bind_exact_workflow_admission(
-                fixture_graph(), response, artifact_bindings=artifact_bindings()
+                fixture_graph(), response, root_artifact_bindings=root_artifact_bindings()
             )
 
         response = workflow_response()
         del response["spec"]
         with self.assertRaisesRegex(admission.HubAdmissionContractError, "missing"):
             admission.bind_exact_workflow_admission(
-                fixture_graph(), response, artifact_bindings=artifact_bindings()
+                fixture_graph(), response, root_artifact_bindings=root_artifact_bindings()
             )
 
+    def test_restored_binding_recomputes_embedded_evidence_identities(self):
+        binding = bind_fixture()
+        changed = copy.deepcopy(binding)
+        changed["graph_identity"] = "0" * 64
+        with self.assertRaisesRegex(admission.HubAdmissionContractError, "does not match embedded"):
+            admission.canonical_workflow_admission_binding(changed)
+
+        changed = copy.deepcopy(binding)
+        changed["workflow_spec"]["max_concurrency"] = 3
+        with self.assertRaisesRegex(admission.HubAdmissionContractError, "embedded Hub workflow spec"):
+            admission.canonical_workflow_admission_binding(changed)
+
+        changed = copy.deepcopy(binding)
+        changed["admission"]["steps"]["prepare"]["manifest_digest"] = SHA("8")
+        with self.assertRaisesRegex(admission.HubAdmissionContractError, "does not match TDI Graph/v1"):
+            admission.canonical_workflow_admission_binding(changed)
+
     def test_binding_source_and_science_authority_are_fail_closed(self):
-        binding = admission.bind_exact_workflow_admission(
-            fixture_graph(), workflow_response(), artifact_bindings=artifact_bindings()
-        )
+        binding = bind_fixture()
         changed = copy.deepcopy(binding)
         changed["hub_source_sha"] = "0" * 40
         with self.assertRaisesRegex(admission.HubAdmissionContractError, "not the qualified"):
@@ -220,9 +276,7 @@ class HubAdmissionContractTests(unittest.TestCase):
             admission.canonical_workflow_admission_binding(changed)
 
     def test_authoritative_artifact_can_be_combined_only_with_same_admitted_workflow_step(self):
-        workflow_binding = admission.bind_exact_workflow_admission(
-            fixture_graph(), workflow_response(), artifact_bindings=artifact_bindings()
-        )
+        workflow_binding = bind_fixture()
         artifact_binding = authoritative_artifact_binding()
         combined = admission.bind_execution_authorized_artifact(artifact_binding, workflow_binding)
         self.assertEqual(3, combined["schema"])
@@ -236,9 +290,7 @@ class HubAdmissionContractTests(unittest.TestCase):
         admission.execution_authorized_artifact_binding_identity(combined)
 
     def test_combined_binding_rejects_wrong_workflow_or_unadmitted_step(self):
-        workflow_binding = admission.bind_exact_workflow_admission(
-            fixture_graph(), workflow_response(), artifact_bindings=artifact_bindings()
-        )
+        workflow_binding = bind_fixture()
         wrong_workflow = authoritative_artifact_binding(
             workflow="123e4567-e89b-42d3-a456-426614174999"
         )
