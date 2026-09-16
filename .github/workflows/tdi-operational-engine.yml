@@ -33,7 +33,7 @@ concurrency:
 
 jobs:
   boundaries:
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-latest' }}
     timeout-minutes: 5
     env:
       PYTHONDONTWRITEBYTECODE: '1'

@@ -34,8 +34,12 @@ pub enum RiskCoverageError {
 impl core::fmt::Display for RiskCoverageError {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::InvalidWeight => formatter.write_str("risk-coverage weights must be finite and non-negative"),
-            Self::InvalidTotal => formatter.write_str("total case count cannot be smaller than selected decisions"),
+            Self::InvalidWeight => {
+                formatter.write_str("risk-coverage weights must be finite and non-negative")
+            }
+            Self::InvalidTotal => {
+                formatter.write_str("total case count cannot be smaller than selected decisions")
+            }
         }
     }
 }
@@ -54,14 +58,19 @@ pub fn risk_coverage_curve(
     if decisions
         .iter()
         .any(|decision| !decision.weight.is_finite() || decision.weight < 0.0)
-        || thresholds.iter().any(|threshold| !threshold.is_finite() || *threshold < 0.0)
+        || thresholds
+            .iter()
+            .any(|threshold| !threshold.is_finite() || *threshold < 0.0)
     {
         return Err(RiskCoverageError::InvalidWeight);
     }
 
     let mut points = Vec::with_capacity(thresholds.len());
     for &threshold in thresholds {
-        let selected = decisions.iter().filter(|decision| decision.weight >= threshold).count();
+        let selected = decisions
+            .iter()
+            .filter(|decision| decision.weight >= threshold)
+            .count();
         let errors = decisions
             .iter()
             .filter(|decision| decision.weight >= threshold && !decision.correct)
@@ -89,8 +98,14 @@ mod tests {
     #[test]
     fn increasing_threshold_reduces_or_preserves_coverage() {
         let decisions = [
-            ScoredDecision { weight: 0.2, correct: false },
-            ScoredDecision { weight: 0.8, correct: true },
+            ScoredDecision {
+                weight: 0.2,
+                correct: false,
+            },
+            ScoredDecision {
+                weight: 0.8,
+                correct: true,
+            },
         ];
         let points = risk_coverage_curve(&decisions, &[0.0, 0.5, 0.9], 3).expect("valid curve");
         assert!(points[0].coverage >= points[1].coverage);

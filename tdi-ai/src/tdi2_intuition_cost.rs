@@ -70,7 +70,8 @@ pub fn logical_memory_accounting(store: &ExperienceStore) -> LogicalMemoryAccoun
     for entry in store.entries() {
         accounting.templates += 1;
         accounting.boolean_clauses += (entry.template().base().required().len()
-            + entry.template().base().forbidden().len()) as u64;
+            + entry.template().base().forbidden().len())
+            as u64;
         accounting.roles += entry.template().base().roles().len() as u64;
         accounting.relations += entry.template().relations().len() as u64;
         accounting.reliability_counters += 2;
@@ -98,7 +99,10 @@ where
 {
     let start = Instant::now();
     let value = operation();
-    ExternalTiming { value, elapsed: start.elapsed() }
+    ExternalTiming {
+        value,
+        elapsed: start.elapsed(),
+    }
 }
 
 /// Collect raw wall-clock durations over repeated externally timed calls.
@@ -124,7 +128,9 @@ mod tests {
         OperationAccounting, logical_memory_accounting, measure_external, measure_repeated_external,
     };
     use crate::experimental::tdi2_intuition::{PredicateId, RoleId, Template, TemplateId};
-    use crate::experimental::tdi2_intuition_relations::{RelationId, RelationalTemplate, RoleRelation};
+    use crate::experimental::tdi2_intuition_relations::{
+        RelationId, RelationalTemplate, RoleRelation,
+    };
     use crate::experimental::tdi2_intuition_reliability::ReliabilityEvidence;
     use crate::experimental::tdi2_intuition_store::{ExperienceEntry, ExperienceStore};
 
@@ -152,12 +158,19 @@ mod tests {
         .expect("template");
         let relational = RelationalTemplate::new(
             base,
-            vec![RoleRelation::new(RoleId::new(1), RelationId::new(7), RoleId::new(2))],
+            vec![RoleRelation::new(
+                RoleId::new(1),
+                RelationId::new(7),
+                RoleId::new(2),
+            )],
         )
         .expect("relations");
         let mut store = ExperienceStore::new(2).expect("store");
         store
-            .insert(ExperienceEntry::new(relational, ReliabilityEvidence::new(3, 1)))
+            .insert(ExperienceEntry::new(
+                relational,
+                ReliabilityEvidence::new(3, 1),
+            ))
             .expect("insert");
         let accounting = logical_memory_accounting(&store);
         assert_eq!(accounting.templates, 1);

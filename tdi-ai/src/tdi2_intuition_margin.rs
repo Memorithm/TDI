@@ -41,7 +41,12 @@ pub fn top_two_margin(candidates: &[Candidate]) -> Result<Option<CandidateMargin
     }
     let absolute = top - second;
     let relative = if top == 0.0 { 0.0 } else { absolute / top };
-    Ok(Some(CandidateMargin { top, second, absolute, relative }))
+    Ok(Some(CandidateMargin {
+        top,
+        second,
+        absolute,
+        relative,
+    }))
 }
 
 #[cfg(test)]
@@ -53,10 +58,12 @@ mod tests {
     #[test]
     fn margin_is_zero_for_equal_candidates() {
         let candidates = [
-            Candidate::from_parts_for_reference(TemplateId::new(1), 2.0, 3),
-            Candidate::from_parts_for_reference(TemplateId::new(2), 2.0, 3),
+            Candidate::new(TemplateId::new(1), 2.0, 3),
+            Candidate::new(TemplateId::new(2), 2.0, 3),
         ];
-        let margin = top_two_margin(&candidates).expect("valid ranking").expect("two candidates");
+        let margin = top_two_margin(&candidates)
+            .expect("valid ranking")
+            .expect("two candidates");
         assert_eq!(margin.absolute, 0.0);
         assert_eq!(margin.relative, 0.0);
     }

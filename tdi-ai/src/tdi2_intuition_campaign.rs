@@ -61,7 +61,14 @@ impl CampaignManifest {
         if !min_weight.is_finite() || min_weight < 0.0 {
             return Err(CampaignError::InvalidMinimumWeight);
         }
-        Ok(Self { domain, family, start_id, count, control_seed, min_weight })
+        Ok(Self {
+            domain,
+            family,
+            start_id,
+            count,
+            control_seed,
+            min_weight,
+        })
     }
 
     /// Stable record suitable for hashing before campaign execution.
@@ -132,9 +139,15 @@ pub enum CampaignError {
 impl core::fmt::Display for CampaignError {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::CaseIdOverflow => formatter.write_str("TDI-2.1 campaign case-id range overflows u32"),
-            Self::CaseCountOverflow => formatter.write_str("TDI-2.1 campaign case count overflows usize"),
-            Self::InvalidMinimumWeight => formatter.write_str("TDI-2.1 minimum weight must be finite and non-negative"),
+            Self::CaseIdOverflow => {
+                formatter.write_str("TDI-2.1 campaign case-id range overflows u32")
+            }
+            Self::CaseCountOverflow => {
+                formatter.write_str("TDI-2.1 campaign case count overflows usize")
+            }
+            Self::InvalidMinimumWeight => {
+                formatter.write_str("TDI-2.1 minimum weight must be finite and non-negative")
+            }
         }
     }
 }
@@ -189,7 +202,9 @@ pub fn motif_cases(start: u32, count: usize) -> Result<Vec<SyntheticCase>, Campa
     let mut cases = Vec::with_capacity(count);
     for offset in 0..count {
         let offset = u32::try_from(offset).map_err(|_| CampaignError::CaseIdOverflow)?;
-        let id = start.checked_add(offset).ok_or(CampaignError::CaseIdOverflow)?;
+        let id = start
+            .checked_add(offset)
+            .ok_or(CampaignError::CaseIdOverflow)?;
         cases.push(motif_retrieval_case(id));
     }
     Ok(cases)
@@ -197,11 +212,15 @@ pub fn motif_cases(start: u32, count: usize) -> Result<Vec<SyntheticCase>, Campa
 
 /// Materialize paired context-reversal cases for a checked contiguous id range.
 pub fn context_cases(start: u32, pair_count: usize) -> Result<Vec<SyntheticCase>, CampaignError> {
-    let capacity = pair_count.checked_mul(2).ok_or(CampaignError::CaseCountOverflow)?;
+    let capacity = pair_count
+        .checked_mul(2)
+        .ok_or(CampaignError::CaseCountOverflow)?;
     let mut cases = Vec::with_capacity(capacity);
     for offset in 0..pair_count {
         let offset = u32::try_from(offset).map_err(|_| CampaignError::CaseIdOverflow)?;
-        let id = start.checked_add(offset).ok_or(CampaignError::CaseIdOverflow)?;
+        let id = start
+            .checked_add(offset)
+            .ok_or(CampaignError::CaseIdOverflow)?;
         cases.extend(context_reversal_pair(id));
     }
     Ok(cases)
@@ -212,7 +231,9 @@ pub fn temporal_cases(start: u32, count: usize) -> Result<Vec<TemporalCase>, Cam
     let mut cases = Vec::with_capacity(count);
     for offset in 0..count {
         let offset = u32::try_from(offset).map_err(|_| CampaignError::CaseIdOverflow)?;
-        let id = start.checked_add(offset).ok_or(CampaignError::CaseIdOverflow)?;
+        let id = start
+            .checked_add(offset)
+            .ok_or(CampaignError::CaseIdOverflow)?;
         cases.push(temporal_trend_case(id));
     }
     Ok(cases)
@@ -223,7 +244,9 @@ pub fn analogy_cases(start: u32, count: usize) -> Result<Vec<AnalogyCase>, Campa
     let mut cases = Vec::with_capacity(count);
     for offset in 0..count {
         let offset = u32::try_from(offset).map_err(|_| CampaignError::CaseIdOverflow)?;
-        let id = start.checked_add(offset).ok_or(CampaignError::CaseIdOverflow)?;
+        let id = start
+            .checked_add(offset)
+            .ok_or(CampaignError::CaseIdOverflow)?;
         cases.push(analogy_case(id));
     }
     Ok(cases)
