@@ -105,6 +105,12 @@ class Tests(unittest.TestCase):
         with self.assertRaises(graph.ExecutionGraphError):
             graph.canonical_graph(a)
 
+    def test_workflow_name_matches_pinned_hub_nul_boundary(self):
+        a = fixture()
+        a["name"] = "bad\0name"
+        with self.assertRaises(graph.ExecutionGraphError):
+            graph.canonical_graph(a)
+
     def test_capability_must_match_hub_grammar(self):
         a = fixture()
         a["steps"][0]["capability"] = "tdi.prepare@1.0.0"
