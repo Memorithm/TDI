@@ -48,6 +48,8 @@ pub mod tdi21_freeze;
 pub mod tdi21_predicate_identifiability;
 #[path = "tdi21_provenance.rs"]
 pub mod tdi21_provenance;
+#[path = "tdi21_relational_binding.rs"]
+pub mod tdi21_relational_binding;
 #[path = "tdi21_stream.rs"]
 pub mod tdi21_stream;
 #[path = "tdi21_boolean_tasks.rs"]
