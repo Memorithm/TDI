@@ -138,3 +138,5 @@ pub mod tdi23_ir_provenance;
 pub mod tdi23_reduction;
 #[path = "tdi24_chiral.rs"]
 pub mod tdi24_chiral;
+#[path = "tdi25_torsor_chiral.rs"]
+pub mod tdi25_torsor_chiral;
