@@ -45,7 +45,7 @@ jobs:
       - run: python3 -m unittest -v scripts/test_tdi_observability_unit.py scripts/test_tdi_engine_unit.py
       - run: python3 scripts/tdi_engine.py doctor
   external:
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-24.04' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     defaults:
       run:
