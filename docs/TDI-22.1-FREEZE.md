@@ -36,8 +36,10 @@ Primary query counts per arm are therefore 640 development and 1280 validation.
 Reference arithmetic is deterministic IEEE-754 binary64 with fixed iteration order.
 
 - generated content components are exact multiples of `0.5` in `[-8,+8]`;
-- evaluator-supplied G3 coordinates are exact quarter-integers in `[-2,+2]`;
+- evaluator-supplied G3 coordinates are exact quarter-integers in `[-1.75,+1.75]`;
 - every input and every derived vector component must have absolute value `<= 64`.
+
+The G3 bound is chosen so the worst frozen F1 transport obeys the declared component limit: `|P-Q| <= 3.5`, each resultant component is at most 8, so each cross-product component is at most `3.5*8 + 3.5*8 = 56`; adding a local moment component of magnitude at most 8 yields at most 64. T3's factorized query is more tightly bounded but is still checked explicitly by the implementation.
 
 No saturation or clamping is permitted. Any actual bound violation is a typed rejection.
 
@@ -50,9 +52,9 @@ No saturation or clamping is permitted. Any actual bound violation is a typed re
 `G2_HELIX`: let `k=i mod 8`, use exact XY lookup
 `[(1,0),(1,1),(0,1),(-1,1),(-1,0),(-1,-1),(0,-1),(1,-1)]`, and `z=i/64`.
 
-`G3_SUPPLIED`: evaluator-generated exact quarter-integers in `[-2,+2]`.
+`G3_SUPPLIED`: evaluator-generated exact quarter-integers in `[-1.75,+1.75]`.
 
-All divisions by 64 are exact in binary64. No transcendental function is used.
+All divisions by powers of two are exact in binary64. No transcendental function is used.
 
 ## 6. Split domains and generation
 
@@ -81,7 +83,7 @@ Scores are tied iff `abs(a-b) <= tol(a,b)`. Value reconstruction uses the same c
 
 T1 uses T0 scoring and a one-hot top-1 readout. If T0 has one unique maximum under the frozen tolerance, that candidate receives weight 1 and all others receive 0; the returned value is its `(R,C)`.
 
-If T0 has a tied maximum, the T1 record is **fail-closed rejected** as `AmbiguousT1Top`. The evaluator must not choose the lowest identity, perturb scores, regenerate the episode, or silently break the tie. Other arm records for the same evaluator-owned query remain valid when otherwise admissible. This rule is frozen specifically so F1 target uniqueness under T3 does not imply an unstated T0/T1 tie-break.
+If T0 has a tied maximum, the T1 record is **fail-closed rejected** as `AmbiguousT1Top`. The evaluator must not choose the lowest identity, perturb scores, regenerate the episode, or silently break the tie. Other arm records for the same evaluator-owned query remain valid when otherwise admissible.
 
 ## 10. Resource accounting
 
@@ -91,8 +93,8 @@ Every arm record exposes all preregistered resource fields separately:
 - `key_bits`;
 - `value_bits`;
 - `position_bits`;
-- `dynamic_state_bits` (including candidate-retained cache/state not already represented by the per-record key/value/position payload fields);
-- `static_parameter_bits` (constants/tables required by the candidate semantics);
+- `dynamic_state_bits`;
+- `static_parameter_bits`;
 - `temporary_slots`;
 - `add_count`;
 - `mul_count`;
@@ -100,11 +102,11 @@ Every arm record exposes all preregistered resource fields separately:
 - `dot_lane_count`;
 - `comparison_count`.
 
-No field may be omitted because its value is zero. T3 query-side `Q x omega` is counted once per query, not per candidate. Evaluator-oracle work is recorded separately from candidate work and is not charged to an arm.
+No field may be omitted because its value is zero. T3 query-side `Q x omega` is counted once per query, not once per candidate. Evaluator-oracle work is recorded separately from candidate work and is not charged to an arm.
 
 ## 11. Provenance
 
-Schema version is exactly `tdi22-eval-record-v1`. Exact field order, delimiters, enum tokens, booleans, rejection tokens and vector/scalar encodings are frozen by `TDI-22.1-RECORD-CONTRACT.md`.
+Schema version is exactly `tdi22-eval-record-v1`. Exact field order, delimiters, enum tokens, booleans, rejection tokens and absence encoding are frozen by `TDI-22.1-RECORD-CONTRACT.md`.
 
 ## 12. Authorization
 
