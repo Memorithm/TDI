@@ -30,7 +30,7 @@ permissions:
 # This workflow is intentionally narrow: it qualifies the frozen non-final TDI-22.1 protocol.
 jobs:
   freeze-integrity:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-24.04' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7

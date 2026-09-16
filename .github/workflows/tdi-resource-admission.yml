@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   actual-local-controller:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-24.04' }}
     timeout-minutes: 25
     defaults:
       run:

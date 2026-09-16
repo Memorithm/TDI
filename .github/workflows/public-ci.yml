@@ -20,7 +20,7 @@ env:
 jobs:
   formatting:
     name: Public formatting
-    runs-on: [self-hosted, Linux, ARM64, tdi]
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
       - name: Checkout repository
@@ -51,7 +51,7 @@ jobs:
 
   tests:
     name: Public tests
-    runs-on: [self-hosted, Linux, ARM64, tdi]
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-24.04' }}
     timeout-minutes: 30
     steps:
       - name: Checkout repository
@@ -65,7 +65,7 @@ jobs:
 
   clippy:
     name: Public clippy
-    runs-on: [self-hosted, Linux, ARM64, tdi]
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-24.04' }}
     timeout-minutes: 30
     steps:
       - name: Checkout repository
@@ -99,7 +99,7 @@ jobs:
 
   integrity:
     name: Public preregistration integrity
-    runs-on: [self-hosted, Linux, ARM64, tdi]
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-24.04' }}
     timeout-minutes: 10
     steps:
       - name: Checkout repository
