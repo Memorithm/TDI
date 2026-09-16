@@ -64,5 +64,7 @@ pub mod tdi22_torsor;
 pub mod tdi23_categorical;
 #[path = "tdi23_ir.rs"]
 pub mod tdi23_ir;
+#[path = "tdi23_ir_provenance.rs"]
+pub mod tdi23_ir_provenance;
 #[path = "tdi23_reduction.rs"]
 pub mod tdi23_reduction;
