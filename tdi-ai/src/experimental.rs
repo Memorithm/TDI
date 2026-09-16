@@ -34,6 +34,8 @@ pub mod tdi2_intuition_aggregation;
 pub mod tdi2_intuition_baselines;
 #[path = "tdi2_intuition_consolidation.rs"]
 pub mod tdi2_intuition_consolidation;
+#[path = "tdi2_intuition_engine.rs"]
+pub mod tdi2_intuition_engine;
 #[path = "tdi2_intuition_inference.rs"]
 pub mod tdi2_intuition_inference;
 #[path = "tdi2_intuition_matching.rs"]
