@@ -21,13 +21,13 @@ from tdi_engine_archive import export_bundle, restore_bundle, verify_bundle
 from tdi_observability import ExportError, EXIT_EXPORT
 
 
-def read_json(path, limit=16 * 1024 * 1024):
+def read_json(path, limit=16 * 1024 * 1024, *, max_items=100_000):
     """Read bounded UTF-8 JSON from an explicitly selected regular file."""
     path = Path(path)
     if path.is_symlink() or not path.is_file():
         raise durable.ContractError("expected an explicit regular non-symlink file")
     with path.open("rb") as stream:
-        return durable.strict_json(stream.read(limit + 1), max_bytes=limit)
+        return durable.strict_json(stream.read(limit + 1), max_bytes=limit, max_items=max_items)
 
 
 def main(argv=None):
@@ -62,6 +62,12 @@ def main(argv=None):
     p = sub.add_parser("export-otlp"); p.add_argument("campaign"); p.add_argument("--endpoint", required=True)
     p = sub.add_parser("exports"); p.add_argument("--after", type=int, default=0)
     p = sub.add_parser("inspect-export"); p.add_argument("export_id")
+    p = sub.add_parser("analysis-validate"); p.add_argument("protocol", type=Path)
+    p = sub.add_parser("analyze"); p.add_argument("--protocol", type=Path, required=True)
+    source = p.add_mutually_exclusive_group(required=True)
+    source.add_argument("--selections", type=Path); source.add_argument("--observations", type=Path)
+    p.add_argument("--worker", type=Path, required=True); p.add_argument("--worker-sha256", required=True)
+    p.add_argument("--source-commit", required=True); p.add_argument("--output", type=Path, required=True)
     for verb in ("retry-export", "reconcile-export"):
         p = sub.add_parser(verb); p.add_argument("export_id"); p.add_argument("--run-id")
     args = parser.parse_args(argv)
@@ -94,6 +100,21 @@ def main(argv=None):
 def dispatch(args):
     """Execute one CLI operation; network clients are created only when needed."""
     op = args.operation
+    if op in ("analysis-validate", "analyze"):
+        from tdi_research_analysis import MAX_ANALYSIS_ITEMS, canonical_protocol, observations_from_catalogue, analyze
+        protocol = canonical_protocol(read_json(args.protocol, max_items=MAX_ANALYSIS_ITEMS))
+        if op == "analysis-validate":
+            return {"protocol_identity": identity("tdi-analysis-protocol/v1", protocol), "protocol": protocol}
+        from tdi_scirust_client import SciRustStats
+        worker = SciRustStats(args.worker, args.worker_sha256, args.source_commit)
+        if args.selections:
+            with EngineStore(args.catalogue, readonly=True) as store:
+                observations = observations_from_catalogue(store, protocol, read_json(args.selections, max_items=MAX_ANALYSIS_ITEMS))
+        else:
+            observations = read_json(args.observations, max_items=MAX_ANALYSIS_ITEMS)
+        report = analyze(protocol, observations, worker)
+        atomic_json(args.output, report)
+        return {"identity": report["identity"], "output": str(args.output), "results": report["results"], "scientific_verdict": report["scientific_verdict"]}
     if op in ("validate", "plan"):
         spec = runtime.canonical_campaign(read_json(args.spec))
         return {"campaign_identity": identity("tdi-operational-campaign/v1", spec), "steps": len(spec["graph"]["steps"]), "spec": spec}
