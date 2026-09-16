@@ -1,6 +1,6 @@
 //! Temporal Boolean structure for TDI-2.1 experiential templates.
 
-use super::tdi2_intuition::{NumericState, PredicateId};
+use super::tdi2_intuition::{BooleanState, NumericState, PredicateId};
 
 /// Direction of a numeric change between two observations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -66,6 +66,21 @@ impl DeltaPredicate {
     }
 }
 
+/// Encode all true temporal predicates into one canonical Boolean state.
+pub fn encode_temporal(
+    previous: &NumericState,
+    current: &NumericState,
+    predicates: &[DeltaPredicate],
+) -> Result<BooleanState, TemporalError> {
+    let mut active = Vec::new();
+    for predicate in predicates {
+        if predicate.evaluate(previous, current)? {
+            active.push(predicate.id);
+        }
+    }
+    Ok(BooleanState::new(active))
+}
+
 impl core::fmt::Display for TemporalError {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
@@ -78,7 +93,7 @@ impl std::error::Error for TemporalError {}
 
 #[cfg(test)]
 mod tests {
-    use super::{DeltaDirection, DeltaPredicate};
+    use super::{DeltaDirection, DeltaPredicate, encode_temporal};
     use crate::experimental::tdi2_intuition::{NumericState, PredicateId};
 
     #[test]
@@ -93,5 +108,19 @@ mod tests {
         )
         .expect("predicate");
         assert_eq!(predicate.evaluate(&previous, &current), Ok(true));
+    }
+
+    #[test]
+    fn temporal_encoder_emits_only_true_delta_predicates() {
+        let previous = NumericState::new(vec![1.0, 4.0]).expect("state");
+        let current = NumericState::new(vec![3.0, 4.1]).expect("state");
+        let predicates = [
+            DeltaPredicate::new(PredicateId::new(1), 0, DeltaDirection::Increase, 1.0)
+                .expect("predicate"),
+            DeltaPredicate::new(PredicateId::new(2), 1, DeltaDirection::Stable, 0.2)
+                .expect("predicate"),
+        ];
+        let encoded = encode_temporal(&previous, &current, &predicates).expect("encode");
+        assert_eq!(encoded.predicates(), &[PredicateId::new(1), PredicateId::new(2)]);
     }
 }
