@@ -1,11 +1,12 @@
 //! TDI-23.1 typed Categorical Attention IR development scaffold.
 //!
-//! This module introduces a bounded graph IR over the TDI-23 real finite-
-//! dimensional dagger carrier. It keeps object identity, direct sum versus
-//! tensor product, nonlinear boundaries, and coordinate-reduction annotations
-//! explicit. It is a development grammar and legality oracle, not a rewrite
-//! search engine, not a complete attention implementation, and not evidence of
-//! quality, compression, asymptotic, or hardware-performance improvement.
+//! The graph is deliberately bounded: finite-dimensional real Hilbert objects,
+//! Stage-0 real linear maps, identity/composition/dagger, explicit opaque
+//! nonlinear boundaries, and explicit coordinate-reduction annotations.
+//!
+//! This is a legality/equivalence scaffold. It is not a rewrite search engine,
+//! not complete softmax attention, and not evidence of quality, compression,
+//! asymptotic, or hardware-performance improvement.
 
 use core::fmt;
 
@@ -18,42 +19,42 @@ use super::tdi23_reduction::{
 /// Versioned non-final TDI-23.1 IR contract.
 pub const CATEGORICAL_IR_CONTRACT: &str = "tdi23.1-categorical-attention-ir-v1";
 
-/// Stable object handle inside one [`CategoricalAttentionIr`].
+/// Stable object handle inside one IR instance.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ObjectId(usize);
 
 impl ObjectId {
-    /// Zero-based object index, useful for deterministic provenance records.
+    /// Zero-based object index for deterministic provenance.
     #[must_use]
     pub const fn index(self) -> usize {
         self.0
     }
 }
 
-/// Stable node handle inside one [`CategoricalAttentionIr`].
+/// Stable node handle inside one IR instance.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct NodeId(usize);
 
 impl NodeId {
-    /// Zero-based node index, useful for deterministic provenance records.
+    /// Zero-based node index for deterministic provenance.
     #[must_use]
     pub const fn index(self) -> usize {
         self.0
     }
 }
 
-/// Construction of one finite-dimensional real Hilbert object.
+/// Structural construction of one finite-dimensional real Hilbert object.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HilbertObjectKind {
-    /// One atomic declared real Hilbert space.
+    /// Atomic declared space.
     Atomic,
-    /// Direct sum / biproduct-like concatenation of declared objects.
+    /// Direct sum / concatenation with additive dimension.
     DirectSum(Vec<ObjectId>),
-    /// Tensor product of declared objects with multiplicative dimension.
+    /// Tensor product with multiplicative dimension.
     TensorProduct(Vec<ObjectId>),
 }
 
-/// One named finite-dimensional real Hilbert object in the IR.
+/// Named finite-dimensional real Hilbert object.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HilbertObject {
     name: String,
@@ -62,80 +63,79 @@ pub struct HilbertObject {
 }
 
 impl HilbertObject {
-    /// Stable human-readable object name within this IR instance.
+    /// Human-readable name, unique within one IR instance.
     #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    /// Declared finite Hilbert-space dimension.
+    /// Declared dimension.
     #[must_use]
     pub const fn dimension(&self) -> usize {
         self.dimension
     }
 
-    /// Structural construction of the object.
+    /// Object construction kind.
     #[must_use]
     pub fn kind(&self) -> &HilbertObjectKind {
         &self.kind
     }
 }
 
-/// Opaque semantic boundary that is deliberately not a `FdHilb` morphism.
+/// Opaque operation/domain boundary that is deliberately not a `FdHilb` morphism.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NonlinearBoundaryKind {
-    /// Softmax or equivalent normalization boundary.
+    /// Softmax or equivalent normalization.
     Softmax,
-    /// Boolean-logic boundary.
+    /// Boolean logic.
     Boolean,
-    /// Finite-field `F2` boundary.
+    /// Finite-field `F2` operations.
     F2,
-    /// Algebraic-normal-form / Zhegalkin boundary.
+    /// Algebraic-normal-form / Zhegalkin operations.
     Anf,
-    /// Max-plus / tropical boundary.
+    /// Max-plus / tropical operations.
     MaxPlus,
 }
 
 impl fmt::Display for NonlinearBoundaryKind {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = match self {
+        formatter.write_str(match self {
             Self::Softmax => "softmax",
             Self::Boolean => "boolean",
             Self::F2 => "F2",
             Self::Anf => "ANF/Zhegalkin",
             Self::MaxPlus => "max-plus",
-        };
-        formatter.write_str(name)
+        })
     }
 }
 
-/// One typed IR node.
+/// Operation represented by one typed IR node.
 #[derive(Clone, Debug, PartialEq)]
 pub enum IrNodeKind {
     /// Concrete Stage-0 real linear map.
     LinearMap(RealLinearMap),
-    /// Identity morphism on one object.
+    /// Identity on the node's domain/codomain object.
     Identity,
     /// Typed composition `outer o inner`.
     Compose {
-        /// Outer/left node.
+        /// Outer/left operand.
         outer: NodeId,
-        /// Inner/right node.
+        /// Inner/right operand.
         inner: NodeId,
     },
-    /// Dagger of a linear subgraph.
+    /// Dagger of a boundary-free linear subgraph.
     Dagger {
-        /// Source node whose domain/codomain are reversed.
+        /// Source node.
         source: NodeId,
     },
-    /// Explicit opaque non-`FdHilb` operation.
+    /// Explicit non-linear / non-`FdHilb` boundary.
     NonlinearBoundary {
-        /// Algebraic/nonlinear domain crossed by this operation.
+        /// Boundary kind.
         boundary: NonlinearBoundaryKind,
     },
 }
 
-/// One node with explicit source and target objects.
+/// One IR node with exact source and target objects.
 #[derive(Clone, Debug, PartialEq)]
 pub struct IrNode {
     domain: ObjectId,
@@ -144,13 +144,13 @@ pub struct IrNode {
 }
 
 impl IrNode {
-    /// Exact declared domain object.
+    /// Exact domain object.
     #[must_use]
     pub const fn domain(&self) -> ObjectId {
         self.domain
     }
 
-    /// Exact declared codomain object.
+    /// Exact codomain object.
     #[must_use]
     pub const fn codomain(&self) -> ObjectId {
         self.codomain
@@ -163,115 +163,87 @@ impl IrNode {
     }
 }
 
-/// Fail-closed errors for the TDI-23.1 graph grammar and legality oracle.
+/// Fail-closed IR construction/evaluation errors.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum IrError {
     /// Object names are unique within one IR instance.
-    DuplicateObjectName {
-        /// Reused name.
-        name: String,
-    },
-    /// Composite objects require at least one factor/summand.
-    EmptyObjectConstruction {
-        /// Construction being attempted.
-        construction: &'static str,
-    },
-    /// A dimension was zero.
+    DuplicateObjectName(String),
+    /// Composite objects need at least one component.
+    EmptyObjectConstruction(&'static str),
+    /// Object dimensions must be positive.
     ZeroDimension,
-    /// Direct-sum addition or tensor multiplication overflowed `usize`.
+    /// Additive or multiplicative dimension overflow.
     DimensionOverflow,
-    /// Object handle does not belong to this IR.
-    UnknownObject {
-        /// Invalid handle.
-        object: ObjectId,
-    },
-    /// Node handle does not belong to this IR.
-    UnknownNode {
-        /// Invalid handle.
-        node: NodeId,
-    },
-    /// Concrete map domain does not match the declared object dimension.
+    /// Object handle is invalid for this IR.
+    UnknownObject(ObjectId),
+    /// Node handle is invalid for this IR.
+    UnknownNode(NodeId),
+    /// Concrete map domain dimension differs from the declared object.
     MapDomainDimensionMismatch {
         /// Object dimension.
         object_dimension: usize,
         /// Map dimension.
         map_dimension: usize,
     },
-    /// Concrete map codomain does not match the declared object dimension.
+    /// Concrete map codomain dimension differs from the declared object.
     MapCodomainDimensionMismatch {
         /// Object dimension.
         object_dimension: usize,
         /// Map dimension.
         map_dimension: usize,
     },
-    /// Composition requires exact middle-object identity, not only equal size.
+    /// Composition requires exact middle-object identity.
     CompositionObjectMismatch {
-        /// Domain object expected by the outer node.
+        /// Domain expected by the outer node.
         outer_domain: ObjectId,
-        /// Codomain object produced by the inner node.
+        /// Codomain produced by the inner node.
         inner_codomain: ObjectId,
     },
-    /// Dagger is illegal when the selected subgraph crosses a nonlinear domain.
-    DaggerCrossesNonlinearBoundary {
-        /// First detected opaque boundary.
-        boundary: NonlinearBoundaryKind,
-    },
-    /// Linear evaluation reached an explicitly nonlinear boundary.
-    LinearEvaluationCrossesBoundary {
-        /// Boundary that prevented linear evaluation.
-        boundary: NonlinearBoundaryKind,
-    },
-    /// Coordinate reduction ambient size does not match the annotated object.
+    /// Dagger cannot cross an opaque nonlinear boundary.
+    DaggerCrossesNonlinearBoundary(NonlinearBoundaryKind),
+    /// Linear evaluation cannot reinterpret an opaque nonlinear boundary.
+    LinearEvaluationCrossesBoundary(NonlinearBoundaryKind),
+    /// Reduction ambient dimension differs from the annotated object.
     ReductionAmbientDimensionMismatch {
         /// Object dimension.
         object_dimension: usize,
         /// Reduction ambient dimension.
         reduction_dimension: usize,
     },
-    /// Reduced lowering requires an explicit object annotation.
-    MissingReductionAnnotation {
-        /// Object lacking a reduction annotation.
-        object: ObjectId,
-    },
-    /// Structural composition-defect auditing requires a composition node.
-    NotCompositionNode {
-        /// Node that was requested.
-        node: NodeId,
-    },
-    /// Underlying Stage-0 linear carrier rejected an operation.
+    /// Reduced lowering requires an explicit reduction annotation.
+    MissingReductionAnnotation(ObjectId),
+    /// Composition-defect auditing requires a composition node.
+    NotCompositionNode(NodeId),
+    /// Stage-0 linear carrier rejected an operation.
     Linear(DaggerError),
-    /// Underlying Stage-0 reduction carrier rejected an operation.
+    /// Stage-0 reduction carrier rejected an operation.
     Reduction(ReductionError),
 }
 
 impl fmt::Display for IrError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::DuplicateObjectName { name } => {
-                write!(formatter, "object name {name:?} is already declared")
-            }
-            Self::EmptyObjectConstruction { construction } => {
-                write!(formatter, "{construction} requires at least one object")
+            Self::DuplicateObjectName(name) => write!(formatter, "duplicate object name {name:?}"),
+            Self::EmptyObjectConstruction(kind) => {
+                write!(formatter, "{kind} requires at least one object")
             }
             Self::ZeroDimension => formatter.write_str("object dimension must be positive"),
             Self::DimensionOverflow => formatter.write_str("object dimension overflowed usize"),
-            Self::UnknownObject { object } => {
-                write!(formatter, "unknown object id {}", object.index())
-            }
-            Self::UnknownNode { node } => write!(formatter, "unknown node id {}", node.index()),
+            Self::UnknownObject(id) => write!(formatter, "unknown object id {}", id.index()),
+            Self::UnknownNode(id) => write!(formatter, "unknown node id {}", id.index()),
             Self::MapDomainDimensionMismatch {
                 object_dimension,
                 map_dimension,
             } => write!(
                 formatter,
-                "map domain dimension mismatch: object={object_dimension}, map={map_dimension}"
+                "map domain mismatch: object={object_dimension}, map={map_dimension}"
             ),
             Self::MapCodomainDimensionMismatch {
                 object_dimension,
                 map_dimension,
             } => write!(
                 formatter,
-                "map codomain dimension mismatch: object={object_dimension}, map={map_dimension}"
+                "map codomain mismatch: object={object_dimension}, map={map_dimension}"
             ),
             Self::CompositionObjectMismatch {
                 outer_domain,
@@ -282,10 +254,10 @@ impl fmt::Display for IrError {
                 outer_domain.index(),
                 inner_codomain.index()
             ),
-            Self::DaggerCrossesNonlinearBoundary { boundary } => {
+            Self::DaggerCrossesNonlinearBoundary(boundary) => {
                 write!(formatter, "dagger cannot cross {boundary} boundary")
             }
-            Self::LinearEvaluationCrossesBoundary { boundary } => {
+            Self::LinearEvaluationCrossesBoundary(boundary) => {
                 write!(formatter, "linear evaluation cannot cross {boundary} boundary")
             }
             Self::ReductionAmbientDimensionMismatch {
@@ -293,17 +265,13 @@ impl fmt::Display for IrError {
                 reduction_dimension,
             } => write!(
                 formatter,
-                "reduction ambient dimension mismatch: object={object_dimension}, reduction={reduction_dimension}"
+                "reduction ambient mismatch: object={object_dimension}, reduction={reduction_dimension}"
             ),
-            Self::MissingReductionAnnotation { object } => {
-                write!(
-                    formatter,
-                    "object {} has no coordinate-reduction annotation",
-                    object.index()
-                )
+            Self::MissingReductionAnnotation(id) => {
+                write!(formatter, "object {} has no reduction annotation", id.index())
             }
-            Self::NotCompositionNode { node } => {
-                write!(formatter, "node {} is not a composition", node.index())
+            Self::NotCompositionNode(id) => {
+                write!(formatter, "node {} is not a composition", id.index())
             }
             Self::Linear(error) => write!(formatter, "linear-map error: {error}"),
             Self::Reduction(error) => write!(formatter, "reduction error: {error}"),
@@ -333,7 +301,7 @@ impl From<ReductionError> for IrError {
     }
 }
 
-/// Bounded typed DAG for the TDI-23.1 categorical-attention development grammar.
+/// Bounded typed DAG for TDI-23.1 categorical-attention research.
 #[derive(Clone, Debug, Default)]
 pub struct CategoricalAttentionIr {
     objects: Vec<HilbertObject>,
@@ -342,7 +310,7 @@ pub struct CategoricalAttentionIr {
 }
 
 impl CategoricalAttentionIr {
-    /// Create an empty IR.
+    /// Create an empty graph.
     #[must_use]
     pub const fn new() -> Self {
         Self {
@@ -364,21 +332,19 @@ impl CategoricalAttentionIr {
         self.push_object(name.into(), dimension, HilbertObjectKind::Atomic)
     }
 
-    /// Add an explicit direct-sum object with additive dimension.
+    /// Add a direct sum with additive dimension.
     pub fn add_direct_sum_object(
         &mut self,
         name: impl Into<String>,
         summands: &[ObjectId],
     ) -> Result<ObjectId, IrError> {
         if summands.is_empty() {
-            return Err(IrError::EmptyObjectConstruction {
-                construction: "direct sum",
-            });
+            return Err(IrError::EmptyObjectConstruction("direct sum"));
         }
         let mut dimension = 0usize;
-        for object in summands {
+        for id in summands {
             dimension = dimension
-                .checked_add(self.object(*object)?.dimension())
+                .checked_add(self.object(*id)?.dimension())
                 .ok_or(IrError::DimensionOverflow)?;
         }
         self.push_object(
@@ -388,21 +354,19 @@ impl CategoricalAttentionIr {
         )
     }
 
-    /// Add an explicit tensor-product object with multiplicative dimension.
+    /// Add a tensor product with multiplicative dimension.
     pub fn add_tensor_product_object(
         &mut self,
         name: impl Into<String>,
         factors: &[ObjectId],
     ) -> Result<ObjectId, IrError> {
         if factors.is_empty() {
-            return Err(IrError::EmptyObjectConstruction {
-                construction: "tensor product",
-            });
+            return Err(IrError::EmptyObjectConstruction("tensor product"));
         }
         let mut dimension = 1usize;
-        for object in factors {
+        for id in factors {
             dimension = dimension
-                .checked_mul(self.object(*object)?.dimension())
+                .checked_mul(self.object(*id)?.dimension())
                 .ok_or(IrError::DimensionOverflow)?;
         }
         self.push_object(
@@ -412,7 +376,7 @@ impl CategoricalAttentionIr {
         )
     }
 
-    /// Add a concrete Stage-0 real linear map between exact declared objects.
+    /// Add a concrete Stage-0 linear map between exact objects.
     pub fn add_linear_map(
         &mut self,
         domain: ObjectId,
@@ -436,16 +400,13 @@ impl CategoricalAttentionIr {
         Ok(self.push_node(domain, codomain, IrNodeKind::LinearMap(map)))
     }
 
-    /// Add the identity morphism for one exact object.
+    /// Add an identity node.
     pub fn add_identity(&mut self, object: ObjectId) -> Result<NodeId, IrError> {
         self.object(object)?;
         Ok(self.push_node(object, object, IrNodeKind::Identity))
     }
 
     /// Add an explicit opaque non-`FdHilb` boundary.
-    ///
-    /// Such a node can participate in a typed pipeline, but linear evaluation
-    /// and dagger construction fail closed when they encounter it.
     pub fn add_nonlinear_boundary(
         &mut self,
         domain: ObjectId,
@@ -461,14 +422,16 @@ impl CategoricalAttentionIr {
         ))
     }
 
-    /// Compose `outer o inner` when the exact middle object is identical.
+    /// Compose `outer o inner`; exact middle-object identity is required.
     pub fn compose(&mut self, outer: NodeId, inner: NodeId) -> Result<NodeId, IrError> {
         let outer_node = self.node(outer)?;
         let inner_node = self.node(inner)?;
-        if outer_node.domain != inner_node.codomain {
+        let outer_domain = outer_node.domain;
+        let inner_codomain = inner_node.codomain;
+        if outer_domain != inner_codomain {
             return Err(IrError::CompositionObjectMismatch {
-                outer_domain: outer_node.domain,
-                inner_codomain: inner_node.codomain,
+                outer_domain,
+                inner_codomain,
             });
         }
         let domain = inner_node.domain;
@@ -476,32 +439,27 @@ impl CategoricalAttentionIr {
         Ok(self.push_node(domain, codomain, IrNodeKind::Compose { outer, inner }))
     }
 
-    /// Construct the dagger of a linear subgraph.
-    ///
-    /// The operation is rejected before graph mutation if any nonlinear boundary
-    /// is reachable from the source expression.
+    /// Add the dagger of a boundary-free linear subgraph.
     pub fn dagger(&mut self, source: NodeId) -> Result<NodeId, IrError> {
         let source_node = self.node(source)?;
+        let domain = source_node.codomain;
+        let codomain = source_node.domain;
         if let Some(boundary) = self.first_nonlinear_boundary(source)? {
-            return Err(IrError::DaggerCrossesNonlinearBoundary { boundary });
+            return Err(IrError::DaggerCrossesNonlinearBoundary(boundary));
         }
-        Ok(self.push_node(
-            source_node.codomain,
-            source_node.domain,
-            IrNodeKind::Dagger { source },
-        ))
+        Ok(self.push_node(domain, codomain, IrNodeKind::Dagger { source }))
     }
 
-    /// Attach or replace the explicit coordinate reduction for one object.
+    /// Attach or replace an explicit coordinate-reduction annotation.
     pub fn annotate_coordinate_reduction(
         &mut self,
         object: ObjectId,
         reduction: CoordinateReduction,
     ) -> Result<(), IrError> {
-        let dimension = self.object(object)?.dimension();
-        if reduction.ambient_dim() != dimension {
+        let object_dimension = self.object(object)?.dimension();
+        if reduction.ambient_dim() != object_dimension {
             return Err(IrError::ReductionAmbientDimensionMismatch {
-                object_dimension: dimension,
+                object_dimension,
                 reduction_dimension: reduction.ambient_dim(),
             });
         }
@@ -509,26 +467,24 @@ impl CategoricalAttentionIr {
         Ok(())
     }
 
-    /// Remove the reduction annotation for one object.
+    /// Remove an object's reduction annotation.
     pub fn clear_coordinate_reduction(&mut self, object: ObjectId) -> Result<(), IrError> {
         self.object(object)?;
         self.reductions[object.index()] = None;
         Ok(())
     }
 
-    /// Read one object by stable handle.
-    pub fn object(&self, object: ObjectId) -> Result<&HilbertObject, IrError> {
-        self.objects
-            .get(object.index())
-            .ok_or(IrError::UnknownObject { object })
+    /// Read one object.
+    pub fn object(&self, id: ObjectId) -> Result<&HilbertObject, IrError> {
+        self.objects.get(id.index()).ok_or(IrError::UnknownObject(id))
     }
 
-    /// Read one node by stable handle.
-    pub fn node(&self, node: NodeId) -> Result<&IrNode, IrError> {
-        self.nodes.get(node.index()).ok_or(IrError::UnknownNode { node })
+    /// Read one node.
+    pub fn node(&self, id: NodeId) -> Result<&IrNode, IrError> {
+        self.nodes.get(id.index()).ok_or(IrError::UnknownNode(id))
     }
 
-    /// Read the optional coordinate-reduction annotation for one object.
+    /// Read one optional coordinate-reduction annotation.
     pub fn coordinate_reduction(
         &self,
         object: ObjectId,
@@ -537,7 +493,7 @@ impl CategoricalAttentionIr {
         Ok(self.reductions[object.index()].as_ref())
     }
 
-    /// Evaluate a boundary-free IR subgraph into the Stage-0 linear carrier.
+    /// Evaluate a boundary-free subgraph into the Stage-0 linear carrier.
     pub fn evaluate_linear(&self, node: NodeId) -> Result<RealLinearMap, IrError> {
         let node_value = self.node(node)?;
         match &node_value.kind {
@@ -552,43 +508,44 @@ impl CategoricalAttentionIr {
             }
             IrNodeKind::Dagger { source } => Ok(self.evaluate_linear(*source)?.dagger()),
             IrNodeKind::NonlinearBoundary { boundary } => {
-                Err(IrError::LinearEvaluationCrossesBoundary {
-                    boundary: *boundary,
-                })
+                Err(IrError::LinearEvaluationCrossesBoundary(*boundary))
             }
         }
     }
 
-    /// Evaluate one boundary-free subgraph and then apply the declared object
-    /// reductions to its source and target.
+    /// Evaluate one linear subgraph and explicitly reduce its endpoint objects.
     pub fn evaluate_reduced_linear(&self, node: NodeId) -> Result<RealLinearMap, IrError> {
         let node_value = self.node(node)?;
+        let domain = node_value.domain;
+        let codomain = node_value.codomain;
         let map = self.evaluate_linear(node)?;
-        let domain = self.required_reduction(node_value.domain)?;
-        let codomain = self.required_reduction(node_value.codomain)?;
-        Ok(reduce_linear_map(&map, domain, codomain)?)
+        Ok(reduce_linear_map(
+            &map,
+            self.required_reduction(domain)?,
+            self.required_reduction(codomain)?,
+        )?)
     }
 
-    /// Audit the Stage-0 omitted-middle-path composition defect for one compose node.
-    ///
-    /// This uses the exact object annotations on the composition domain, middle,
-    /// and codomain. It reports the Stage-0 structural diagnostic and does not
-    /// claim that the complete IR is functorially reducible.
+    /// Audit the Stage-0 omitted-middle-path structural defect for a compose node.
     pub fn composition_reduction_defect_max_abs(&self, node: NodeId) -> Result<f64, IrError> {
         let node_value = self.node(node)?;
-        let (outer, inner) = match node_value.kind {
-            IrNodeKind::Compose { outer, inner } => (outer, inner),
-            _ => return Err(IrError::NotCompositionNode { node }),
+        let (outer, inner) = match &node_value.kind {
+            IrNodeKind::Compose { outer, inner } => (*outer, *inner),
+            _ => return Err(IrError::NotCompositionNode(node)),
         };
         let outer_node = self.node(outer)?;
         let inner_node = self.node(inner)?;
+        let domain = inner_node.domain;
+        let middle = inner_node.codomain;
+        let codomain = outer_node.codomain;
         let first = self.evaluate_linear(inner)?;
         let second = self.evaluate_linear(outer)?;
-        let domain = self.required_reduction(inner_node.domain)?;
-        let middle = self.required_reduction(inner_node.codomain)?;
-        let codomain = self.required_reduction(outer_node.codomain)?;
         Ok(reduction_composition_defect_max_abs(
-            &first, &second, domain, middle, codomain,
+            &first,
+            &second,
+            self.required_reduction(domain)?,
+            self.required_reduction(middle)?,
+            self.required_reduction(codomain)?,
         )?)
     }
 
@@ -598,8 +555,12 @@ impl CategoricalAttentionIr {
         dimension: usize,
         kind: HilbertObjectKind,
     ) -> Result<ObjectId, IrError> {
-        if self.objects.iter().any(|object| object.name == name) {
-            return Err(IrError::DuplicateObjectName { name });
+        if self
+            .objects
+            .iter()
+            .any(|object| object.name.as_str() == name.as_str())
+        {
+            return Err(IrError::DuplicateObjectName(name));
         }
         let id = ObjectId(self.objects.len());
         self.objects.push(HilbertObject {
@@ -623,7 +584,7 @@ impl CategoricalAttentionIr {
 
     fn required_reduction(&self, object: ObjectId) -> Result<&CoordinateReduction, IrError> {
         self.coordinate_reduction(object)?
-            .ok_or(IrError::MissingReductionAnnotation { object })
+            .ok_or(IrError::MissingReductionAnnotation(object))
     }
 
     fn first_nonlinear_boundary(
@@ -666,21 +627,20 @@ mod tests {
         let mut ir = CategoricalAttentionIr::new();
         let h2 = ir.add_atomic_object("H2", 2).expect("H2");
         let h3 = ir.add_atomic_object("H3", 3).expect("H3");
-        let direct_sum = ir
+        let sum = ir
             .add_direct_sum_object("H2_plus_H3", &[h2, h3])
-            .expect("direct sum");
+            .expect("sum");
         let tensor = ir
             .add_tensor_product_object("H2_tensor_H3", &[h2, h3])
             .expect("tensor");
-
-        assert_eq!(ir.object(direct_sum).expect("sum").dimension(), 5);
-        assert_eq!(ir.object(tensor).expect("tensor").dimension(), 6);
+        assert_eq!(ir.object(sum).expect("sum object").dimension(), 5);
+        assert_eq!(ir.object(tensor).expect("tensor object").dimension(), 6);
         assert!(matches!(
-            ir.object(direct_sum).expect("sum").kind(),
+            ir.object(sum).expect("sum object").kind(),
             HilbertObjectKind::DirectSum(_)
         ));
         assert!(matches!(
-            ir.object(tensor).expect("tensor").kind(),
+            ir.object(tensor).expect("tensor object").kind(),
             HilbertObjectKind::TensorProduct(_)
         ));
     }
@@ -697,7 +657,6 @@ mod tests {
         let inner = ir
             .add_linear_map(c, c, RealLinearMap::identity(2).expect("inner map"))
             .expect("inner");
-
         assert_eq!(
             ir.compose(outer, inner),
             Err(IrError::CompositionObjectMismatch {
@@ -708,7 +667,7 @@ mod tests {
     }
 
     #[test]
-    fn tdi23_1_dagger_and_composition_match_stage0_linear_semantics() {
+    fn tdi23_1_dagger_and_composition_match_stage0_semantics() {
         let mut ir = CategoricalAttentionIr::new();
         let a = ir.add_atomic_object("A", 2).expect("A");
         let b = ir.add_atomic_object("B", 3).expect("B");
@@ -721,12 +680,11 @@ mod tests {
         let g = ir.add_linear_map(b, c, g_map.clone()).expect("g node");
         let composed = ir.compose(g, f).expect("g o f");
         let dagger = ir.dagger(composed).expect("dagger");
-
         let actual = ir.evaluate_linear(dagger).expect("evaluate");
         let expected = f_map
             .dagger()
             .compose(&g_map.dagger())
-            .expect("f^dagger o g^dagger");
+            .expect("expected dagger composition");
         assert_eq!(actual, expected);
     }
 
@@ -739,34 +697,32 @@ mod tests {
         let f = ir.add_linear_map(a, b, map.clone()).expect("f");
         let id_a = ir.add_identity(a).expect("id A");
         let id_b = ir.add_identity(b).expect("id B");
-        let right_identity = ir.compose(f, id_a).expect("f o id_A");
-        let left_identity = ir.compose(id_b, f).expect("id_B o f");
-
-        assert_eq!(ir.evaluate_linear(right_identity).expect("eval"), map);
-        assert_eq!(ir.evaluate_linear(left_identity).expect("eval"), map);
+        let right = ir.compose(f, id_a).expect("f o id_A");
+        let left = ir.compose(id_b, f).expect("id_B o f");
+        assert_eq!(ir.evaluate_linear(right).expect("right"), map);
+        assert_eq!(ir.evaluate_linear(left).expect("left"), map);
     }
 
     #[test]
-    fn tdi23_1_nonlinear_boundaries_are_explicit_and_fail_closed_for_dagger() {
+    fn tdi23_1_nonlinear_boundary_fails_closed_for_linear_semantics() {
         let mut ir = CategoricalAttentionIr::new();
         let h = ir.add_atomic_object("H", 3).expect("H");
         let softmax = ir
             .add_nonlinear_boundary(h, h, NonlinearBoundaryKind::Softmax)
-            .expect("softmax boundary");
+            .expect("softmax");
         let identity = ir.add_identity(h).expect("identity");
-        let pipeline = ir.compose(identity, softmax).expect("typed pipeline");
-
+        let pipeline = ir.compose(identity, softmax).expect("pipeline");
         assert_eq!(
             ir.evaluate_linear(pipeline),
-            Err(IrError::LinearEvaluationCrossesBoundary {
-                boundary: NonlinearBoundaryKind::Softmax,
-            })
+            Err(IrError::LinearEvaluationCrossesBoundary(
+                NonlinearBoundaryKind::Softmax
+            ))
         );
         assert_eq!(
             ir.dagger(pipeline),
-            Err(IrError::DaggerCrossesNonlinearBoundary {
-                boundary: NonlinearBoundaryKind::Softmax,
-            })
+            Err(IrError::DaggerCrossesNonlinearBoundary(
+                NonlinearBoundaryKind::Softmax
+            ))
         );
     }
 
@@ -788,27 +744,25 @@ mod tests {
             CoordinateReduction::new(2, vec![1]).expect("K reduction"),
         )
         .expect("annotate K");
-
-        let reduced = ir.evaluate_reduced_linear(node).expect("reduced map");
+        let reduced = ir.evaluate_reduced_linear(node).expect("reduced");
         assert_eq!(reduced.domain_dim(), 2);
         assert_eq!(reduced.codomain_dim(), 1);
         assert_eq!(reduced.entries(), &[6.0, 4.0]);
     }
 
     #[test]
-    fn tdi23_1_reduced_lowering_fails_when_annotation_is_missing() {
+    fn tdi23_1_reduced_lowering_requires_annotations() {
         let mut ir = CategoricalAttentionIr::new();
         let h = ir.add_atomic_object("H", 2).expect("H");
-        let node = ir.add_identity(h).expect("identity");
-
+        let identity = ir.add_identity(h).expect("identity");
         assert_eq!(
-            ir.evaluate_reduced_linear(node),
-            Err(IrError::MissingReductionAnnotation { object: h })
+            ir.evaluate_reduced_linear(identity),
+            Err(IrError::MissingReductionAnnotation(h))
         );
     }
 
     #[test]
-    fn tdi23_1_composition_defect_uses_middle_object_annotation() {
+    fn tdi23_1_composition_defect_tracks_omitted_middle_paths() {
         let mut ir = CategoricalAttentionIr::new();
         let a = ir.add_atomic_object("A", 1).expect("A");
         let b = ir.add_atomic_object("B", 2).expect("B");
@@ -817,17 +771,17 @@ mod tests {
             .add_linear_map(
                 a,
                 b,
-                RealLinearMap::new(1, 2, vec![1.0, 1.0]).expect("first"),
+                RealLinearMap::new(1, 2, vec![1.0, 1.0]).expect("first map"),
             )
-            .expect("first node");
+            .expect("first");
         let second = ir
             .add_linear_map(
                 b,
                 c,
-                RealLinearMap::new(2, 1, vec![1.0, 1.0]).expect("second"),
+                RealLinearMap::new(2, 1, vec![1.0, 1.0]).expect("second map"),
             )
-            .expect("second node");
-        let composed = ir.compose(second, first).expect("composition");
+            .expect("second");
+        let composed = ir.compose(second, first).expect("compose");
         ir.annotate_coordinate_reduction(
             a,
             CoordinateReduction::new(1, vec![0]).expect("A reduction"),
@@ -843,13 +797,11 @@ mod tests {
             CoordinateReduction::new(1, vec![0]).expect("C reduction"),
         )
         .expect("annotate C");
-
         assert_eq!(
             ir.composition_reduction_defect_max_abs(composed)
-                .expect("dropped-path defect"),
+                .expect("dropped path"),
             1.0
         );
-
         ir.annotate_coordinate_reduction(
             b,
             CoordinateReduction::new(2, vec![0, 1]).expect("full B reduction"),
@@ -857,7 +809,7 @@ mod tests {
         .expect("replace B reduction");
         assert_eq!(
             ir.composition_reduction_defect_max_abs(composed)
-                .expect("full-space defect"),
+                .expect("full middle"),
             0.0
         );
     }
