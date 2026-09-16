@@ -38,3 +38,31 @@ required-features = ["experimental"]
 [[example]]
 name = "tdi2_intuition_development"
 required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_validation"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_motif_b2"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_motif_b0"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_motif_b1"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_support_scaling"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_evidence_quality"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_threshold_sweep"
+required-features = ["experimental"]
