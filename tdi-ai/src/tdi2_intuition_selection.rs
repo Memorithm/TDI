@@ -15,6 +15,19 @@ pub struct Candidate {
 }
 
 impl Candidate {
+    /// Construct an already-evaluated candidate value.
+    ///
+    /// Normal engine operation obtains candidates through [`select_candidates`].
+    /// This constructor exists for composition and deterministic reference tests.
+    #[must_use]
+    pub const fn new(template_id: TemplateId, weight: f64, support: u64) -> Self {
+        Self {
+            template_id,
+            weight,
+            support,
+        }
+    }
+
     /// Stable template identifier.
     #[must_use]
     pub const fn template_id(self) -> TemplateId {
@@ -49,11 +62,11 @@ pub fn select_candidates(
         if !match_template(entry.template().base(), state).is_exact() {
             continue;
         }
-        candidates.push(Candidate {
-            template_id: entry.template().base().id(),
-            weight: policy.weight(entry.evidence())?,
-            support: entry.evidence().support(),
-        });
+        candidates.push(Candidate::new(
+            entry.template().base().id(),
+            policy.weight(entry.evidence())?,
+            entry.evidence().support(),
+        ));
     }
 
     candidates.sort_by(|left, right| {
