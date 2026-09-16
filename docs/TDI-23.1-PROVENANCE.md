@@ -44,7 +44,7 @@ Before emitting a manifest, the provenance layer independently traverses the roo
 - dagger endpoints reverse the source endpoints;
 - dagger source subgraphs contain no nonlinear/algebraic boundary.
 
-This validator is intentionally separate from the builder path. It re-checks stored semantics rather than treating successful construction as sufficient evidence of integrity.
+This validator is intentionally separate from the builder path. It re-checks stored semantics rather than treating successful construction as sufficient evidence of integrity. Validation memoizes the computed nonlinear-boundary status for each already validated node, so a rooted DAG that reuses the same node does not recursively revalidate that shared subgraph. A regression builds forty repeated self-compositions and requires the validator to report the exact 41 reachable nodes without expanding the DAG into a tree.
 
 ## Manifest encoding
 
@@ -91,6 +91,7 @@ The development tests must show at least:
 - adding a coordinate-reduction annotation changes the manifest and records its ordered coordinates;
 - direct sum and tensor product produce distinct manifests;
 - rooted validation counts explicit nonlinear boundaries and reachable reduction annotations;
+- shared DAG nodes reuse cached validation state rather than triggering repeated subtree traversal;
 - a root handle from another IR instance fails closed.
 
 ## Non-goals
