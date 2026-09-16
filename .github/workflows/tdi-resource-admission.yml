@@ -1,0 +1,62 @@
+name: TDI Elastic resource admission
+on:
+  pull_request:
+    paths: ['scripts/tdi_*', 'scripts/test_tdi_*', 'tdi-ai/**', 'tdi-core/**', 'Cargo*', 'docs/engineering/**', '.github/workflows/tdi-resource-admission.yml']
+  push:
+    branches: [main]
+    paths: ['scripts/tdi_*', 'scripts/test_tdi_*', 'tdi-ai/**', 'tdi-core/**', 'Cargo*', 'docs/engineering/**', '.github/workflows/tdi-resource-admission.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: resource-admission-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  actual-local-controller:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: integration-tdi
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONPATH: scripts
+      CARGO_INCREMENTAL: '0'
+      CARGO_BUILD_JOBS: '2'
+      RUSTFLAGS: '-C debuginfo=0'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          path: integration-tdi
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: Memorithm/ElasticXxx
+          ref: f8e10b1a1d05d6c22c0f56fed87252bc65d4e66a
+          persist-credentials: false
+          path: integration-elastic
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: Memorithm/scirust-hub
+          ref: ccdcb99a4573dbefb944af0df713101b100b5f78
+          persist-credentials: false
+          path: integration-hub
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+      - name: Build the pinned controller in its own Cargo context
+        working-directory: integration-elastic
+        run: cargo build --locked -p elastic-cli
+      - name: Build the pinned actual Hub
+        working-directory: integration-hub
+        run: cargo build --locked -p scirust-hubd -p scirust-hub-worker
+      - name: Build the TDI library worker
+        run: cargo build --locked -p tdi-ai --example durable_worker
+      - name: Execute real Linux sensors, Elastic permits and Hub admission
+        env:
+          TDI_HUBD_BIN: ${{ github.workspace }}/integration-hub/target/debug/scirust-hubd
+          TDI_DURABLE_WORKER: ${{ github.workspace }}/integration-tdi/target/debug/examples/durable_worker
+          TDI_ELASTIC_BIN: ${{ github.workspace }}/integration-elastic/target/debug/elastic-cli
+          TDI_ELASTIC_SOURCE_COMMIT: f8e10b1a1d05d6c22c0f56fed87252bc65d4e66a
+        run: python3 -m unittest -v scripts/test_tdi_resource_integration.py

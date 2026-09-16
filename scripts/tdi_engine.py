@@ -48,6 +48,11 @@ def main(argv=None):
     p.add_argument("--adapter", choices=("finite", "jacobi"), required=True)
     p.add_argument("--trials", type=int, default=2); p.add_argument("--domain", choices=("Development", "Validation"), default="Development")
     p = sub.add_parser("submit"); p.add_argument("spec", type=Path); p.add_argument("--roots", type=Path)
+    p = sub.add_parser("run-local-admitted")
+    p.add_argument("spec", type=Path); p.add_argument("--roots", type=Path)
+    p.add_argument("--elastic-worker", type=Path, required=True); p.add_argument("--worker-sha256", required=True)
+    p.add_argument("--source-commit", required=True); p.add_argument("--resource-policy", type=Path, required=True)
+    sub.add_parser("capacity")
     for verb in ("run", "resume", "cancel", "inspect"):
         p = sub.add_parser(verb); p.add_argument("campaign")
     p = sub.add_parser("attach"); p.add_argument("campaign"); p.add_argument("workflow"); p.add_argument("--roots", type=Path)
@@ -80,6 +85,8 @@ def main(argv=None):
         code = durable.EXIT_OK
         if isinstance(result, dict) and result.get("phase") in ("failed", "cancelled"):
             code = durable.EXIT_TRIAL_FAILURE
+        if isinstance(result, dict) and result.get("status") == "resource-rejected":
+            code = durable.EXIT_TRIAL_FAILURE
         print(durable.canonical({"schema": 1, "operation": args.operation, "exit_code": code, "result": result}))
         return code
     except ExportError as error:
@@ -104,6 +111,9 @@ def main(argv=None):
 def dispatch(args):
     """Execute one CLI operation; network clients are created only when needed."""
     op = args.operation
+    if op == "capacity":
+        from tdi_physical_telemetry import capacity_snapshot
+        return capacity_snapshot()
     if op in ("analysis-validate", "analyze"):
         from tdi_research_analysis import MAX_ANALYSIS_ITEMS, canonical_protocol, observations_from_catalogue, analyze
         protocol = canonical_protocol(read_json(args.protocol, max_items=MAX_ANALYSIS_ITEMS))
@@ -138,7 +148,7 @@ def dispatch(args):
         serve(args.catalogue, args.port)
         return {"status": "stopped"}
     readonly = op in ("status", "inspect", "compare", "events", "backup", "export", "cache-request", "cache-get", "exports", "inspect-export")
-    if op in ("fixture-plan", "library-fixture-plan", "submit", "run", "resume", "cancel", "attach", "export", "restore", "cache-get"):
+    if op in ("fixture-plan", "library-fixture-plan", "submit", "run-local-admitted", "run", "resume", "cancel", "attach", "export", "restore", "cache-get"):
         client = HubClient(args.hub, token=os.environ.get("TDI_HUB_TOKEN"),
                            allow_loopback_http=args.allow_loopback_http, timeout=args.timeout)
     if op in ("fixture-plan", "library-fixture-plan"):
@@ -153,6 +163,10 @@ def dispatch(args):
         atomic_json(args.output, spec)
         return {"path": str(args.output), "campaign_identity": identity("tdi-operational-campaign/v1", spec)}
     with EngineStore(args.catalogue, readonly=readonly) as store:
+        if op == "run-local-admitted":
+            from tdi_resource_admission import execute_local_admitted
+            return execute_local_admitted(client, store, read_json(args.spec), read_json(args.roots) if args.roots else {},
+                                          args.elastic_worker, args.worker_sha256, args.source_commit, read_json(args.resource_policy))
         if op == "exports":
             return store.list_exports(after=args.after)
         if op == "inspect-export":
