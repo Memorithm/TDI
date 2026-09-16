@@ -1,12 +1,12 @@
 # TDI-23.2 — Bounded Local Rewrite Calculus
 
-Status: **DEVELOPMENT ONLY / DRAFT PR / NOT FROZEN / NO REWRITE SEARCH / NO CONFIRMATORY EXECUTION**
+Status: **CANDIDATE PREPARATION / DRAFT PR / BLOCKED ON TDI-23.1 FREEZE / NOT FROZEN / NO REWRITE SEARCH / NO CONFIRMATORY EXECUTION**
 
 ## Purpose
 
-TDI-23.2 begins with a deliberately tiny local rewrite calculus over the already-qualified TDI-23.1 typed IR. The purpose of this slice is not optimization and not graph search. It is to establish that explicit local rewrite rules can be represented, pattern-matched, independently validated, and verified against the existing exact semantic oracle before any broader rewrite engine exists.
+This branch prepares a deliberately tiny candidate local rewrite calculus over the TDI-23.1 typed IR. It does **not** promote TDI-23.2 to the active stage: the canonical TDI-23 programme still blocks TDI-23.2 on a stable TDI-23.1 grammar. The purpose of this candidate is to establish that explicit local rewrite rules can be represented, pattern-matched, independently validated, and verified against the existing exact semantic oracle before any broader rewrite engine exists.
 
-Versioned contract:
+Versioned candidate contract:
 
 `tdi23.2-local-rewrite-calculus-v1`
 
@@ -16,7 +16,7 @@ Implementation:
 
 ## Admitted rules
 
-Exactly four rules are admitted in this first slice:
+Exactly four rules are admitted in this first candidate slice:
 
 1. left identity: `id_B o f -> f`;
 2. right identity: `f o id_A -> f`;
@@ -55,7 +55,7 @@ The function does not mutate the graph.
 
 ## Explicitly excluded rewrites
 
-This slice does **not** authorize:
+This candidate does **not** authorize:
 
 - associativity or reassociation of composition under floating-point arithmetic;
 - commutation or reordering of arbitrary maps;
@@ -73,7 +73,9 @@ This slice does **not** authorize:
 
 ## Boundary discipline
 
-An identity surrounding an opaque nonlinear boundary is *not* rewritten by this slice even when an abstract category could admit an identity law there. TDI-23.2 currently delegates semantic acceptance to the Stage-0 linear oracle, which fails closed at softmax/Boolean/`F2`/ANF/max-plus boundaries. Cross-domain rewrite semantics require a later explicit interface contract.
+An identity surrounding an opaque nonlinear boundary is *not* rewritten by this candidate even when an abstract category could admit an identity law there. The verifier delegates semantic acceptance to the Stage-0 linear oracle, which fails closed at softmax/Boolean/`F2`/ANF/max-plus boundaries. Cross-domain rewrite semantics require a later explicit interface contract.
+
+Coordinate-reduction annotations are not interpreted as a permission to push a rewrite through a reduced execution plan. The current verifier establishes only unreduced Stage-0 linear semantics. Any interaction between rewrite rules and staged/global reduction requires a separate TDI-23 contract.
 
 ## Deterministic controls
 
@@ -88,9 +90,11 @@ The development tests cover at least:
 - fail-closed identity elimination across a softmax boundary;
 - refusal to manufacture an identity rule merely because distinct endpoint objects share the same dimension.
 
-## Gate toward a larger TDI-23.2 calculus
+## Promotion gate
 
-Additional rewrite rules may be proposed only one rule family at a time. Each family must declare:
+This candidate may not be promoted from draft preparation to active TDI-23.2 until the required TDI-23.1 grammar/equivalence foundation is explicitly frozen and qualified on the exact repository state used by the candidate.
+
+After promotion, additional rewrite rules may be proposed only one rule family at a time. Each family must declare:
 
 - exact structural preconditions;
 - endpoint/object-identity requirements;
