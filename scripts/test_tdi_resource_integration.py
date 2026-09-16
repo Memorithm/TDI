@@ -8,7 +8,7 @@ import unittest
 
 import test_tdi_engine_integration as operational
 import tdi_experiment_supervisor as durable
-from tdi_engine_store import EngineStore
+from tdi_engine_store import EngineStore, identity
 from tdi_physical_telemetry import capacity_snapshot, measured_process
 from tdi_resource_admission import elastic_decision
 
@@ -36,6 +36,7 @@ class ResourceIntegrationTests(unittest.TestCase):
         plan, policy_path = self.root / "plan.json", self.root / "policy.json"
         self.cli("fixture-plan", "--worker", self.worker, "--trials", 3, "--output", plan)
         original = json.loads(plan.read_text())
+        original_id = identity("tdi-operational-campaign/v1", original)
         self.assertEqual(3, original["graph"]["max_concurrency"])
         policy_path.write_text(json.dumps(self.policy()))
         command = ("run-local-admitted", plan, "--elastic-worker", self.elastic,
@@ -57,6 +58,10 @@ class ResourceIntegrationTests(unittest.TestCase):
             admission = next(e["payload"] for e in events if e["kind"] == "resource-admission")
             self.assertTrue(admission["elastic"]["report"]["committed"])
             self.assertEqual("Pass", admission["elastic"]["report"]["verification"])
+            original_events = store.events(original_id)
+            dispatch = next(e["payload"] for e in original_events if e["kind"] == "resource-dispatch")
+            self.assertEqual(identity("tdi-resource-root-bindings/v1", {}),
+                             dispatch["binding"]["root_bindings_identity"])
 
     def test_real_capacity_rejection_has_cost_and_never_submits_work(self):
         plan = self.root / "plan.json"
@@ -80,6 +85,22 @@ class ResourceIntegrationTests(unittest.TestCase):
         self.assertIsNone(failure["elastic"]["report"])
         self.assertIsNotNone(failure["elastic"]["protocol_failure"])
         self.assertEqual(7, failure["cost_measurements"]["exit_code"])
+
+    def test_refuses_retroactive_admission_for_existing_hub_campaign(self):
+        plan, policy_path = self.root / "plan.json", self.root / "policy.json"
+        self.cli("fixture-plan", "--worker", self.worker, "--trials", 1, "--output", plan)
+        campaign = self.cli("submit", plan)["campaign"]
+        policy_path.write_text(json.dumps(self.policy()))
+        result = self.cli("run-local-admitted", plan, "--elastic-worker", self.elastic,
+                          "--worker-sha256", durable.file_digest(self.elastic), "--source-commit", self.source,
+                          "--resource-policy", policy_path, expected_code=durable.EXIT_CONTRACT)
+        self.assertEqual("contract-error", result["status"])
+        self.assertIn("already dispatched without a resource-admission binding", result["error"])
+        with EngineStore(self.catalogue, readonly=True) as store:
+            self.assertEqual("admitted", store.get(campaign)["phase"])
+            kinds = {event["kind"] for event in store.events(campaign)}
+            self.assertNotIn("resource-admission", kinds)
+            self.assertNotIn("resource-dispatch", kinds)
 
     def test_process_measurements_failure_timeout_and_output_bounds(self):
         code, out, _, measured = measured_process([sys.executable, "-c", "print('measured'); raise SystemExit(7)"])
