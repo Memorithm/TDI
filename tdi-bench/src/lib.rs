@@ -11,6 +11,7 @@
 
 pub mod attention_v7;
 pub mod decision_v8;
+pub mod engine_adapters;
 #[path = "gaussian_mmi_v7_stable.rs"]
 pub mod gaussian_mmi_v7;
 pub mod ordinal_v12;

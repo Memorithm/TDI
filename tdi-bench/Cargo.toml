@@ -10,5 +10,6 @@ description = "Reproducible benchmarks for the TDI research programmes"
 workspace = true
 
 [dependencies]
+tdi-ai = { path = "../tdi-ai" }
 tdi-core = { path = "../tdi-core" }
 tdi-operator = { path = "../tdi-operator" }
