@@ -22,6 +22,10 @@ def admitted_scirust_step():
         "capability": scirust.SCIRUST_HUB_CAPABILITY,
         "capability_contract_version": scirust.SCIRUST_HUB_CAPABILITY_CONTRACT_VERSION,
     }
+    surface = scirust.scirust_adapter_surface()
+    descriptor["capabilities"] = copy.deepcopy(surface["capabilities"])
+    descriptor["inputs"] = copy.deepcopy(surface["inputs"])
+    descriptor["outputs"] = copy.deepcopy(surface["outputs"])
     return partner.bind_admitted_partner_step(
         descriptor, hub_fixture.bind_fixture(), step_key="prepare"
     )
@@ -83,6 +87,33 @@ class SciRustPartnerContractTests(unittest.TestCase):
         self.assertFalse(request["scirust_execution_qualified"])
         self.assertFalse(request["primitive_promotion_authorized"])
         scirust.scirust_promotion_contract_identity(value)
+
+    def test_contract_requires_exact_scirust_adapter_surface(self):
+        mutations = (
+            ("capabilities", ["runtime.actuate"]),
+            ("inputs", []),
+            ("outputs", [{"name": "response", "schema": 1, "identity": SHA("f")}]),
+        )
+        for field, changed in mutations:
+            value = contract()
+            descriptor = value["partner_step"]["adapter"]
+            descriptor[field] = changed
+            value["partner_step"] = partner.bind_admitted_partner_step(
+                descriptor, hub_fixture.bind_fixture(), step_key="prepare"
+            )
+            with self.subTest(field=field), self.assertRaisesRegex(
+                scirust.SciRustPartnerContractError, f"adapter {field}"
+            ):
+                scirust.canonical_scirust_promotion_contract(value)
+
+    def test_non_string_request_selectors_fail_as_contract_errors(self):
+        for field in ("domain", "primitive_kind"):
+            value = contract()
+            value["request"][field] = []
+            with self.subTest(field=field), self.assertRaises(
+                scirust.SciRustPartnerContractError
+            ):
+                scirust.canonical_scirust_promotion_contract(value)
 
     def test_contract_requires_exact_scirust_partner_source_protocol_and_prepare_capability(self):
         value = contract()
