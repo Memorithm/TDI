@@ -1,0 +1,27 @@
+name: Synchronize PR283 with current main
+
+on:
+  push:
+    branches:
+      - industrialize/scirust-partner-h3
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: industrialize/scirust-partner-h3
+          fetch-depth: 0
+      - name: Merge current default branch
+        run: |
+          git config user.name 'ZEKRITI TAREK'
+          git config user.email 'contact@checkupauto.fr'
+          git fetch origin main
+          git merge --no-edit origin/main
+          git rm .github/workflows/autosync-pr283-main.yml
+          git commit -m 'chore(ci): remove one-shot main synchronizer'
+          git push origin HEAD:industrialize/scirust-partner-h3
