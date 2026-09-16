@@ -1,0 +1,26 @@
+name: TDI-23 categorical dagger bootstrap
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  categorical-dagger-bootstrap:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+
+      - name: Verify TDI-23 Stage-0 bootstrap
+        run: bash scripts/check-tdi23-stage0-bootstrap.sh
