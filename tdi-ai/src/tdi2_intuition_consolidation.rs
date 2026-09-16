@@ -3,7 +3,7 @@
 //! Inference never calls this module implicitly. A real outcome must first be
 //! observed and classified by the experimental protocol.
 
-use super::tdi2_intuition::TemplateId;
+use super::tdi2_intuition::{PredicateId, Template, TemplateId};
 use super::tdi2_intuition_reliability::{ReliabilityError, ReliabilityEvidence};
 
 /// Empirical validation result for one applied template.
@@ -77,10 +77,62 @@ pub enum StructuralReview {
     ConsiderCreation,
 }
 
+/// Polarity of one Boolean clause in a template.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClausePolarity {
+    /// Predicate must be present.
+    Required,
+    /// Predicate must be absent.
+    Forbidden,
+}
+
+/// One review-only candidate that removes exactly one Boolean condition.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GeneralizationProposal {
+    /// Existing template under review.
+    pub template_id: TemplateId,
+    /// Predicate proposed for removal.
+    pub predicate: PredicateId,
+    /// Clause polarity in the source template.
+    pub polarity: ClausePolarity,
+}
+
+/// Enumerate one-literal generalizations without mutating the template.
+///
+/// If a template contains only one Boolean condition, no proposal is emitted,
+/// because applying it would produce the invalid empty-template case.
+#[must_use]
+pub fn one_literal_generalizations(template: &Template) -> Vec<GeneralizationProposal> {
+    let total = template.required().len() + template.forbidden().len();
+    if total <= 1 {
+        return Vec::new();
+    }
+    template
+        .required()
+        .iter()
+        .copied()
+        .map(|predicate| GeneralizationProposal {
+            template_id: template.id(),
+            predicate,
+            polarity: ClausePolarity::Required,
+        })
+        .chain(template.forbidden().iter().copied().map(|predicate| {
+            GeneralizationProposal {
+                template_id: template.id(),
+                predicate,
+                polarity: ClausePolarity::Forbidden,
+            }
+        }))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{StructuralReview, ValidationOutcome, consolidate_validation};
-    use crate::experimental::tdi2_intuition::TemplateId;
+    use super::{
+        ClausePolarity, StructuralReview, ValidationOutcome, consolidate_validation,
+        one_literal_generalizations,
+    };
+    use crate::experimental::tdi2_intuition::{PredicateId, Template, TemplateId};
     use crate::experimental::tdi2_intuition_reliability::ReliabilityEvidence;
 
     #[test]
@@ -117,5 +169,19 @@ mod tests {
                 template_id: TemplateId::new(8)
             }
         );
+    }
+
+    #[test]
+    fn generalization_proposals_remove_only_one_clause_at_a_time() {
+        let template = Template::new(
+            TemplateId::new(9),
+            vec![PredicateId::new(1), PredicateId::new(2)],
+            vec![PredicateId::new(7)],
+            Vec::new(),
+        )
+        .expect("template");
+        let proposals = one_literal_generalizations(&template);
+        assert_eq!(proposals.len(), 3);
+        assert_eq!(proposals[0].polarity, ClausePolarity::Required);
     }
 }
