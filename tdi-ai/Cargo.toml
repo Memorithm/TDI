@@ -114,3 +114,7 @@ required-features = ["experimental"]
 [[example]]
 name = "tdi2_intuition_analogy_validation"
 required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_generalization_review"
+required-features = ["experimental"]
