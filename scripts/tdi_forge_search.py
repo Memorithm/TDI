@@ -313,16 +313,19 @@ def run_search(client, store, key, *, max_stages=128):
 
 
 def cancel_search(client, store, key):
-    """Persist cancellation before cancelling every already mapped Hub campaign."""
+    """Persist cancellation only after every ambiguous Hub submission is reconciled."""
     record = store.get_search(key)
     if record["binding"]["hub_endpoint"] != client.endpoint:
         raise durable.ContractError("search is bound to another Hub")
     if record["phase"] == "completed":
         return record
+    rows = store.db.execute("SELECT campaign FROM search_stages WHERE search=?", (key,)).fetchall()
+    campaigns = [store.get(row[0]) for row in rows]
+    if any(campaign["phase"] in ("submitting", "submission-unknown") for campaign in campaigns):
+        raise durable.ContractError("ambiguous Hub submission must be attached before search cancellation")
     if record["phase"] != "cancelled":
         record = store.update_search(key, record["sequence"], "cancelled", record["response"], {"cancellation_requested": True})
-    for row in store.db.execute("SELECT campaign FROM search_stages WHERE search=?", (key,)).fetchall():
-        campaign = store.get(row[0])
+    for campaign in campaigns:
         if campaign["phase"] not in ("completed", "failed", "cancelled"):
-            runtime.cancel(client, store, row[0])
+            runtime.cancel(client, store, campaign["id"])
     return store.get_search(key)
