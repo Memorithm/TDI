@@ -126,6 +126,8 @@ pub mod tdi2_intuition_store;
 pub mod tdi2_intuition_tasks;
 #[path = "tdi2_intuition_temporal.rs"]
 pub mod tdi2_intuition_temporal;
+#[path = "tdi2_intuition_temporal_transfer.rs"]
+pub mod tdi2_intuition_temporal_transfer;
 #[path = "tdi2_intuition_trace.rs"]
 pub mod tdi2_intuition_trace;
 #[path = "tdi2_intuition_transfer.rs"]
