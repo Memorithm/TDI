@@ -81,7 +81,7 @@ The audited Hub `WorkflowSpec/v1` carries a `ComponentId`, but normal workflow s
 `compile_hub_workflow_preview()` returns a versioned envelope containing:
 
 - `execution_authorized: false`;
-- a structurally valid Hub `WorkflowSpec/v1` preview;
+- a Hub `WorkflowSpec/v1`-shaped structural preview;
 - exact component alias -> Hub ComponentId/version/manifest-digest pins;
 - exact per-step capability contract-version pins;
 - the pinned Hub source/model contract.
@@ -94,6 +94,10 @@ Bindings are explicit:
 Hub IDs must be canonical lowercase hyphenated UUIDs. Capability names are checked against the audited Hub grammar: one or more dot-separated `[a-z][a-z0-9_]{0,63}` segments. Versions follow the audited Hub version grammar. TDI output labels also follow Hub's short printable/no-whitespace boundary.
 
 A mismatched component version or manifest digest is rejected before the preview is returned. However, because current WorkflowSpec/v1 cannot enforce those pins atomically during normal submission, the preview **must not be submitted as authoritative TDI execution**. A later versioned TDI↔Hub capability edge must enforce component/manifest/capability pins inside Hub before setting an execution authorization boundary.
+
+The preview also does **not** attest deployment admission. The pinned Hub model applies runtime `Limits` to `RunSpec` values (including serialized parameter size, input count and timeout), while Graph/v1 is a TDI semantic contract with its own bounds. A later executable edge must validate every compiled step against the exact Hub limits in force. Consequently this Lot-E preview is not described as a Hub-admissible workflow merely because its JSON shape matches `WorkflowSpec/v1`.
+
+The external TDI SHA-256 -> Hub ArtifactId mapping is likewise a caller-supplied structural binding, not an attestation that Hub's stored bytes or its domain-separated `ContentDigest` equal the TDI digest namespace. The real edge must verify authoritative Hub artifact metadata/bytes before execution.
 
 The preview emits no retry policy. Distributed leases, fencing tokens, liveness and authoritative publication are later Hub integration work and are not inferred from this local graph contract.
 
@@ -119,4 +123,4 @@ PYTHONPATH=scripts python3 -m unittest \
 
 The tests cover canonical checkpoint identity, state/RNG sensitivity, exact lineage binding, frozen progress budgets, input/RNG drift, graph order/cycle rejection, output references, checkpoint port declarations, language-independent parameters, Hub source/capability/version grammar, component-version-sensitive step identities, component binding mismatch, canonical Hub UUIDs and the non-executable structural workflow preview.
 
-Passing these tests establishes only the software contract. A real distributed TDI↔Hub edge requires a separate versioned capability plus Hub-side component-pin enforcement, tests, fencing and authoritative-publication qualification.
+Passing these tests establishes only the software contract. A real distributed TDI↔Hub edge requires a separate versioned capability plus authoritative component/artifact verification, exact Hub admission-limit checks, Hub-side tests, fencing and authoritative-publication qualification.
