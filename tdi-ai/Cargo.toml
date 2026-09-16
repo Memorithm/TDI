@@ -82,3 +82,7 @@ required-features = ["experimental"]
 [[example]]
 name = "tdi2_intuition_context_development"
 required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_context_ablation"
+required-features = ["experimental"]
