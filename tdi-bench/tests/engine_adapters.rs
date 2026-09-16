@@ -13,6 +13,86 @@ fn contexts() -> Vec<StepContext> {
         .collect()
 }
 
+fn check_resumed_pair<A>(mut source: A)
+where
+    A: ReplayCodec + Clone,
+    A::Checkpoint: PartialEq + std::fmt::Debug,
+    A::Observation: Clone + PartialEq + std::fmt::Debug,
+    A::Error: std::fmt::Debug,
+{
+    use tdi_ai::adapter_sdk::RelativeReplay;
+    let fresh = source.checkpoint().unwrap();
+    for depth in 1..=2 {
+        source
+            .advance(StepContext {
+                depth,
+                noise_stream: 0,
+            })
+            .unwrap();
+    }
+    let cp = source
+        .decode_checkpoint(&source.encode_checkpoint().unwrap())
+        .unwrap();
+    let resumed = RelativeReplay::new(&source, &cp).unwrap();
+    assert_eq!(resumed.origin(), 2);
+    let mut uninterrupted = source.clone();
+    let expected = (3..=4)
+        .map(|depth| {
+            uninterrupted
+                .advance(StepContext {
+                    depth,
+                    noise_stream: 0,
+                })
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+    let mut observed = Vec::new();
+    let report = run_paired(
+        &resumed,
+        &cp,
+        &cp,
+        RunLimits::new(2, 2, 2, Collection::All).unwrap(),
+        NoiseCoupling::Deterministic,
+        |a, b| {
+            assert_eq!(a, b);
+            Ok::<_, ()>(a.clone())
+        },
+        |_| false,
+        |depth, value| {
+            assert_eq!(depth, observed.len() + 1);
+            observed.push(value.clone());
+            Ok::<_, ()>(())
+        },
+    )
+    .unwrap();
+    assert!(report.failure.is_none());
+    assert_eq!(report.completed_depth, 2);
+    assert_eq!(observed, expected);
+    assert_eq!(source.checkpoint().unwrap(), cp);
+    let mismatch = run_paired(
+        &resumed,
+        &cp,
+        &fresh,
+        RunLimits::new(1, 1, 1, Collection::All).unwrap(),
+        NoiseCoupling::Deterministic,
+        |_, _| -> Result<(), ()> { panic!("mismatched origin was scored") },
+        |_| false,
+        |_, _| Ok::<_, ()>(()),
+    )
+    .unwrap();
+    assert_eq!(mismatch.completed_depth, 0);
+    assert_eq!(
+        mismatch.failure.unwrap().stage,
+        tdi_ai::experiment::Stage::Fork
+    );
+}
+
+#[test]
+fn restored_codecs_run_through_the_actual_paired_executor() {
+    check_resumed_pair(FiniteCycle::new(3).unwrap());
+    check_resumed_pair(JacobiSweep::new(vec![4.0, 4.0], vec![1.0], 0.0).unwrap());
+}
+
 #[test]
 fn finite_library_codec_branches_oracle_and_intervention() {
     let source = FiniteCycle::new(3).unwrap();

@@ -61,6 +61,88 @@ pub trait ReplayCodec: ReplayAdapter {
     fn decode_checkpoint(&self, bytes: &[u8]) -> Result<Self::Checkpoint, Self::Error>;
 }
 
+/// A restored paired branch has an incompatible origin or its depth overflows.
+#[derive(Debug, PartialEq)]
+pub enum RelativeReplayError<E> {
+    /// The underlying adapter rejected an operation.
+    Adapter(E),
+    /// Paired checkpoints must start at the same absolute logical progress.
+    OriginMismatch,
+    /// Origin plus requested advancement exceeds the adapter's lifetime budget.
+    DepthLimit,
+}
+
+/// Translate the existing paired runner's relative depths to a restored origin.
+///
+/// Prepare this factory explicitly from one checkpoint, then pass it and both
+/// complete checkpoints to `run_paired`. Every fork validates the same origin.
+/// Scores, cancellation callbacks, sink depths and report depths remain relative
+/// to this run; add `origin()` when an absolute timeline is needed. Preparation
+/// executes no advances, scoring or sink. The original paired API is unchanged.
+pub struct RelativeReplay<A: ReplayCodec> {
+    adapter: A,
+    origin: usize,
+}
+
+impl<A: ReplayCodec> RelativeReplay<A> {
+    /// Prepare an owned source factory at the checkpoint's absolute origin.
+    pub fn new(
+        factory: &A,
+        checkpoint: &A::Checkpoint,
+    ) -> Result<Self, RelativeReplayError<A::Error>> {
+        let adapter = factory
+            .fork(checkpoint)
+            .map_err(RelativeReplayError::Adapter)?;
+        let origin = adapter.progress();
+        if origin > adapter.contract().max_steps {
+            return Err(RelativeReplayError::DepthLimit);
+        }
+        Ok(Self { adapter, origin })
+    }
+
+    /// Absolute logical depth represented by relative run depth zero.
+    pub fn origin(&self) -> usize {
+        self.origin
+    }
+}
+
+impl<A: ReplayCodec> ReplayAdapter for RelativeReplay<A> {
+    type Checkpoint = A::Checkpoint;
+    type Observation = A::Observation;
+    type Error = RelativeReplayError<A::Error>;
+
+    fn fork(&self, checkpoint: &A::Checkpoint) -> Result<Self, Self::Error> {
+        let adapter = self
+            .adapter
+            .fork(checkpoint)
+            .map_err(RelativeReplayError::Adapter)?;
+        if adapter.progress() != self.origin {
+            return Err(RelativeReplayError::OriginMismatch);
+        }
+        Ok(Self {
+            adapter,
+            origin: self.origin,
+        })
+    }
+    fn checkpoint(&self) -> Result<A::Checkpoint, Self::Error> {
+        self.adapter
+            .checkpoint()
+            .map_err(RelativeReplayError::Adapter)
+    }
+    fn advance(&mut self, context: StepContext) -> Result<A::Observation, Self::Error> {
+        let depth = self
+            .origin
+            .checked_add(context.depth)
+            .ok_or(RelativeReplayError::DepthLimit)?;
+        if depth > self.adapter.contract().max_steps {
+            return Err(RelativeReplayError::DepthLimit);
+        }
+        self.adapter
+            .advance(StepContext { depth, ..context })
+            .map_err(RelativeReplayError::Adapter)
+    }
+}
+
 /// A failed codec or independent replay qualification.
 #[derive(Debug, PartialEq)]
 pub enum CodecConformanceError<E> {

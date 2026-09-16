@@ -45,6 +45,16 @@ after restore the next depth is `progress() + 1`. A worker request is bounded to
 these structural limits are not physical RSS measurements or hostile-code
 isolation. Cancellation/deadlines are cooperative between bounded steps.
 
+For paired execution after restore, explicitly prepare
+`RelativeReplay::new(&factory, &decoded_reference)` and pass that factory plus
+both decoded checkpoints to the existing `run_paired`. It translates relative
+run depths to the common restored origin and rejects mismatched branch origins
+before scoring. Cancellation callbacks, sink depths and reports remain relative
+to the new run; `origin()` supplies the absolute offset. A dedicated regression
+runs both actual libraries through this paired path and compares their suffix
+observations to uninterrupted execution. Passing advanced absolute-depth
+adapters directly to the original relative-depth `run_paired` is unsupported.
+
 ## Execute both libraries through Hub
 
 Build Hub in a sibling checkout, outside TDI's offline Cargo configuration:
