@@ -11,6 +11,7 @@
   "notes": [
     "Stage-0 template only. Every scientific field stays unresolved_blocking.",
     "Merging this template does not freeze TDI-23.0 and does not authorize comparative or confirmatory attention experiments.",
+    "Global-reduction candidates remain development-only and may not be promoted as functorial, lossless, or performance-improving without later evidence.",
     "FLAT-ATTENTION integration remains downstream and independently gated."
   ],
   "freeze": {
@@ -58,6 +59,30 @@
         "batched_q_times_k_transpose_future"
       ]
     },
+    "global_reduction_family": {
+      "status": "unresolved_blocking",
+      "value": null,
+      "non_authorizing_candidates": [
+        "objectwise_coordinate_subspace_stage0",
+        "arbitrary_orthonormal_subspace_future_only",
+        "learned_subspace_future_only"
+      ]
+    },
+    "global_reduction_preservation": {
+      "status": "unresolved_blocking",
+      "value": null,
+      "required_named_diagnostics": [
+        "dagger_commutation",
+        "reduce_lift_residual",
+        "composition_defect",
+        "full_middle_space_control",
+        "dropped_middle_path_control"
+      ],
+      "non_authorizing_candidates": [
+        "coordinate_reduction_exact_dagger_commutation",
+        "composition_not_assumed_preserved"
+      ]
+    },
     "nonlinear_boundary": {
       "status": "unresolved_blocking",
       "value": null,
@@ -81,7 +106,8 @@
       "value": null,
       "non_authorizing_candidates": [
         "small_integer_dense_maps",
-        "basis_and_small_integer_query_key_kets"
+        "basis_and_small_integer_query_key_kets",
+        "small_coordinate_reduction_fixtures"
       ]
     },
     "control_battery": {
@@ -94,7 +120,12 @@
         "noncommuting_composition",
         "dimension_mismatch_rejection",
         "nonfinite_rejection",
-        "rewrite_disabled_reference"
+        "rewrite_disabled_reference",
+        "no_reduction_reference",
+        "dagger_reduction_commutation",
+        "full_middle_space_composition_defect_zero",
+        "dropped_middle_path_composition_defect_nonzero",
+        "reduce_lift_residual"
       ]
     },
     "split_discipline": {
