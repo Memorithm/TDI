@@ -20,18 +20,12 @@ impl ExperienceEntry {
     pub const fn new(template: RelationalTemplate, evidence: ReliabilityEvidence) -> Self {
         Self { template, evidence }
     }
-
     /// Structural template carried by this entry.
     #[must_use]
-    pub const fn template(&self) -> &RelationalTemplate {
-        &self.template
-    }
-
+    pub const fn template(&self) -> &RelationalTemplate { &self.template }
     /// Historical success/failure evidence.
     #[must_use]
-    pub const fn evidence(&self) -> ReliabilityEvidence {
-        self.evidence
-    }
+    pub const fn evidence(&self) -> ReliabilityEvidence { self.evidence }
 }
 
 /// Deterministically ordered bounded memory of experiential templates.
@@ -39,6 +33,19 @@ impl ExperienceEntry {
 pub struct ExperienceStore {
     capacity: usize,
     entries: Vec<ExperienceEntry>,
+}
+
+/// Read-only memory-pressure diagnostic.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StoreUtilization {
+    /// Current stored entry count.
+    pub used: usize,
+    /// Declared capacity.
+    pub capacity: usize,
+    /// Remaining entry slots.
+    pub remaining: usize,
+    /// Used fraction in `[0, 1]`.
+    pub fraction: f64,
 }
 
 /// Fail-closed storage errors.
@@ -59,13 +66,10 @@ impl core::fmt::Display for StoreError {
             Self::DuplicateTemplate { template } => {
                 write!(formatter, "template {} already exists", template.raw())
             }
-            Self::Full { capacity } => {
-                write!(formatter, "experience store capacity {capacity} reached")
-            }
+            Self::Full { capacity } => write!(formatter, "experience store capacity {capacity} reached"),
         }
     }
 }
-
 impl std::error::Error for StoreError {}
 
 impl ExperienceStore {
@@ -74,24 +78,16 @@ impl ExperienceStore {
         if capacity == 0 {
             return Err(StoreError::ZeroCapacity);
         }
-        Ok(Self {
-            capacity,
-            entries: Vec::with_capacity(capacity),
-        })
+        Ok(Self { capacity, entries: Vec::with_capacity(capacity) })
     }
 
     /// Insert an entry while preserving ascending template-id order.
     pub fn insert(&mut self, entry: ExperienceEntry) -> Result<(), StoreError> {
         let id = entry.template().base().id();
-        match self
-            .entries
-            .binary_search_by_key(&id, |candidate| candidate.template().base().id())
-        {
+        match self.entries.binary_search_by_key(&id, |candidate| candidate.template().base().id()) {
             Ok(_) => return Err(StoreError::DuplicateTemplate { template: id }),
             Err(_) if self.entries.len() == self.capacity => {
-                return Err(StoreError::Full {
-                    capacity: self.capacity,
-                });
+                return Err(StoreError::Full { capacity: self.capacity });
             }
             Err(index) => self.entries.insert(index, entry),
         }
@@ -109,26 +105,26 @@ impl ExperienceStore {
 
     /// Canonically ordered entries.
     #[must_use]
-    pub fn entries(&self) -> &[ExperienceEntry] {
-        &self.entries
-    }
-
+    pub fn entries(&self) -> &[ExperienceEntry] { &self.entries }
     /// Declared maximum number of entries.
     #[must_use]
-    pub const fn capacity(&self) -> usize {
-        self.capacity
-    }
-
+    pub const fn capacity(&self) -> usize { self.capacity }
     /// Current number of entries.
     #[must_use]
-    pub fn len(&self) -> usize {
-        self.entries.len()
-    }
-
+    pub fn len(&self) -> usize { self.entries.len() }
     /// Whether no experience is currently stored.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
+    pub fn is_empty(&self) -> bool { self.entries.is_empty() }
+
+    /// Read-only memory utilization. This never triggers eviction or mutation.
+    #[must_use]
+    pub fn utilization(&self) -> StoreUtilization {
+        StoreUtilization {
+            used: self.entries.len(),
+            capacity: self.capacity,
+            remaining: self.capacity - self.entries.len(),
+            fraction: self.entries.len() as f64 / self.capacity as f64,
+        }
     }
 }
 
@@ -169,10 +165,19 @@ mod tests {
         store.insert(entry(1)).expect("insert");
         assert_eq!(
             store.insert(entry(1)),
-            Err(StoreError::DuplicateTemplate {
-                template: TemplateId::new(1)
-            })
+            Err(StoreError::DuplicateTemplate { template: TemplateId::new(1) })
         );
         assert_eq!(store.insert(entry(2)), Err(StoreError::Full { capacity: 1 }));
+    }
+
+    #[test]
+    fn utilization_is_observational_only() {
+        let mut store = ExperienceStore::new(4).expect("store");
+        store.insert(entry(1)).expect("insert");
+        let utilization = store.utilization();
+        assert_eq!(utilization.used, 1);
+        assert_eq!(utilization.remaining, 3);
+        assert_eq!(utilization.fraction, 0.25);
+        assert_eq!(store.len(), 1);
     }
 }
