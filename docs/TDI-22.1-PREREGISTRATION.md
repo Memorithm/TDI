@@ -12,23 +12,15 @@ The primary torsor-specific contrast is **T3 versus T4**. T3 versus T0 is contex
 
 All arms operate on the same evaluator-owned episode and receive the same admissible source fields. They are deterministic reference mechanisms; no training occurs in the initial TDI-22.2 development evaluator.
 
+For a key torsor stored at reference point `P`, its local six-component representation is `(R, M(P))` and its origin-reduced representation is `(R, C)` with `C = M(P) + P x R`. The normative arm contract is `docs/TDI-22.1-ARM-CONTRACT.md`; the definitions below repeat the scoring rules so the preregistration is self-contained.
+
 ### T0 — vector reference
 
-T0 is an exact six-component cosine-similarity reference over the flattened query `(v, omega)` and key `(R, C)`. It does not apply Varignon transport or any cross product. Define
+T0 treats the stored local six-vector as ordinary numeric channels and scores it by the exact raw six-component dot product
 
-`dot_6 = v . R + omega . C`,
+`score_T0 = v . R + omega . M(P)`.
 
-`query_norm_2 = v . v + omega . omega`,
-
-`key_norm_2 = R . R + C . C`,
-
-and
-
-`score_T0 = dot_6 / sqrt(query_norm_2 * key_norm_2)`.
-
-The evaluator must reject the record before scoring if either squared norm is zero, non-finite, or if their product/derived square root is non-finite. Arithmetic is performed in the frozen binary64 reference order used by the evaluator; implementations may not substitute an algebraically rearranged normalization without a new protocol version.
-
-T0 is therefore deliberately distinct from T4: T0 normalizes the same six scalar channels by query/key magnitude, whereas T4 uses the raw six-lane dot product `v . R + omega . C`. Because candidate key norms may differ, T0 and T4 need not induce the same ranking. T0 establishes a conventional magnitude-normalized same-width vector baseline; T4 remains the matched raw six-component non-torsor control for the torsor-specific T3 comparison.
+T0 does not transport the moment, does not use `P` in scoring, and does not use the origin-reduced moment `C`. It therefore differs from T4, which scores the reduced six-vector `(R, C)`. This arm establishes a same-width ordinary-vector context baseline without introducing Varignon transport.
 
 ### T1 — torsor value only
 
@@ -52,11 +44,11 @@ No conventional vector-score term is added in T3.
 
 ### T4 — matched six-component non-torsor control
 
-Uses the same six scalar query channels and six scalar key channels as T3 and the same scalar dot-product reduction width, but excludes the geometric transport term `Q x omega`. Its score is
+Uses the same six scalar query channels and the same origin-reduced six scalar key channels as T3 and the same scalar dot-product reduction width, but excludes the geometric transport term `Q x omega`. Its score is
 
 `score_T4 = v . R + omega . C`.
 
-T4 therefore controls six-component width and the `(R, C)` key storage while removing the declared Varignon query transport. Unlike T0, T4 performs no magnitude normalization. It is not claimed to match T3's exact arithmetic operation count; operation counts are recorded separately and never hidden inside the quality verdict.
+T4 therefore controls six-component width and the `(R, C)` key storage while removing the declared Varignon query transport. T0 is distinct because it uses the raw local moment `M(P)` rather than `C`. T4 is not claimed to match T3's exact arithmetic operation count; operation counts are recorded separately and never hidden inside the quality verdict.
 
 ## 3. Task families
 
@@ -110,8 +102,6 @@ Every arm records, without converting these counts into runtime claims:
 - temporary scalar/vector slots required by the reference scoring step;
 - scalar additions;
 - scalar multiplications;
-- square-root evaluations;
-- scalar divisions;
 - cross-product evaluations;
 - dot-product scalar lanes;
 - comparisons used by ranking;
@@ -163,7 +153,6 @@ At minimum, the evaluator must fail closed with typed reasons for:
 - malformed episode;
 - non-finite input component;
 - non-finite derived component;
-- zero or non-finite T0 query/key norm;
 - invalid geometry identifier;
 - out-of-bound coordinate/component/index;
 - missing target;
