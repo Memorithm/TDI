@@ -80,13 +80,15 @@ or equivalently
 
 `R(g) o R(f) = E_C^dagger g P_B f E_A`.
 
-The exact difference is therefore
+In exact real algebra the difference is therefore
 
 `D_comp = E_C^dagger g (I_B - P_B) f E_A`.
 
 This term is the contribution carried by omitted intermediate coordinates. In general it is non-zero. Consequently the Stage-0 coordinate reduction is **not claimed to be a functor on arbitrary morphisms**.
 
-TDI-23 exposes a `max_abs` composition-defect metric rather than hiding this failure.
+The implementation evaluates the omitted-path term on the right-hand side directly, in ambient intermediate-coordinate order, and reports its `max_abs` value. It deliberately does **not** compute `R(g o f) - R(g) o R(f)` by subtracting two separately accumulated `f64` matrix products. That subtraction can produce a non-zero value solely from IEEE-754 reassociation when the retained intermediate coordinates are a permutation of the full basis, even though `P_B = I_B` and no path was removed.
+
+Accordingly, the Stage-0 metric is a numerical evaluation of the declared **structural omitted-path defect**. It is kept separate from floating-point execution residuals. A later frozen evaluator may introduce a second numerical-equivalence metric with an explicit tolerance and common execution order, but Stage 0 does not pin such a tolerance.
 
 ## Reconstruction residual
 
@@ -123,7 +125,7 @@ The direct relevance is structural. A future attention graph may contain maps fo
 
 1. dagger semantics;
 2. pairings such as `k^dagger q`;
-3. composition to within a declared defect budget;
+3. composition to within a declared structural-defect budget;
 4. enough task semantics to justify a downstream FLAT-ATTENTION experiment.
 
 A positive TDI-23 result would still not establish lower latency, lower memory, better model quality, or a valid FLAT kernel. Those remain separate downstream qualification questions.
@@ -135,8 +137,8 @@ The development scaffold must prove at least the following deterministic propert
 - invalid coordinate selections fail closed;
 - coordinate reduction commutes with dagger on finite fixtures;
 - reduce/lift/reduce is idempotent on the selected block;
-- a full ordered intermediate basis yields zero composition defect on a deterministic fixture;
-- deliberately dropping a contributing intermediate path yields a non-zero, predicted composition defect;
+- retaining the complete intermediate basis yields zero structural composition defect, including when that complete basis is represented in a noncanonical order;
+- deliberately dropping a contributing intermediate path yields a non-zero, predicted structural composition defect;
 - reduce/lift residual reports discarded entries rather than silently treating the lift as lossless.
 
 ## Deferred generalizations
