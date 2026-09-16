@@ -31,12 +31,25 @@ for file in \
     test -s "$file" || fail "missing required Stage-0 surface: $file"
 done
 
-grep -Fq 'active Stage 0 bootstrap; not frozen; no confirmatory execution authorised' \
-    "$PROGRAMME" || fail "programme Stage-0 status drifted"
+# Stage 0 is no longer the active engineering stage after its bootstrap merge,
+# but its own row and documents must remain explicitly scientifically unresolved
+# and non-final. Bind the programme assertion to the complete TDI-23.0 row so a
+# contradictory row cannot hide behind the global programme status line.
+grep -Fq 'scientific freeze unresolved; no confirmatory execution authorised' \
+    "$PROGRAMME" || fail "programme lost unresolved Stage-0 freeze/authorization boundary"
+mapfile -t tdi23_stage0_rows < <(grep -F '| **TDI-23.0** |' "$PROGRAMME")
+if ((${#tdi23_stage0_rows[@]} != 1)); then
+    fail "programme must contain exactly one TDI-23.0 stage row"
+fi
+if [[ "${tdi23_stage0_rows[0]}" != *'| bootstrap merged; scientific freeze unresolved |' ]]; then
+    fail "TDI-23.0 programme row no longer records merged bootstrap with unresolved scientific freeze"
+fi
 grep -Fq '`softmax` is nonlinear' "$PROGRAMME" \
     || fail "programme lost explicit nonlinear softmax boundary"
-grep -Fq 'ACTIVE STAGE-0 BOOTSTRAP / NON-FINAL' "$SCOPE" \
-    || fail "scope status drifted"
+grep -Fq 'BOOTSTRAP MERGED / SCIENTIFIC FREEZE UNRESOLVED / NON-FINAL' "$SCOPE" \
+    || fail "scope lost merged/unresolved/non-final Stage-0 boundary"
+grep -Fq 'BOOTSTRAP MERGED — scientific freeze unresolved; confirmatory execution unauthorized' "$STATUS" \
+    || fail "status lost merged/unresolved/unauthorized Stage-0 boundary"
 grep -Fq 'tdi23-real-fdhilb-dagger-v1' "$CATEGORICAL_SRC" \
     || fail "versioned categorical contract missing"
 grep -Fq 'tdi23-coordinate-reduction-v1' "$REDUCTION_SRC" \

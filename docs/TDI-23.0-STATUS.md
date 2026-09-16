@@ -1,10 +1,10 @@
 # TDI-23.0 Status
 
-Status: **ACTIVE STAGE-0 BOOTSTRAP — not frozen; confirmatory execution unauthorized**
+Status: **BOOTSTRAP MERGED — scientific freeze unresolved; confirmatory execution unauthorized**
 
 ## Current state
 
-TDI-23.x is initialized as a categorical/dagger-attention research line with a first explicit global-reduction research axis.
+TDI-23.0 engineering bootstrap is merged. TDI-23.x has progressed to later non-final engineering work, but the Stage-0 scientific freeze remains unresolved and its authorization boundary remains normative.
 
 Primary Stage-0 surfaces:
 
@@ -40,10 +40,10 @@ Primary Stage-0 surfaces:
 - `confirmatory_execution_authorized` is **false**.
 - `final_execution_authorized` is **false**.
 - No reduction-selection policy, approximate-error budget, attention-quality benchmark, model-training campaign, hardware benchmark, FLAT kernel integration, or final population is authorized.
-- TDI-23.1 may not silently resolve Stage-0 freeze fields.
+- Later TDI-23.x engineering stages may not silently resolve Stage-0 freeze fields.
 
-## Immediate next slice after bootstrap
+## Successor state
 
-After the Stage-0 integrity gate passes, the next non-final engineering slice is TDI-23.1: specify a minimal typed Categorical Attention IR grammar with explicit domain/codomain objects, composition, dagger, identity, nonlinear boundaries, and an object-reduction annotation whose preservation/defect contract is explicit. Tensor product and direct-sum constructions must remain distinct.
+TDI-23.1 engineering work may build a minimal typed Categorical Attention IR grammar with explicit domain/codomain objects, composition, dagger, identity, nonlinear boundaries, and object-reduction annotations whose preservation/defect contract is explicit. Tensor product and direct-sum constructions must remain distinct.
 
-No rewrite search, reduction search, learned subspace, approximate tolerance claim, or FLAT lowering is authorized until that grammar has deterministic legality and equivalence/defect fixtures.
+This progression does not retroactively freeze Stage 0. No rewrite search, reduction search, learned subspace, approximate tolerance claim, or FLAT lowering is authorized solely by the TDI-23.0 bootstrap.
