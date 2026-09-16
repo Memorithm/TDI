@@ -3,8 +3,9 @@
 use std::collections::BTreeSet;
 use tdi_ai::experimental::tdi21_relational_binding::{RelationalConfig, RelationalRead};
 use tdi_ai::experimental::tdi21_relational_tasks::{
-    DevelopmentRelationalSet, RELATIONAL_EPISODES_PER_SPLIT, RelationalSplit,
-    ValidationRelationalSet, evaluate_relational_episode, exact_split_overlap,
+    DevelopmentRelationalSet, RELATIONAL_EPISODES_PER_SPLIT, RELATIONAL_V1_ENTITY_BITS,
+    RELATIONAL_V1_RELATION_BITS, RelationalSplit, ValidationRelationalSet,
+    evaluate_relational_episode, exact_split_overlap,
 };
 use tdi_ai::experimental::tdi21_stream::{MemoryMode, StreamConfig};
 
@@ -13,12 +14,12 @@ fn config() -> RelationalConfig {
         stream: StreamConfig {
             mode: MemoryMode::TwoWay,
             slots: 128,
-            payload_bits: 8,
+            payload_bits: RELATIONAL_V1_ENTITY_BITS,
             max_events: 128,
             route_salt: 0x5444_4932_3100_0021,
         },
-        entity_bits: 8,
-        relation_bits: 8,
+        entity_bits: RELATIONAL_V1_ENTITY_BITS,
+        relation_bits: RELATIONAL_V1_RELATION_BITS,
     }
 }
 
@@ -71,6 +72,10 @@ fn entity_and_relation_identifier_namespaces_do_not_overlap_across_splits() {
 
     assert!(development_entities.is_disjoint(&validation_entities));
     assert!(development_relations.is_disjoint(&validation_relations));
+    assert!(development_entities.iter().all(|&value| value < 16));
+    assert!(validation_entities.iter().all(|&value| value < 16));
+    assert!(development_relations.iter().all(|&value| value < 16));
+    assert!(validation_relations.iter().all(|&value| value < 16));
 }
 
 fn assert_episode_accounting(
