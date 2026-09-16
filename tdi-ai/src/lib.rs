@@ -8,6 +8,7 @@
 //! generic contracts that can be instantiated by toy mechanisms, model probes,
 //! FLAT-ATTENTION reference semantics, or future adapters.
 
+pub mod adapter_sdk;
 pub mod associative_memory;
 mod assr;
 pub mod assr_h_reference;
