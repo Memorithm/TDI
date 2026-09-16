@@ -1,0 +1,146 @@
+{
+  "schema_version": 1,
+  "kind": "tdi23_0_stage0_freeze",
+  "status": "template_unfrozen",
+  "confirmatory_execution_authorized": false,
+  "final_execution_authorized": false,
+  "allowed_domains": [
+    "Development",
+    "Validation"
+  ],
+  "notes": [
+    "Stage-0 template only. Every scientific field stays unresolved_blocking.",
+    "Merging this template does not freeze TDI-23.0 and does not authorize comparative or confirmatory attention experiments.",
+    "Global-reduction candidates remain development-only and may not be promoted as functorial, lossless, or performance-improving without later evidence.",
+    "FLAT-ATTENTION integration remains downstream and independently gated."
+  ],
+  "freeze": {
+    "scalar_field_contract": {
+      "status": "unresolved_blocking",
+      "value": null,
+      "non_authorizing_candidates": [
+        "real_f64_stage0",
+        "complex_f64_future_only"
+      ]
+    },
+    "inner_product_contract": {
+      "status": "unresolved_blocking",
+      "value": null,
+      "non_authorizing_candidates": [
+        "standard_euclidean_real"
+      ]
+    },
+    "linear_map_storage_contract": {
+      "status": "unresolved_blocking",
+      "value": null,
+      "non_authorizing_candidates": [
+        "row_major_dense"
+      ]
+    },
+    "dagger_semantics": {
+      "status": "unresolved_blocking",
+      "value": null,
+      "non_authorizing_candidates": [
+        "real_matrix_transpose_in_declared_orthonormal_bases"
+      ]
+    },
+    "composition_semantics": {
+      "status": "unresolved_blocking",
+      "value": null,
+      "non_authorizing_candidates": [
+        "left_after_right_typed_matrix_composition"
+      ]
+    },
+    "attention_score_mapping": {
+      "status": "unresolved_blocking",
+      "value": null,
+      "non_authorizing_candidates": [
+        "key_dagger_compose_query_ket",
+        "batched_q_times_k_transpose_future"
+      ]
+    },
+    "global_reduction_family": {
+      "status": "unresolved_blocking",
+      "value": null,
+      "non_authorizing_candidates": [
+        "objectwise_coordinate_subspace_stage0",
+        "arbitrary_orthonormal_subspace_future_only",
+        "learned_subspace_future_only"
+      ]
+    },
+    "global_reduction_preservation": {
+      "status": "unresolved_blocking",
+      "value": null,
+      "required_named_diagnostics": [
+        "dagger_commutation",
+        "reduce_lift_residual",
+        "composition_defect",
+        "full_middle_space_control",
+        "dropped_middle_path_control"
+      ],
+      "non_authorizing_candidates": [
+        "coordinate_reduction_exact_dagger_commutation",
+        "composition_not_assumed_preserved"
+      ]
+    },
+    "nonlinear_boundary": {
+      "status": "unresolved_blocking",
+      "value": null,
+      "required_named_boundaries": [
+        "softmax_external_to_fdhilb_linear_morphisms",
+        "boolean_not_silently_fdhilb",
+        "f2_not_silently_fdhilb",
+        "anf_not_silently_fdhilb",
+        "max_plus_not_silently_fdhilb"
+      ]
+    },
+    "numerical_tolerance_policy": {
+      "status": "unresolved_blocking",
+      "value": null,
+      "non_authorizing_candidates": [
+        "exact_structural_checks_plus_declared_scaled_f64_tolerance"
+      ]
+    },
+    "development_fixture_family": {
+      "status": "unresolved_blocking",
+      "value": null,
+      "non_authorizing_candidates": [
+        "small_integer_dense_maps",
+        "basis_and_small_integer_query_key_kets",
+        "small_coordinate_reduction_fixtures"
+      ]
+    },
+    "control_battery": {
+      "status": "unresolved_blocking",
+      "value": null,
+      "required_named_controls": [
+        "identity_map",
+        "zero_map",
+        "rectangular_map",
+        "noncommuting_composition",
+        "dimension_mismatch_rejection",
+        "nonfinite_rejection",
+        "rewrite_disabled_reference",
+        "no_reduction_reference",
+        "dagger_reduction_commutation",
+        "full_middle_space_composition_defect_zero",
+        "dropped_middle_path_composition_defect_nonzero",
+        "reduce_lift_residual"
+      ]
+    },
+    "split_discipline": {
+      "status": "unresolved_blocking",
+      "value": null,
+      "non_authorizing_candidates": [
+        "development_and_validation_only_no_final_surface"
+      ]
+    },
+    "provenance_contract": {
+      "status": "unresolved_blocking",
+      "value": null,
+      "non_authorizing_candidates": [
+        "stage0_contract_version_plus_git_sha"
+      ]
+    }
+  }
+}
