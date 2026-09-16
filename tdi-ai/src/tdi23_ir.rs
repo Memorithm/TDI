@@ -9,37 +9,53 @@
 //! asymptotic, or hardware-performance improvement.
 
 use core::fmt;
+use core::sync::atomic::{AtomicU64, Ordering};
 
 use super::tdi23_categorical::{DaggerError, RealLinearMap};
 use super::tdi23_reduction::{
-    CoordinateReduction, ReductionError, reduce_linear_map,
-    reduction_composition_defect_max_abs,
+    CoordinateReduction, ReductionError, reduce_linear_map, reduction_composition_defect_max_abs,
 };
 
 /// Versioned non-final TDI-23.1 IR contract.
 pub const CATEGORICAL_IR_CONTRACT: &str = "tdi23.1-categorical-attention-ir-v1";
 
-/// Stable object handle inside one IR instance.
+static NEXT_IR_OWNER: AtomicU64 = AtomicU64::new(1);
+
+fn allocate_ir_owner() -> u64 {
+    NEXT_IR_OWNER
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |owner| {
+            owner.checked_add(1)
+        })
+        .expect("TDI-23.1 IR owner-id space exhausted")
+}
+
+/// Stable object handle bound to one IR instance.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct ObjectId(usize);
+pub struct ObjectId {
+    owner: u64,
+    index: usize,
+}
 
 impl ObjectId {
-    /// Zero-based object index for deterministic provenance.
+    /// Zero-based object index for deterministic local provenance.
     #[must_use]
     pub const fn index(self) -> usize {
-        self.0
+        self.index
     }
 }
 
-/// Stable node handle inside one IR instance.
+/// Stable node handle bound to one IR instance.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct NodeId(usize);
+pub struct NodeId {
+    owner: u64,
+    index: usize,
+}
 
 impl NodeId {
-    /// Zero-based node index for deterministic provenance.
+    /// Zero-based node index for deterministic local provenance.
     #[must_use]
     pub const fn index(self) -> usize {
-        self.0
+        self.index
     }
 }
 
@@ -174,6 +190,10 @@ pub enum IrError {
     ZeroDimension,
     /// Additive or multiplicative dimension overflow.
     DimensionOverflow,
+    /// Object handle came from another IR instance.
+    ForeignObjectHandle(ObjectId),
+    /// Node handle came from another IR instance.
+    ForeignNodeHandle(NodeId),
     /// Object handle is invalid for this IR.
     UnknownObject(ObjectId),
     /// Node handle is invalid for this IR.
@@ -229,6 +249,12 @@ impl fmt::Display for IrError {
             }
             Self::ZeroDimension => formatter.write_str("object dimension must be positive"),
             Self::DimensionOverflow => formatter.write_str("object dimension overflowed usize"),
+            Self::ForeignObjectHandle(id) => {
+                write!(formatter, "object handle {} belongs to another IR", id.index())
+            }
+            Self::ForeignNodeHandle(id) => {
+                write!(formatter, "node handle {} belongs to another IR", id.index())
+            }
             Self::UnknownObject(id) => write!(formatter, "unknown object id {}", id.index()),
             Self::UnknownNode(id) => write!(formatter, "unknown node id {}", id.index()),
             Self::MapDomainDimensionMismatch {
@@ -258,7 +284,10 @@ impl fmt::Display for IrError {
                 write!(formatter, "dagger cannot cross {boundary} boundary")
             }
             Self::LinearEvaluationCrossesBoundary(boundary) => {
-                write!(formatter, "linear evaluation cannot cross {boundary} boundary")
+                write!(
+                    formatter,
+                    "linear evaluation cannot cross {boundary} boundary"
+                )
             }
             Self::ReductionAmbientDimensionMismatch {
                 object_dimension,
@@ -268,7 +297,11 @@ impl fmt::Display for IrError {
                 "reduction ambient mismatch: object={object_dimension}, reduction={reduction_dimension}"
             ),
             Self::MissingReductionAnnotation(id) => {
-                write!(formatter, "object {} has no reduction annotation", id.index())
+                write!(
+                    formatter,
+                    "object {} has no reduction annotation",
+                    id.index()
+                )
             }
             Self::NotCompositionNode(id) => {
                 write!(formatter, "node {} is not a composition", id.index())
@@ -302,18 +335,30 @@ impl From<ReductionError> for IrError {
 }
 
 /// Bounded typed DAG for TDI-23.1 categorical-attention research.
-#[derive(Clone, Debug, Default)]
+///
+/// Handles are instance-bound. The graph intentionally does not implement
+/// `Clone`: duplicating an instance while retaining the same owner token would
+/// permit divergent graphs to reinterpret one another's handles.
+#[derive(Debug)]
 pub struct CategoricalAttentionIr {
+    owner: u64,
     objects: Vec<HilbertObject>,
     reductions: Vec<Option<CoordinateReduction>>,
     nodes: Vec<IrNode>,
 }
 
+impl Default for CategoricalAttentionIr {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CategoricalAttentionIr {
-    /// Create an empty graph.
+    /// Create an empty graph with a process-local ownership token.
     #[must_use]
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
+            owner: allocate_ir_owner(),
             objects: Vec::new(),
             reductions: Vec::new(),
             nodes: Vec::new(),
@@ -415,11 +460,7 @@ impl CategoricalAttentionIr {
     ) -> Result<NodeId, IrError> {
         self.object(domain)?;
         self.object(codomain)?;
-        Ok(self.push_node(
-            domain,
-            codomain,
-            IrNodeKind::NonlinearBoundary { boundary },
-        ))
+        Ok(self.push_node(domain, codomain, IrNodeKind::NonlinearBoundary { boundary }))
     }
 
     /// Compose `outer o inner`; exact middle-object identity is required.
@@ -474,13 +515,21 @@ impl CategoricalAttentionIr {
         Ok(())
     }
 
-    /// Read one object.
+    /// Read one object, rejecting a handle created by another IR instance.
     pub fn object(&self, id: ObjectId) -> Result<&HilbertObject, IrError> {
-        self.objects.get(id.index()).ok_or(IrError::UnknownObject(id))
+        if id.owner != self.owner {
+            return Err(IrError::ForeignObjectHandle(id));
+        }
+        self.objects
+            .get(id.index())
+            .ok_or(IrError::UnknownObject(id))
     }
 
-    /// Read one node.
+    /// Read one node, rejecting a handle created by another IR instance.
     pub fn node(&self, id: NodeId) -> Result<&IrNode, IrError> {
+        if id.owner != self.owner {
+            return Err(IrError::ForeignNodeHandle(id));
+        }
         self.nodes.get(id.index()).ok_or(IrError::UnknownNode(id))
     }
 
@@ -562,7 +611,10 @@ impl CategoricalAttentionIr {
         {
             return Err(IrError::DuplicateObjectName(name));
         }
-        let id = ObjectId(self.objects.len());
+        let id = ObjectId {
+            owner: self.owner,
+            index: self.objects.len(),
+        };
         self.objects.push(HilbertObject {
             name,
             dimension,
@@ -573,7 +625,10 @@ impl CategoricalAttentionIr {
     }
 
     fn push_node(&mut self, domain: ObjectId, codomain: ObjectId, kind: IrNodeKind) -> NodeId {
-        let id = NodeId(self.nodes.len());
+        let id = NodeId {
+            owner: self.owner,
+            index: self.nodes.len(),
+        };
         self.nodes.push(IrNode {
             domain,
             codomain,
@@ -619,6 +674,30 @@ mod tests {
         assert_eq!(
             CATEGORICAL_IR_CONTRACT,
             "tdi23.1-categorical-attention-ir-v1"
+        );
+    }
+
+    #[test]
+    fn tdi23_1_handles_are_bound_to_their_owning_ir() {
+        let mut left = CategoricalAttentionIr::new();
+        let left_object = left.add_atomic_object("H", 2).expect("left object");
+        let left_node = left.add_identity(left_object).expect("left node");
+
+        let mut right = CategoricalAttentionIr::new();
+        let right_object = right.add_atomic_object("H", 2).expect("right object");
+        let right_node = right.add_identity(right_object).expect("right node");
+
+        assert_eq!(
+            right.add_identity(left_object),
+            Err(IrError::ForeignObjectHandle(left_object))
+        );
+        assert_eq!(
+            right.compose(right_node, left_node),
+            Err(IrError::ForeignNodeHandle(left_node))
+        );
+        assert_eq!(
+            left.compose(left_node, right_node),
+            Err(IrError::ForeignNodeHandle(right_node))
         );
     }
 
@@ -672,10 +751,8 @@ mod tests {
         let a = ir.add_atomic_object("A", 2).expect("A");
         let b = ir.add_atomic_object("B", 3).expect("B");
         let c = ir.add_atomic_object("C", 2).expect("C");
-        let f_map = RealLinearMap::new(2, 3, vec![1.0, 2.0, 0.0, 1.0, 3.0, -1.0])
-            .expect("f");
-        let g_map = RealLinearMap::new(3, 2, vec![2.0, 0.0, 1.0, -1.0, 4.0, 2.0])
-            .expect("g");
+        let f_map = RealLinearMap::new(2, 3, vec![1.0, 2.0, 0.0, 1.0, 3.0, -1.0]).expect("f");
+        let g_map = RealLinearMap::new(3, 2, vec![2.0, 0.0, 1.0, -1.0, 4.0, 2.0]).expect("g");
         let f = ir.add_linear_map(a, b, f_map.clone()).expect("f node");
         let g = ir.add_linear_map(b, c, g_map.clone()).expect("g node");
         let composed = ir.compose(g, f).expect("g o f");
@@ -731,8 +808,7 @@ mod tests {
         let mut ir = CategoricalAttentionIr::new();
         let h = ir.add_atomic_object("H", 3).expect("H");
         let k = ir.add_atomic_object("K", 2).expect("K");
-        let map = RealLinearMap::new(3, 2, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
-            .expect("map");
+        let map = RealLinearMap::new(3, 2, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).expect("map");
         let node = ir.add_linear_map(h, k, map).expect("node");
         ir.annotate_coordinate_reduction(
             h,
