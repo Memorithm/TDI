@@ -2,6 +2,8 @@
 
 This is the durable engineering handoff for the industrialization programme. It records software evidence only and does not authorize or reinterpret a scientific stage.
 
+**Current exact-head qualification note (2026-09-16):** later Lot-H/operational/export work advanced after several rows below were written. For current qualification state of PRs #279, #283–#288 and active candidates #296/#331, this handoff explicitly delegates to [`industrialization-qualification-audit-2026-09-16.md`](industrialization-qualification-audit-2026-09-16.md). Where an older row below conflicts with that dated exact-head audit, use the audit for current state and retain the older row only as historical programme context. Merge presence alone is not a qualification result.
+
 ## Baseline
 
 - Historical audit: `2b9cf772d3c0711349f9a70ba7cd7f1bfef90aca`.
@@ -123,7 +125,7 @@ The dedicated `TDI artifact and provenance contracts` workflow succeeded on the 
 
 - TDI declares Rust 1.85; audited scirust-hub declares Rust 1.89. No mandatory direct Rust dependency is introduced for the graph or artifact bridge.
 - The Lot-E graph contract pins `Memorithm/scirust-hub` source `4bf6186841e1ea70ed15cd84faf33de9b48429cd`, WorkflowSpec schema `1`, model `1.2.0`, capability/version grammar, canonical UUID identifiers and the relevant default RunSpec admission limits.
-- Graph steps pin exact Hub ComponentId, component version, component-manifest digest and capability-contract version. The original Lot-E compiler remains a non-authoritative preview because its pinned source predates workflow admission. Hub PR #54 now enforces those identities at execution admission; Lot G3 consumes that separately qualified surface instead of changing Hub ownership or rewriting Lot E.
+- Graph steps pin exact Hub ComponentId, component version/manifest digest and capability-contract version. The original Lot-E compiler remains a non-authoritative preview because its pinned source predates workflow admission. Hub PR #54 now enforces those identities at execution admission; Lot G3 consumes that separately qualified surface instead of changing Hub ownership or rewriting Lot E.
 - The pinned Hub `Version::parse` is semver-shaped rather than a full SemVer parser; TDI mirrors that exact accepted wire grammar instead of rejecting Hub-valid version labels.
 - scirust-hub remains owner of generic DAG scheduling, registry resolution, remote workers, leases, heartbeats, retries, cancellation, artifact storage/transport and publication; TDI remains owner of scientific meaning, checkpoint admissibility, portable scientific provenance and accepted evidence semantics.
 - Hub publication authority is qualified end-to-end for the current boundary: PR #48 defines `PublicationFence/v1`, PR #49 persists it durably, PR #50 issues a fresh fence per persisted attempt and makes downstream `FromStep` consume only authoritative publication, and PR #51 exposes a read-only authenticated publication DTO. TDI G2 consumes that evidence only; it cannot schedule, fence, publish, lease or store on Hub's behalf.
@@ -140,6 +142,6 @@ The dedicated `TDI artifact and provenance contracts` workflow succeeded on the 
 
 ## Next
 
-1. Qualify ElasticXxx-specific PR #279 on its exact final head without promoting structural interchange to Elastic execution, `apply`, or runtime actuation authority.
-2. Add SciRust, FLAT-ATTENTION and NNIS request/response integrations as separate versioned, source-pinned contract slices with partner-owned semantics and no copied schedulers/runtimes.
-3. Continue statistics/sensitivity, CLI/API/viewer, external exports and measured engine benchmarks.
+1. Use the dated exact-head audit linked at the top to close qualification evidence for current Lot-H partner boundaries without converting interchange contracts into partner execution, scientific authority, runtime actuation, or performance claims.
+2. Qualify #331 real-library replay adapters and #296/SciRust #1452 shared analysis on their exact final heads; keep #296 unmerged until the reviewed final SciRust source revision is pinned.
+3. Continue measured engine benchmarks, remaining statistics/sensitivity integration, and hardware-specific FLAT/NNIS qualification only when the required physical evidence is available.
