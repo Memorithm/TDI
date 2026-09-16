@@ -77,6 +77,15 @@ conflicts. Current queries for the final heads of those already-merged CI PRs
 still include queued/pending workflow runs, so their presence on `main` is not
 used here as retroactive exact-head qualification evidence.
 
+At the 2026-09-16 23:31 UTC resync, `main` advanced again through TDI-2.1
+PRs #414, #415 and #416 to `0fd3946065fa25e74ee3d3ac0e6d8e93363e620b`;
+#413 was merged forward through that state without conflicts. The current main
+snapshot fails Rust 1.97.1 `cargo fmt --all -- --check` in
+`tdi-ai/src/tdi2_intuition_experience.rs`; repair PR #417 contains only the
+canonical formatter delta and remains exact-head gated. Until that repair is
+qualified and merged, the inherited formatting failure is an explicit release
+blocker rather than a successful #413 qualification.
+
 | Repository / PR | Exact head | Observed checks | Consequence |
 | --- | --- | --- | --- |
 | TDI #409 | `b9deadb88375cea9d6f67b795bb91fb03f00da44` | 57 queued | No final-head qualification. |
