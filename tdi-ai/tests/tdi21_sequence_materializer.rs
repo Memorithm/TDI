@@ -53,10 +53,7 @@ fn case(decision: Event, probe_key: u64, expected: u64) -> AdmissionAuditCase {
 fn exact_v1_conflict_is_materialized_without_manual_labels() {
     let materialized = materialize_admission_cases(
         config(MemoryMode::TwoWay),
-        &[
-            case(write(9, 99, 1), 1, 11),
-            case(write(9, 99, 1), 9, 99),
-        ],
+        &[case(write(9, 99, 1), 1, 11), case(write(9, 99, 1), 9, 99)],
     )
     .unwrap();
 
@@ -101,10 +98,7 @@ fn all_four_counterfactual_classes_are_derived_by_execution() {
 fn materialized_conflict_flows_into_distributional_search_unchanged() {
     let materialized = materialize_admission_cases(
         config(MemoryMode::TwoWay),
-        &[
-            case(write(9, 99, 1), 1, 11),
-            case(write(9, 99, 1), 9, 99),
-        ],
+        &[case(write(9, 99, 1), 1, 11), case(write(9, 99, 1), 9, 99)],
     )
     .unwrap();
     let development = DevelopmentAdmissionSet::new(6, materialized.samples()).unwrap();
