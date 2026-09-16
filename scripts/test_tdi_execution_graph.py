@@ -105,7 +105,14 @@ class Tests(unittest.TestCase):
         with self.assertRaises(graph.ExecutionGraphError):
             graph.canonical_graph(a)
 
-    def test_workflow_name_matches_pinned_hub_nul_boundary(self):
+    def test_workflow_name_matches_pinned_hub_boundary(self):
+        a = fixture()
+        a["name"] = "   "
+        self.assertEqual(graph.canonical_graph(a)["name"], "   ")
+        a = fixture()
+        a["name"] = ""
+        with self.assertRaises(graph.ExecutionGraphError):
+            graph.canonical_graph(a)
         a = fixture()
         a["name"] = "bad\0name"
         with self.assertRaises(graph.ExecutionGraphError):
