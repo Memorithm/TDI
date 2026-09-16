@@ -31,6 +31,31 @@ pub enum CampaignFamily {
     AnalogyTransfer,
 }
 
+/// Frozen motif Development population start.
+pub const MOTIF_DEVELOPMENT_START: u32 = 1_000;
+/// Frozen motif Validation population start.
+pub const MOTIF_VALIDATION_START: u32 = 2_000;
+/// Number of motif cases in each non-final population.
+pub const MOTIF_DOMAIN_CASES: usize = 34;
+
+/// Return the frozen motif manifest for one non-final domain.
+#[must_use]
+pub fn frozen_motif_manifest(domain: CampaignDomain) -> CampaignManifest {
+    let start_id = match domain {
+        CampaignDomain::Development => MOTIF_DEVELOPMENT_START,
+        CampaignDomain::Validation => MOTIF_VALIDATION_START,
+    };
+    CampaignManifest::new(
+        domain,
+        CampaignFamily::MotifRetrieval,
+        start_id,
+        MOTIF_DOMAIN_CASES,
+        0,
+        0.0,
+    )
+    .expect("frozen motif manifest constants are valid")
+}
+
 /// Canonical non-final campaign manifest.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CampaignManifest {
@@ -255,8 +280,10 @@ pub fn analogy_cases(start: u32, count: usize) -> Result<Vec<AnalogyCase>, Campa
 #[cfg(test)]
 mod tests {
     use super::{
-        CampaignDomain, CampaignFamily, CampaignManifest, CampaignResultArtifact, analogy_cases,
-        context_cases, motif_cases, run_paired_campaign, run_synthetic_campaign, temporal_cases,
+        CampaignDomain, CampaignFamily, CampaignManifest, CampaignResultArtifact,
+        MOTIF_DEVELOPMENT_START, MOTIF_DOMAIN_CASES, MOTIF_VALIDATION_START, analogy_cases,
+        context_cases, frozen_motif_manifest, motif_cases, run_paired_campaign,
+        run_synthetic_campaign, temporal_cases,
     };
     use crate::experimental::tdi2_intuition_analogy_tasks::analogy_case;
     use crate::experimental::tdi2_intuition_inference::IntuitionOutcome;
@@ -356,5 +383,16 @@ mod tests {
         let cases = analogy_cases(3, 2).expect("bounded range");
         assert_eq!(cases[0], analogy_case(3));
         assert_eq!(cases[1], analogy_case(4));
+    }
+
+    #[test]
+    fn frozen_motif_populations_are_disjoint_and_equal_sized() {
+        let development = frozen_motif_manifest(CampaignDomain::Development);
+        let validation = frozen_motif_manifest(CampaignDomain::Validation);
+        assert_eq!(development.start_id, MOTIF_DEVELOPMENT_START);
+        assert_eq!(validation.start_id, MOTIF_VALIDATION_START);
+        assert_eq!(development.count, MOTIF_DOMAIN_CASES);
+        assert_eq!(validation.count, MOTIF_DOMAIN_CASES);
+        assert!(development.start_id + development.count as u32 <= validation.start_id);
     }
 }
