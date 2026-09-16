@@ -1,0 +1,43 @@
+{
+  "adapter_identity": "fixture-adapter/v1",
+  "backend_identity": "linux-cgroup-v2",
+  "checkpoint_ordinal": 2,
+  "experiment_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "input_artifacts": [
+    {
+      "name": "dataset",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    {
+      "name": "config",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+    }
+  ],
+  "plan_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "progress": {
+    "completed_observations": 8,
+    "completed_steps": 4
+  },
+  "rng_streams": [
+    {
+      "counter_decimal": "9",
+      "name": "noise",
+      "stream_id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    {
+      "counter_decimal": "5",
+      "name": "task",
+      "stream_id": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  ],
+  "schema": 1,
+  "seed_decimal": "9223372036854775815",
+  "state": {
+    "media_type": "application/vnd.tdi.checkpoint.v1+bin",
+    "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+    "size_bytes": 128
+  },
+  "step_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "step_key": "evaluate",
+  "trial_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+}
