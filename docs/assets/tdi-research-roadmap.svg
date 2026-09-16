@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="820" viewBox="0 0 1600 820" role="img" aria-labelledby="title desc">
   <title id="title">TDI research programme roadmap through TDI-23</title>
-  <desc id="desc">Dynamic Information Theory research programme from completed finite-state evidence through active successor, causal representation, Boolean relational, torsor, and categorical dagger research lines.</desc>
+  <desc id="desc">Dynamic Information Theory research programme from completed finite-state evidence through active successor, causal representation, Boolean relational, frozen torsor-contract, bounded TDI-22.2, and categorical dagger research lines.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#07111f"/>
@@ -63,9 +63,9 @@
   <g transform="translate(572 484)">
     <rect width="456" height="158" rx="20" fill="#0e3540" stroke="#55d6be" stroke-width="2"/>
     <text x="24" y="40" class="stage">TDI-22.x</text>
-    <text x="24" y="70" class="status">TORSOR ATTENTION · STAGE-0</text>
-    <text x="24" y="101" class="desc">Six-component torsor/twist semantics, exact transport</text>
-    <text x="24" y="124" class="desc">identities and matched representation controls.</text>
+    <text x="24" y="70" class="status">22.0/22.1 FROZEN · 22.2 BOUNDED ACTIVE</text>
+    <text x="24" y="101" class="desc">Frozen torsor/matched-control contracts; deterministic</text>
+    <text x="24" y="124" class="desc">evaluator + P1–P5 generator, no campaign result.</text>
   </g>
 
   <g transform="translate(1072 484)">
@@ -79,7 +79,7 @@
   <g transform="translate(72 678)">
     <rect width="1456" height="76" rx="18" fill="#0b1f33" stroke="#274761"/>
     <text x="24" y="30" class="small">SCIENTIFIC STATUS RULE</text>
-    <text x="24" y="55" class="desc">Active Stage-0 ≠ frozen protocol ≠ confirmatory result. Final execution and downstream product claims require their own explicit gates.</text>
+    <text x="24" y="55" class="desc">Frozen non-final contract ≠ confirmatory result. Final execution and downstream product claims require their own explicit gates.</text>
   </g>
 
   <text x="72" y="793" class="small">EVIDENCE FIRST · CLAIMS BOUNDED BY FROZEN EXPERIMENTS</text>
