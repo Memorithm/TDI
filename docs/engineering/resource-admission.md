@@ -90,7 +90,14 @@ catalogue event. Unexpected Elastic output retains a protocol failure and output
 hash, never raw unselected logs. Use `events CAMPAIGN` with pagination to export
 these versioned records; ordinary scientific bundle exports retain their existing
 schema. A denied admission leaves a prepared campaign with no workflow or results
-and returns exit 21. Contract errors before launch return exit 22.
+and returns exit 20. Contract errors before launch return exit 21.
+
+The controller is bound to the original plan identity and this locally sampled
+executor environment through required, separate CLI arguments. A request for a
+different plan or environment is rejected before permit actuation. If process
+launch fails (permissions, format or loader), admission retains the launch
+attempt duration and errno. Child exit status, CPU use and RSS remain absent;
+the campaign has a durable `resource-admission` failure event and no Hub work.
 
 The link from original plan to admitted graph is durable before any Hub mutation.
 Retrying the same command reconciles an already-dispatched workflow. If dispatch

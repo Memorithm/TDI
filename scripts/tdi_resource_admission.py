@@ -67,14 +67,16 @@ def elastic_decision(spec, worker, worker_sha256, source_commit, policy):
                                 "environment_id": snapshot["environment_id"],
                                 "age_milliseconds": (time.monotonic_ns() - int(snapshot["sampled_monotonic_ns"])) // 1000000,
                                 "capacity": snapshot["capacity"]})
-    code, out, _, costs = measured_process([str(worker.resolve()), "admit-capacity"],
+    code, out, _, costs = measured_process([str(worker.resolve()), "admit-capacity",
+                                           "--expected-plan-id", spec["graph"]["root_plan_id"],
+                                           "--expected-environment-id", snapshot["environment_id"]],
                                            input_bytes=durable.canonical(request).encode(), timeout=10, max_output=65536)
     failure = None
     try:
         if durable.file_digest(worker) != worker_sha256:
             raise durable.ContractError("Elastic executable changed during admission")
         report = _report(out, request, code, costs)
-    except ValueError as error:
+    except (ValueError, OSError) as error:
         report, failure = None, str(error)
     evidence = {"schema": 1, "scope": "local Hub process admission only", "observation": snapshot,
                 "elastic": {"source_commit": source_commit, "binary_sha256": worker_sha256, "request": request, "report": report,

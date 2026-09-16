@@ -92,6 +92,28 @@ class ResourceIntegrationTests(unittest.TestCase):
         _, out, _, budget = measured_process([sys.executable, "-c", "print('x'*100000)"], max_output=1024)
         self.assertEqual("output-budget", budget["technical_failure"]); self.assertEqual(1024, len(out))
 
+    def test_actual_launch_failures_are_durable_and_never_dispatch(self):
+        plan, policy_path = self.root / "plan.json", self.root / "policy.json"
+        self.cli("fixture-plan", "--worker", self.worker, "--trials", 1, "--output", plan)
+        policy_path.write_text(json.dumps(self.policy()))
+        for name, content, mode in [("no-exec", "#!/bin/sh\nexit 0\n", 0o600),
+                                    ("bad-format", "invalid executable format\n", 0o700),
+                                    ("missing-loader", "#!/nonexistent/tdi-fixture-loader\n", 0o700)]:
+            worker = self.root / name; worker.write_text(content); worker.chmod(mode)
+            result = self.cli("run-local-admitted", plan, "--elastic-worker", worker,
+                              "--worker-sha256", durable.file_digest(worker), "--source-commit", self.source,
+                              "--resource-policy", policy_path, expected_code=durable.EXIT_TRIAL_FAILURE)
+            self.assertEqual("resource-rejected", result["status"])
+            self.assertEqual("process-launch-failed", result["cost_measurements"]["technical_failure"])
+            self.assertIsNone(result["cost_measurements"]["exit_code"])
+            self.assertIsNone(result["cost_measurements"]["peak_rss_bytes"])
+            self.assertGreater(int(result["cost_measurements"]["launch_attempt_ns"]), 0)
+            with EngineStore(self.catalogue, readonly=True) as store:
+                self.assertIsNone(store.get(result["campaign"])["workflow"])
+                evidence = [e["payload"] for e in store.events(result["campaign"]) if e["kind"] == "resource-admission"][-1]
+                self.assertIsNone(evidence["elastic"]["report"])
+                self.assertEqual("process-launch-failed", evidence["cost_measurements"]["technical_failure"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -126,8 +126,21 @@ def measured_process(command, *, input_bytes=b"", timeout=10.0, max_output=10485
     reason, usage = None, None
     with tempfile.TemporaryFile() as source, tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
         source.write(input_bytes); source.seek(0)
-        child = subprocess.Popen(command, stdin=source, stdout=stdout, stderr=stderr,
-                                 env=env or {"LANG": "C", "LC_ALL": "C"}, start_new_session=True)
+        try:
+            child = subprocess.Popen(command, stdin=source, stdout=stdout, stderr=stderr,
+                                     env=env or {"LANG": "C", "LC_ALL": "C"}, start_new_session=True)
+        except OSError as error:
+            # No wait4 child result exists: retain the measured launch attempt
+            # without inventing a child exit status, CPU consumption or RSS.
+            elapsed = str(time.monotonic_ns() - start)
+            return None, b"", b"", {
+                "schema": 1, "sensor": "python-subprocess-launch/linux/v1", "clock": "time.monotonic_ns",
+                "wall_ns": elapsed, "launch_ns": None, "launch_attempt_ns": elapsed,
+                "completion_polling_granularity_ns": None, "exit_code": None,
+                "technical_failure": "process-launch-failed", "launch_errno": error.errno,
+                "user_cpu_seconds": None, "system_cpu_seconds": None, "peak_rss_bytes": None,
+                "rss_scope": "unavailable: process launch failed", "stdout_bytes": 0, "stderr_bytes": 0,
+                "gpu_time": None, "accelerator_memory_bytes": None, "energy_joules": None}
         launched = time.monotonic_ns()
         try:
             while True:
