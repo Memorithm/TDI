@@ -6,9 +6,12 @@
 //! for later B4/B5 routing research, not evidence of learned relational generalization.
 
 use super::tdi21::{BooleanState, MemoryRead};
-use super::tdi21_stream::{BooleanStream, Event, StepOutput, StreamConfig, StreamCounters, StreamError};
+use super::tdi21_stream::{
+    BooleanStream, Event, StepOutput, StreamConfig, StreamCounters, StreamError,
+};
 
 pub const RELATIONAL_BINDING_SEMANTICS: &str = "tdi21-relational-binding-v1";
+pub const MAX_COMPOSITION_HOPS: usize = 4;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RelationalConfig {
@@ -24,6 +27,8 @@ pub enum RelationalError {
     AddressWidthOverflow,
     EntityOutOfRange,
     RelationOutOfRange,
+    EmptyRelationPath,
+    TooManyCompositionHops,
     UnexpectedQuiet,
     Stream(StreamError),
 }
@@ -76,11 +81,7 @@ impl RelationalBinder {
     }
 
     fn entity_limit(&self) -> u64 {
-        if self.config.entity_bits == 64 {
-            u64::MAX
-        } else {
-            1u64 << self.config.entity_bits
-        }
+        1u64 << self.config.entity_bits
     }
 
     fn relation_limit(&self) -> u64 {
@@ -132,18 +133,40 @@ impl RelationalBinder {
         Self::decode_reply(self.stream.step(Event::Recall { key })?)
     }
 
-    /// Compose two exact symbolic relations without an all-history scan.
-    /// Missing first-hop or second-hop facts remain explicit misses.
+    /// Follow a bounded relation path without scanning prior events.
+    /// Every hop performs one exact-address memory lookup. Missing intermediate
+    /// state terminates the path as an explicit miss.
+    pub fn compose_path(
+        &mut self,
+        relations: &[u64],
+        subject: u64,
+    ) -> Result<RelationalRead, RelationalError> {
+        if relations.is_empty() {
+            return Err(RelationalError::EmptyRelationPath);
+        }
+        if relations.len() > MAX_COMPOSITION_HOPS {
+            return Err(RelationalError::TooManyCompositionHops);
+        }
+        if subject >= self.entity_limit() {
+            return Err(RelationalError::EntityOutOfRange);
+        }
+
+        let mut current = subject;
+        for &relation in relations {
+            current = match self.recall(relation, current)? {
+                RelationalRead::Hit(value) => value,
+                RelationalRead::Miss => return Ok(RelationalRead::Miss),
+            };
+        }
+        Ok(RelationalRead::Hit(current))
+    }
+
     pub fn compose2(
         &mut self,
         first_relation: u64,
         second_relation: u64,
         subject: u64,
     ) -> Result<RelationalRead, RelationalError> {
-        let intermediate = match self.recall(first_relation, subject)? {
-            RelationalRead::Hit(value) => value,
-            RelationalRead::Miss => return Ok(RelationalRead::Miss),
-        };
-        self.recall(second_relation, intermediate)
+        self.compose_path(&[first_relation, second_relation], subject)
     }
 }
