@@ -37,6 +37,23 @@ impl ConsolidationUpdate {
     /// Observed validation classification.
     #[must_use]
     pub const fn outcome(self) -> ValidationOutcome { self.outcome }
+
+    /// Canonical post-outcome record suitable for TDI artifact binding.
+    #[must_use]
+    pub fn canonical_record(self) -> String {
+        let outcome = match self.outcome {
+            ValidationOutcome::Confirmed => "confirmed",
+            ValidationOutcome::Refuted => "refuted",
+        };
+        format!(
+            "tdi2.1-consolidation-v1;template={};before={}:{};after={}:{};outcome={outcome}",
+            self.template_id.raw(),
+            self.before.successes(),
+            self.before.failures(),
+            self.after.successes(),
+            self.after.failures(),
+        )
+    }
 }
 
 /// Update success/failure evidence after a separately observed outcome.
@@ -117,10 +134,6 @@ pub fn one_literal_generalizations(template: &Template) -> Vec<GeneralizationPro
 }
 
 /// Enumerate single-predicate specializations that would exclude one refuted state.
-///
-/// The candidate universe is frozen externally. Existing template predicates are
-/// ignored. Active counterexample predicates are proposed as forbidden clauses;
-/// inactive candidates are proposed as required clauses. Proposals are not applied.
 #[must_use]
 pub fn counterexample_specializations(
     template: &Template,
@@ -154,9 +167,7 @@ mod tests {
         ClausePolarity, StructuralReview, ValidationOutcome, consolidate_validation,
         counterexample_specializations, one_literal_generalizations,
     };
-    use crate::experimental::tdi2_intuition::{
-        BooleanState, PredicateId, Template, TemplateId,
-    };
+    use crate::experimental::tdi2_intuition::{BooleanState, PredicateId, Template, TemplateId};
     use crate::experimental::tdi2_intuition_reliability::ReliabilityEvidence;
 
     #[test]
@@ -180,6 +191,19 @@ mod tests {
         )
         .expect("counter has room");
         assert_eq!(update.after(), ReliabilityEvidence::new(4, 3));
+    }
+
+    #[test]
+    fn consolidation_record_binds_before_and_after_evidence() {
+        let update = consolidate_validation(
+            TemplateId::new(3),
+            ReliabilityEvidence::new(4, 2),
+            ValidationOutcome::Confirmed,
+        )
+        .expect("update");
+        let record = update.canonical_record();
+        assert!(record.contains("before=4:2"));
+        assert!(record.contains("after=5:2"));
     }
 
     #[test]
