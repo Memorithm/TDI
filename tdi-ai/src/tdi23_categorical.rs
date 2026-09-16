@@ -125,19 +125,7 @@ impl RealLinearMap {
         codomain_dim: usize,
         entries: Vec<f64>,
     ) -> Result<Self, DaggerError> {
-        if domain_dim == 0 {
-            return Err(DaggerError::ZeroDimension {
-                field: "domain_dim",
-            });
-        }
-        if codomain_dim == 0 {
-            return Err(DaggerError::ZeroDimension {
-                field: "codomain_dim",
-            });
-        }
-        let expected = domain_dim
-            .checked_mul(codomain_dim)
-            .ok_or(DaggerError::DimensionOverflow)?;
+        let expected = checked_matrix_len(domain_dim, codomain_dim)?;
         if entries.len() != expected {
             return Err(DaggerError::InvalidStorageLength {
                 expected,
@@ -156,12 +144,7 @@ impl RealLinearMap {
 
     /// Construct the identity map on a positive finite dimension.
     pub fn identity(dimension: usize) -> Result<Self, DaggerError> {
-        if dimension == 0 {
-            return Err(DaggerError::ZeroDimension { field: "dimension" });
-        }
-        let len = dimension
-            .checked_mul(dimension)
-            .ok_or(DaggerError::DimensionOverflow)?;
+        let len = checked_matrix_len(dimension, dimension)?;
         let mut entries = vec![0.0; len];
         for index in 0..dimension {
             entries[index * dimension + index] = 1.0;
@@ -171,9 +154,7 @@ impl RealLinearMap {
 
     /// Construct the zero map `domain -> codomain`.
     pub fn zero(domain_dim: usize, codomain_dim: usize) -> Result<Self, DaggerError> {
-        let len = domain_dim
-            .checked_mul(codomain_dim)
-            .ok_or(DaggerError::DimensionOverflow)?;
+        let len = checked_matrix_len(domain_dim, codomain_dim)?;
         Self::new(domain_dim, codomain_dim, vec![0.0; len])
     }
 
@@ -214,11 +195,10 @@ impl RealLinearMap {
     #[must_use]
     pub fn dagger(&self) -> Self {
         let mut transposed = vec![0.0; self.entries.len()];
-        for row in 0..self.codomain_dim {
-            for column in 0..self.domain_dim {
-                transposed[column * self.codomain_dim + row] =
-                    self.entries[row * self.domain_dim + column];
-            }
+        for (index, value) in self.entries.iter().copied().enumerate() {
+            let row = index / self.domain_dim;
+            let column = index % self.domain_dim;
+            transposed[column * self.codomain_dim + row] = value;
         }
         Self {
             domain_dim: self.codomain_dim,
@@ -236,29 +216,19 @@ impl RealLinearMap {
             });
         }
 
-        let len = rhs
-            .domain_dim
-            .checked_mul(self.codomain_dim)
-            .ok_or(DaggerError::DimensionOverflow)?;
+        let len = checked_matrix_len(rhs.domain_dim, self.codomain_dim)?;
         let mut entries = vec![0.0; len];
-
-        for row in 0..self.codomain_dim {
+        for (row, left_row) in self.entries.chunks_exact(self.domain_dim).enumerate() {
             for column in 0..rhs.domain_dim {
                 let mut sum = 0.0;
-                for middle in 0..self.domain_dim {
-                    let left = self.entries[row * self.domain_dim + middle];
+                for (middle, left) in left_row.iter().copied().enumerate() {
                     let right = rhs.entries[middle * rhs.domain_dim + column];
                     sum += left * right;
-                    if !sum.is_finite() {
-                        return Err(DaggerError::NonFiniteDerivedValue {
-                            operation: "matrix composition",
-                        });
-                    }
+                    ensure_finite(sum, "matrix composition")?;
                 }
                 entries[row * rhs.domain_dim + column] = sum;
             }
         }
-
         Self::new(rhs.domain_dim, self.codomain_dim, entries)
     }
 
@@ -272,18 +242,14 @@ impl RealLinearMap {
         }
         validate_vector(vector)?;
 
-        let mut output = vec![0.0; self.codomain_dim];
-        for (row, value) in output.iter_mut().enumerate() {
+        let mut output = Vec::with_capacity(self.codomain_dim);
+        for row in self.entries.chunks_exact(self.domain_dim) {
             let mut sum = 0.0;
-            for (column, coordinate) in vector.iter().copied().enumerate() {
-                sum += self.entries[row * self.domain_dim + column] * coordinate;
-                if !sum.is_finite() {
-                    return Err(DaggerError::NonFiniteDerivedValue {
-                        operation: "linear-map application",
-                    });
-                }
+            for (weight, coordinate) in row.iter().zip(vector) {
+                sum += weight * coordinate;
+                ensure_finite(sum, "linear-map application")?;
             }
-            *value = sum;
+            output.push(sum);
         }
         Ok(output)
     }
@@ -303,11 +269,7 @@ pub fn euclidean_inner_product(left: &[f64], right: &[f64]) -> Result<f64, Dagge
     let mut sum = 0.0;
     for (left_value, right_value) in left.iter().zip(right) {
         sum += left_value * right_value;
-        if !sum.is_finite() {
-            return Err(DaggerError::NonFiniteDerivedValue {
-                operation: "euclidean inner product",
-            });
-        }
+        ensure_finite(sum, "euclidean inner product")?;
     }
     Ok(sum)
 }
@@ -323,6 +285,22 @@ pub fn dagger_attention_score(query: &[f64], key: &[f64]) -> Result<f64, DaggerE
     Ok(scalar.entries[0])
 }
 
+fn checked_matrix_len(domain_dim: usize, codomain_dim: usize) -> Result<usize, DaggerError> {
+    if domain_dim == 0 {
+        return Err(DaggerError::ZeroDimension {
+            field: "domain_dim",
+        });
+    }
+    if codomain_dim == 0 {
+        return Err(DaggerError::ZeroDimension {
+            field: "codomain_dim",
+        });
+    }
+    domain_dim
+        .checked_mul(codomain_dim)
+        .ok_or(DaggerError::DimensionOverflow)
+}
+
 fn validate_vector(vector: &[f64]) -> Result<(), DaggerError> {
     if vector.is_empty() {
         return Err(DaggerError::ZeroDimension {
@@ -333,6 +311,14 @@ fn validate_vector(vector: &[f64]) -> Result<(), DaggerError> {
         return Err(DaggerError::NonFiniteVectorEntry { index });
     }
     Ok(())
+}
+
+fn ensure_finite(value: f64, operation: &'static str) -> Result<(), DaggerError> {
+    if value.is_finite() {
+        Ok(())
+    } else {
+        Err(DaggerError::NonFiniteDerivedValue { operation })
+    }
 }
 
 #[cfg(test)]
@@ -360,10 +346,8 @@ mod tests {
 
     #[test]
     fn tdi23_dagger_reverses_composition() {
-        let f = RealLinearMap::new(2, 3, vec![1.0, 2.0, 0.0, 1.0, 3.0, -1.0])
-            .expect("finite f");
-        let g = RealLinearMap::new(3, 2, vec![2.0, 0.0, 1.0, -1.0, 4.0, 2.0])
-            .expect("finite g");
+        let f = RealLinearMap::new(2, 3, vec![1.0, 2.0, 0.0, 1.0, 3.0, -1.0]).expect("finite f");
+        let g = RealLinearMap::new(3, 2, vec![2.0, 0.0, 1.0, -1.0, 4.0, 2.0]).expect("finite g");
 
         let left = g.compose(&f).expect("g o f").dagger();
         let right = f
@@ -392,10 +376,7 @@ mod tests {
         );
 
         let zero = RealLinearMap::zero(3, 2).expect("zero map");
-        assert_eq!(
-            zero.apply(&[2.0, -1.0, 4.0]).expect("apply"),
-            [0.0, 0.0]
-        );
+        assert_eq!(zero.apply(&[2.0, -1.0, 4.0]).expect("apply"), [0.0, 0.0]);
     }
 
     #[test]
