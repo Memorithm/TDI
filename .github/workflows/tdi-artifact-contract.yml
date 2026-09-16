@@ -1,0 +1,35 @@
+name: TDI artifact and provenance contracts
+
+on:
+  pull_request:
+    paths:
+      - "scripts/tdi_experiment_contract.py"
+      - "scripts/tdi_artifact_contract.py"
+      - "scripts/test_tdi_artifact_contract.py"
+      - "docs/TDI-ARTIFACT-PROVENANCE-CONTRACT.md"
+      - "docs/engineering/industrialization-status.md"
+      - ".github/workflows/tdi-artifact-contract.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile contract modules
+        run: |
+          python3 -m py_compile \
+            scripts/tdi_experiment_contract.py \
+            scripts/tdi_artifact_contract.py \
+            scripts/test_tdi_artifact_contract.py
+      - name: Run portable artifact contract tests
+        run: |
+          PYTHONPATH=scripts python3 -m unittest \
+            scripts/test_tdi_artifact_contract.py -v
