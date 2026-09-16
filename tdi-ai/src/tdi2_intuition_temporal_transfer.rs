@@ -108,3 +108,75 @@ mod tests {
         );
     }
 }
+
+use super::tdi2_intuition_temporal::BooleanSequence;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TemporalPatternMatch {
+    pub exact: bool,
+    pub satisfied_clauses: usize,
+    pub total_clauses: usize,
+}
+
+#[must_use]
+pub fn match_temporal_pattern(
+    pattern: &TemporalPattern,
+    query: &BooleanSequence,
+) -> TemporalPatternMatch {
+    let mut satisfied = 0usize;
+    let mut total = 0usize;
+    if pattern.frames().len() != query.len() {
+        return TemporalPatternMatch {
+            exact: false,
+            satisfied_clauses: 0,
+            total_clauses: pattern
+                .frames()
+                .iter()
+                .map(|f| f.required().len() + f.forbidden().len())
+                .sum(),
+        };
+    }
+    for (clause, state) in pattern.frames().iter().zip(query.frames()) {
+        satisfied += clause
+            .required()
+            .iter()
+            .filter(|p| state.contains(**p))
+            .count();
+        satisfied += clause
+            .forbidden()
+            .iter()
+            .filter(|p| !state.contains(**p))
+            .count();
+        total += clause.required().len() + clause.forbidden().len();
+    }
+    TemporalPatternMatch {
+        exact: satisfied == total,
+        satisfied_clauses: satisfied,
+        total_clauses: total,
+    }
+}
+
+#[cfg(test)]
+mod matching_tests {
+    use super::{TemporalClause, TemporalPattern, match_temporal_pattern};
+    use crate::experimental::tdi2_intuition::{BooleanState, PredicateId, TemplateId};
+    use crate::experimental::tdi2_intuition_temporal::BooleanSequence;
+    #[test]
+    fn temporal_pattern_ignores_distractors_but_preserves_order() {
+        let pattern = TemporalPattern::new(
+            TemplateId::new(1),
+            vec![
+                TemporalClause::new(vec![PredicateId::new(1)], Vec::new()).unwrap(),
+                TemporalClause::new(vec![PredicateId::new(2)], Vec::new()).unwrap(),
+            ],
+        )
+        .unwrap();
+        let query = BooleanSequence::new(vec![
+            BooleanState::new(vec![PredicateId::new(1), PredicateId::new(99)]),
+            BooleanState::new(vec![PredicateId::new(2), PredicateId::new(98)]),
+        ]);
+        assert!(match_temporal_pattern(&pattern, &query).exact);
+        let reversed = BooleanSequence::new(query.frames().iter().cloned().rev().collect());
+        assert!(!match_temporal_pattern(&pattern, &reversed).exact);
+    }
+}
