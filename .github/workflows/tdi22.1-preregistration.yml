@@ -1,0 +1,39 @@
+name: TDI-22.1 preregistration integrity
+
+on:
+  pull_request:
+    paths:
+      - 'docs/TDI-22.1*'
+      - 'scripts/check-tdi22.1-preregistration.sh'
+      - 'tdi-ai/**'
+      - 'examples/**'
+      - 'results/**'
+      - 'artifacts/**'
+      - '.github/workflows/tdi22.1-preregistration.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/TDI-22.1*'
+      - 'scripts/check-tdi22.1-preregistration.sh'
+      - 'tdi-ai/**'
+      - 'examples/**'
+      - 'results/**'
+      - 'artifacts/**'
+      - '.github/workflows/tdi22.1-preregistration.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  preregistration-integrity:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+      - name: Verify TDI-22.1 preregistration boundary
+        run: bash scripts/check-tdi22.1-preregistration.sh
