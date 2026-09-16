@@ -148,7 +148,7 @@ def _validate_deployment(record):
 
 def _control(store, key, operation, *, phase="running"):
     record = store.get_search(key)
-    if record["phase"] == "cancelled":
+    if record["phase"] in ("cancel-requested", "cancelled"):
         raise durable.ContractError("search was cancelled")
     command = {"request_id": "command-" + str(len(record["response"]["checkpoint"]["commands"])), "operation": operation}
     store.search_event(key, "control-intent", {"command": command})
@@ -242,7 +242,7 @@ def _execute_stage(client, store, record, permit):
         mapping = _prepare_stage(client, store, record, permit)
     campaign = store.get(mapping["campaign"])
     runtime.submit(client, store, campaign["spec"], mapping["roots"])
-    if store.get_search(record["id"])["phase"] == "cancelled":
+    if store.get_search(record["id"])["phase"] in ("cancel-requested", "cancelled"):
         runtime.cancel(client, store, campaign["id"])
         raise durable.ContractError("search cancelled before execution")
     result = runtime.execute(client, store, campaign["id"])
@@ -276,7 +276,7 @@ def run_search(client, store, key, *, max_stages=128):
         record = store.get_search(key)
         if record["binding"]["hub_endpoint"] != client.endpoint:
             raise durable.ContractError("search is bound to another Hub")
-        if record["phase"] in ("completed", "cancelled"):
+        if record["phase"] in ("completed", "cancel-requested", "cancelled"):
             return record
         restored, costs = _forge(record).call(record["spec"], record["response"]["checkpoint"])
         if restored != record["response"]:
@@ -285,7 +285,7 @@ def run_search(client, store, key, *, max_stages=128):
         completed = 0
         while completed < max_stages:
             record = store.get_search(key)
-            if record["phase"] == "cancelled":
+            if record["phase"] in ("cancel-requested", "cancelled"):
                 return record
             snapshot = record["response"]["snapshot"]
             permit = snapshot["active_attempt"]
@@ -313,19 +313,34 @@ def run_search(client, store, key, *, max_stages=128):
 
 
 def cancel_search(client, store, key):
-    """Persist cancellation only after every ambiguous Hub submission is reconciled."""
+    """Persist intent first; unknown submissions remain explicitly pending cleanup.
+
+    Attach their existing workflow IDs using the operational CLI, then repeat
+    cancellation. A pending cancellation can never dispatch new work.
+    """
     record = store.get_search(key)
     if record["binding"]["hub_endpoint"] != client.endpoint:
         raise durable.ContractError("search is bound to another Hub")
     if record["phase"] == "completed":
         return record
-    rows = store.db.execute("SELECT campaign FROM search_stages WHERE search=?", (key,)).fetchall()
-    campaigns = [store.get(row[0]) for row in rows]
-    if any(campaign["phase"] in ("submitting", "submission-unknown") for campaign in campaigns):
-        raise durable.ContractError("ambiguous Hub submission must be attached before search cancellation")
-    if record["phase"] != "cancelled":
-        record = store.update_search(key, record["sequence"], "cancelled", record["response"], {"cancellation_requested": True})
-    for campaign in campaigns:
+    if record["phase"] == "cancelled":
+        return record
+    if record["phase"] != "cancel-requested":
+        record = store.update_search(key, record["sequence"], "cancel-requested", record["response"], {"cancellation_requested": True})
+    pending = []
+    for row in store.db.execute("SELECT campaign FROM search_stages WHERE search=?", (key,)).fetchall():
+        campaign = store.get(row[0])
         if campaign["phase"] not in ("completed", "failed", "cancelled"):
-            runtime.cancel(client, store, campaign["id"])
-    return store.get_search(key)
+            if campaign["workflow"] is None and campaign["phase"] in ("submitting", "submission-unknown"):
+                pending.append({"campaign": row[0], "reason": "attach-existing-workflow-before-cancel"})
+                continue
+            try:
+                campaign = runtime.cancel(client, store, row[0])
+            except durable.ContractError as error:
+                pending.append({"campaign": row[0], "reason": "cancellation-needs-reconciliation", "diagnostic": str(error)[:2048]})
+                continue
+            if campaign["phase"] not in ("completed", "failed", "cancelled"):
+                pending.append({"campaign": row[0], "reason": "Hub-cleanup-not-terminal"})
+    record = store.get_search(key)
+    return store.update_search(key, record["sequence"], "cancel-requested" if pending else "cancelled", record["response"],
+                               {"cancellation_requested": True, "pending_cleanup": pending, "cleanup_acknowledged": not pending})

@@ -13,8 +13,8 @@ import test_tdi_engine_integration as operational
 import tdi_experiment_supervisor as durable
 from tdi_engine_store import EngineStore
 import tdi_engine_runtime as runtime
-import tdi_forge_search as search
 from tdi_hub_client import HubTransportUnknown
+import tdi_forge_search as search
 
 
 class SearchIntegrationTests(unittest.TestCase):
@@ -113,34 +113,6 @@ class SearchIntegrationTests(unittest.TestCase):
             with self.assertRaisesRegex(durable.ContractError, "differs from Forge replay"):
                 search.run_search(self.client, store, second["id"])
 
-    def test_ambiguous_submission_requires_attach_before_search_cancellation(self):
-        key = self.prepare()["id"]
-        with EngineStore(self.catalogue) as store:
-            record = search._control(store, key, {"op": "ask"})
-            candidate = record["response"]["snapshot"]["candidates"][0]["proposal"]["candidate_id"]
-            record = search._control(store, key, {"op": "begin", "candidate_id": candidate, "stage": "compile"})
-            permit = record["response"]["snapshot"]["active_attempt"]
-            mapping = search._prepare_stage(self.client, store, record, permit)
-            campaign = store.get(mapping["campaign"])
-            submitted = {}
-
-            def lose_binding(spec, response, roots):
-                submitted["workflow"] = response["id"]
-                raise ValueError("injected lost workflow response")
-
-            with patch.object(runtime, "_bind_record", side_effect=lose_binding):
-                with self.assertRaises(HubTransportUnknown):
-                    runtime.submit(self.client, store, campaign["spec"], mapping["roots"])
-            self.assertEqual("submission-unknown", store.get(campaign["id"])["phase"])
-            before = store.get_search(key)
-            with self.assertRaisesRegex(durable.ContractError, "must be attached before search cancellation"):
-                search.cancel_search(self.client, store, key)
-            self.assertEqual(before["phase"], store.get_search(key)["phase"])
-            runtime.attach(self.client, store, campaign["id"], submitted["workflow"], mapping["roots"])
-            cancelled = search.cancel_search(self.client, store, key)
-            self.assertEqual("cancelled", cancelled["phase"])
-            self.assertEqual("cancelled", store.get(campaign["id"])["phase"])
-
     def test_cancelled_search_blocks_already_admitted_workflow_execution(self):
         key = self.prepare()["id"]
         with EngineStore(self.catalogue) as store:
@@ -150,7 +122,10 @@ class SearchIntegrationTests(unittest.TestCase):
             mapping = search._prepare_stage(self.client, store, record, record["response"]["snapshot"]["active_attempt"])
             campaign = store.get(mapping["campaign"])
             runtime.submit(self.client, store, campaign["spec"], mapping["roots"])
-            store.update_search(key, record["sequence"], "cancelled", record["response"], {"cancellation_requested": True})
+            record = store.update_search(key, record["sequence"], "cancel-requested", record["response"], {"cancellation_requested": True})
+            for invalid_phase in ("running", "cancelled"):
+                with self.assertRaises(durable.ContractError):
+                    store.update_search(key, record["sequence"], invalid_phase, record["response"], {})
             with self.assertRaises(durable.ContractError):
                 runtime.execute(self.client, store, campaign["id"])
             self.assertEqual("admitted", store.get(campaign["id"])["phase"])
@@ -180,6 +155,34 @@ class SearchIntegrationTests(unittest.TestCase):
         self.assertEqual(9, completed["response"]["snapshot"]["attempts"])
         self.assertEqual(135000, completed["response"]["snapshot"]["charged_ms"])
 
+    def test_lost_actual_submission_cancellation_waits_for_attach_then_completes(self):
+        key = self.prepare()["id"]
+        real_request, received = self.client.request, []
+        def lost(method, path, **kwargs):
+            value = real_request(method, path, **kwargs)
+            if method == "POST" and path == "/api/v1/workflows":
+                received.append(value["workflow"]["id"])
+                raise HubTransportUnknown("injected lost reply after actual workflow admission")
+            return value
+        with EngineStore(self.catalogue) as store, patch.object(self.client, "request", lost):
+            with self.assertRaises(HubTransportUnknown):
+                search.run_search(self.client, store, key)
+        self.assertEqual(1, len(received))
+        pending = self.cli("search-cancel", key, expected_code=durable.EXIT_TRIAL_FAILURE)
+        self.assertEqual("cancel-requested", pending["phase"])
+        self.assertFalse(pending["last_transition"]["cleanup_acknowledged"])
+        self.assertEqual("attach-existing-workflow-before-cancel", pending["last_transition"]["pending_cleanup"][0]["reason"])
+        self.assertEqual(pending, self.cli("search-resume", key, expected_code=durable.EXIT_TRIAL_FAILURE))
+        stage = pending["stages"][0]
+        with EngineStore(self.catalogue) as store:
+            runtime.attach(self.client, store, stage["campaign"], received[0], stage["roots"])
+            with self.assertRaises(durable.ContractError):
+                runtime.execute(self.client, store, stage["campaign"])
+        cancelled = self.cli("search-cancel", key, expected_code=durable.EXIT_TRIAL_FAILURE)
+        self.assertEqual("cancelled", cancelled["phase"])
+        self.assertTrue(cancelled["last_transition"]["cleanup_acknowledged"])
+        self.assertEqual("cancelled", cancelled["stages"][0]["phase"])
+
 
 class SearchMigrationTests(unittest.TestCase):
     def test_v2_migration_rollback_and_backup_preserve_legacy_bytes(self):
@@ -188,7 +191,7 @@ class SearchMigrationTests(unittest.TestCase):
             with sqlite3.connect(path) as db:
                 db.executescript((Path(__file__).parent / "fixtures/tdi-catalogue-v2.sql").read_text())
                 db.execute("INSERT INTO campaigns VALUES ('legacy','{}','http://127.0.0.1:8477','prepared',NULL,NULL,NULL,1)")
-                db.execute("INSERT INTO exports VALUES ('export','legacy','otlp','http://127.0.0.1:4318','{}','failed',?,1)", ('{ \"original\": true }',))
+                db.execute("INSERT INTO exports VALUES ('export','legacy','otlp','http://127.0.0.1:4318','{}','failed',?,1)", ('{ "original": true }',))
             with EngineStore(path, readonly=True) as old:
                 self.assertEqual([], old.list_searches())
             original = EngineStore._create_searches
@@ -202,11 +205,11 @@ class SearchMigrationTests(unittest.TestCase):
                 self.assertIsNone(db.execute("SELECT name FROM sqlite_master WHERE name='searches'").fetchone())
             with EngineStore(path) as current:
                 self.assertEqual(3, current.db.execute("PRAGMA user_version").fetchone()[0])
-                self.assertEqual('{ \"original\": true }', current.db.execute("SELECT receipt FROM exports").fetchone()[0])
+                self.assertEqual('{ "original": true }', current.db.execute("SELECT receipt FROM exports").fetchone()[0])
                 current.backup(Path(directory) / "backup.sqlite")
             with EngineStore(Path(directory) / "backup.sqlite", readonly=True) as backup:
                 self.assertEqual([], backup.list_searches())
-                self.assertEqual('{ \"original\": true }', backup.db.execute("SELECT receipt FROM exports").fetchone()[0])
+                self.assertEqual('{ "original": true }', backup.db.execute("SELECT receipt FROM exports").fetchone()[0])
 
 
 if __name__ == "__main__":

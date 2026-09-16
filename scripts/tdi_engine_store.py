@@ -169,7 +169,7 @@ class EngineStore:
             raise durable.ContractError("scientific search contract/binding integrity mismatch")
         row = self.db.execute("SELECT payload FROM search_events WHERE search=? AND kind='transition' ORDER BY sequence DESC LIMIT 1", (key,)).fetchone()
         record["last_transition"] = durable.strict_json(row[0]) if row else None
-        record["execution_error"] = bool(record["last_transition"] and
+        record["execution_error"] = record["phase"] == "cancel-requested" or bool(record["last_transition"] and
                                          ({"stage_failure", "budget_or_prerequisite_stop"} & set(record["last_transition"])))
         record["stages"] = [{"attempt": r[0], "campaign": r[1], "roots": durable.strict_json(r[2]), "phase": r[3], "workflow": r[4]}
                             for r in self.db.execute("SELECT ss.attempt,ss.campaign,ss.roots,c.phase,c.workflow FROM search_stages ss JOIN campaigns c ON c.id=ss.campaign WHERE ss.search=? ORDER BY ss.rowid", (key,))]
@@ -186,13 +186,20 @@ class EngineStore:
 
     def update_search(self, key, sequence, phase, response, event):
         """CAS checkpoint and audit event in one FULL-synchronous transaction."""
-        if phase not in ("prepared", "running", "paused", "completed", "cancelled"):
+        origins = {"prepared": ("prepared",), "running": ("prepared", "running", "paused"),
+                   "paused": ("running",), "completed": ("running", "completed"),
+                   "cancel-requested": ("prepared", "running", "paused", "cancel-requested"),
+                   "cancelled": ("cancel-requested", "cancelled")}
+        if phase not in origins:
             raise durable.ContractError("unknown scientific search phase")
+        placeholders = ",".join("?" for _ in origins[phase])
         with self.db:
-            changed = self.db.execute("UPDATE searches SET response=?,phase=?,sequence=sequence+1 WHERE id=? AND sequence=?",
-                (durable.canonical(response), phase, key, sequence))
+            changed = self.db.execute("UPDATE searches SET response=?,phase=?,sequence=sequence+1 WHERE id=? AND sequence=? "
+                f"AND phase IN ({placeholders}) "
+                "AND NOT (? AND EXISTS (SELECT 1 FROM search_stages ss JOIN campaigns c ON c.id=ss.campaign WHERE ss.search=searches.id AND c.phase NOT IN ('completed','failed','cancelled')))",
+                (durable.canonical(response), phase, key, sequence, *origins[phase], phase == "cancelled"))
             if changed.rowcount != 1:
-                raise durable.ContractError("scientific search state changed; reload before execution")
+                raise durable.ContractError("scientific search transition invalid, cleanup incomplete or state changed")
             self._search_event(key, "transition", event)
         return self.get_search(key)
 
@@ -352,7 +359,7 @@ class EngineStore:
         with self.db:
             cursor = self.db.execute(
                 "UPDATE campaigns SET phase=?,workflow=COALESCE(?,workflow),admission=COALESCE(?,admission),snapshot=COALESCE(?,snapshot) WHERE id=? AND phase=? "
-                "AND NOT (? AND EXISTS (SELECT 1 FROM search_stages ss JOIN searches s ON s.id=ss.search WHERE ss.campaign=campaigns.id AND s.phase='cancelled'))",
+                "AND NOT (? AND EXISTS (SELECT 1 FROM search_stages ss JOIN searches s ON s.id=ss.search WHERE ss.campaign=campaigns.id AND s.phase IN ('cancel-requested','cancelled')))",
                 (phase, workflow, durable.canonical(admission) if admission else None,
                  durable.canonical(snapshot) if snapshot else None, campaign, expected, phase == "executing" and expected == "admitted"),
             )

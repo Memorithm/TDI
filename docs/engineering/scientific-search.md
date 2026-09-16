@@ -21,7 +21,7 @@ TDI's Cargo configuration:
 
 ```sh
 cd ../Forge
-git checkout 4c3813347d564953bfa3930ef613d1c62a08daf3
+git checkout 0d48a91a5eed6a9ae09a5eacd7c4f18df8bdd333
 cargo build --locked -p forge-bridge --example scientific_search
 cd ../scirust-hub
 git checkout ccdcb99a4573dbefb944af0df713101b100b5f78
@@ -40,7 +40,7 @@ python3 scripts/tdi_engine.py --hub http://127.0.0.1:8477 --allow-loopback-http 
   --tdi-source-commit "$(git rev-parse HEAD)" \
   --forge-worker "$PWD/../Forge/target/debug/examples/scientific_search" \
   --forge-sha256 "$(sha256sum ../Forge/target/debug/examples/scientific_search | cut -d ' ' -f 1)" \
-  --forge-source-commit 4c3813347d564953bfa3930ef613d1c62a08daf3 \
+  --forge-source-commit 0d48a91a5eed6a9ae09a5eacd7c4f18df8bdd333 \
   --strategy grid --seed 18446744073709551615
 ```
 
@@ -63,11 +63,15 @@ values and the Pareto set depend on the actual machine; there is no fixed winner
 or expected speedup. `scientific_verdict` remains `not-assessed`.
 
 Use `search-cancel SEARCH_ID` with the same Hub options for cancellation. It
-persists cancellation before cancelling mapped workflows. A transactional check
+persists `cancel-requested` before cancelling mapped workflows. A transactional check
 prevents a cancelled search from starting an already admitted stage. A prepared
 workflow can now be cancelled before any Hub submission. In-flight execution
 still requires the Hub's cleanup acknowledgement. Repeating cancellation can
-finish cleanup after a lost reply; it does not reopen the search.
+finish cleanup after a lost reply; it does not reopen the search. Unknown
+submissions remain `cancel-requested` with explicit `pending_cleanup` campaign
+identities until their existing workflows are attached and cancellation is
+repeated. The state becomes `cancelled` only after all mapped work is terminal.
+Neither a pending nor completed cancellation can dispatch work.
 
 ## What is measured
 
@@ -149,7 +153,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts \
 TDI_HUBD_BIN="$PWD/../scirust-hub/target/debug/scirust-hubd" \
 TDI_SEARCH_WORKER="$PWD/target/debug/examples/finite_search_worker" \
 TDI_FORGE_WORKER="$PWD/../Forge/target/debug/examples/scientific_search" \
-TDI_FORGE_SOURCE_COMMIT=4c3813347d564953bfa3930ef613d1c62a08daf3 \
+TDI_FORGE_SOURCE_COMMIT=0d48a91a5eed6a9ae09a5eacd7c4f18df8bdd333 \
 TDI_SEARCH_SOURCE_COMMIT="$(git rev-parse HEAD)" \
 python3 -m unittest -v scripts/test_tdi_forge_integration.py
 ```
