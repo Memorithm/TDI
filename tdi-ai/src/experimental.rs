@@ -44,6 +44,8 @@ pub mod tdi2_intuition_reliability;
 pub mod tdi2_intuition_selection;
 #[path = "tdi2_intuition_store.rs"]
 pub mod tdi2_intuition_store;
+#[path = "tdi2_intuition_trace.rs"]
+pub mod tdi2_intuition_trace;
 #[path = "tdi2_intuition_transfer.rs"]
 pub mod tdi2_intuition_transfer;
 #[path = "tdi2_intuition_weight.rs"]
