@@ -47,13 +47,15 @@ def entity_id(value):
     return value
 
 
-class HubClient:
-    """Connect to one explicitly selected Hub, without automatic mutation retries.
+class BoundedOriginClient:
+    """Connect to one explicitly selected origin without automatic mutation retries.
 
     Example: ``HubClient('http://127.0.0.1:8477', allow_loopback_http=True)``.
     HTTPS validates certificates against the platform trust store. A remote
     HTTPS deployment also requires a token. Never place tokens in the URL.
     """
+
+    path_prefix = "/api/v1/"
 
     def __init__(self, endpoint, *, token=None, allow_loopback_http=False,
                  timeout=30, max_bytes=MAX_TRANSFER_BYTES):
@@ -95,7 +97,7 @@ class HubClient:
         JSON errors contain only the HTTP status, not the remote body, URL,
         credentials or worker diagnostics. ``binary=True`` returns exact bytes.
         """
-        if method not in ("GET", "POST") or not path.startswith("/api/v1/"):
+        if method not in ("GET", "POST") or not path.startswith(self.path_prefix):
             raise HubClientError("unsupported Hub operation")
         if "#" in path or "\\" in path or ".." in path:
             raise HubClientError("invalid Hub resource path")
@@ -141,6 +143,14 @@ class HubClient:
             if method != "GET":
                 raise HubTransportUnknown("Hub mutation response unavailable; reconcile before continuing") from None
             raise HubClientError("Hub response unavailable or invalid") from None
+
+
+class HubClient(BoundedOriginClient):
+    """Hub artifact client; optional exporters reuse only the origin transport.
+
+    Example: ``HubClient('https://hub.example', token=secret)``. Upload/download
+    retain descriptor, access, byte-budget and portable-digest validation.
+    """
 
     def upload(self, descriptor, payload):
         """Upload an explicitly selected permitted artifact and verify Hub's digest bridge."""
