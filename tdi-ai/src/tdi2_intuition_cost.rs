@@ -3,6 +3,7 @@
 //! These measurements are never inputs to template applicability, ranking,
 //! transfer, consolidation, or abstention.
 
+use std::hint::black_box;
 use std::time::{Duration, Instant};
 
 use super::tdi2_intuition_store::ExperienceStore;
@@ -97,15 +98,31 @@ where
 {
     let start = Instant::now();
     let value = operation();
-    ExternalTiming {
-        value,
-        elapsed: start.elapsed(),
+    ExternalTiming { value, elapsed: start.elapsed() }
+}
+
+/// Collect raw wall-clock durations over repeated externally timed calls.
+///
+/// Results are black-boxed only to reduce trivial benchmark elimination. The
+/// returned durations are observations and cannot influence subsequent calls.
+pub fn measure_repeated_external<T, F>(repeats: usize, mut operation: F) -> Vec<Duration>
+where
+    F: FnMut() -> T,
+{
+    let mut durations = Vec::with_capacity(repeats);
+    for _ in 0..repeats {
+        let start = Instant::now();
+        black_box(operation());
+        durations.push(start.elapsed());
     }
+    durations
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{OperationAccounting, logical_memory_accounting, measure_external};
+    use super::{
+        OperationAccounting, logical_memory_accounting, measure_external, measure_repeated_external,
+    };
     use crate::experimental::tdi2_intuition::{PredicateId, RoleId, Template, TemplateId};
     use crate::experimental::tdi2_intuition_relations::{RelationId, RelationalTemplate, RoleRelation};
     use crate::experimental::tdi2_intuition_reliability::ReliabilityEvidence;
@@ -154,5 +171,11 @@ mod tests {
     fn timing_observer_does_not_change_return_value() {
         let measured = measure_external(|| 42_u64);
         assert_eq!(measured.value, 42);
+    }
+
+    #[test]
+    fn repeated_timing_returns_exact_requested_sample_count() {
+        let samples = measure_repeated_external(5, || 7_u64);
+        assert_eq!(samples.len(), 5);
     }
 }
