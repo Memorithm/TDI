@@ -75,6 +75,45 @@ pub fn motif_retrieval_case(case_id: u32) -> SyntheticCase {
     }
 }
 
+/// Motif retrieval with a controlled number of irrelevant novel predicates.
+#[must_use]
+pub fn motif_retrieval_stress_case(case_id: u32, distractor_count: u16) -> SyntheticCase {
+    let motif = PredicateId::new(100 + case_id % 17);
+    let block = 1_000_000 + (case_id % 10_000) * 1024;
+    let mut predicates = Vec::with_capacity(usize::from(distractor_count) + 1);
+    predicates.push(motif);
+    predicates
+        .extend((0..distractor_count).map(|offset| PredicateId::new(block + u32::from(offset))));
+    SyntheticCase {
+        family: TaskFamily::MotifRetrieval,
+        query: BooleanState::new(predicates),
+        expected_template: TemplateId::new(u64::from(case_id % 17) + 1),
+    }
+}
+
+/// State deliberately containing no known motif predicate.
+#[must_use]
+pub fn motif_ood_state(case_id: u32, predicate_count: u16) -> BooleanState {
+    let block = 20_000_000 + (case_id % 10_000) * 1024;
+    BooleanState::new(
+        (0..predicate_count)
+            .map(|offset| PredicateId::new(block + u32::from(offset)))
+            .collect(),
+    )
+}
+
+/// State containing two known motifs simultaneously, creating exact ambiguity.
+#[must_use]
+pub fn motif_ambiguous_state(first: u8, second: u8) -> Option<BooleanState> {
+    if first >= 17 || second >= 17 || first == second {
+        return None;
+    }
+    Some(BooleanState::new(vec![
+        PredicateId::new(100 + u32::from(first)),
+        PredicateId::new(100 + u32::from(second)),
+    ]))
+}
+
 /// Deterministic pair for context reversal.
 ///
 /// Both cases share a base motif but differ by one context predicate and must
@@ -118,7 +157,10 @@ pub fn temporal_trend_case(case_id: u32) -> TemporalCase {
 
 #[cfg(test)]
 mod tests {
-    use super::{TaskFamily, context_reversal_pair, motif_retrieval_case, temporal_trend_case};
+    use super::{
+        TaskFamily, context_reversal_pair, motif_ambiguous_state, motif_ood_state,
+        motif_retrieval_case, motif_retrieval_stress_case, temporal_trend_case,
+    };
 
     #[test]
     fn motif_fixture_is_deterministic() {
@@ -142,5 +184,22 @@ mod tests {
         let case = temporal_trend_case(4);
         assert_eq!(case.query().len(), 3);
         assert_ne!(case.query().frames()[0], case.query().frames()[2]);
+    }
+
+    #[test]
+    fn stress_fixture_preserves_motif_while_adding_irrelevant_predicates() {
+        let case = motif_retrieval_stress_case(5, 64);
+        assert_eq!(
+            case.expected_template(),
+            motif_retrieval_case(5).expected_template()
+        );
+        assert_eq!(case.query().len(), 65);
+    }
+
+    #[test]
+    fn ood_and_ambiguous_states_have_explicit_shapes() {
+        assert_eq!(motif_ood_state(2, 8).len(), 8);
+        assert_eq!(motif_ambiguous_state(0, 1).expect("valid pair").len(), 2);
+        assert!(motif_ambiguous_state(1, 1).is_none());
     }
 }
