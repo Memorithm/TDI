@@ -201,7 +201,9 @@ impl ResourceLedger {
         if n == 0 {
             return Err(EvalError::LengthMismatch);
         }
-        let key_bits = 384_u64.checked_mul(n).ok_or(EvalError::ArithmeticOverflow)?;
+        let key_bits = 384_u64
+            .checked_mul(n)
+            .ok_or(EvalError::ArithmeticOverflow)?;
         let dot_lane_count = 6_u64.checked_mul(n).ok_or(EvalError::ArithmeticOverflow)?;
         let comparison_count = n.checked_sub(1).ok_or(EvalError::ArithmeticOverflow)?;
         let base_mul = 6_u64.checked_mul(n).ok_or(EvalError::ArithmeticOverflow)?;
@@ -215,8 +217,12 @@ impl ResourceLedger {
                     0,
                     192,
                     8,
-                    base_add.checked_add(6).ok_or(EvalError::ArithmeticOverflow)?,
-                    base_mul.checked_add(6).ok_or(EvalError::ArithmeticOverflow)?,
+                    base_add
+                        .checked_add(6)
+                        .ok_or(EvalError::ArithmeticOverflow)?,
+                    base_mul
+                        .checked_add(6)
+                        .ok_or(EvalError::ArithmeticOverflow)?,
                     1,
                 ),
             };
@@ -305,13 +311,31 @@ impl fmt::Display for EvalError {
         match self {
             Self::Algebra(error) => write!(formatter, "torsor algebra error: {error}"),
             Self::OutOfBounds { field } => write!(formatter, "{field} exceeds frozen bounds"),
-            Self::GeometryIndex { index } => write!(formatter, "geometry index {index} exceeds frozen bound"),
-            Self::SuppliedPositionRequired => write!(formatter, "G3 requires an evaluator-supplied position"),
-            Self::NonQuarterSuppliedPosition => write!(formatter, "G3 position must use exact quarter-integer components"),
-            Self::LengthMismatch => write!(formatter, "candidate count does not match the frozen contract"),
-            Self::DuplicateIdentity { identity } => write!(formatter, "duplicate candidate identity {identity}"),
-            Self::AmbiguousTarget => write!(formatter, "top score is ambiguous under the frozen tolerance"),
-            Self::AmbiguousT1Top => write!(formatter, "T1 top score is ambiguous under the frozen tolerance"),
+            Self::GeometryIndex { index } => {
+                write!(formatter, "geometry index {index} exceeds frozen bound")
+            }
+            Self::SuppliedPositionRequired => {
+                write!(formatter, "G3 requires an evaluator-supplied position")
+            }
+            Self::NonQuarterSuppliedPosition => write!(
+                formatter,
+                "G3 position must use exact quarter-integer components"
+            ),
+            Self::LengthMismatch => write!(
+                formatter,
+                "candidate count does not match the frozen contract"
+            ),
+            Self::DuplicateIdentity { identity } => {
+                write!(formatter, "duplicate candidate identity {identity}")
+            }
+            Self::AmbiguousTarget => write!(
+                formatter,
+                "top score is ambiguous under the frozen tolerance"
+            ),
+            Self::AmbiguousT1Top => write!(
+                formatter,
+                "T1 top score is ambiguous under the frozen tolerance"
+            ),
             Self::ArithmeticOverflow => write!(formatter, "arithmetic overflow"),
             Self::NonFiniteScore => write!(formatter, "candidate score is non-finite"),
         }
@@ -346,7 +370,9 @@ pub fn geometry_point(
 
     let point = match geometry {
         Geometry::G0Origin => Vec3::zero(),
-        Geometry::G1Linear => Vec3::new(index as f64 / 64.0, 0.0, 0.0).map_err(EvalError::Algebra)?,
+        Geometry::G1Linear => {
+            Vec3::new(index as f64 / 64.0, 0.0, 0.0).map_err(EvalError::Algebra)?
+        }
         Geometry::G2Helix => {
             let (x, y) = match index % 8 {
                 0 => (1.0, 0.0),
@@ -363,7 +389,10 @@ pub fn geometry_point(
         }
         Geometry::G3Supplied => {
             let value = supplied.ok_or(EvalError::SuppliedPositionRequired)?;
-            if !is_exact_quarter(value.x) || !is_exact_quarter(value.y) || !is_exact_quarter(value.z) {
+            if !is_exact_quarter(value.x)
+                || !is_exact_quarter(value.y)
+                || !is_exact_quarter(value.z)
+            {
                 return Err(EvalError::NonQuarterSuppliedPosition);
             }
             bound_vec(value, "supplied_position", MAX_SUPPLIED_POSITION_ABS)?;
@@ -381,12 +410,18 @@ pub struct SplitMix64 {
 }
 
 impl SplitMix64 {
-    pub fn for_episode(split: Split, cell: PrimaryCell, episode_index: u64) -> Result<Self, EvalError> {
+    pub fn for_episode(
+        split: Split,
+        cell: PrimaryCell,
+        episode_index: u64,
+    ) -> Result<Self, EvalError> {
         if episode_index >= (1_u64 << 48) {
             return Err(EvalError::ArithmeticOverflow);
         }
         let selector = (u64::from(cell.id()) << 56) | episode_index;
-        Ok(Self { state: split.domain() ^ selector })
+        Ok(Self {
+            state: split.domain() ^ selector,
+        })
     }
 
     #[must_use]
@@ -399,12 +434,14 @@ impl SplitMix64 {
     }
 
     pub fn half_step(&mut self) -> Result<f64, EvalError> {
-        let residue = i64::try_from(self.next_u64() % 33).map_err(|_| EvalError::ArithmeticOverflow)?;
+        let residue =
+            i64::try_from(self.next_u64() % 33).map_err(|_| EvalError::ArithmeticOverflow)?;
         Ok((residue - 16) as f64 / 2.0)
     }
 
     pub fn quarter_step(&mut self) -> Result<f64, EvalError> {
-        let residue = i64::try_from(self.next_u64() % 15).map_err(|_| EvalError::ArithmeticOverflow)?;
+        let residue =
+            i64::try_from(self.next_u64() % 15).map_err(|_| EvalError::ArithmeticOverflow)?;
         Ok((residue - 7) as f64 / 4.0)
     }
 }
@@ -427,7 +464,11 @@ pub fn score(arm: Arm, query: EvalQuery, key: EvalKey) -> Result<f64, EvalError>
                 "factorized_resultant_dual",
                 MAX_COMPONENT_ABS,
             )?;
-            bound_vec(factorized.moment_dual, "factorized_moment_dual", MAX_COMPONENT_ABS)?;
+            bound_vec(
+                factorized.moment_dual,
+                "factorized_moment_dual",
+                MAX_COMPONENT_ABS,
+            )?;
             factorized
                 .pair(key.torsor.factorized_key().map_err(EvalError::Algebra)?)
                 .map_err(EvalError::Algebra)?
@@ -451,13 +492,22 @@ pub fn scores_tied(lhs: f64, rhs: f64) -> bool {
     lhs.is_finite() && rhs.is_finite() && (lhs - rhs).abs() <= score_tolerance(lhs, rhs)
 }
 
-pub fn rank_candidates(arm: Arm, query: EvalQuery, candidates: &[EvalKey]) -> Result<Ranking, EvalError> {
+pub fn rank_candidates(
+    arm: Arm,
+    query: EvalQuery,
+    candidates: &[EvalKey],
+) -> Result<Ranking, EvalError> {
     if candidates.len() != CANDIDATES_PER_QUERY {
         return Err(EvalError::LengthMismatch);
     }
     for (index, candidate) in candidates.iter().enumerate() {
-        if candidates[..index].iter().any(|prior| prior.identity == candidate.identity) {
-            return Err(EvalError::DuplicateIdentity { identity: candidate.identity });
+        if candidates[..index]
+            .iter()
+            .any(|prior| prior.identity == candidate.identity)
+        {
+            return Err(EvalError::DuplicateIdentity {
+                identity: candidate.identity,
+            });
         }
     }
 
@@ -482,7 +532,10 @@ pub fn rank_candidates(arm: Arm, query: EvalQuery, candidates: &[EvalKey]) -> Re
     })
 }
 
-pub fn t1_value_readout(query: EvalQuery, candidates: &[EvalKey]) -> Result<(Ranking, TorsorValue), EvalError> {
+pub fn t1_value_readout(
+    query: EvalQuery,
+    candidates: &[EvalKey],
+) -> Result<(Ranking, TorsorValue), EvalError> {
     let ranking = rank_candidates(Arm::T1, query, candidates)?;
     let selected = candidates
         .iter()
@@ -514,7 +567,10 @@ fn encode_identity(value: Option<u16>) -> String {
 }
 
 fn encode_score(value: Option<f64>) -> String {
-    value.map_or_else(|| "none".to_owned(), |value| format!("0x{:016x}", value.to_bits()))
+    value.map_or_else(
+        || "none".to_owned(),
+        |value| format!("0x{:016x}", value.to_bits()),
+    )
 }
 
 impl EvalRecord {
@@ -591,7 +647,8 @@ mod tests {
 
     #[test]
     fn dyadic_generators_match_frozen_lattices() {
-        let mut stream = SplitMix64::for_episode(Split::Development, PrimaryCell::P2, 0).unwrap();
+        let mut stream =
+            SplitMix64::for_episode(Split::Development, PrimaryCell::P2, 0).unwrap();
         for _ in 0..128 {
             let half = stream.half_step().unwrap();
             assert!((-8.0..=8.0).contains(&half));
@@ -604,9 +661,18 @@ mod tests {
 
     #[test]
     fn geometry_registry_matches_frozen_definitions() {
-        assert_eq!(geometry_point(Geometry::G0Origin, 9, None).unwrap(), Vec3::zero());
-        assert_eq!(geometry_point(Geometry::G1Linear, 64, None).unwrap(), v(1.0, 0.0, 0.0));
-        assert_eq!(geometry_point(Geometry::G2Helix, 9, None).unwrap(), v(1.0, 1.0, 9.0 / 64.0));
+        assert_eq!(
+            geometry_point(Geometry::G0Origin, 9, None).unwrap(),
+            Vec3::zero()
+        );
+        assert_eq!(
+            geometry_point(Geometry::G1Linear, 64, None).unwrap(),
+            v(1.0, 0.0, 0.0)
+        );
+        assert_eq!(
+            geometry_point(Geometry::G2Helix, 9, None).unwrap(),
+            v(1.0, 1.0, 9.0 / 64.0)
+        );
         assert_eq!(
             geometry_point(Geometry::G3Supplied, 0, Some(v(1.75, -1.5, 0.25))).unwrap(),
             v(1.75, -1.5, 0.25)
@@ -619,7 +685,10 @@ mod tests {
         let key = key(0, 2.0, v(1.0, 1.0, -1.0));
         let t3 = score(Arm::T3, query, key).unwrap();
         let t4 = score(Arm::T4, query, key).unwrap();
-        let expected = query.position().cross(query.twist().angular()).dot(key.torsor().resultant());
+        let expected = query
+            .position()
+            .cross(query.twist().angular())
+            .dot(key.torsor().resultant());
         assert!((t3 - t4 - expected).abs() <= score_tolerance(t3 - t4, expected));
     }
 
@@ -632,10 +701,18 @@ mod tests {
         .unwrap();
         let key = EvalKey::new(
             0,
-            Torsor3::new(v(1.0, 2.0, 0.0), v(0.0, 0.0, 0.0), v(0.0, 0.0, 1.0)).unwrap(),
+            Torsor3::new(
+                v(1.0, 2.0, 0.0),
+                v(0.0, 0.0, 0.0),
+                v(0.0, 0.0, 1.0),
+            )
+            .unwrap(),
         )
         .unwrap();
-        assert_ne!(score(Arm::T0, query, key).unwrap(), score(Arm::T4, query, key).unwrap());
+        assert_ne!(
+            score(Arm::T0, query, key).unwrap(),
+            score(Arm::T4, query, key).unwrap()
+        );
     }
 
     #[test]
@@ -648,7 +725,9 @@ mod tests {
         let key = key(0, 1.0, Vec3::zero());
         assert!(matches!(
             score(Arm::T3, query, key),
-            Err(EvalError::OutOfBounds { field: "factorized_resultant_dual" })
+            Err(EvalError::OutOfBounds {
+                field: "factorized_resultant_dual"
+            })
         ));
     }
 
@@ -659,7 +738,10 @@ mod tests {
         for identity in 0..CANDIDATES_PER_QUERY {
             candidates.push(key(identity as u16, 1.0, Vec3::zero()));
         }
-        assert_eq!(rank_candidates(Arm::T1, query, &candidates), Err(EvalError::AmbiguousT1Top));
+        assert_eq!(
+            rank_candidates(Arm::T1, query, &candidates),
+            Err(EvalError::AmbiguousT1Top)
+        );
     }
 
     #[test]
@@ -690,7 +772,9 @@ mod tests {
         };
         let line = record.encode_line();
         assert_eq!(line.trim_end_matches('\n').split('\t').count(), 25);
-        assert!(line.contains("\ttarget_identity=none\tselected_identity=none\texact_success=0\t"));
+        assert!(line.contains(
+            "\ttarget_identity=none\tselected_identity=none\texact_success=0\t"
+        ));
         assert!(line.contains("\trejection_reason=missing_target\t"));
         assert!(line.ends_with('\n'));
     }
