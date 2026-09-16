@@ -178,7 +178,10 @@ def _validate_hub_contract(value):
         raise ExecutionGraphError("hub_contract.source_commit must be a lowercase 40-hex Git commit")
     if value["source_commit"] != HUB_SOURCE_COMMIT:
         raise ExecutionGraphError("unsupported Hub source commit for Graph/v1 compiler")
-    if value["workflow_schema_version"] != HUB_WORKFLOW_SCHEMA_VERSION:
+    if (
+        type(value["workflow_schema_version"]) is not int
+        or value["workflow_schema_version"] != HUB_WORKFLOW_SCHEMA_VERSION
+    ):
         raise ExecutionGraphError("unsupported Hub workflow schema version")
     if value["workflow_model_version"] != HUB_WORKFLOW_MODEL_VERSION:
         raise ExecutionGraphError("unsupported Hub workflow model version")
@@ -244,7 +247,7 @@ def canonical_graph(graph):
         },
         "execution graph",
     )
-    if graph["schema"] != GRAPH_SCHEMA:
+    if type(graph["schema"]) is not int or graph["schema"] != GRAPH_SCHEMA:
         raise ExecutionGraphError("unsupported execution graph schema")
     _text(graph["semantic_version"], "semantic_version", max_bytes=256)
     workflow_name = _workflow_name(graph["name"])

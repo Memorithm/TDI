@@ -198,6 +198,30 @@ class HubAdmissionContractTests(unittest.TestCase):
                     fixture_graph(), response, root_artifact_bindings=root_artifact_bindings()
                 )
 
+    def test_g3_identity_version_fields_reject_boolean_aliases(self):
+        response = workflow_response()
+        response["admission"]["schema_version"] = True
+        with self.assertRaisesRegex(
+            admission.HubAdmissionContractError, "workflow admission schema version"
+        ):
+            admission.bind_exact_workflow_admission(
+                fixture_graph(), response, root_artifact_bindings=root_artifact_bindings()
+            )
+
+        binding = bind_fixture()
+        binding["schema"] = True
+        with self.assertRaisesRegex(
+            admission.HubAdmissionContractError, "workflow admission binding schema"
+        ):
+            admission.canonical_workflow_admission_binding(binding)
+
+        binding = bind_fixture()
+        binding["admission_schema_version"] = True
+        with self.assertRaisesRegex(
+            admission.HubAdmissionContractError, "workflow admission schema version mismatch"
+        ):
+            admission.canonical_workflow_admission_binding(binding)
+
     def test_each_registry_pin_must_match_graph(self):
         fields = (
             ("component_version", "1.2.4"),
