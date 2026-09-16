@@ -5,6 +5,9 @@ on:
     paths:
       - 'scripts/tdi_hub_edge_contract.py'
       - 'scripts/test_tdi_hub_edge_contract.py'
+      - 'scripts/tdi_hub_admission_contract.py'
+      - 'scripts/test_tdi_hub_admission_contract.py'
+      - 'scripts/tdi_execution_graph.py'
       - 'scripts/tdi_artifact_contract.py'
       - 'scripts/tdi_experiment_contract.py'
       - 'docs/engineering/industrialization-status.md'
@@ -14,6 +17,9 @@ on:
     paths:
       - 'scripts/tdi_hub_edge_contract.py'
       - 'scripts/test_tdi_hub_edge_contract.py'
+      - 'scripts/tdi_hub_admission_contract.py'
+      - 'scripts/test_tdi_hub_admission_contract.py'
+      - 'scripts/tdi_execution_graph.py'
       - 'scripts/tdi_artifact_contract.py'
       - 'scripts/tdi_experiment_contract.py'
       - 'docs/engineering/industrialization-status.md'
@@ -32,11 +38,15 @@ jobs:
           PYTHONPATH=scripts python3 -m py_compile \
             scripts/tdi_experiment_contract.py \
             scripts/tdi_artifact_contract.py \
+            scripts/tdi_execution_graph.py \
             scripts/tdi_hub_edge_contract.py \
+            scripts/tdi_hub_admission_contract.py \
             scripts/test_tdi_artifact_contract.py \
-            scripts/test_tdi_hub_edge_contract.py
+            scripts/test_tdi_hub_edge_contract.py \
+            scripts/test_tdi_hub_admission_contract.py
       - name: Run Hub edge and artifact contract regressions
         run: |
           PYTHONPATH=scripts python3 -m unittest \
             scripts/test_tdi_artifact_contract.py \
-            scripts/test_tdi_hub_edge_contract.py -v
+            scripts/test_tdi_hub_edge_contract.py \
+            scripts/test_tdi_hub_admission_contract.py -v
