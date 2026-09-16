@@ -42,6 +42,8 @@ pub mod tdi2_intuition_calibration;
 pub mod tdi2_intuition_consolidation;
 #[path = "tdi2_intuition_controls.rs"]
 pub mod tdi2_intuition_controls;
+#[path = "tdi2_intuition_cost.rs"]
+pub mod tdi2_intuition_cost;
 #[path = "tdi2_intuition_dedup.rs"]
 pub mod tdi2_intuition_dedup;
 #[path = "tdi2_intuition_encoder.rs"]
