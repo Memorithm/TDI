@@ -6,10 +6,7 @@ use super::tdi2_intuition_selection::Candidate;
 
 /// Remove a frozen set of context predicates from one Boolean query.
 #[must_use]
-pub fn remove_context(
-    state: &BooleanState,
-    context_predicates: &[PredicateId],
-) -> BooleanState {
+pub fn remove_context(state: &BooleanState, context_predicates: &[PredicateId]) -> BooleanState {
     let mut masked = context_predicates.to_vec();
     masked.sort_unstable();
     masked.dedup();
@@ -24,7 +21,9 @@ pub fn remove_context(
 }
 
 /// Preserve Boolean applicability and roles while removing all role relations.
-pub fn remove_relations(template: &RelationalTemplate) -> Result<RelationalTemplate, RelationError> {
+pub fn remove_relations(
+    template: &RelationalTemplate,
+) -> Result<RelationalTemplate, RelationError> {
     RelationalTemplate::new(template.base().clone(), Vec::new())
 }
 
@@ -45,8 +44,12 @@ pub fn equalize_experience_weights(candidates: &[Candidate]) -> Vec<Candidate> {
 #[cfg(test)]
 mod tests {
     use super::{equalize_experience_weights, remove_context, remove_relations};
-    use crate::experimental::tdi2_intuition::{BooleanState, PredicateId, RoleId, Template, TemplateId};
-    use crate::experimental::tdi2_intuition_relations::{RelationId, RelationalTemplate, RoleRelation};
+    use crate::experimental::tdi2_intuition::{
+        BooleanState, PredicateId, RoleId, Template, TemplateId,
+    };
+    use crate::experimental::tdi2_intuition_relations::{
+        RelationId, RelationalTemplate, RoleRelation,
+    };
     use crate::experimental::tdi2_intuition_selection::Candidate;
 
     #[test]
@@ -57,7 +60,10 @@ mod tests {
             PredicateId::new(9),
         ]);
         let ablated = remove_context(&state, &[PredicateId::new(9)]);
-        assert_eq!(ablated.predicates(), &[PredicateId::new(1), PredicateId::new(2)]);
+        assert_eq!(
+            ablated.predicates(),
+            &[PredicateId::new(1), PredicateId::new(2)]
+        );
         assert_eq!(state.len(), 3);
     }
 
@@ -72,7 +78,11 @@ mod tests {
         .expect("template");
         let template = RelationalTemplate::new(
             base.clone(),
-            vec![RoleRelation::new(RoleId::new(1), RelationId::new(7), RoleId::new(2))],
+            vec![RoleRelation::new(
+                RoleId::new(1),
+                RelationId::new(7),
+                RoleId::new(2),
+            )],
         )
         .expect("relations");
         let ablated = remove_relations(&template).expect("ablation");

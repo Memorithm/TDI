@@ -43,11 +43,23 @@ pub fn analogy_case(case_id: u32) -> AnalogyCase {
             .entity()
     };
     let expected = vec![
-        ExpectedRelation { left: resolve(roles[0]), relation: RelationId::new(1), right: resolve(roles[1]) },
-        ExpectedRelation { left: resolve(roles[1]), relation: RelationId::new(2), right: resolve(roles[2]) },
+        ExpectedRelation {
+            left: resolve(roles[0]),
+            relation: RelationId::new(1),
+            right: resolve(roles[1]),
+        },
+        ExpectedRelation {
+            left: resolve(roles[1]),
+            relation: RelationId::new(2),
+            right: resolve(roles[2]),
+        },
     ];
 
-    AnalogyCase { template, bindings, expected }
+    AnalogyCase {
+        template,
+        bindings,
+        expected,
+    }
 }
 
 #[cfg(test)]

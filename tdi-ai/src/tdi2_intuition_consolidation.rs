@@ -27,16 +27,24 @@ pub struct ConsolidationUpdate {
 impl ConsolidationUpdate {
     /// Template whose evidence changed.
     #[must_use]
-    pub const fn template_id(self) -> TemplateId { self.template_id }
+    pub const fn template_id(self) -> TemplateId {
+        self.template_id
+    }
     /// Evidence before validation.
     #[must_use]
-    pub const fn before(self) -> ReliabilityEvidence { self.before }
+    pub const fn before(self) -> ReliabilityEvidence {
+        self.before
+    }
     /// Evidence after validation.
     #[must_use]
-    pub const fn after(self) -> ReliabilityEvidence { self.after }
+    pub const fn after(self) -> ReliabilityEvidence {
+        self.after
+    }
     /// Observed validation classification.
     #[must_use]
-    pub const fn outcome(self) -> ValidationOutcome { self.outcome }
+    pub const fn outcome(self) -> ValidationOutcome {
+        self.outcome
+    }
 
     /// Canonical post-outcome record suitable for TDI artifact binding.
     #[must_use]
@@ -64,7 +72,12 @@ pub fn consolidate_validation(
 ) -> Result<ConsolidationUpdate, ReliabilityError> {
     let mut after = evidence;
     after.observe(matches!(outcome, ValidationOutcome::Confirmed))?;
-    Ok(ConsolidationUpdate { template_id, before: evidence, after, outcome })
+    Ok(ConsolidationUpdate {
+        template_id,
+        before: evidence,
+        after,
+        outcome,
+    })
 }
 
 /// Structural evolution is deliberately a proposal, not an automatic mutation.
@@ -125,11 +138,17 @@ pub fn one_literal_generalizations(template: &Template) -> Vec<GeneralizationPro
             predicate,
             polarity: ClausePolarity::Required,
         })
-        .chain(template.forbidden().iter().copied().map(|predicate| GeneralizationProposal {
-            template_id: template.id(),
-            predicate,
-            polarity: ClausePolarity::Forbidden,
-        }))
+        .chain(
+            template
+                .forbidden()
+                .iter()
+                .copied()
+                .map(|predicate| GeneralizationProposal {
+                    template_id: template.id(),
+                    predicate,
+                    polarity: ClausePolarity::Forbidden,
+                }),
+        )
         .collect()
 }
 
@@ -208,8 +227,15 @@ mod tests {
 
     #[test]
     fn structural_changes_remain_review_proposals() {
-        let review = StructuralReview::ConsiderGeneralization { template_id: TemplateId::new(8) };
-        assert_eq!(review, StructuralReview::ConsiderGeneralization { template_id: TemplateId::new(8) });
+        let review = StructuralReview::ConsiderGeneralization {
+            template_id: TemplateId::new(8),
+        };
+        assert_eq!(
+            review,
+            StructuralReview::ConsiderGeneralization {
+                template_id: TemplateId::new(8)
+            }
+        );
     }
 
     #[test]
