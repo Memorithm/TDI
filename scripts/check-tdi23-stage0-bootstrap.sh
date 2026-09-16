@@ -31,8 +31,14 @@ for file in \
     test -s "$file" || fail "missing required Stage-0 surface: $file"
 done
 
-grep -Fq 'active Stage 0 bootstrap; not frozen; no confirmatory execution authorised' \
-    "$PROGRAMME" || fail "programme Stage-0 status drifted"
+# Stage 0 may cease to be the active engineering stage after its bootstrap is
+# merged, but its scientific freeze/authorization boundary must remain explicit.
+grep -Fq 'scientific freeze unresolved; no confirmatory execution authorised' \
+    "$PROGRAMME" || fail "programme lost unresolved Stage-0 freeze/authorization boundary"
+grep -Fq '| **TDI-23.0**' "$PROGRAMME" \
+    || fail "programme lost the TDI-23.0 stage entry"
+grep -Fq 'bootstrap merged; scientific freeze unresolved' "$PROGRAMME" \
+    || fail "programme no longer records TDI-23.0 as merged but scientifically unresolved"
 grep -Fq '`softmax` is nonlinear' "$PROGRAMME" \
     || fail "programme lost explicit nonlinear softmax boundary"
 grep -Fq 'ACTIVE STAGE-0 BOOTSTRAP / NON-FINAL' "$SCOPE" \
