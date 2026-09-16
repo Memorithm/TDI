@@ -1,6 +1,8 @@
 import copy
 import unittest
 
+import tdi_hub_admission_contract as admission
+import tdi_hub_edge_contract as hub
 import tdi_partner_adapter_contract as partner
 import tdi_scirust_partner_contract as scirust
 import test_tdi_hub_admission_contract as hub_fixture
@@ -9,7 +11,19 @@ import test_tdi_partner_adapter_contract as partner_fixture
 SHA = lambda c: c * 64
 
 
-def admitted_scirust_step():
+def candidate_descriptor(*, access_class="development", raw_sha256=None, size_bytes=321):
+    return {
+        "schema": 1,
+        "name": "tdi-scirust-representation-candidate-v1.json",
+        "raw_sha256": raw_sha256 or SHA("1"),
+        "size_bytes": size_bytes,
+        "media_type": scirust.SCIRUST_CANDIDATE_MEDIA_TYPE,
+        "access_class": access_class,
+    }
+
+
+def admitted_scirust_step(candidate=None):
+    candidate = candidate or candidate_descriptor()
     descriptor = partner_fixture.descriptor("scirust")
     descriptor["source_sha"] = scirust.SCIRUST_SOURCE_SHA
     descriptor["protocol"] = {
@@ -26,15 +40,28 @@ def admitted_scirust_step():
     descriptor["capabilities"] = copy.deepcopy(surface["capabilities"])
     descriptor["inputs"] = copy.deepcopy(surface["inputs"])
     descriptor["outputs"] = copy.deepcopy(surface["outputs"])
-    return partner.bind_admitted_partner_step(
-        descriptor, hub_fixture.bind_fixture(), step_key="prepare"
+    portable = hub.bind_portable_artifact(
+        candidate,
+        {
+            "id": hub_fixture.INPUT_ARTIFACT,
+            "hub_digest": "c" * 64,
+            "raw_sha256": candidate["raw_sha256"],
+            "size": candidate["size_bytes"],
+        },
     )
+    admitted = admission.bind_exact_workflow_admission(
+        hub_fixture.fixture_graph(),
+        hub_fixture.workflow_response(),
+        root_artifact_bindings={candidate["raw_sha256"]: portable},
+    )
+    return partner.bind_admitted_partner_step(descriptor, admitted, step_key="prepare")
 
 
-def contract():
+def contract(*, domain="Development", access_class="development"):
+    candidate = candidate_descriptor(access_class=access_class)
     return {
         "schema": 1,
-        "partner_step": admitted_scirust_step(),
+        "partner_step": admitted_scirust_step(candidate),
         "scirust": {
             "repository": scirust.SCIRUST_REPOSITORY,
             "source_sha": scirust.SCIRUST_SOURCE_SHA,
@@ -44,15 +71,8 @@ def contract():
             "public_surfaces": list(scirust.SCIRUST_PUBLIC_SURFACES),
         },
         "request": {
-            "domain": "Development",
-            "candidate_artifact": {
-                "schema": 1,
-                "name": "tdi-scirust-representation-candidate-v1.json",
-                "raw_sha256": SHA("a"),
-                "size_bytes": 321,
-                "media_type": scirust.SCIRUST_CANDIDATE_MEDIA_TYPE,
-                "access_class": "development",
-            },
+            "domain": domain,
+            "candidate_artifact": candidate,
             "primitive_kind": "representation-primitive",
             "promotion_scope": "candidate-only",
         },
@@ -99,7 +119,7 @@ class SciRustPartnerContractTests(unittest.TestCase):
             descriptor = value["partner_step"]["adapter"]
             descriptor[field] = changed
             value["partner_step"] = partner.bind_admitted_partner_step(
-                descriptor, hub_fixture.bind_fixture(), step_key="prepare"
+                descriptor, value["partner_step"]["workflow_admission_binding"], step_key="prepare"
             )
             with self.subTest(field=field), self.assertRaisesRegex(
                 scirust.SciRustPartnerContractError, f"adapter {field}"
@@ -124,7 +144,9 @@ class SciRustPartnerContractTests(unittest.TestCase):
         value = contract()
         value["partner_step"]["adapter"]["source_sha"] = "f" * 40
         value["partner_step"] = partner.bind_admitted_partner_step(
-            value["partner_step"]["adapter"], hub_fixture.bind_fixture(), step_key="prepare"
+            value["partner_step"]["adapter"],
+            value["partner_step"]["workflow_admission_binding"],
+            step_key="prepare",
         )
         with self.assertRaisesRegex(scirust.SciRustPartnerContractError, "audited source"):
             scirust.canonical_scirust_promotion_contract(value)
@@ -137,7 +159,9 @@ class SciRustPartnerContractTests(unittest.TestCase):
             value = contract()
             value["partner_step"]["adapter"]["protocol"][field] = changed
             value["partner_step"] = partner.bind_admitted_partner_step(
-                value["partner_step"]["adapter"], hub_fixture.bind_fixture(), step_key="prepare"
+                value["partner_step"]["adapter"],
+                value["partner_step"]["workflow_admission_binding"],
+                step_key="prepare",
             )
             with self.subTest(field=field), self.assertRaisesRegex(
                 scirust.SciRustPartnerContractError, "protocol does not match"
@@ -152,7 +176,7 @@ class SciRustPartnerContractTests(unittest.TestCase):
             "capability_contract_version": "1.1.0",
         }
         value["partner_step"] = partner.bind_admitted_partner_step(
-            descriptor, hub_fixture.bind_fixture(), step_key="evaluate"
+            descriptor, value["partner_step"]["workflow_admission_binding"], step_key="evaluate"
         )
         with self.assertRaisesRegex(scirust.SciRustPartnerContractError, "preparation boundary"):
             scirust.canonical_scirust_promotion_contract(value)
@@ -189,9 +213,7 @@ class SciRustPartnerContractTests(unittest.TestCase):
         with self.assertRaisesRegex(scirust.SciRustPartnerContractError, "access_class"):
             scirust.canonical_scirust_promotion_contract(value)
 
-        value = contract()
-        value["request"]["domain"] = "Validation"
-        value["request"]["candidate_artifact"]["access_class"] = "validation"
+        value = contract(domain="Validation", access_class="validation")
         canonical = scirust.canonical_scirust_promotion_contract(value)
         self.assertEqual("Validation", canonical["request"]["domain"])
 
@@ -203,6 +225,17 @@ class SciRustPartnerContractTests(unittest.TestCase):
         value = contract()
         value["request"]["promotion_scope"] = "auto-merge"
         with self.assertRaisesRegex(scirust.SciRustPartnerContractError, "candidate-only"):
+            scirust.canonical_scirust_promotion_contract(value)
+
+    def test_candidate_must_be_exact_admitted_root_consumed_by_partner_step(self):
+        value = contract()
+        value["request"]["candidate_artifact"]["raw_sha256"] = SHA("a")
+        with self.assertRaisesRegex(scirust.SciRustPartnerContractError, "direct root artifact"):
+            scirust.canonical_scirust_promotion_contract(value)
+
+        value = contract()
+        value["request"]["candidate_artifact"]["size_bytes"] += 1
+        with self.assertRaisesRegex(scirust.SciRustPartnerContractError, "exactly match"):
             scirust.canonical_scirust_promotion_contract(value)
 
     def test_only_declared_reusable_primitive_classes_are_admitted(self):
