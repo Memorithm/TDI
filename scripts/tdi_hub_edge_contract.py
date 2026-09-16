@@ -13,6 +13,7 @@ TDI edge is explicitly advanced by a later reviewed change.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import uuid
 
@@ -63,6 +64,10 @@ def _canonical_uuid(value, name):
     if str(parsed) != value:
         raise HubEdgeContractError(f"{name} must use canonical lowercase UUID form")
     return value
+
+
+def _binding_digest(kind, value):
+    return hashlib.sha256(kind.encode("ascii") + b"\0" + experiment.canonical(value)).hexdigest()
 
 
 def canonical_portable_digest_response(response):
@@ -162,4 +167,4 @@ def canonical_hub_artifact_binding(binding):
 def hub_artifact_binding_identity(binding):
     """Return a stable TDI identity for a validated non-authoritative Hub binding."""
     value = canonical_hub_artifact_binding(binding)
-    return artifact._digest("tdi-hub-artifact-binding/v1", value)
+    return _binding_digest("tdi-hub-artifact-binding/v1", value)
