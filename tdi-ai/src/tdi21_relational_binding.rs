@@ -20,6 +20,13 @@ pub struct RelationalConfig {
     pub relation_bits: u8,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RelationalWork {
+    /// One semantic derivation of the packed `(relation, subject)` identifier.
+    /// This is not a CPU-instruction or cycle count.
+    pub address_derivations: u64,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RelationalError {
     InvalidEntityWidth,
@@ -30,6 +37,7 @@ pub enum RelationalError {
     EmptyRelationPath,
     TooManyCompositionHops,
     EventBudgetExhausted,
+    CounterOverflow,
     UnexpectedQuiet,
     Stream(StreamError),
 }
@@ -50,6 +58,7 @@ pub enum RelationalRead {
 pub struct RelationalBinder {
     config: RelationalConfig,
     stream: BooleanStream,
+    work: RelationalWork,
 }
 
 impl RelationalBinder {
@@ -69,6 +78,7 @@ impl RelationalBinder {
         Ok(Self {
             config,
             stream: BooleanStream::new(config.stream)?,
+            work: RelationalWork::default(),
         })
     }
 
@@ -77,8 +87,14 @@ impl RelationalBinder {
         self.stream.counters()
     }
 
+    #[must_use]
+    pub const fn relational_work(&self) -> RelationalWork {
+        self.work
+    }
+
     pub fn reset(&mut self) {
         self.stream.reset();
+        self.work = RelationalWork::default();
     }
 
     fn entity_limit(&self) -> u64 {
@@ -89,7 +105,7 @@ impl RelationalBinder {
         1u64 << self.config.relation_bits
     }
 
-    fn address(&self, relation: u64, subject: u64) -> Result<u64, RelationalError> {
+    fn packed_address(&self, relation: u64, subject: u64) -> Result<u64, RelationalError> {
         if subject >= self.entity_limit() {
             return Err(RelationalError::EntityOutOfRange);
         }
@@ -97,6 +113,13 @@ impl RelationalBinder {
             return Err(RelationalError::RelationOutOfRange);
         }
         Ok((relation << self.config.entity_bits) | subject)
+    }
+
+    fn next_address_count(&self) -> Result<u64, RelationalError> {
+        self.work
+            .address_derivations
+            .checked_add(1)
+            .ok_or(RelationalError::CounterOverflow)
     }
 
     fn decode_reply(output: StepOutput) -> Result<RelationalRead, RelationalError> {
@@ -116,12 +139,14 @@ impl RelationalBinder {
         if object >= self.entity_limit() {
             return Err(RelationalError::EntityOutOfRange);
         }
-        let key = self.address(relation, subject)?;
+        let key = self.packed_address(relation, subject)?;
+        let next_address_count = self.next_address_count()?;
         self.stream.step(Event::Write {
             key,
             payload: BooleanState::from_bits(object),
             marker: BooleanState::from_bits(1),
         })?;
+        self.work.address_derivations = next_address_count;
         Ok(())
     }
 
@@ -130,8 +155,11 @@ impl RelationalBinder {
         relation: u64,
         subject: u64,
     ) -> Result<RelationalRead, RelationalError> {
-        let key = self.address(relation, subject)?;
-        Self::decode_reply(self.stream.step(Event::Recall { key })?)
+        let key = self.packed_address(relation, subject)?;
+        let next_address_count = self.next_address_count()?;
+        let output = self.stream.step(Event::Recall { key })?;
+        self.work.address_derivations = next_address_count;
+        Self::decode_reply(output)
     }
 
     /// Follow a bounded relation path without scanning prior events.
@@ -167,6 +195,9 @@ impl RelationalBinder {
             .is_none_or(|events| events > self.config.stream.max_events)
         {
             return Err(RelationalError::EventBudgetExhausted);
+        }
+        if self.work.address_derivations.checked_add(required).is_none() {
+            return Err(RelationalError::CounterOverflow);
         }
 
         let mut current = subject;
