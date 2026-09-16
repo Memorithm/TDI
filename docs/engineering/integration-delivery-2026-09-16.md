@@ -82,8 +82,8 @@ PRs #414, #415 and #416 to `0fd3946065fa25e74ee3d3ac0e6d8e93363e620b`;
 #413 was merged forward through that state without conflicts. That snapshot had
 a Rust 1.97.1 formatting regression in `tdi2_intuition_experience.rs`. PR #419
 subsequently landed the canonical formatter result; the duplicate repair #417
-was closed without merge. At the current resync, `main` is
-`c809ef34e22df7c90843b5946408e45f4ef5ac3d` through #423 and
+was closed without merge. At the 2026-09-16 23:38 UTC resync, `main` is
+`3618a5874a68b10cfe1f4c4d86287edcdf72c6dc` through #427 and
 `cargo +1.97.1 fmt --all -- --check` passes. This removes the inherited format
 blocker only; it does not promote any research result or clear the remaining
 exact-head/upstream release blockers.
