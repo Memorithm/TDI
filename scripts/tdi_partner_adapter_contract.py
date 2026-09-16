@@ -1,0 +1,355 @@
+"""Versioned, fail-closed contracts for TDI cross-repository partner adapters.
+
+This module is the Lot-H common adapter boundary. It records which qualified
+partner repository/source/protocol a TDI Graph/v1 step intends to use and binds
+that descriptor to an exact Hub-admitted workflow step. It does not invoke the
+partner, schedule work, read protected holdouts, authorize a scientific stage,
+publish a scientific verdict, or grant runtime actuation authority.
+
+Partner-specific payload semantics remain owned by their repositories and must
+be qualified in later Lot-H slices before ``partner_execution_qualified`` can
+ever become true.
+"""
+from __future__ import annotations
+
+import hashlib
+import re
+
+import tdi_execution_graph as execution_graph
+import tdi_experiment_contract as experiment
+import tdi_hub_admission_contract as admission
+
+PARTNER_ADAPTER_SCHEMA = 1
+ADMITTED_PARTNER_STEP_SCHEMA = 1
+MAX_CAPABILITIES = 128
+MAX_CONTRACTS = 128
+MAX_TEXT_BYTES = 512
+
+_HEX40 = re.compile(r"[0-9a-f]{40}\Z")
+_HEX64 = re.compile(r"[0-9a-f]{64}\Z")
+_CAPABILITY = re.compile(r"[a-z0-9][a-z0-9._:/-]{0,127}\Z")
+_CONTRACT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}\Z")
+
+_PARTNERS = {
+    "elasticxxx": {
+        "repository": "Memorithm/ElasticXxx",
+        "role": "resource-control",
+    },
+    "forge": {
+        "repository": "Memorithm/Forge",
+        "role": "candidate-search",
+    },
+    "scirust": {
+        "repository": "Memorithm/scirust",
+        "role": "math-primitives",
+    },
+    "flat-attention": {
+        "repository": "Memorithm/FLAT-ATTENTION",
+        "role": "attention-execution",
+    },
+    "nnis": {
+        "repository": "Memorithm/NNIS",
+        "role": "hardware-qualification",
+    },
+}
+
+_REQUIRED_PERMISSIONS = {
+    "read_protected_holdout": False,
+    "authorize_scientific_stage": False,
+    "publish_scientific_verdict": False,
+    "actuate_runtime": False,
+}
+
+
+class PartnerAdapterContractError(ValueError):
+    """A partner adapter descriptor or admitted-step binding is invalid."""
+
+
+def _digest(kind, value):
+    return hashlib.sha256(kind.encode("ascii") + b"\0" + experiment.canonical(value)).hexdigest()
+
+
+def _exact(value, fields, name):
+    if not isinstance(value, dict) or set(value) != set(fields):
+        raise PartnerAdapterContractError(f"{name} has unknown or missing fields")
+    return value
+
+
+def _text(value, name, *, max_bytes=MAX_TEXT_BYTES):
+    if not isinstance(value, str) or not value.strip():
+        raise PartnerAdapterContractError(f"{name} must be a non-empty string")
+    if len(value.encode("utf-8")) > max_bytes:
+        raise PartnerAdapterContractError(f"{name} exceeds the text bound")
+    return value
+
+
+def _sha40(value, name):
+    if not isinstance(value, str) or _HEX40.fullmatch(value) is None:
+        raise PartnerAdapterContractError(f"{name} must be lowercase 40-hex")
+    return value
+
+
+def _sha256(value, name):
+    if not isinstance(value, str) or _HEX64.fullmatch(value) is None:
+        raise PartnerAdapterContractError(f"{name} must be lowercase SHA-256")
+    return value
+
+
+def _safe_positive_integer(value, name):
+    if type(value) is not int or not 1 <= value <= experiment.JSON_SAFE_INTEGER:
+        raise PartnerAdapterContractError(
+            f"{name} must be a positive JSON-safe integer <= {experiment.JSON_SAFE_INTEGER}"
+        )
+    return value
+
+
+def _canonical_protocol(value):
+    _exact(value, {"name", "version", "schema_identity"}, "adapter protocol")
+    name = _text(value["name"], "adapter protocol name")
+    if _CONTRACT_NAME.fullmatch(name) is None:
+        raise PartnerAdapterContractError("adapter protocol name has invalid syntax")
+    return {
+        "name": name,
+        "version": _safe_positive_integer(value["version"], "adapter protocol version"),
+        "schema_identity": _sha256(value["schema_identity"], "adapter protocol schema_identity"),
+    }
+
+
+def _canonical_named_contracts(records, name):
+    if not isinstance(records, list) or len(records) > MAX_CONTRACTS:
+        raise PartnerAdapterContractError(f"{name} must be a bounded list")
+    seen = set()
+    result = []
+    for index, record in enumerate(records):
+        _exact(record, {"name", "schema", "identity"}, f"{name}[{index}]")
+        contract_name = _text(record["name"], f"{name}[{index}].name")
+        if _CONTRACT_NAME.fullmatch(contract_name) is None:
+            raise PartnerAdapterContractError(f"{name}[{index}].name has invalid syntax")
+        if contract_name in seen:
+            raise PartnerAdapterContractError(f"duplicate {name} name")
+        seen.add(contract_name)
+        result.append(
+            {
+                "name": contract_name,
+                "schema": _safe_positive_integer(record["schema"], f"{name}[{index}].schema"),
+                "identity": _sha256(record["identity"], f"{name}[{index}].identity"),
+            }
+        )
+    result.sort(key=lambda item: item["name"])
+    return result
+
+
+def _canonical_capabilities(values):
+    if not isinstance(values, list) or len(values) > MAX_CAPABILITIES:
+        raise PartnerAdapterContractError("capabilities must be a bounded list")
+    result = []
+    seen = set()
+    for index, value in enumerate(values):
+        if not isinstance(value, str) or _CAPABILITY.fullmatch(value) is None:
+            raise PartnerAdapterContractError(f"capabilities[{index}] has invalid syntax")
+        if value in seen:
+            raise PartnerAdapterContractError("duplicate capability")
+        seen.add(value)
+        result.append(value)
+    result.sort()
+    return result
+
+
+def _canonical_hub_component(value):
+    _exact(
+        value,
+        {
+            "component_id",
+            "component_version",
+            "manifest_digest",
+            "capability",
+            "capability_contract_version",
+        },
+        "Hub component binding",
+    )
+    component_id = value["component_id"]
+    if not isinstance(component_id, str):
+        raise PartnerAdapterContractError("Hub component id must be a string")
+    manifest = _sha256(value["manifest_digest"], "Hub component manifest_digest")
+    component_version = _text(value["component_version"], "Hub component version", max_bytes=128)
+    capability = _text(value["capability"], "Hub component capability", max_bytes=128)
+    capability_contract_version = _text(
+        value["capability_contract_version"],
+        "Hub capability contract version",
+        max_bytes=128,
+    )
+    return {
+        "component_id": component_id,
+        "component_version": component_version,
+        "manifest_digest": manifest,
+        "capability": capability,
+        "capability_contract_version": capability_contract_version,
+    }
+
+
+def canonical_partner_adapter(descriptor):
+    """Validate and canonicalize PartnerAdapter/v1.
+
+    The permissions object is deliberately all-false. Later partner-specific
+    adapters may prove executable payload semantics, but this common contract
+    never grants protected-data, scientific-verdict, or actuation authority.
+    """
+    _exact(
+        descriptor,
+        {
+            "schema",
+            "partner",
+            "repository",
+            "source_sha",
+            "role",
+            "protocol",
+            "hub_component",
+            "capabilities",
+            "inputs",
+            "outputs",
+            "permissions",
+        },
+        "partner adapter",
+    )
+    if descriptor["schema"] != PARTNER_ADAPTER_SCHEMA:
+        raise PartnerAdapterContractError("unsupported partner adapter schema")
+    partner = descriptor["partner"]
+    if partner not in _PARTNERS:
+        raise PartnerAdapterContractError("unsupported TDI partner")
+    profile = _PARTNERS[partner]
+    if descriptor["repository"] != profile["repository"]:
+        raise PartnerAdapterContractError("partner repository does not match the declared partner")
+    if descriptor["role"] != profile["role"]:
+        raise PartnerAdapterContractError("partner role does not match the declared partner")
+    permissions = descriptor["permissions"]
+    _exact(permissions, set(_REQUIRED_PERMISSIONS), "partner adapter permissions")
+    if permissions != _REQUIRED_PERMISSIONS:
+        raise PartnerAdapterContractError("common partner adapter contract grants no authority")
+    return {
+        "schema": PARTNER_ADAPTER_SCHEMA,
+        "partner": partner,
+        "repository": profile["repository"],
+        "source_sha": _sha40(descriptor["source_sha"], "partner source_sha"),
+        "role": profile["role"],
+        "protocol": _canonical_protocol(descriptor["protocol"]),
+        "hub_component": _canonical_hub_component(descriptor["hub_component"]),
+        "capabilities": _canonical_capabilities(descriptor["capabilities"]),
+        "inputs": _canonical_named_contracts(descriptor["inputs"], "inputs"),
+        "outputs": _canonical_named_contracts(descriptor["outputs"], "outputs"),
+        "permissions": dict(_REQUIRED_PERMISSIONS),
+    }
+
+
+def partner_adapter_identity(descriptor):
+    return _digest("tdi-partner-adapter/v1", canonical_partner_adapter(descriptor))
+
+
+def _graph_step_for_key(admission_binding, step_key):
+    if not isinstance(step_key, str):
+        raise PartnerAdapterContractError("step_key must be a string")
+    steps = admission_binding["graph"]["steps"]
+    for step in steps:
+        if step["key"] == step_key:
+            return step
+    raise PartnerAdapterContractError("step_key is not present in admitted Graph/v1")
+
+
+def bind_admitted_partner_step(descriptor, workflow_admission_binding, *, step_key):
+    """Bind one PartnerAdapter/v1 to an exact G3 Hub-admitted Graph/v1 step.
+
+    This proves structural identity only. The returned object intentionally says
+    ``partner_execution_qualified=false`` until a later partner-specific slice
+    verifies that repository's real request/response protocol and execution
+    evidence.
+    """
+    adapter = canonical_partner_adapter(descriptor)
+    try:
+        admitted = admission.canonical_workflow_admission_binding(workflow_admission_binding)
+    except admission.HubAdmissionContractError as exc:
+        raise PartnerAdapterContractError(str(exc)) from exc
+    if step_key not in admitted["admitted_steps"]:
+        raise PartnerAdapterContractError("step_key is not covered by exact Hub admission")
+    step = _graph_step_for_key(admitted, step_key)
+    component = adapter["hub_component"]
+    expected = {
+        "component_id": step["component_id"],
+        "component_version": step["component_version"],
+        "manifest_digest": step["component_manifest_digest"],
+        "capability": step["capability"],
+        "capability_contract_version": step["capability_contract_version"],
+    }
+    if experiment.canonical(component) != experiment.canonical(expected):
+        raise PartnerAdapterContractError("partner Hub component does not match admitted Graph/v1 step")
+    return {
+        "schema": ADMITTED_PARTNER_STEP_SCHEMA,
+        "workflow": admitted["workflow"],
+        "step_key": step_key,
+        "graph_identity": admitted["graph_identity"],
+        "workflow_admission_binding_identity": admission.workflow_admission_binding_identity(admitted),
+        "partner_adapter_identity": partner_adapter_identity(adapter),
+        "adapter": adapter,
+        "workflow_admission_binding": admitted,
+        "workflow_execution_admitted": True,
+        "partner_contract_bound": True,
+        "partner_execution_qualified": False,
+        "protected_holdout_access_authorized": False,
+        "scientific_stage_authorized": False,
+        "scientific_verdict_authorized": False,
+        "runtime_actuation_authorized": False,
+    }
+
+
+def canonical_admitted_partner_step(binding):
+    """Recompute AdmittedPartnerStep/v1 identities from embedded evidence."""
+    _exact(
+        binding,
+        {
+            "schema",
+            "workflow",
+            "step_key",
+            "graph_identity",
+            "workflow_admission_binding_identity",
+            "partner_adapter_identity",
+            "adapter",
+            "workflow_admission_binding",
+            "workflow_execution_admitted",
+            "partner_contract_bound",
+            "partner_execution_qualified",
+            "protected_holdout_access_authorized",
+            "scientific_stage_authorized",
+            "scientific_verdict_authorized",
+            "runtime_actuation_authorized",
+        },
+        "admitted partner step",
+    )
+    if binding["schema"] != ADMITTED_PARTNER_STEP_SCHEMA:
+        raise PartnerAdapterContractError("unsupported admitted partner step schema")
+    expected = bind_admitted_partner_step(
+        binding["adapter"],
+        binding["workflow_admission_binding"],
+        step_key=binding["step_key"],
+    )
+    for field in (
+        "workflow",
+        "graph_identity",
+        "workflow_admission_binding_identity",
+        "partner_adapter_identity",
+    ):
+        if binding[field] != expected[field]:
+            raise PartnerAdapterContractError(f"{field} does not match embedded evidence")
+    for field in (
+        "workflow_execution_admitted",
+        "partner_contract_bound",
+        "partner_execution_qualified",
+        "protected_holdout_access_authorized",
+        "scientific_stage_authorized",
+        "scientific_verdict_authorized",
+        "runtime_actuation_authorized",
+    ):
+        if binding[field] is not expected[field]:
+            raise PartnerAdapterContractError(f"{field} violates the common partner boundary")
+    return expected
+
+
+def admitted_partner_step_identity(binding):
+    return _digest("tdi-admitted-partner-step/v1", canonical_admitted_partner_step(binding))
