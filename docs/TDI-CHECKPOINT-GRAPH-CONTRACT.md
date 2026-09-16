@@ -14,11 +14,12 @@ TDI owns the scientific/execution meaning that must survive a restart:
 - RNG stream coordinates and counters;
 - adapter/backend identity;
 - content-addressed checkpoint state;
+- exact component/capability contract pins required by a step;
 - which declared step output is a checkpoint and which input may resume from one.
 
 `Memorithm/scirust-hub` owns generic orchestration. TDI does **not** implement another scheduler, retry engine, lease manager, remote worker pool, cancellation service or artifact registry in this lot.
 
-The thin Hub compiler is pinned to the audited Hub source commit `4bf6186841e1ea70ed15cd84faf33de9b48429cd`, `WorkflowSpec` schema version `1`, and workflow model version `1.2.0`. A later Hub contract change requires an explicit TDI adapter/version update rather than silent reinterpretation.
+The Hub bridge is pinned to audited Hub source commit `4bf6186841e1ea70ed15cd84faf33de9b48429cd`, `WorkflowSpec` schema version `1`, and workflow model version `1.2.0`. A later Hub contract change requires an explicit TDI adapter/version update rather than silent reinterpretation.
 
 ## CheckpointManifest/v1
 
@@ -52,13 +53,16 @@ An accepted checkpoint is **not** permission to retry, resume a protected/final 
 
 ## ExecutionGraph/v1
 
-The graph is deliberately a **topological declaration**, not a scheduler. Each step may depend only on a step already declared earlier. This gives a simple fail-closed acyclicity rule while leaving actual ready-set scheduling and parallel execution to Hub.
+The graph is deliberately a **topological declaration**, not a scheduler. Each step may depend only on a step already declared earlier. This gives a fail-closed acyclicity rule while leaving actual ready-set scheduling and parallel execution to Hub.
 
 Each step binds:
 
 - stable step key;
 - component alias;
+- exact component version;
+- exact content digest of the component manifest expected by TDI;
 - Hub-compatible capability name;
+- exact capability contract version;
 - canonical parameters;
 - immutable external artifact inputs and/or outputs of earlier steps;
 - declared output labels;
@@ -66,29 +70,39 @@ Each step binds:
 - timeout in integer milliseconds;
 - checkpoint policy: `none` or `exact`.
 
-Graph identity is domain-separated as `tdi-execution-graph/v1`. Each step receives a `tdi-execution-step/v1` identity bound to the root TDI execution-plan identity and its canonical step definition. Any semantic change to a step therefore invalidates an old checkpoint for exact resume.
+One component alias may not resolve to different component version/manifest pins in the same graph. Graph identity is domain-separated as `tdi-execution-graph/v1`. Each step receives a `tdi-execution-step/v1` identity bound to the root TDI execution-plan identity and its complete canonical step definition. Changing component version, component manifest digest or capability contract version therefore changes the step identity and invalidates an old checkpoint for exact resume.
 
 Graph parameters intentionally reject JSON floating-point values and unsafe integers. Domains needing floating-point parameters must first define an explicit stable string representation, matching the ExperimentSpec numeric policy.
 
-## Hub compilation
+## Hub structural preview — not execution authorization
 
-`compile_hub_workflow()` produces a Hub `WorkflowSpec/v1` object only. It performs no network call and no execution.
+The audited Hub `WorkflowSpec/v1` carries a `ComponentId`, but normal workflow submission resolves the latest registered manifest for that component. It does not atomically carry/enforce the component version + manifest digest pins required for TDI exact reproducibility. Therefore Lot E does **not** claim that a raw WorkflowSpec/v1 is an executable exact TDI plan.
+
+`compile_hub_workflow_preview()` returns a versioned envelope containing:
+
+- `execution_authorized: false`;
+- a structurally valid Hub `WorkflowSpec/v1` preview;
+- exact component alias -> Hub ComponentId/version/manifest-digest pins;
+- exact per-step capability contract-version pins;
+- the pinned Hub source/model contract.
 
 Bindings are explicit:
 
-- `component_alias -> Hub ComponentId`;
+- `component_alias -> {component_id, component_version, manifest_digest}`;
 - external content SHA-256 -> Hub ArtifactId.
 
-Hub IDs must be canonical lowercase hyphenated UUIDs. Capability names are checked against the audited Hub grammar: one or more dot-separated `[a-z][a-z0-9_]{0,63}` segments. TDI output labels also follow Hub's short printable/no-whitespace boundary.
+Hub IDs must be canonical lowercase hyphenated UUIDs. Capability names are checked against the audited Hub grammar: one or more dot-separated `[a-z][a-z0-9_]{0,63}` segments. Versions follow the audited Hub version grammar. TDI output labels also follow Hub's short printable/no-whitespace boundary.
 
-The compiler emits no retry policy. A missing retry policy means one attempt in the audited Hub model. Distributed leases, fencing tokens, liveness and authoritative publication are a later Hub integration lot and are not inferred from this local graph contract.
+A mismatched component version or manifest digest is rejected before the preview is returned. However, because current WorkflowSpec/v1 cannot enforce those pins atomically during normal submission, the preview **must not be submitted as authoritative TDI execution**. A later versioned TDI↔Hub capability edge must enforce component/manifest/capability pins inside Hub before setting an execution authorization boundary.
+
+The preview emits no retry policy. Distributed leases, fencing tokens, liveness and authoritative publication are later Hub integration work and are not inferred from this local graph contract.
 
 ## Checked-in fixtures
 
 - `docs/examples/checkpoint-manifest-v1.json`
 - `docs/examples/execution-graph-v1.json`
 
-The fixture graph pins the Hub source/model contract and demonstrates `prepare -> evaluate`, with a content-addressed external input and an exact checkpoint output. These are software fixtures, not scientific populations or benchmark evidence.
+The fixture graph pins the Hub source/model contract, component version/manifest digest and capability contract versions, and demonstrates `prepare -> evaluate`, with a content-addressed external input and an exact checkpoint output. These are software fixtures, not scientific populations or benchmark evidence.
 
 ## Qualification
 
@@ -103,6 +117,6 @@ PYTHONPATH=scripts python3 -m unittest \
   scripts/test_tdi_execution_graph.py -v
 ```
 
-The tests cover canonical identity, state/RNG sensitivity, exact lineage binding, frozen progress budgets, input/RNG drift, graph order/cycle rejection, output references, checkpoint port declarations, language-independent parameters, Hub capability grammar, canonical Hub UUIDs and the thin workflow compiler.
+The tests cover canonical checkpoint identity, state/RNG sensitivity, exact lineage binding, frozen progress budgets, input/RNG drift, graph order/cycle rejection, output references, checkpoint port declarations, language-independent parameters, Hub source/capability/version grammar, component-version-sensitive step identities, component binding mismatch, canonical Hub UUIDs and the non-executable structural workflow preview.
 
-Passing these tests establishes only the software contract. A real distributed TDI↔Hub edge requires a separate versioned capability plus Hub-side tests and fencing/authoritative-publication qualification.
+Passing these tests establishes only the software contract. A real distributed TDI↔Hub edge requires a separate versioned capability plus Hub-side component-pin enforcement, tests, fencing and authoritative-publication qualification.
