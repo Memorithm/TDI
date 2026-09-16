@@ -7,9 +7,10 @@ This is the durable engineering handoff for the industrialization programme. It 
 - Historical audit: `2b9cf772d3c0711349f9a70ba7cd7f1bfef90aca`.
 - Programme baseline revalidated 2026-09-15: `c973b47355f8bd3eb630a2d267355f733dfde1b2`.
 - Foundation A/B: PR #250, head `07b01760f23200665dbc713e73c0cdc35bb49e76`, merged `3b8686047a95c4665f6c1b70b87ab9a9ac3591be` after applicable exact-head workflows succeeded.
-- Linux containment C: PR #252, head `1b4735b8aae65ad8f951803d18330706224fa33c`, merged `32e51b9b51a254680d1c5bca0d8e96c2ac39f53f`; the exact-head `TDI engine Linux containment` workflow and returned repository workflows succeeded.
-- Lot-D base after concurrent scientific merges: `0262fbe99c495dccb405eb54b5a61433cc806555`.
-- Current branch: `industrialize/experiment-contract-d`.
+- Linux containment C: PR #252, head `1b4735b8aae65ad8f951803d18330706224fa33c`, merged `32e51b9b51a254680d1c5bca0d8e96c2ac39f53f`; exact-head real-kernel and repository workflows succeeded.
+- Experiment contract D: PR #253, final head `98a894437cbd6b1b72b23aeb2bdd84548e32124a`, merged `4dd4e0db2837fcffd2e6177542ab14cd289c8540`. All returned pull-request workflows on that exact head completed successfully, including Rust, public Rust, MSRV, TDI AI contracts and real-kernel engine containment.
+- Lot-E base: `4dd4e0db2837fcffd2e6177542ab14cd289c8540`.
+- Current branch: `industrialize/checkpoint-dag-e`.
 - Scientific constraints remain those in `AGENTS.md` and the ecosystem roadmap/overlays.
 
 ## Delivered / candidate capabilities
@@ -25,10 +26,12 @@ This is the durable engineering handoff for the industrialization programme. It 
 | C resume semantics | qualified | PR #252 reconciles stale unfinished containment before durable `Interrupted`; no silent scientific retry. |
 | C hostile-code sandbox | blocked | cgroup v2 is insufficient; `trust=untrusted` fails closed. |
 | C hard GPU-memory quota | blocked | visibility is not a VRAM quota; requested hard limit fails closed. |
-| D ExperimentSpec / identities | candidate | schema 3 adds question, ExperimentSpec-plan, execution-plan, trial, attempt and scientific-result identities without changing schema 2. |
-| D worker response v2 | candidate | caller-owned experiment/plan/trial/attempt/backend/domain/seed bindings, decimal u64 seed transport, bounded progress/artifact/error surfaces. |
-| D cross-language canonical numbers | candidate | identity integers limited to JSON-safe range; canonical result v2 rejects floats until a representation is frozen. |
-| E and later lots | planned | no completion claim yet. |
+| D ExperimentSpec / identities | qualified | PR #253 binds question, ExperimentSpec-plan, execution-plan, trial, attempt and scientific-result identities while preserving schemas 1/2. |
+| D worker response v2 | qualified | PR #253 caller-owned identity/seed binding, authoritative step/observation budget counters and content-addressed result artifacts; exact-head software and real-kernel gates passed. |
+| D cross-language canonical numbers | qualified for v1/v2 scope | JSON-safe identity integers, decimal u64 seeds, timeout normalization, and explicit float exclusion from canonical scientific result values. |
+| E CheckpointManifest/v1 | candidate | content-addressed state plus exact experiment/plan/trial/step/adapter/backend/input/RNG binding and frozen progress-budget validation. |
+| E declarative execution graph | candidate | topological Graph/v1 with per-step identities, exact checkpoint ports and a thin compiler to pinned Hub WorkflowSpec/v1. |
+| E generic scheduling | intentionally delegated | scirust-hub owns ready-set scheduling, retries, cancellation, workflow lifecycle, artifacts, leases and remote transport; TDI does not duplicate them. |
 
 ## Qualification matrix progress
 
@@ -41,43 +44,42 @@ This is the durable engineering handoff for the industrialization programme. It 
 | Q07 | qualified for declared cgroup-v2 profile | PR #252 exact-head real-kernel process-tree cleanup/recovery qualification. |
 | Q08 | qualified for declared cgroup-v2 profile | PR #252 real-kernel memory/PID/CPU limits and sibling isolation. |
 | Q09 | partial | unsupported hard VRAM quota fails closed; measured GPU qualification remains. |
-| Q10 | candidate | schema-3 plan/trial/attempt binding; exact-head CI and checkpoint binding remain before Q10 as a whole is qualified. |
-| Q11-Q12 | planned | scheduler and common adapter SDK. |
+| Q10 | candidate pending Lot-E exact-head qualification | PR #253 qualified plan/trial/attempt identity; Lot E adds exact checkpoint lineage/resume binding. |
+| Q11 | candidate for declarative graph contract | Lot E validates TDI graph semantics and compiles to audited Hub WorkflowSpec/v1; actual generic scheduler remains Hub-owned. |
+| Q12 | planned | common adapter SDK remains separate from graph/checkpoint semantics. |
 | Q13-Q14 | partial | legacy journal migration qualified; portable registry/artifact export remains. |
 | Q15-Q17 | planned | controlled cache and distributed fencing/deduplication. |
 | Q18-Q30 | planned | cross-repository integrations, statistics, CLI/viewer/exports, hardware adapters, docs and final integrated qualification. |
 
-## Lot-D candidate validation
+## Lot-E candidate validation
 
-Non-privileged contract tests cover:
+Local non-privileged qualification currently covers 12 checkpoint/graph contract tests:
 
 ```bash
 PYTHONPATH=scripts python3 -m py_compile \
-  scripts/tdi_experiment_contract.py \
-  scripts/tdi_linux_contract.py \
-  scripts/tdi_linux_runner.py \
-  scripts/prepare_tdi_experiment_plan.py
+  scripts/tdi_checkpoint_contract.py \
+  scripts/tdi_execution_graph.py
 PYTHONPATH=scripts python3 -m unittest \
-  scripts/test_tdi_experiment_contract.py \
-  scripts/test_tdi_linux_contract_v3.py \
-  scripts/test_prepare_tdi_experiment_plan.py -v
+  scripts/test_tdi_checkpoint_contract.py \
+  scripts/test_tdi_execution_graph.py -v
 ```
 
-The exact-head workflow must additionally pass a real-kernel schema-3 run/resume fixture under the deliberately delegated cgroup-v2 parent. A skipped privileged test does not count as qualification.
+The existing `TDI engine Linux containment` workflow is extended so these contracts run alongside all previously qualified engine-contract tests on the exact PR head. The cgroup kernel job remains enabled so Lot E cannot accidentally regress the contained execution foundation.
 
 ## Cross-repository decisions
 
-- TDI declares Rust 1.85; current scirust-hub and ElasticXxx manifests previously audited declared 1.89. No mandatory direct Rust dependency is introduced merely for convenience; revalidate versions at the integration lot.
-- scirust-hub remains owner of generic remote workers, leases, heartbeats and transport; TDI remains owner of scientific meaning and accepted publication.
+- TDI declares Rust 1.85; audited scirust-hub declares Rust 1.89. No mandatory direct Rust dependency is introduced for the graph bridge.
+- The Lot-E graph contract pins `Memorithm/scirust-hub` source `4bf6186841e1ea70ed15cd84faf33de9b48429cd`, WorkflowSpec schema `1`, model `1.2.0`, its capability grammar and canonical UUID identifiers.
+- scirust-hub remains owner of generic DAG scheduling, remote workers, leases, heartbeats, retries, cancellation and artifact transport; TDI remains owner of scientific meaning, checkpoint admissibility and accepted publication.
+- Hub's current remote lease v1 has attempt/lease identity, heartbeat and expiry but no qualified fencing/generation token preventing stale publication after reassignment; distributed fencing remains a later Lot-H requirement.
 - ElasticXxx remains owner of generic observe/forecast/plan/validate/act/verify/commit-or-rollback resource policy.
-- Forge remains owner of candidate proposal/search; TDI controls allowed evaluation observations and verdicts.
-- `ExperimentSpec/v1` is additive infrastructure and must not be used to synthesize or authorize a protected/final series surface.
+- Forge remains owner of candidate proposal/search; TDI controls allowed evaluation observations and scientific verdicts.
+- `ExperimentSpec/v1`, CheckpointManifest/v1 and Graph/v1 are infrastructure contracts and must not be used to synthesize or authorize a protected/final series surface.
 
 ## Next
 
-1. Qualify Lot D on its exact PR head, including the real-kernel schema-3 run/resume test and Rust worker-response/v2 fixture build.
-2. Add checkpoint binding and DAG execution semantics (Lot E), reusing Hub mechanisms rather than duplicating generic orchestration.
-3. Add registry, provenance verification, artifact CAS/export and controlled cache.
-4. Add a real Hub edge with fencing/authoritative publication.
-5. Add ElasticXxx, Forge, SciRust, FLAT-ATTENTION and NNIS integrations only through qualified versioned contracts.
-6. Continue statistics/sensitivity, CLI/API/viewer, external exports and measured engine benchmarks.
+1. Qualify and merge Lot E on its exact PR head; address review findings before merge.
+2. Add registry, provenance verification, artifact CAS/export and controlled cache without duplicating Hub's generic artifact registry.
+3. Add a real TDI↔Hub capability edge, then qualify fencing/authoritative publication in Hub before distributed execution is promoted.
+4. Add ElasticXxx, Forge, SciRust, FLAT-ATTENTION and NNIS integrations only through qualified versioned contracts.
+5. Continue statistics/sensitivity, CLI/API/viewer, external exports and measured engine benchmarks.
