@@ -1,13 +1,13 @@
 """Versioned, authority-free TDI -> ElasticXxx resource-control contract.
 
 This Lot-H slice binds the qualified common ``PartnerAdapter/v1`` boundary to
-ElasticXxx's published ``elastic.hub.run@1.0.0`` process contract.  It records a
+ElasticXxx's published ``elastic.hub.run@1.0.0`` process contract. It records a
 portable OperatorConfig/v1 artifact reference and the evidence shape expected
 from ElasticXxx, but it deliberately does not execute ElasticXxx or reimplement
 OperatorConfig validation.
 
 ElasticXxx remains authoritative for resource semantics, trusted validation,
-physical actuation, post-actuation verification, and commit/rollback.  This
+physical actuation, post-actuation verification, and commit/rollback. This
 contract permits only observe-only, plan-only, and dry-run intent; it rejects
 ``apply`` and keeps every execution/actuation/scientific authority bit false.
 """
@@ -35,22 +35,18 @@ ELASTIC_EVIDENCE_SOURCE_COMMAND = "run"
 ELASTIC_HUB_CAPABILITY = "tdi.prepare"
 ELASTIC_HUB_CAPABILITY_CONTRACT_VERSION = "1.0.0"
 ELASTIC_CONFIG_MEDIA_TYPE = "application/json"
-# Ordinary SHA-256 of the schema-owning source files at ELASTIC_SOURCE_SHA.
 ELASTIC_CONFIG_SCHEMA_IDENTITY = "3830ca34d8724c4f5e1c7801472c67ba1394e235b23a6172565324b542f77d94"
 ELASTIC_EVIDENCE_SCHEMA_IDENTITY = "94e214e9649df75d896a0cb46e8065e56e927a6d01106fed575da30cd159b6cb"
 
 
 def elastic_adapter_surface():
-    """Return fresh exact process capability and schema-owner source pins.
-
-    This describes this contract's non-actuating projection and does not
-    authorize invoking the underlying process.
-    """
+    """Return fresh exact process capability and schema-owner source pins."""
     return {
         "capabilities": [ELASTIC_PROTOCOL_NAME],
         "inputs": [{"name": "operator-config", "schema": 1, "identity": ELASTIC_CONFIG_SCHEMA_IDENTITY}],
         "outputs": [{"name": "runtime-evidence", "schema": 1, "identity": ELASTIC_EVIDENCE_SCHEMA_IDENTITY}],
     }
+
 
 MAX_TEXT_BYTES = 512
 _ALLOWED_DOMAINS = {"Development", "Validation"}
@@ -192,6 +188,43 @@ def _canonical_request(value):
     }
 
 
+def _require_config_bound_to_partner_step(admitted_partner_step, config):
+    """Require the OperatorConfig to be the exact admitted root consumed by the step."""
+    workflow_binding = admitted_partner_step["workflow_admission_binding"]
+    step_key = admitted_partner_step["step_key"]
+    step = next(
+        (record for record in workflow_binding["graph"]["steps"] if record["key"] == step_key),
+        None,
+    )
+    if step is None:
+        raise ElasticPartnerContractError("partner_step is not present in the admitted Graph/v1")
+
+    direct_root_digests = {
+        input_binding["sha256"]
+        for input_binding in step["inputs"].values()
+        if input_binding["kind"] == "artifact"
+    }
+    config_digest = config["raw_sha256"]
+    if config_digest not in direct_root_digests:
+        raise ElasticPartnerContractError(
+            "OperatorConfig artifact must be a direct root artifact consumed by partner_step"
+        )
+
+    root_binding = workflow_binding["root_artifact_bindings"].get(config_digest)
+    if root_binding is None:
+        raise ElasticPartnerContractError(
+            "OperatorConfig artifact is missing its admitted root artifact binding"
+        )
+    try:
+        root_descriptor = artifact.canonical_artifact(root_binding["descriptor"])
+    except artifact.ArtifactContractError as exc:
+        raise ElasticPartnerContractError(str(exc)) from exc
+    if experiment.canonical(config) != experiment.canonical(root_descriptor):
+        raise ElasticPartnerContractError(
+            "OperatorConfig artifact must exactly match the admitted root artifact descriptor"
+        )
+
+
 def _canonical_expected_evidence(value):
     _exact(value, {"schema", "media_type", "source_command"}, "expected_evidence")
     if value["schema"] != ELASTIC_EVIDENCE_SCHEMA:
@@ -267,11 +300,13 @@ def canonical_elastic_resource_contract(value):
                 f"ElasticXxx adapter {field} does not match the audited process surface"
             )
 
+    request = _canonical_request(value["request"])
+    _require_config_bound_to_partner_step(admitted_partner_step, request["config_artifact"])
     return {
         "schema": ELASTIC_RESOURCE_CONTRACT_SCHEMA,
         "partner_step": admitted_partner_step,
         "elastic": _canonical_elastic_metadata(value["elastic"]),
-        "request": _canonical_request(value["request"]),
+        "request": request,
         "expected_evidence": _canonical_expected_evidence(value["expected_evidence"]),
         "permissions": _canonical_permissions(value["permissions"]),
     }
@@ -287,7 +322,7 @@ def elastic_resource_contract_identity(value):
 def compile_elastic_hub_run_request(value):
     """Compile an authority-free interchange envelope for later Elastic validation.
 
-    This result is not an invocation command and cannot authorize execution.  An
+    This result is not an invocation command and cannot authorize execution. An
     execution owner must independently retrieve the OperatorConfig bytes, verify
     the ArtifactDescriptor, parse them with the pinned ElasticXxx implementation,
     and prove that the actual config stays within the requested non-actuating
