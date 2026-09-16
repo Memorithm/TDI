@@ -3,6 +3,8 @@
 //! These measurements are never inputs to template applicability, ranking,
 //! transfer, consolidation, or abstention.
 
+use std::time::{Duration, Instant};
+
 use super::tdi2_intuition_store::ExperienceStore;
 
 /// Logical operation counts for one inference run.
@@ -75,9 +77,35 @@ pub fn logical_memory_accounting(store: &ExperienceStore) -> LogicalMemoryAccoun
     accounting
 }
 
+/// Result plus externally observed wall-clock duration.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExternalTiming<T> {
+    /// Unmodified function result.
+    pub value: T,
+    /// Wall-clock duration measured outside the algorithm.
+    pub elapsed: Duration,
+}
+
+/// Measure one call externally.
+///
+/// The elapsed duration is returned alongside the result and is never provided
+/// to the measured closure. Latency therefore remains an observed consequence,
+/// not a decision variable of the intuition algorithm.
+pub fn measure_external<T, F>(operation: F) -> ExternalTiming<T>
+where
+    F: FnOnce() -> T,
+{
+    let start = Instant::now();
+    let value = operation();
+    ExternalTiming {
+        value,
+        elapsed: start.elapsed(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{OperationAccounting, logical_memory_accounting};
+    use super::{OperationAccounting, logical_memory_accounting, measure_external};
     use crate::experimental::tdi2_intuition::{PredicateId, RoleId, Template, TemplateId};
     use crate::experimental::tdi2_intuition_relations::{RelationId, RelationalTemplate, RoleRelation};
     use crate::experimental::tdi2_intuition_reliability::ReliabilityEvidence;
@@ -120,5 +148,11 @@ mod tests {
         assert_eq!(accounting.roles, 2);
         assert_eq!(accounting.relations, 1);
         assert_eq!(accounting.reliability_counters, 2);
+    }
+
+    #[test]
+    fn timing_observer_does_not_change_return_value() {
+        let measured = measure_external(|| 42_u64);
+        assert_eq!(measured.value, 42);
     }
 }
