@@ -25,6 +25,9 @@ FORGE_EXTERNAL_DOMAIN_SCHEMA_VERSION = 1
 FORGE_SCIENTIFIC_DOMAIN_SCHEMA_VERSION = 1
 FORGE_PROTOCOL_NAME = "forge.scientific-external-domain"
 FORGE_PROTOCOL_VERSION = 1
+FORGE_PROTOCOL_SCHEMA_IDENTITY = "af22223b02dbc26ed19dd916cb84eb0f64f6ba2df570a9458aab80489882d14c"
+FORGE_HUB_CAPABILITY = "tdi.evaluate"
+FORGE_HUB_CAPABILITY_CONTRACT_VERSION = "1.1.0"
 
 MAX_LIST_ITEMS = 128
 MAX_TEXT_BYTES = 512
@@ -264,9 +267,18 @@ def canonical_forge_search_contract(value):
     if (
         adapter["protocol"]["name"] != FORGE_PROTOCOL_NAME
         or adapter["protocol"]["version"] != FORGE_PROTOCOL_VERSION
+        or adapter["protocol"]["schema_identity"] != FORGE_PROTOCOL_SCHEMA_IDENTITY
     ):
         raise ForgePartnerContractError(
             "Forge adapter protocol does not match the audited scientific-domain contract"
+        )
+    if (
+        adapter["hub_component"]["capability"] != FORGE_HUB_CAPABILITY
+        or adapter["hub_component"]["capability_contract_version"]
+        != FORGE_HUB_CAPABILITY_CONTRACT_VERSION
+    ):
+        raise ForgePartnerContractError(
+            "Forge adapter Hub capability does not match the qualified evaluation boundary"
         )
 
     forge = value["forge"]

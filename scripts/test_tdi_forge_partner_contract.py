@@ -15,7 +15,7 @@ def admitted_forge_step():
     descriptor["protocol"] = {
         "name": "forge.scientific-external-domain",
         "version": 1,
-        "schema_identity": SHA("d"),
+        "schema_identity": forge.FORGE_PROTOCOL_SCHEMA_IDENTITY,
     }
     return partner.bind_admitted_partner_step(
         descriptor, hub_fixture.bind_fixture(), step_key="evaluate"
@@ -133,15 +133,38 @@ class ForgePartnerContractTests(unittest.TestCase):
         ):
             forge.canonical_forge_search_contract(value)
 
+        for field, changed in (
+            ("name", "forge.other"),
+            ("version", 2),
+            ("schema_identity", SHA("e")),
+        ):
+            value = contract()
+            value["partner_step"]["adapter"]["protocol"][field] = changed
+            value["partner_step"] = partner.bind_admitted_partner_step(
+                value["partner_step"]["adapter"],
+                hub_fixture.bind_fixture(),
+                step_key="evaluate",
+            )
+            with self.subTest(field=field), self.assertRaisesRegex(
+                forge.ForgePartnerContractError, "protocol does not match"
+            ):
+                forge.canonical_forge_search_contract(value)
+
         value = contract()
-        value["partner_step"]["adapter"]["protocol"]["name"] = "forge.other"
         value["partner_step"] = partner.bind_admitted_partner_step(
-            value["partner_step"]["adapter"],
+            {
+                **value["partner_step"]["adapter"],
+                "hub_component": {
+                    **value["partner_step"]["adapter"]["hub_component"],
+                    "capability": "tdi.prepare",
+                    "capability_contract_version": "1.0.0",
+                },
+            },
             hub_fixture.bind_fixture(),
-            step_key="evaluate",
+            step_key="prepare",
         )
         with self.assertRaisesRegex(
-            forge.ForgePartnerContractError, "protocol does not match"
+            forge.ForgePartnerContractError, "Hub capability does not match"
         ):
             forge.canonical_forge_search_contract(value)
 

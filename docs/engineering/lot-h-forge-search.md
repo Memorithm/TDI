@@ -10,7 +10,8 @@ The adapter is pinned to `Memorithm/Forge` source `8946e702e697c144c85e0fb166a21
 
 - `ExternalDomainManifestV1`, schema version 1;
 - `ScientificExternalDomainManifestV1`, schema version 1;
-- protocol name `forge.scientific-external-domain`, version 1.
+- protocol name `forge.scientific-external-domain`, version 1, with TDI protocol schema identity `af22223b02dbc26ed19dd916cb84eb0f64f6ba2df570a9458aab80489882d14c`;
+- admitted Hub capability `tdi.evaluate` at capability-contract version `1.1.0`.
 
 At that Forge source, the scientific wrapper validates the generic external-domain manifest, requires non-empty candidate-generation and independent-verification source sets, rejects development/validation overlap, and inherits the generic final-holdout leakage guard. Forge remains responsible for independently validating any compiled interchange payload.
 
