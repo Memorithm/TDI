@@ -2,7 +2,7 @@
 
 This is the durable engineering handoff for the industrialization programme. It records software evidence only and does not authorize or reinterpret a scientific stage.
 
-**Current exact-head qualification note (2026-09-16):** later Lot-H/operational/export work advanced after several rows below were written. For current qualification state of PRs #279, #283–#288 and active candidates #296/#331, this handoff explicitly delegates to [`industrialization-qualification-audit-2026-09-16.md`](industrialization-qualification-audit-2026-09-16.md). Where an older row below conflicts with that dated exact-head audit, use the audit for current state and retain the older row only as historical programme context. Merge presence alone is not a qualification result.
+**Current delivery note (2026-09-16):** the [integrated delivery record](integration-delivery-2026-09-16.md) updates the coding frontier through #411 and records the 70-test local integration pass, open dependency pins and queued/failed GitHub checks. The [earlier exact-head audit](industrialization-qualification-audit-2026-09-16.md) remains historical evidence for #279/#283–#288/#296/#331; it does not describe the later coding frontier. Merge presence alone is not qualification. Start with the [research engine guide](research-engine.md) for runnable use.
 
 ## Baseline
 
@@ -70,7 +70,7 @@ Contract qualification alone does not establish an operational research product.
 | Q01 | Failed worker has correct journal and CLI exit | Qualified #250; real Hub failure/restart scenario additionally passes locally. |
 | Q02 | Malformed/duplicate/overflow/nonfinite/deep JSON rejected | Qualified #250; real HTTP parser failure boundaries pass locally. |
 | Q03 | Impossible journal transitions and corruption detected | Qualified #250. |
-| Q04 | No quadratic append reread; documented benchmark | Hash-growth property qualified #250; measured scaling benchmark remains. |
+| Q04 | No quadratic append reread; documented benchmark | Hash-growth property qualified #250; #388 adds actual append/hash counts and 72 raw benchmark observations with compatibility rules. No portable speedup or power-loss claim. |
 | Q05 | Crash before/after commit and consistent resume | Trial-boundary qualification #250/#252; real Hub restart without new attempts passes locally. |
 | Q06 | Interrupted creation, disk-full and persistence failures | Partial; new atomic export/fsync/disk-full and pre-dispatch persistence fault tests pass locally. |
 | Q07 | No abandoned descendant in qualified containment profile | Qualified cgroup-v2 profile #252; the Hub process path does not inherit that quota/sandbox qualification. |
@@ -78,25 +78,25 @@ Contract qualification alone does not establish an operational research product.
 | Q09 | Explicit absent/insufficient GPU behavior | Unsupported hard VRAM quota fails closed; no hardware measurement qualification. |
 | Q10 | Changed plan or wrong checkpoint refuses resume | Qualified lineage/budget contracts #254. |
 | Q11 | Bounded concurrency, dependencies, aggregation order | Hub owns scheduling; real two-trial run→verify DAG passes locally. Broader remote failure/load matrix remains. |
-| Q12 | Independent source, branches, caches and RNG | Partial; partner descriptors do not qualify backend execution. Multi-domain SDK conformance remains. |
+| Q12 | Independent source, branches, caches and RNG | #331 implements real finite/Jacobi ReplayCodec adapters, complete checkpoints and branch/RNG/cache conformance. Local SDK/process tests pass; current exact-head CI remains unestablished. |
 | Q13 | Registry/artifact export/import preserves provenance | Local pass for result-evidence bundles, new Hub artifact receipts, re-export and SQLite backup; executable input/toolchain packaging is outside this bundle. |
-| Q14 | Legacy journal migration preserves old evidence | Qualified non-destructive journal migration #250; unrelated to portable artifact contract #261. |
+| Q14 | Legacy journal migration preserves old evidence | Qualified legacy journal migration #250; catalogue schema 1–4 migrations additionally preserve old bytes and roll back on interruption. Actual mixed-row/proof/export tests pass locally in #389/integration. |
 | Q15 | Cache dependency invalidation and domain separation | Local pass for durable exact deterministic-data index and verified lookup; source lineage preserved, no fresh trial/timing claim. |
 | Q16 | Old attempt/expired lease cannot publish | Hub #48–#51 owns qualified fencing/publication persistence; portable digest translation alone does not establish this. |
 | Q17 | Duplicate/disordered messages yield one authoritative commit | Hub publication contracts plus local no-redispatch/lost-response reconciliation; broader remote fault qualification remains. |
 | Q18 | Real TDI plan, worker execution and verified result | Local pass: actual Rust durable_worker, real Hub HTTP/process/SQLite and independent counter oracle; pinned Hub #55 transfer is merged. |
-| Q19 | Elastic resource control preserves protocol | Partial: #279 interchange and #282 validation repairs; actual resource-control integration remains. |
-| Q20 | Forge excludes incorrect candidates before measurement | Partial: #277 nonexecuting contract; real search/evaluation integration remains. |
-| Q21 | Shared SciRust primitive consumed against reference | Remaining; a promotion descriptor alone is insufficient. |
-| Q22 | Correct statistical units, exclusions and uncertainty | Remaining general analysis/report integration. |
-| Q23 | Search/sensitivity bounds, lineage and oracle qualification | Remaining. |
+| Q19 | Elastic resource control preserves protocol | Actual #341/#95 Linux capacity→Elastic permit→Hub admission passes locally; only predeclared concurrency changes. This is admission, not a new OS sandbox/VRAM quota; exact-head qualification remains incomplete. |
+| Q20 | Forge excludes incorrect candidates before measurement | Actual #385/#39 compile→independent verify→measure passes, including incorrect candidate exclusion, cost/budget and ambiguous cancellation recovery. Final upstream pin and exact-head CI remain. |
+| Q21 | Shared SciRust primitive consumed against reference | Real SciRust paired/bootstrap/Holm/Morris/Sobol process consumed by #296/#387; independent SciPy/SALib references pass. #1452 final qualification and downstream merge-SHA repin remain. |
+| Q22 | Correct statistical units, exclusions and uncertainty | #296/#409 implement unit-weighted paired analysis, explicit missing/excluded denominators and intervals, full inventory, separate aggregate/stratum labels and actual figures. Local integration passes; final dependency/CI qualification remains. |
+| Q23 | Search/sensitivity bounds, lineage and oracle qualification | #385/#387 implement bounded replayable search and exact sensitivity-plan/workflow lineage; altered coordinates/response functions are rejected. Local oracles pass; final upstream pins and exact-head CI remain. |
 | Q24 | Prepare→run→inspect→cancel→resume→export→verify | Local pass for documented CLI, separate cancellation scenario and read-only JSON API. |
-| Q25 | Real UI data, incomplete/error/permission states | Local pass for catalogue viewer, escaping, host policy and actual workflow results; statistical plots remain. |
-| Q26 | MLflow/telemetry failure visible without durable loss | Remaining optional export/telemetry integration. |
+| Q25 | Real UI data, incomplete/error/permission states | #409 actual catalogue/search/DAG views, domain/phase filtering, report API/exports and real curves/interval/sensitivity figures pass locally. No simulated progress or missing-value imputation; local dedicated non-final profile. |
+| Q26 | MLflow/telemetry failure visible without durable loss | #287 exact-head qualification passed for optional real MLflow/OTLP and durable queue recovery; actual exporters pass again in the 70-test integration. Remote metric delivery is not exactly-once. |
 | Q27 | Restricted data absent from logs/cache/exports/candidates | Partial: restricted roots rejected before reads and dedicated non-final store required; no per-artifact scientific ACL claim on a mixed Hub. |
-| Q28 | FLAT/NNIS differential contracts and exact hardware status | Remaining; no GPU evidence claimed. |
-| Q29 | Executed documentation on declared versions | Local pass for operational CLI examples with actual binaries; whole product documentation still in progress. |
-| Q30 | Final-head CI, merge SHA and post-merge verification | Hub #55 head `af0d8195a88f96e3172961b5e6ff6d08e2aa9300` passed CI before merge `ccdcb99a4573dbefb944af0df713101b100b5f78`; TDI operational PR qualification remains. |
+| Q28 | FLAT/NNIS differential contracts and exact hardware status | #411 actual FLAT MHA/GQA/MQA/causal/offset probes pass independent f64 oracles via Hub. Default and optional NNIS builds/Clippy pass. GPU execution unqualified; exact NNIS upstream validator retains unresolved_blocking. |
+| Q29 | Executed documentation on declared versions | Public Linux/Python 3.12/Rust 1.89 CLI/SDK/export examples exercised by actual integration tests. Operations, compatibility, release policy and glossary delivered. Debian 12, remote deployments and administrative ruleset activation explicitly unverified. |
+| Q30 | Final-head CI, merge SHA and post-merge verification | Incomplete: component code and consolidated local 70-test pass exist; TDI/Forge checks queued, SciRust hardware job failed, final dependency merge pins and integrated exact-head/post-merge gates remain. No merge override or industrial-release claim. |
 
 See [the executable operational guide](operational-engine.md) and the mandatory
 `TDI operational engine` workflow for reproducible commands and exact limits.

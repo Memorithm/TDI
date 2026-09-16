@@ -40,6 +40,16 @@ def main(argv=None):
     parser.add_argument("--format", choices=("json", "pretty"), default="json", help="compact versioned JSON or indented readable JSON")
     sub = parser.add_subparsers(dest="operation", required=True)
     sub.add_parser("doctor")
+    p = sub.add_parser("sensitivity-plan")
+    p.add_argument("--protocol", type=Path, required=True); p.add_argument("--output", type=Path, required=True)
+    p = sub.add_parser("sensitivity-fixture-plan")
+    p.add_argument("--plan", type=Path, required=True); p.add_argument("--function", choices=("additive", "ishigami"), required=True)
+    p.add_argument("--output", type=Path, required=True)
+    p = sub.add_parser("sensitivity-analyze")
+    p.add_argument("--plan", type=Path, required=True); p.add_argument("--output", type=Path, required=True)
+    source = p.add_mutually_exclusive_group(required=True)
+    source.add_argument("--selections", type=Path); source.add_argument("--observations", type=Path); source.add_argument("--campaign")
+    p.add_argument("--worker", type=Path); p.add_argument("--worker-sha256"); p.add_argument("--source-commit")
     for verb in ("validate", "plan"):
         p = sub.add_parser(verb); p.add_argument("spec", type=Path)
     p = sub.add_parser("fixture-plan")
@@ -49,6 +59,12 @@ def main(argv=None):
     p.add_argument("--worker", type=Path, required=True); p.add_argument("--output", type=Path, required=True)
     p.add_argument("--adapter", choices=("finite", "jacobi"), required=True)
     p.add_argument("--trials", type=int, default=2); p.add_argument("--domain", choices=("Development", "Validation"), default="Development")
+    p = sub.add_parser("attention-fixture-plan")
+    p.add_argument("--worker", type=Path, required=True); p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--backend", choices=("flat-reference", "nnis-cuda-fused"), default="flat-reference")
+    p.add_argument("--trials", type=int, default=6); p.add_argument("--domain", choices=("Development", "Validation"), default="Development")
+    p.add_argument("--allow-cuda", action="store_true")
+    p = sub.add_parser("nnis-qualification-review"); p.add_argument("checkout", type=Path)
     p = sub.add_parser("submit"); p.add_argument("spec", type=Path); p.add_argument("--roots", type=Path)
     p = sub.add_parser("run-local-admitted")
     p.add_argument("spec", type=Path); p.add_argument("--roots", type=Path)
@@ -138,6 +154,45 @@ def dispatch(args):
             with EngineStore(args.catalogue, readonly=True) as store:
                 report = series_from_catalogue(store, read_json(args.selections))
         return export_report(report, args.output, figures=args.figures)
+    if op in ("sensitivity-plan", "sensitivity-fixture-plan", "sensitivity-analyze"):
+        from tdi_sensitivity import make_plan, validate_plan, collect, analyze
+        if args.output.exists() or args.output.is_symlink():
+            raise durable.StorageError("sensitivity output already exists")
+        if op == "sensitivity-plan":
+            plan = make_plan(read_json(args.protocol))
+            atomic_json(args.output, plan)
+            return {"identity": plan["identity"], "rows": len(plan["rows"]), "path": str(args.output), "execution_started": False}
+        plan = validate_plan(read_json(args.plan, max_items=1000000))
+        if op == "sensitivity-fixture-plan":
+            from tdi_sensitivity_fixture import prepare
+            client = HubClient(args.hub, token=os.environ.get("TDI_HUB_TOKEN"), allow_loopback_http=args.allow_loopback_http, timeout=args.timeout)
+            spec = prepare(client, plan, args.function)
+            atomic_json(args.output, spec)
+            return {"campaign_identity": identity("tdi-operational-campaign/v1", spec), "path": str(args.output), "execution_started": False}
+        worker = None
+        if plan["protocol"]["method"] != "ablation":
+            if not all((args.worker, args.worker_sha256, args.source_commit)):
+                raise durable.ContractError("sensitivity analysis requires a pinned SciRust worker")
+            from tdi_scirust_client import SciRustStats
+            worker = SciRustStats(args.worker, args.worker_sha256, args.source_commit)
+        if args.observations:
+            observations = read_json(args.observations, max_items=1000000)
+        else:
+            with EngineStore(args.catalogue, readonly=True) as store:
+                if args.campaign:
+                    campaign = store.get(args.campaign)
+                    selections = [{"campaign": args.campaign, "step": step, "output": output}
+                                  for step, outputs in campaign["spec"]["outputs"].items() for output, contract in outputs.items()
+                                  if contract["json_fields"].get("plan_identity") == plan["identity"]]
+                else:
+                    selections = read_json(args.selections)
+                observations = collect(store, plan, selections)
+        report = analyze(plan, observations, worker)
+        atomic_json(args.output, report)
+        return {"identity": report["identity"], "path": str(args.output), "result": report["result"], "scientific_verdict": report["scientific_verdict"]}
+    if op == "nnis-qualification-review":
+        from tdi_nnis_qualification_review import review_checkout
+        return review_checkout(args.checkout)
     if op == "capacity":
         from tdi_physical_telemetry import capacity_snapshot
         return capacity_snapshot()
@@ -175,14 +230,18 @@ def dispatch(args):
         serve(args.catalogue, args.port, reports=args.report, figures=args.figures)
         return {"status": "stopped"}
     readonly = op in ("status", "inspect", "compare", "events", "backup", "export", "cache-request", "cache-get", "exports", "inspect-export", "searches", "search-inspect")
-    if op in ("fixture-plan", "library-fixture-plan", "submit", "run-local-admitted", "run", "resume", "cancel", "attach", "export", "restore", "cache-get", "search-fixture", "search-run", "search-resume", "search-cancel"):
+    if op in ("fixture-plan", "library-fixture-plan", "attention-fixture-plan", "submit", "run-local-admitted", "run", "resume", "cancel", "attach", "export", "restore", "cache-get", "search-fixture", "search-run", "search-resume", "search-cancel"):
         client = HubClient(args.hub, token=os.environ.get("TDI_HUB_TOKEN"),
                            allow_loopback_http=args.allow_loopback_http, timeout=args.timeout)
-    if op in ("fixture-plan", "library-fixture-plan"):
+    if op in ("fixture-plan", "library-fixture-plan", "attention-fixture-plan"):
         from tdi_hub_fixture import prepare_fixture
         if args.output.exists() or args.output.is_symlink():
             raise durable.ContractError("fixture plan output already exists")
-        if op == "library-fixture-plan":
+        if op == "attention-fixture-plan":
+            from tdi_attention_fixture import prepare_attention_fixture
+            spec = prepare_attention_fixture(client, args.worker, backend=args.backend, domain=args.domain,
+                                             trials=args.trials, allow_cuda=args.allow_cuda)
+        elif op == "library-fixture-plan":
             from tdi_library_fixture import prepare_library_fixture
             spec = prepare_library_fixture(client, args.worker, adapter=args.adapter, domain=args.domain, trials=args.trials)
         else:

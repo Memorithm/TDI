@@ -10,6 +10,8 @@ TDI develops falsifiable experiments, preregistered decision rules, deterministi
 
 > The illustration above is a visual introduction. The status table below is the authoritative research map for the repository.
 
+For the executable research bench, start with the [research engine guide](docs/engineering/research-engine.md): local campaigns, recovery, bounded search, analysis, figures and exports. Its [delivery record](docs/engineering/integration-delivery-2026-09-16.md) distinguishes implemented software from pending release and hardware qualification.
+
 ## Why TDI matters
 
 TDI is not a collection of benchmark claims. It is a sequence of controlled research programmes designed to answer narrower questions with stronger evidence.
