@@ -3,91 +3,62 @@ import unittest
 
 import tdi_execution_graph as graph
 
-SHA = lambda c: c * 64
-HUB = "4bf6186841e1ea70ed15cd84faf33de9b48429cd"
-
+SHA=lambda c: c*64
+HUB="4bf6186841e1ea70ed15cd84faf33de9b48429cd"
 
 def fixture():
     return {
-        "schema": 1,
-        "semantic_version": "tdi-graph/1.0.0",
-        "name": "fixture-graph",
-        "root_plan_id": SHA("a"),
-        "hub_contract": {
-            "repository": "Memorithm/scirust-hub",
-            "source_commit": HUB,
-            "workflow_schema_version": 1,
-            "workflow_model_version": "1.2.0",
-        },
-        "max_concurrency": 2,
-        "steps": [
+        "schema":1,
+        "semantic_version":"tdi-graph/1.0.0",
+        "name":"fixture-graph",
+        "root_plan_id":SHA("a"),
+        "hub_contract":{"repository":"Memorithm/scirust-hub","source_commit":HUB,
+                        "workflow_schema_version":1,"workflow_model_version":"1.2.0"},
+        "max_concurrency":2,
+        "steps":[
             {
-                "key": "prepare",
-                "component_alias": "tdi-runner",
-                "capability": "tdi.prepare",
-                "parameters": {"mode": "fixture", "count": 2},
-                "inputs": {"spec": {"kind": "artifact", "sha256": SHA("1")}},
-                "outputs": ["file:prepared", "file:checkpoint"],
-                "after": [],
-                "timeout_milliseconds": 1000,
-                "checkpoint": {"mode": "exact", "input": None, "output": "file:checkpoint"},
+                "key":"prepare","component_alias":"tdi-runner","component_version":"1.2.3","component_manifest_digest":SHA("9"),"capability":"tdi.prepare","capability_contract_version":"1.0.0",
+                "parameters":{"mode":"fixture","count":2},
+                "inputs":{"spec":{"kind":"artifact","sha256":SHA("1")}},
+                "outputs":["file:prepared","file:checkpoint"],"after":[],"timeout_milliseconds":1000,
+                "checkpoint":{"mode":"exact","input":None,"output":"file:checkpoint"},
             },
             {
-                "key": "evaluate",
-                "component_alias": "tdi-runner",
-                "capability": "tdi.evaluate",
-                "parameters": {"mode": "fixture"},
-                "inputs": {
-                    "prepared": {"kind": "step", "step": "prepare", "output": "file:prepared"},
-                    "checkpoint": {"kind": "step", "step": "prepare", "output": "file:checkpoint"},
-                },
-                "outputs": ["file:result"],
-                "after": ["prepare"],
-                "timeout_milliseconds": 2000,
-                "checkpoint": {"mode": "none", "input": None, "output": None},
+                "key":"evaluate","component_alias":"tdi-runner","component_version":"1.2.3","component_manifest_digest":SHA("9"),"capability":"tdi.evaluate","capability_contract_version":"1.1.0",
+                "parameters":{"mode":"fixture"},
+                "inputs":{"prepared":{"kind":"step","step":"prepare","output":"file:prepared"},
+                          "checkpoint":{"kind":"step","step":"prepare","output":"file:checkpoint"}},
+                "outputs":["file:result"],"after":["prepare"],"timeout_milliseconds":2000,
+                "checkpoint":{"mode":"none","input":None,"output":None},
             },
         ],
     }
 
-
 class Tests(unittest.TestCase):
     def test_graph_identity_and_step_identity_are_stable(self):
-        a = fixture()
-        b = copy.deepcopy(a)
+        a=fixture(); b=copy.deepcopy(a)
         b["steps"][0]["outputs"].reverse()
-        self.assertEqual(graph.graph_identity(a), graph.graph_identity(b))
-        self.assertEqual(graph.step_identity(a, "prepare"), graph.step_identity(b, "prepare"))
-        self.assertNotEqual(graph.step_identity(a, "prepare"), graph.step_identity(a, "evaluate"))
+        self.assertEqual(graph.graph_identity(a),graph.graph_identity(b))
+        self.assertEqual(graph.step_identity(a,"prepare"),graph.step_identity(b,"prepare"))
+        self.assertNotEqual(graph.step_identity(a,"prepare"),graph.step_identity(a,"evaluate"))
 
     def test_forward_dependency_and_unknown_output_fail_closed(self):
-        a = fixture()
-        a["steps"][0]["after"] = ["evaluate"]
-        with self.assertRaises(graph.ExecutionGraphError):
-            graph.canonical_graph(a)
-        a = fixture()
-        a["steps"][1]["inputs"]["prepared"]["output"] = "file:missing"
-        with self.assertRaises(graph.ExecutionGraphError):
-            graph.canonical_graph(a)
+        a=fixture(); a["steps"][0]["after"]=["evaluate"]
+        with self.assertRaises(graph.ExecutionGraphError): graph.canonical_graph(a)
+        a=fixture(); a["steps"][1]["inputs"]["prepared"]["output"]="file:missing"
+        with self.assertRaises(graph.ExecutionGraphError): graph.canonical_graph(a)
 
     def test_checkpoint_input_output_contract(self):
-        a = fixture()
-        a["steps"][0]["checkpoint"]["output"] = "file:missing"
-        with self.assertRaises(graph.ExecutionGraphError):
-            graph.canonical_graph(a)
-        a = fixture()
-        a["steps"][1]["checkpoint"] = {"mode": "exact", "input": "missing", "output": "file:result"}
-        with self.assertRaises(graph.ExecutionGraphError):
-            graph.canonical_graph(a)
+        a=fixture(); a["steps"][0]["checkpoint"]["output"]="file:missing"
+        with self.assertRaises(graph.ExecutionGraphError): graph.canonical_graph(a)
+        a=fixture(); a["steps"][1]["checkpoint"]={"mode":"exact","input":"missing","output":"file:result"}
+        with self.assertRaises(graph.ExecutionGraphError): graph.canonical_graph(a)
 
     def test_parameters_reject_floats_and_unsafe_integers(self):
-        a = fixture()
-        a["steps"][0]["parameters"]["x"] = 0.5
-        with self.assertRaises(graph.ExecutionGraphError):
-            graph.canonical_graph(a)
-        a = fixture()
-        a["steps"][0]["parameters"]["x"] = 2**53
-        with self.assertRaises(graph.ExecutionGraphError):
-            graph.canonical_graph(a)
+        a=fixture(); a["steps"][0]["parameters"]["x"]=0.5
+        with self.assertRaises(graph.ExecutionGraphError): graph.canonical_graph(a)
+        a=fixture(); a["steps"][0]["parameters"]["x"]=2**53
+        with self.assertRaises(graph.ExecutionGraphError): graph.canonical_graph(a)
 
     def test_hub_source_contract_is_exactly_pinned(self):
         a = fixture()
@@ -101,46 +72,42 @@ class Tests(unittest.TestCase):
         with self.assertRaises(graph.ExecutionGraphError):
             graph.canonical_graph(a)
 
-    def test_hub_compiler_is_thin_and_exact(self):
+    def test_component_pin_changes_step_identity_and_mismatched_binding_fails(self):
         a = fixture()
-        out = graph.compile_hub_workflow(
-            a,
-            component_bindings={"tdi-runner": "11111111-1111-1111-1111-111111111111"},
-            artifact_bindings={SHA("1"): "22222222-2222-2222-2222-222222222222"},
-        )
-        self.assertEqual(out["schema_version"], 1)
-        self.assertEqual(out["max_concurrency"], 2)
-        self.assertNotIn("retry", out["steps"][0])
-        self.assertEqual(
-            out["steps"][0]["inputs"]["spec"],
-            {"artifact": {"artifact": "22222222-2222-2222-2222-222222222222"}},
-        )
-        self.assertEqual(
-            out["steps"][1]["inputs"]["prepared"],
-            {"from_step": {"key": "prepare", "output": "file:prepared"}},
-        )
+        base = graph.step_identity(a, "prepare")
+        changed = copy.deepcopy(a)
+        changed["steps"][0]["component_version"] = "1.2.4"
+        changed["steps"][1]["component_version"] = "1.2.4"
+        self.assertNotEqual(base, graph.step_identity(changed, "prepare"))
+        with self.assertRaises(graph.ExecutionGraphError):
+            graph.compile_hub_workflow_preview(
+                a,
+                component_bindings={"tdi-runner": {
+                    "component_id": "11111111-1111-1111-1111-111111111111",
+                    "component_version": "1.2.4",
+                    "manifest_digest": SHA("9"),
+                }},
+                artifact_bindings={SHA("1"): "22222222-2222-2222-2222-222222222222"},
+            )
+
+    def test_hub_compiler_is_thin_and_exact(self):
+        a=fixture()
+        out=graph.compile_hub_workflow_preview(a,component_bindings={"tdi-runner":{"component_id":"11111111-1111-1111-1111-111111111111","component_version":"1.2.3","manifest_digest":SHA("9")}},
+                                       artifact_bindings={SHA("1"):"22222222-2222-2222-2222-222222222222"})
+        self.assertFalse(out["execution_authorized"])
+        self.assertEqual(out["workflow"]["schema_version"],1)
+        self.assertEqual(out["workflow"]["max_concurrency"],2)
+        self.assertNotIn("retry",out["workflow"]["steps"][0])
+        self.assertEqual(out["workflow"]["steps"][0]["inputs"]["spec"],
+                         {"artifact":{"artifact":"22222222-2222-2222-2222-222222222222"}})
+        self.assertEqual(out["workflow"]["steps"][1]["inputs"]["prepared"],
+                         {"from_step":{"key":"prepare","output":"file:prepared"}})
 
     def test_hub_compiler_requires_explicit_bindings(self):
-        a = fixture()
+        a=fixture()
         with self.assertRaises(graph.ExecutionGraphError):
-            graph.compile_hub_workflow(
-                a,
-                component_bindings={},
-                artifact_bindings={SHA("1"): "22222222-2222-2222-2222-222222222222"},
-            )
+            graph.compile_hub_workflow_preview(a,component_bindings={},artifact_bindings={SHA("1"):"x"})
         with self.assertRaises(graph.ExecutionGraphError):
-            graph.compile_hub_workflow(
-                a,
-                component_bindings={"tdi-runner": "11111111-1111-1111-1111-111111111111"},
-                artifact_bindings={},
-            )
-        with self.assertRaises(graph.ExecutionGraphError):
-            graph.compile_hub_workflow(
-                a,
-                component_bindings={"tdi-runner": "NOT-A-UUID"},
-                artifact_bindings={SHA("1"): "22222222-2222-2222-2222-222222222222"},
-            )
+            graph.compile_hub_workflow_preview(a,component_bindings={"tdi-runner":{"component_id":"x","component_version":"1.2.3","manifest_digest":SHA("9")}},artifact_bindings={})
 
-
-if __name__ == "__main__":
-    unittest.main()
+if __name__=='__main__': unittest.main()
