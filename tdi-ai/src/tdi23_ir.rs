@@ -250,10 +250,18 @@ impl fmt::Display for IrError {
             Self::ZeroDimension => formatter.write_str("object dimension must be positive"),
             Self::DimensionOverflow => formatter.write_str("object dimension overflowed usize"),
             Self::ForeignObjectHandle(id) => {
-                write!(formatter, "object handle {} belongs to another IR", id.index())
+                write!(
+                    formatter,
+                    "object handle {} belongs to another IR",
+                    id.index()
+                )
             }
             Self::ForeignNodeHandle(id) => {
-                write!(formatter, "node handle {} belongs to another IR", id.index())
+                write!(
+                    formatter,
+                    "node handle {} belongs to another IR",
+                    id.index()
+                )
             }
             Self::UnknownObject(id) => write!(formatter, "unknown object id {}", id.index()),
             Self::UnknownNode(id) => write!(formatter, "unknown node id {}", id.index()),
