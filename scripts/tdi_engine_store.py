@@ -19,7 +19,7 @@ import urllib.parse
 import tdi_artifact_contract as artifacts
 import tdi_experiment_supervisor as durable
 
-SCHEMA = 1
+SCHEMA = 2
 MAX_PAGE = 200
 
 
@@ -79,7 +79,7 @@ class EngineStore:
                 # short mutations. Never hold a file lock across a network wait:
                 # another CLI process must be able to persist cancellation.
                 fcntl.flock(self.lock, fcntl.LOCK_UN)
-            if self.db.execute("PRAGMA user_version").fetchone()[0] != SCHEMA:
+            if self.db.execute("PRAGMA user_version").fetchone()[0] not in ((1, SCHEMA) if readonly else (SCHEMA,)):
                 raise durable.StorageError("unsupported catalogue schema")
             self.db.row_factory = sqlite3.Row
             self.db.execute("PRAGMA foreign_keys=ON")
@@ -93,6 +93,20 @@ class EngineStore:
     def _initialize(self):
         version = self.db.execute("PRAGMA user_version").fetchone()[0]
         if version == SCHEMA:
+            return
+        if version == 1:
+            tables = {row[0] for row in self.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            if tables != {"campaigns", "events", "results", "cache", "restored_artifacts"}:
+                raise durable.StorageError("unrecognized v1 catalogue tables")
+            self.db.execute("BEGIN IMMEDIATE")
+            try:
+                self._create_exports()
+                self.db.execute(f"PRAGMA user_version={SCHEMA}")
+                self.db.commit()
+                durable._fsync_directory(self.path.parent)
+            except BaseException:
+                self.db.rollback()
+                raise
             return
         if version != 0 or self.db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchone():
             raise durable.StorageError("unknown database cannot become a TDI catalogue")
@@ -108,12 +122,76 @@ class EngineStore:
         try:
             for sql in statements:
                 self.db.execute(sql)
+            self._create_exports()
             self.db.execute(f"PRAGMA user_version={SCHEMA}")
             self.db.commit()
             durable._fsync_directory(self.path.parent)
         except BaseException:
             self.db.rollback()
             raise
+
+    def _create_exports(self):
+        self.db.execute("CREATE TABLE exports (id TEXT PRIMARY KEY, campaign TEXT NOT NULL REFERENCES campaigns(id), kind TEXT NOT NULL, endpoint TEXT NOT NULL, plan TEXT NOT NULL, state TEXT NOT NULL, receipt TEXT NOT NULL, updated_ns INTEGER NOT NULL)")
+        self.db.execute("CREATE INDEX campaign_exports ON exports(campaign, updated_ns)")
+
+    @contextlib.contextmanager
+    def delivery_lock(self):
+        """Serialize external delivery/reconciliation only; never block campaign cancellation."""
+        path = Path(str(self.path) + ".delivery.lock")
+        if path.is_symlink():
+            raise durable.StorageError("symlink delivery lock is forbidden")
+        with path.open("a+b") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            yield
+
+    def list_exports(self, *, after=0, limit=MAX_PAGE):
+        """List bounded delivery state without loading payloads or credentials."""
+        self._page(after, limit)
+        return [dict(row) for row in self.db.execute("SELECT id,campaign,kind,endpoint,state,updated_ns FROM exports ORDER BY updated_ns,id LIMIT ? OFFSET ?", (limit, after))]
+
+    def prepare_export(self, campaign, kind, endpoint, plan):
+        """Persist a bounded immutable export plan without changing campaign evidence.
+
+        At most 32 unfinished exports may be queued. Existing identical plans
+        return their durable state and are never implicitly redispatched.
+        """
+        key = identity("tdi-external-export/v1", {"campaign": campaign, "kind": kind, "endpoint": endpoint, "plan": plan})
+        raw = durable.canonical(plan)
+        if kind not in ("mlflow", "otlp") or len(raw.encode()) > 1024 * 1024:
+            raise durable.ContractError("unsupported or oversized export plan")
+        self.db.execute("BEGIN IMMEDIATE")
+        with self.db:
+            row = self.db.execute("SELECT id FROM exports WHERE id=?", (key,)).fetchone()
+            if row is None:
+                if self.db.execute("SELECT COUNT(*) FROM exports WHERE state != 'sent'").fetchone()[0] >= 32:
+                    raise durable.ContractError("external export queue is full")
+                self.db.execute("INSERT INTO exports VALUES (?,?,?,?,?,'prepared','{}',?)", (key, campaign, kind, endpoint, raw, time.time_ns()))
+                self._event(campaign, "export-prepared", {"export": key, "kind": kind})
+        return self.get_export(key)
+
+    def get_export(self, key):
+        """Read one export intent/receipt without exposing credentials."""
+        row = self.db.execute("SELECT * FROM exports WHERE id=?", (key,)).fetchone()
+        if row is None:
+            raise durable.ContractError("unknown external export")
+        record = dict(row)
+        record["plan"], record["receipt"] = durable.strict_json(record["plan"]), durable.strict_json(record["receipt"])
+        expected = identity("tdi-external-export/v1", {k: record[k] for k in ("campaign", "kind", "endpoint", "plan")})
+        if key != expected:
+            raise durable.ContractError("external export plan integrity mismatch")
+        return record
+
+    def export_transition(self, key, expected, state, receipt):
+        """Compare-and-set delivery state; export failure cannot overwrite results."""
+        allowed = {"prepared": {"sending"}, "sending": {"sending", "sent", "failed"}, "failed": {"sending"}}
+        if state not in allowed.get(expected, set()):
+            raise durable.ContractError("invalid export transition")
+        with self.db:
+            changed = self.db.execute("UPDATE exports SET state=?,receipt=?,updated_ns=? WHERE id=? AND state=?",
+                (state, durable.canonical(receipt), time.time_ns(), key, expected))
+            if changed.rowcount != 1:
+                raise durable.ContractError("export state changed; inspect before continuing")
+            self._event(self.get_export(key)["campaign"], "export-" + state, {"export": key, "receipt": receipt})
 
     def __enter__(self):
         return self
