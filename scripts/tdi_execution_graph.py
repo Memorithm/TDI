@@ -56,7 +56,11 @@ def _text(value, name, *, max_bytes=16_384):
 
 
 def _workflow_name(value):
-    value = _text(value, "name", max_bytes=128)
+    if not isinstance(value, str):
+        raise ExecutionGraphError("name must be a string")
+    size = len(value.encode("utf-8"))
+    if size == 0 or size > 128:
+        raise ExecutionGraphError("name must be 1..=128 UTF-8 bytes")
     if "\0" in value:
         raise ExecutionGraphError("name must not contain NUL")
     return value
