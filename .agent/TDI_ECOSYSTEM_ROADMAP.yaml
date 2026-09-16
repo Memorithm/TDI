@@ -545,7 +545,7 @@ research_engine_statistics_bridge_2026_09_16:
   numerical_owner: Memorithm/scirust
   protocol_and_report_owner: Memorithm/TDI
   source_pull_request: https://github.com/Memorithm/scirust/pull/1452
-  source_revision: fdd4cf626e9171c935af05f6344e62c41766a365
+  source_revision: 7981120d9b703a5d82796608e7565e3763d8c611
   merged_consumer_pull_request: https://github.com/Memorithm/TDI/pull/296
   merged_consumer_revision: 29294e801234e858e122bf32ed694acbb3190d54
   current_consumer_dependency_pin: 06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0
@@ -583,7 +583,7 @@ research_engine_operational_frontier_2026_09_16:
     - ElasticXxx_95_actual_capacity_admission_and_TDI_341_consumer_merged_current_CI_evidence_incomplete
     - TDI_385_durable_Forge_Hub_search_candidate_at_135fc20520fed390d23e78f6374a6a0207a26a4d
     - TDI_387_Morris_Sobol_ablation_candidate_at_54dff997ede3b948b420ab0c021af2933334ad63
-    - TDI_388_measured_engine_benchmarks_candidate_at_fdd0f57dc3f5fe885601229b9c2d570e54b35635
+    - TDI_388_measured_engine_benchmarks_candidate_at_9e8ba6bb5e2cad4d6fa1eca6b33b3fb0a371f6da
     - TDI_389_shared_admission_proofs_and_schema_4_candidate_at_13d46681f8a9f629680eb9c9b77180bf5db8484b
   measured_scope:
     - serial_public_software_cases_with_real_Hub_workers_and_recorded_repetitions
@@ -591,7 +591,30 @@ research_engine_operational_frontier_2026_09_16:
     - 16_trial_32_output_shared_storage_150890_bytes_versus_1328144_reconstructed_JSON_bytes
     - visible_filesystem_fsync_volatile_does_not_qualify_power_loss_durability
   remaining:
-    - richer_readonly_consultation_reports_and_figure_exports
-    - remaining_permitted_FLAT_NNIS_adapters_with_explicit_hardware_gates
+    - upstream_hardware_failure_and_final_SciRust_Forge_dependency_merge_pins
     - latest_exact_head_CI_review_final_dependency_pins_and_post_merge_checks
   authority: no_change_to_any_scientific_stage_or_protected_payload_boundary
+
+research_engine_integrated_consumer_2026_09_16:
+  status: implemented_public_software_candidate_not_release_qualified
+  consumer_pull_request: https://github.com/Memorithm/TDI/pull/413
+  consumer_revision: cabb0b5ab2c6ad2c45121134bbeffa4c822ef028
+  public_software_evidence: 70_actual_process_integration_tests_passed_locally
+  source_build_attestation: false
+  hardware_execution_performed: false
+  final_or_blocked_model_authorization: false
+  exact_head_ci: pending
+  authority: no_existing_stage_default_backend_or_maturity_promotion
+  implemented:
+    - schema_4_shared_proofs_and_preserved_portable_evidence_identity
+    - actual_Forge_Hub_search_and_Morris_Sobol_ablation
+    - actual_readonly_DAG_search_reports_and_SVG_PNG_PDF_exports_in_PR_409
+    - actual_FLAT_reference_and_explicit_optional_NNIS_adapter_in_PR_411
+    - corrected_72_record_engine_baseline_and_88_6_percent_fixture_JSON_storage_reduction
+    - integrated_no_skip_CI_operating_guide_compatibility_release_and_glossary
+  blockers:
+    - queued_TDI_and_Forge_checks_are_not_success
+    - SciRust_1452_Thor_cuBLAS_job_failed_at_exact_head_7981120d9b703a5d82796608e7565e3763d8c611
+    - final_upstream_merge_pins_reviews_exact_head_and_post_merge_gates_remain
+    - NNIS_CUDA_device_execution_and_CUDA_RUST_SIMT_qualification_remain_unresolved
+  review_partitions: [385, 387, 388, 389, 409, 411]
