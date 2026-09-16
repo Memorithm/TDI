@@ -10,8 +10,8 @@ This is the durable engineering handoff for the industrialization programme. It 
 - Linux containment C: PR #252, head `1b4735b8aae65ad8f951803d18330706224fa33c`, merged `32e51b9b51a254680d1c5bca0d8e96c2ac39f53f`; exact-head real-kernel and repository workflows succeeded.
 - Experiment contract D: PR #253, final head `98a894437cbd6b1b72b23aeb2bdd84548e32124a`, merged `4dd4e0db2837fcffd2e6177542ab14cd289c8540`. All returned pull-request workflows on that exact head completed successfully, including Rust, public Rust, MSRV, TDI AI contracts and real-kernel engine containment.
 - Checkpoint/DAG E: PR #254, final head `2afb9c1d391a79c2f6828fe5fcf2f30477c1d357`, merged `bad24136e081157886d9c94283f3d49d43be335a` after all returned applicable exact-head workflows succeeded and no unresolved review thread remained.
-- Lot-F base: `bad24136e081157886d9c94283f3d49d43be335a`.
-- Current branch: `industrialize/provenance-cache-f`.
+- Lot F: PR #261, final head `dceb67d4a9c49ce293c08347cab61db0f3347871`, merged `494240ebc5cd8d9418ce8c174dd65a4bc4e17651` after all returned applicable exact-head workflows succeeded, including the dedicated artifact/provenance contract gate.
+- Post-Lot-F base: `494240ebc5cd8d9418ce8c174dd65a4bc4e17651`.
 - Scientific constraints remain those in `AGENTS.md` and the ecosystem roadmap/overlays.
 
 ## Delivered / candidate capabilities
@@ -36,10 +36,10 @@ This is the durable engineering handoff for the industrialization programme. It 
 | E Hub text/version fidelity | qualified | PR #254 output labels reject Unicode `Cc` controls/whitespace like pinned Hub; version parsing intentionally matches Hub's semver-shaped (not full SemVer) grammar. |
 | E Hub bridge | qualified structural preview only | PR #254 `compile_hub_workflow_preview()` emits `execution_authorized: false`; current WorkflowSpec/v1 cannot atomically enforce component/capability pins, registry state or portable-artifact identity. |
 | E generic scheduling | intentionally delegated | scirust-hub owns ready-set scheduling, retries, cancellation, workflow lifecycle, artifacts, leases and remote transport; TDI does not duplicate them. |
-| F ArtifactDescriptor/v1 | candidate | portable raw-SHA256/size/media/access descriptor plus byte verification; explicitly not interchangeable with Hub domain-separated `ContentDigest`. |
-| F ProvenanceRecord/v1 | candidate | binds artifact identity to experiment/plan/trial/attempt/step, implementation, domain, exact named inputs and dependencies. |
-| F ExportManifest/v1 | candidate | complete member-set verification, payload verification and monotone access restriction without storage or publication. |
-| F exact-domain cache semantics | candidate | cache key binds domain/plan/step/implementation/backend/inputs/parameters; disabled and unauthorized reuse fail closed; no cache store or scientific authorization is implemented. |
+| F ArtifactDescriptor/v1 | qualified | PR #261: portable raw-SHA256/size/media/access descriptor plus byte verification; explicitly not interchangeable with Hub domain-separated `ContentDigest`. |
+| F ProvenanceRecord/v1 | qualified | PR #261 binds artifact identity to experiment/plan/trial/attempt/step, implementation, domain, exact named inputs and dependencies. |
+| F ExportManifest/v1 | qualified | PR #261 qualifies complete member-set verification, payload verification and monotone access restriction without storage or publication. |
+| F exact-domain cache semantics | qualified | PR #261: cache key binds domain/plan/step/implementation/backend/inputs/parameters; disabled and unauthorized reuse fail closed; no cache store or scientific authorization is implemented. |
 | F physical CAS/registry | intentionally delegated | Hub remains owner of physical content-addressed storage, registry persistence and transport. |
 
 ## Qualification matrix progress
@@ -56,8 +56,8 @@ This is the durable engineering handoff for the industrialization programme. It 
 | Q10 | qualified for exact checkpoint lineage | PR #254 binds exact checkpoint identity, frozen budgets, immutable inputs, RNG streams and caller-owned execution identity. |
 | Q11 | qualified for declarative graph semantics only | PR #254 validates graph/component/capability pins, pinned Hub structural/text/version boundaries and a non-authoritative preview; authoritative Hub execution remains blocked until a versioned Hub edge enforces registry/artifact pins. |
 | Q12 | planned | common adapter SDK remains separate from graph/checkpoint semantics. |
-| Q13-Q14 | candidate | Lot F defines portable descriptor/provenance/export verification; exact-head qualification and external export integration remain. |
-| Q15 | candidate | exact-domain cache identity/refusal semantics added; durable cache index/storage remains outside this module and reuse still requires caller authorization. |
+| Q13-Q14 | qualified for portable contract verification | PR #261 exact-head qualification passed for descriptor/provenance/export verification; external export integration remains later work. |
+| Q15 | qualified for contract semantics | PR #261 exact-head qualification passed for exact-domain cache identity/refusal; durable cache index/storage remains outside this module and reuse still requires caller authorization. |
 | Q16-Q17 | planned | real Hub edge, fencing and deduplicated authoritative publication. |
 | Q18-Q30 | planned | cross-repository integrations, statistics, CLI/viewer/exports, hardware adapters, docs and final integrated qualification. |
 
@@ -67,9 +67,9 @@ PR #254 qualified 20 checkpoint/graph contract tests (6 checkpoint + 14 graph) o
 
 Checkpoint regressions cover exact lineage, input/RNG drift, content identity, embedded progress limits and rejection of caller-side budget widening. Graph regressions include component-id/version/manifest/capability identity sensitivity, single-alias pin consistency, Hub input grammar, max 32 inputs, 16 KiB serialized parameters, audited 3,600,000 ms timeout bound, workflow-name NUL rejection, pinned Hub prerelease-version behavior and Unicode control rejection for output labels. The existing `TDI engine Linux containment` workflow executes these contracts alongside all previously qualified engine-contract tests. The cgroup kernel job remains enabled so Lot E cannot accidentally regress the contained execution foundation.
 
-## Lot-F candidate validation
+## Lot-F qualified validation
 
-Candidate qualification covers portable artifact/provenance/export/cache contract tests:
+PR #261 qualified the portable artifact/provenance/export/cache contract tests on exact head `dceb67d4a9c49ce293c08347cab61db0f3347871` before merge `494240ebc5cd8d9418ce8c174dd65a4bc4e17651`:
 
 ```bash
 PYTHONPATH=scripts python3 -m py_compile \
@@ -79,7 +79,7 @@ PYTHONPATH=scripts python3 -m unittest \
   scripts/test_tdi_artifact_contract.py -v
 ```
 
-The dedicated `TDI artifact and provenance contracts` workflow executes these tests on the exact PR head. The candidate tests cover raw-payload digest/size verification, TDI-vs-Hub digest non-interchangeability, canonical provenance ordering, exact export member/provenance binding, monotone access restrictions, exact-domain cache identity, disabled/unauthorized cache refusal, and fail-closed structural bounds.
+The dedicated `TDI artifact and provenance contracts` workflow succeeded on the final exact PR head. The qualified tests cover raw-payload digest/size verification, TDI-vs-Hub digest non-interchangeability, canonical provenance ordering, exact export member/provenance binding, monotone access restrictions, exact-domain cache identity, disabled/unauthorized cache refusal, and fail-closed structural bounds.
 
 ## Cross-repository decisions
 
@@ -97,7 +97,7 @@ The dedicated `TDI artifact and provenance contracts` workflow executes these te
 
 ## Next
 
-1. Qualify Lot F on its exact PR head; address all material review findings before merge.
-2. Add a real TDI↔Hub capability/publication edge that atomically enforces component, capability and portable-artifact pins, then qualify lease fencing and authoritative publication without moving Hub-owned scheduling/storage into TDI.
+1. Add a real TDI↔Hub capability/publication edge that atomically enforces component, capability and portable-artifact pins; keep execution fail-closed while Hub v1 lacks a qualified fencing/generation token.
+2. Qualify lease fencing and authoritative publication in Hub-owned orchestration before TDI treats remote publication as authoritative.
 3. Add ElasticXxx, Forge, SciRust, FLAT-ATTENTION and NNIS integrations only through qualified versioned contracts.
 4. Continue statistics/sensitivity, CLI/API/viewer, external exports and measured engine benchmarks.
