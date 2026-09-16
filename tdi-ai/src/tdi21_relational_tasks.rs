@@ -86,10 +86,14 @@ pub struct RelationalEpisodeOutcome {
     pub relational_work: RelationalWork,
 }
 
+/// Versioned identifier namespaces. Under the v1 reference stream configuration
+/// (128 two-way slots and the TDI-21 relational salt), facts required by one
+/// episode occupy distinct buckets. This isolates relation-composition behavior
+/// from a deterministic eviction confound in the nominal-capacity fixture.
 fn namespace(split: RelationalSplit) -> ([u64; 6], [u64; 4]) {
     match split {
-        RelationalSplit::Development => ([3, 5, 9, 13, 17, 21], [1, 2, 4, 7]),
-        RelationalSplit::Validation => ([131, 149, 167, 181, 197, 211], [31, 37, 41, 43]),
+        RelationalSplit::Development => ([1, 2, 3, 6, 4, 5], [1, 2, 3, 4]),
+        RelationalSplit::Validation => ([101, 102, 103, 106, 104, 105], [5, 6, 7, 8]),
     }
 }
 
