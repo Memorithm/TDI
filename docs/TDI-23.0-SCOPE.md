@@ -1,6 +1,6 @@
 # TDI-23.0 — Stage-0 Scope and Stage Gate
 
-Status: **ACTIVE STAGE-0 BOOTSTRAP / NON-FINAL**
+Status: **BOOTSTRAP MERGED / SCIENTIFIC FREEZE UNRESOLVED / NON-FINAL**
 
 ## Purpose
 
@@ -15,6 +15,8 @@ It lands:
 - a second opt-in development module implementing coordinate-subspace global reduction, lift, reconstruction residual, and composition-defect auditing;
 - deterministic tests for dagger involution, reversed composition, `k^dagger o q = <k,q>`, reduction/dagger commutation, explicit lossy composition defects, dimension rejection, and non-finite rejection;
 - a bootstrap integrity script that validates documentation, the freeze template, formatting, clippy, and Stage-0 Rust tests.
+
+The engineering bootstrap is merged, but the Stage-0 scientific freeze remains unresolved. The Stage-0 gate therefore remains normative and fail-closed while later TDI-23.x engineering stages proceed.
 
 ## Stage-0 semantic carrier
 
@@ -78,7 +80,7 @@ Stage 0 does **not**:
 
 ## Stage gate toward TDI-23.1
 
-TDI-23.1 IR work may begin only when:
+The prerequisites that allowed TDI-23.1 engineering work to begin remain preserved as historical and ongoing integrity conditions:
 
 1. `docs/TDI-23-PROGRAMME.md`, `docs/TDI-23.0-SCOPE.md`, `docs/TDI-23.0-STATUS.md`, and `docs/TDI-23.0-GLOBAL-REDUCTION.md` are merged;
 2. `docs/tdi23/tdi23.0-stage0-freeze.template.json` remains present with both execution flags `false`;
@@ -86,7 +88,7 @@ TDI-23.1 IR work may begin only when:
 4. `scripts/check-tdi23-stage0-bootstrap.sh` passes;
 5. the experimental Rust scaffold remains explicitly real-valued and does not silently generalize numerical assumptions;
 6. the reduction scaffold continues to expose composition loss rather than silently asserting functoriality;
-7. any field needed by TDI-23.1 is resolved only by an explicit later PR.
+7. any Stage-0 scientific field needed by a later TDI-23.x stage is resolved only by an explicit later freeze decision.
 
 ## Required Stage-0 controls
 
