@@ -17,8 +17,8 @@ check_blob() {
 
 check_blob "docs/TDI-22.1-PREREGISTRATION.md" "fdeceed48229221b42bd6591550f060e594909cb"
 check_blob "docs/TDI-22.1-ARM-CONTRACT.md" "08dfda1eda9f2d730080e74359474537b2e03b5a"
-check_blob "docs/TDI-22.1-FREEZE.md" "a741554b839bd6cce734bd4bb607a6bd8161b0d6"
-check_blob "docs/TDI-22.1-SEED-CONTRACT.md" "76cba8c31985ebc6860e0187827198742da46cb8"
+check_blob "docs/TDI-22.1-FREEZE.md" "d74e11ea56ec2e67d3daf50fc767243a75b01954"
+check_blob "docs/TDI-22.1-SEED-CONTRACT.md" "b4fde0b5358e777e33ef04616ed28dded7d16421"
 check_blob "docs/TDI-22.1-GENERATOR-CONTRACT.md" "e6b76c2f2a46090b277af9095827d0f6cc2d2a28"
 check_blob "docs/TDI-22.1-RECORD-CONTRACT.md" "86eaed60b7fdda2945b53cf180c18da6d8a1fc7a"
 check_blob "docs/TDI-22.1-IMPLEMENTATION-GATE.md" "2cae6ad10b613365afca96d7a92bb605000ca8c1"
@@ -35,7 +35,8 @@ grep -Fq 'static_parameter_bits' docs/TDI-22.1-RECORD-CONTRACT.md
 grep -Fq 'ASCII TAB byte' docs/TDI-22.1-RECORD-CONTRACT.md
 grep -Fq 'unsigned integer bit counts' docs/TDI-22.1-RECORD-CONTRACT.md
 grep -Fq 'unavailable identity or score: literal `none`' docs/TDI-22.1-RECORD-CONTRACT.md
-grep -Fq 'quarter_step(w) = ((w mod 17) - 8) / 4' docs/TDI-22.1-SEED-CONTRACT.md
+grep -Fq 'quarter_step(w) = ((w mod 15) - 7) / 4' docs/TDI-22.1-SEED-CONTRACT.md
+grep -Fq 'worst frozen F1 transport' docs/TDI-22.1-FREEZE.md
 grep -Fq 'M(P)=C-P x R' docs/TDI-22.1-GENERATOR-CONTRACT.md
 
 if find results artifacts -type f 2>/dev/null \
