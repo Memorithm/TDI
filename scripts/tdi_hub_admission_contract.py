@@ -176,6 +176,8 @@ def _canonical_root_artifact_bindings(graph_value, bindings):
     """
     if not isinstance(bindings, dict):
         raise HubAdmissionContractError("root_artifact_bindings must be an object")
+    if any(not isinstance(key, str) for key in bindings):
+        raise HubAdmissionContractError("root_artifact_bindings keys must be SHA-256 strings")
     expected = _root_artifact_digests(graph_value)
     actual = set(bindings)
     if actual != expected:
@@ -223,14 +225,20 @@ def bind_exact_workflow_admission(graph, workflow_response, *, root_artifact_bin
     this exact workflow for execution. It never authorizes a TDI scientific
     stage, holdout, claim or verdict.
     """
-    graph_value = execution_graph.canonical_graph(graph)
+    try:
+        graph_value = execution_graph.canonical_graph(graph)
+    except execution_graph.ExecutionGraphError as exc:
+        raise HubAdmissionContractError(str(exc)) from exc
     root_bindings, artifact_ids = _canonical_root_artifact_bindings(
         graph_value, root_artifact_bindings
     )
-    preview = execution_graph.compile_hub_workflow_preview(
-        graph_value,
-        artifact_bindings=artifact_ids,
-    )
+    try:
+        preview = execution_graph.compile_hub_workflow_preview(
+            graph_value,
+            artifact_bindings=artifact_ids,
+        )
+    except execution_graph.ExecutionGraphError as exc:
+        raise HubAdmissionContractError(str(exc)) from exc
     response = _canonical_workflow_record_projection(workflow_response)
     if response["name"] != graph_value["name"]:
         raise HubAdmissionContractError("Hub workflow name does not match TDI Graph/v1")
@@ -294,15 +302,18 @@ def canonical_workflow_admission_binding(binding):
 
     try:
         graph_value = execution_graph.canonical_graph(binding["graph"])
-    except execution_graph.GraphContractError as exc:
+    except execution_graph.ExecutionGraphError as exc:
         raise HubAdmissionContractError(str(exc)) from exc
     root_bindings, artifact_ids = _canonical_root_artifact_bindings(
         graph_value, binding["root_artifact_bindings"]
     )
-    preview = execution_graph.compile_hub_workflow_preview(
-        graph_value,
-        artifact_bindings=artifact_ids,
-    )
+    try:
+        preview = execution_graph.compile_hub_workflow_preview(
+            graph_value,
+            artifact_bindings=artifact_ids,
+        )
+    except execution_graph.ExecutionGraphError as exc:
+        raise HubAdmissionContractError(str(exc)) from exc
     if not _json_equal(binding["workflow_spec"], preview["workflow"]):
         raise HubAdmissionContractError("embedded Hub workflow spec does not match embedded TDI Graph/v1")
     admission = _canonical_admission(binding["admission"], _expected_admission(graph_value))
