@@ -13,6 +13,8 @@ The adapter is pinned to `Memorithm/Forge` source `8946e702e697c144c85e0fb166a21
 - protocol name `forge.scientific-external-domain`, version 1, with TDI protocol schema identity `af22223b02dbc26ed19dd916cb84eb0f64f6ba2df570a9458aab80489882d14c`;
 - admitted Hub capability `tdi.evaluate` at capability-contract version `1.1.0`.
 
+The protocol schema identity is the SHA-256 of the ASCII descriptor `Memorithm/Forge@8946e702e697c144c85e0fb166a21fe759cdae46:ExternalDomainManifestV1/1+ScientificExternalDomainManifestV1/1`. It is a TDI adapter identity anchored to the audited Forge source and schema versions, not a claim that Forge publishes that digest itself.
+
 At that Forge source, the scientific wrapper validates the generic external-domain manifest, requires non-empty candidate-generation and independent-verification source sets, rejects development/validation overlap, and inherits the generic final-holdout leakage guard. Forge remains responsible for independently validating any compiled interchange payload.
 
 ## TDI-owned semantics
@@ -20,6 +22,7 @@ At that Forge source, the scientific wrapper validates the generic external-doma
 `ForgeSearchContract/v1` binds:
 
 - the exact G3-admitted Forge partner step and audited Forge source;
+- the exact TDI adapter protocol identity and compatible admitted Hub capability;
 - the upstream TDI repository, exact Git object id, and scientific/search contract SHA-256;
 - explicit candidate dimensions Forge may search;
 - distinct generation, verification, and final-holdout source identities;
@@ -27,7 +30,7 @@ At that Forge source, the scientific wrapper validates the generic external-doma
 - named minimize/maximize objectives;
 - environment fingerprint/isolation requirements.
 
-The contract is content-addressed by TDI canonical encoding. It rejects JSON Boolean aliases on integer version fields, non-ASCII Forge-incompatible repository syntax, duplicate bounded lists, source/protocol drift, development/validation overlap, final-holdout leakage, and authority escalation.
+The contract is content-addressed by TDI canonical encoding. It rejects JSON Boolean aliases on integer version fields, non-ASCII Forge-incompatible repository syntax, duplicate bounded lists, source/protocol/capability drift, development/validation overlap, final-holdout leakage, and authority escalation.
 
 ## Authority boundary
 
@@ -46,5 +49,7 @@ Forge continues to own candidate proposal/mutation, independent verification, me
 ## Qualification
 
 The dedicated `TDI Forge partner contracts` workflow compiles the G3, common-partner and Forge-specific contract modules and runs their regression suites together. Normal repository gates remain authoritative as well.
+
+The first automated review identified that source/repository matching alone was insufficient: a canonical Forge descriptor could otherwise carry a different protocol or be bound to an admitted but incompatible Hub capability. The corrected contract therefore pins protocol name, version, schema identity, capability name and capability-contract version and regression-tests protocol/capability drift.
 
 No candidate search, protected holdout, scientific result or performance measurement is produced by these tests.
