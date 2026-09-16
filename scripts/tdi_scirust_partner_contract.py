@@ -1,13 +1,13 @@
 """Versioned, authority-free TDI -> SciRust primitive-promotion contract.
 
 This Lot-H slice binds the qualified common ``PartnerAdapter/v1`` boundary to
-an exact audited SciRust Tensor-IR representation surface.  It describes a
+an exact audited SciRust Tensor-IR representation surface. It describes a
 portable candidate artifact that may be reviewed for promotion into SciRust;
 it does not execute SciRust, copy SciRust implementation code into TDI, or
 transfer TDI scientific-state/verdict ownership.
 
 The adapter protocol defined here is TDI-owned interchange metadata, not a
-claim that SciRust publishes a network protocol.  SciRust remains authoritative
+claim that SciRust publishes a network protocol. SciRust remains authoritative
 for whether a candidate is generic, correct, API-compatible, tested and suitable
 for promotion into its reusable mathematical core.
 """
@@ -30,8 +30,11 @@ SCIRUST_PUBLIC_SURFACES = (
     "RepresentationPlan",
     "StorageBits",
 )
+SCIRUST_REPRESENTATION_SCHEMA_IDENTITY = (
+    "92f258383afe68c364a9ee361999bf18db3b7e611da84c75290f5de17fb3853d"
+)
 
-# TDI-owned adapter interchange contract.  The identity is frozen from the
+# TDI-owned adapter interchange contract. The identity is frozen from the
 # audited source/API descriptor documented in lot-h-scirust-primitive-boundary.md.
 SCIRUST_PROTOCOL_NAME = "tdi.scirust.representation-promotion"
 SCIRUST_PROTOCOL_VERSION = 1
@@ -76,6 +79,21 @@ def _strict_version(value, expected, name):
     if type(value) is not int or value != expected:
         raise SciRustPartnerContractError(f"{name} must be the integer {expected}")
     return value
+
+
+def scirust_adapter_surface():
+    """Return the exact TDI projection of the audited SciRust interface."""
+    return {
+        "capabilities": ["scirust.tensor-ir.representation.v1"],
+        "inputs": [
+            {
+                "name": "primitive-candidate",
+                "schema": 1,
+                "identity": SCIRUST_REPRESENTATION_SCHEMA_IDENTITY,
+            }
+        ],
+        "outputs": [],
+    }
 
 
 def _canonical_candidate_artifact(value, domain):
@@ -124,7 +142,10 @@ def _canonical_scirust_metadata(value):
         raise SciRustPartnerContractError("SciRust representation module identity drift")
     if value["representation_blob_sha"] != SCIRUST_REPRESENTATION_BLOB_SHA:
         raise SciRustPartnerContractError("SciRust representation module blob drift")
-    if type(value["public_surfaces"]) is not list or tuple(value["public_surfaces"]) != SCIRUST_PUBLIC_SURFACES:
+    if (
+        type(value["public_surfaces"]) is not list
+        or tuple(value["public_surfaces"]) != SCIRUST_PUBLIC_SURFACES
+    ):
         raise SciRustPartnerContractError("SciRust audited public surface drift")
     return {
         "repository": SCIRUST_REPOSITORY,
@@ -143,16 +164,24 @@ def _canonical_request(value):
         "request",
     )
     domain = value["domain"]
-    if domain not in _ALLOWED_DOMAINS:
-        raise SciRustPartnerContractError("request.domain must be Development or Validation")
+    if not isinstance(domain, str) or domain not in _ALLOWED_DOMAINS:
+        raise SciRustPartnerContractError(
+            "request.domain must be Development or Validation"
+        )
     primitive_kind = value["primitive_kind"]
-    if primitive_kind not in _ALLOWED_KINDS:
-        raise SciRustPartnerContractError("request.primitive_kind is not an allowed reusable primitive class")
+    if not isinstance(primitive_kind, str) or primitive_kind not in _ALLOWED_KINDS:
+        raise SciRustPartnerContractError(
+            "request.primitive_kind is not an allowed reusable primitive class"
+        )
     if value["promotion_scope"] != "candidate-only":
-        raise SciRustPartnerContractError("request.promotion_scope must remain candidate-only")
+        raise SciRustPartnerContractError(
+            "request.promotion_scope must remain candidate-only"
+        )
     return {
         "domain": domain,
-        "candidate_artifact": _canonical_candidate_artifact(value["candidate_artifact"], domain),
+        "candidate_artifact": _canonical_candidate_artifact(
+            value["candidate_artifact"], domain
+        ),
         "primitive_kind": primitive_kind,
         "promotion_scope": "candidate-only",
     }
@@ -161,15 +190,23 @@ def _canonical_request(value):
 def _canonical_review(value):
     _exact(
         value,
-        {"owner", "independent_scirust_validation_required", "implementation_copy_forbidden"},
+        {
+            "owner",
+            "independent_scirust_validation_required",
+            "implementation_copy_forbidden",
+        },
         "review",
     )
     if value["owner"] != SCIRUST_REPOSITORY:
-        raise SciRustPartnerContractError("SciRust must remain the promotion review owner")
+        raise SciRustPartnerContractError(
+            "SciRust must remain the promotion review owner"
+        )
     if value["independent_scirust_validation_required"] is not True:
         raise SciRustPartnerContractError("independent SciRust validation is mandatory")
     if value["implementation_copy_forbidden"] is not True:
-        raise SciRustPartnerContractError("TDI must not copy SciRust implementation ownership")
+        raise SciRustPartnerContractError(
+            "TDI must not copy SciRust implementation ownership"
+        )
     return {
         "owner": SCIRUST_REPOSITORY,
         "independent_scirust_validation_required": True,
@@ -202,28 +239,45 @@ def canonical_scirust_promotion_contract(value):
         "SciRust promotion contract schema",
     )
     try:
-        admitted_partner_step = partner.canonical_admitted_partner_step(value["partner_step"])
+        admitted_partner_step = partner.canonical_admitted_partner_step(
+            value["partner_step"]
+        )
     except partner.PartnerAdapterContractError as exc:
         raise SciRustPartnerContractError(str(exc)) from exc
 
     adapter = admitted_partner_step["adapter"]
-    if adapter["partner"] != "scirust" or adapter["repository"] != SCIRUST_REPOSITORY:
+    if (
+        adapter["partner"] != "scirust"
+        or adapter["repository"] != SCIRUST_REPOSITORY
+    ):
         raise SciRustPartnerContractError("partner_step is not the SciRust adapter")
     if adapter["source_sha"] != SCIRUST_SOURCE_SHA:
-        raise SciRustPartnerContractError("SciRust adapter source does not match the audited source")
+        raise SciRustPartnerContractError(
+            "SciRust adapter source does not match the audited source"
+        )
     protocol = adapter["protocol"]
     if (
         protocol["name"] != SCIRUST_PROTOCOL_NAME
         or protocol["version"] != SCIRUST_PROTOCOL_VERSION
         or protocol["schema_identity"] != SCIRUST_PROTOCOL_SCHEMA_IDENTITY
     ):
-        raise SciRustPartnerContractError("SciRust adapter protocol does not match the qualified TDI interchange contract")
+        raise SciRustPartnerContractError(
+            "SciRust adapter protocol does not match the qualified TDI interchange contract"
+        )
     hub = adapter["hub_component"]
     if (
         hub["capability"] != SCIRUST_HUB_CAPABILITY
-        or hub["capability_contract_version"] != SCIRUST_HUB_CAPABILITY_CONTRACT_VERSION
+        or hub["capability_contract_version"]
+        != SCIRUST_HUB_CAPABILITY_CONTRACT_VERSION
     ):
-        raise SciRustPartnerContractError("SciRust adapter must bind the non-executing preparation boundary")
+        raise SciRustPartnerContractError(
+            "SciRust adapter must bind the non-executing preparation boundary"
+        )
+    for field, expected in scirust_adapter_surface().items():
+        if adapter[field] != expected:
+            raise SciRustPartnerContractError(
+                f"SciRust adapter {field} does not match the audited source projection"
+            )
 
     return {
         "schema": SCIRUST_PROMOTION_CONTRACT_SCHEMA,
