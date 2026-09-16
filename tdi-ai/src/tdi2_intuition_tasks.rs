@@ -10,6 +10,8 @@ pub enum TaskFamily {
     MotifRetrieval,
     /// The same base motif maps differently under two explicit contexts.
     ContextReversal,
+    /// A reusable base/context template applied across novel case identities.
+    ContextTemplateTransfer,
     /// Ordered Boolean frames distinguish temporal direction.
     TemporalTrend,
 }
@@ -138,6 +140,29 @@ pub fn context_reversal_pair(case_id: u32) -> [SyntheticCase; 2] {
     ]
 }
 
+/// Reusable context-conditioned pair whose structural vocabulary is shared across ids.
+#[must_use]
+pub fn context_template_pair(case_id: u32) -> [SyntheticCase; 2] {
+    let class = case_id % 13;
+    let base = PredicateId::new(2_000 + class);
+    let context_a = PredicateId::new(30_000);
+    let context_b = PredicateId::new(30_001);
+    let distractor = PredicateId::new(50_000 + case_id);
+    let first_id = 200_000 + 2 * u64::from(class);
+    [
+        SyntheticCase {
+            family: TaskFamily::ContextTemplateTransfer,
+            query: BooleanState::new(vec![base, context_a, distractor]),
+            expected_template: TemplateId::new(first_id),
+        },
+        SyntheticCase {
+            family: TaskFamily::ContextTemplateTransfer,
+            query: BooleanState::new(vec![base, context_b, distractor]),
+            expected_template: TemplateId::new(first_id + 1),
+        },
+    ]
+}
+
 /// Deterministic ordered temporal trend case.
 ///
 /// Reversing the frames changes the structure while preserving the same predicate vocabulary.
@@ -158,8 +183,8 @@ pub fn temporal_trend_case(case_id: u32) -> TemporalCase {
 #[cfg(test)]
 mod tests {
     use super::{
-        TaskFamily, context_reversal_pair, motif_ambiguous_state, motif_ood_state,
-        motif_retrieval_case, motif_retrieval_stress_case, temporal_trend_case,
+        TaskFamily, context_reversal_pair, context_template_pair, motif_ambiguous_state,
+        motif_ood_state, motif_retrieval_case, motif_retrieval_stress_case, temporal_trend_case,
     };
 
     #[test]
@@ -201,5 +226,21 @@ mod tests {
         assert_eq!(motif_ood_state(2, 8).len(), 8);
         assert_eq!(motif_ambiguous_state(0, 1).expect("valid pair").len(), 2);
         assert!(motif_ambiguous_state(1, 1).is_none());
+    }
+
+    #[test]
+    fn transferable_context_reuses_structure_across_case_identities() {
+        let first = context_template_pair(1);
+        let repeated_class = context_template_pair(14);
+        assert_eq!(
+            first[0].expected_template(),
+            repeated_class[0].expected_template()
+        );
+        assert_eq!(
+            first[1].expected_template(),
+            repeated_class[1].expected_template()
+        );
+        assert_ne!(first[0].query(), repeated_class[0].query());
+        assert_eq!(first[0].family(), TaskFamily::ContextTemplateTransfer);
     }
 }
