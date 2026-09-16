@@ -1,5 +1,7 @@
 import unittest
 
+import tdi_hub_admission_contract as admission
+import tdi_hub_edge_contract as hub
 import tdi_flat_partner_contract as flat
 import tdi_partner_adapter_contract as partner
 import test_tdi_hub_admission_contract as hub_fixture
@@ -8,7 +10,19 @@ import test_tdi_partner_adapter_contract as partner_fixture
 SHA = lambda c: c * 64
 
 
-def admitted_flat_step():
+def candidate_descriptor(*, access_class="development", raw_sha256=None, size_bytes=123):
+    return {
+        "schema": 1,
+        "name": "tdi-flat-qualification-candidate-v1.json",
+        "raw_sha256": raw_sha256 or SHA("1"),
+        "size_bytes": size_bytes,
+        "media_type": flat.FLAT_CANDIDATE_MEDIA_TYPE,
+        "access_class": access_class,
+    }
+
+
+def admitted_flat_step(candidate=None):
+    candidate = candidate or candidate_descriptor()
     descriptor = partner_fixture.descriptor("flat-attention")
     descriptor["source_sha"] = flat.FLAT_SOURCE_SHA
     descriptor.update(flat.flat_adapter_surface())
@@ -22,15 +36,28 @@ def admitted_flat_step():
         "capability": flat.FLAT_HUB_CAPABILITY,
         "capability_contract_version": flat.FLAT_HUB_CAPABILITY_CONTRACT_VERSION,
     }
-    return partner.bind_admitted_partner_step(
-        descriptor, hub_fixture.bind_fixture(), step_key="prepare"
+    portable = hub.bind_portable_artifact(
+        candidate,
+        {
+            "id": hub_fixture.INPUT_ARTIFACT,
+            "hub_digest": "c" * 64,
+            "raw_sha256": candidate["raw_sha256"],
+            "size": candidate["size_bytes"],
+        },
     )
+    admitted = admission.bind_exact_workflow_admission(
+        hub_fixture.fixture_graph(),
+        hub_fixture.workflow_response(),
+        root_artifact_bindings={candidate["raw_sha256"]: portable},
+    )
+    return partner.bind_admitted_partner_step(descriptor, admitted, step_key="prepare")
 
 
-def contract():
+def contract(*, domain="Development", access_class="development"):
+    candidate = candidate_descriptor(access_class=access_class)
     return {
         "schema": 1,
-        "partner_step": admitted_flat_step(),
+        "partner_step": admitted_flat_step(candidate),
         "flat": {
             "repository": flat.FLAT_REPOSITORY,
             "source_sha": flat.FLAT_SOURCE_SHA,
@@ -45,16 +72,9 @@ def contract():
             "boolean_signature_schema": flat.FLAT_BOOLEAN_SIGNATURE_SCHEMA,
         },
         "request": {
-            "domain": "Development",
+            "domain": domain,
             "qualification_scope": "boolean-front-end-contract",
-            "candidate_artifact": {
-                "schema": 1,
-                "name": "tdi-flat-qualification-candidate-v1.json",
-                "raw_sha256": SHA("a"),
-                "size_bytes": 512,
-                "media_type": flat.FLAT_CANDIDATE_MEDIA_TYPE,
-                "access_class": "development",
-            },
+            "candidate_artifact": candidate,
         },
         "review": {
             "owner": flat.FLAT_REPOSITORY,
@@ -98,7 +118,7 @@ class FlatPartnerContractTests(unittest.TestCase):
         descriptor = value["partner_step"]["adapter"]
         descriptor["source_sha"] = "f" * 40
         value["partner_step"] = partner.bind_admitted_partner_step(
-            descriptor, hub_fixture.bind_fixture(), step_key="prepare"
+            descriptor, value["partner_step"]["workflow_admission_binding"], step_key="prepare"
         )
         with self.assertRaisesRegex(flat.FlatPartnerContractError, "audited source"):
             flat.canonical_flat_qualification_contract(value)
@@ -112,7 +132,7 @@ class FlatPartnerContractTests(unittest.TestCase):
             descriptor = value["partner_step"]["adapter"]
             descriptor["protocol"][field] = changed
             value["partner_step"] = partner.bind_admitted_partner_step(
-                descriptor, hub_fixture.bind_fixture(), step_key="prepare"
+                descriptor, value["partner_step"]["workflow_admission_binding"], step_key="prepare"
             )
             with self.subTest(field=field), self.assertRaisesRegex(
                 flat.FlatPartnerContractError, "protocol does not match"
@@ -127,7 +147,7 @@ class FlatPartnerContractTests(unittest.TestCase):
             "capability_contract_version": "1.1.0",
         }
         value["partner_step"] = partner.bind_admitted_partner_step(
-            descriptor, hub_fixture.bind_fixture(), step_key="evaluate"
+            descriptor, value["partner_step"]["workflow_admission_binding"], step_key="evaluate"
         )
         with self.assertRaisesRegex(flat.FlatPartnerContractError, "preparation boundary"):
             flat.canonical_flat_qualification_contract(value)
@@ -142,7 +162,7 @@ class FlatPartnerContractTests(unittest.TestCase):
             descriptor = value["partner_step"]["adapter"]
             descriptor[field] = replacement
             value["partner_step"] = partner.bind_admitted_partner_step(
-                descriptor, hub_fixture.bind_fixture(), step_key="prepare"
+                descriptor, value["partner_step"]["workflow_admission_binding"], step_key="prepare"
             )
             with self.subTest(field=field), self.assertRaisesRegex(
                 flat.FlatPartnerContractError, "audited source projection"
@@ -193,9 +213,7 @@ class FlatPartnerContractTests(unittest.TestCase):
         with self.assertRaisesRegex(flat.FlatPartnerContractError, "access_class"):
             flat.canonical_flat_qualification_contract(value)
 
-        value = contract()
-        value["request"]["domain"] = "Validation"
-        value["request"]["candidate_artifact"]["access_class"] = "validation"
+        value = contract(domain="Validation", access_class="validation")
         self.assertEqual(
             "Validation",
             flat.canonical_flat_qualification_contract(value)["request"]["domain"],
@@ -218,6 +236,17 @@ class FlatPartnerContractTests(unittest.TestCase):
         value = contract()
         value["request"]["candidate_artifact"]["media_type"] = "application/json"
         with self.assertRaisesRegex(flat.FlatPartnerContractError, "media_type"):
+            flat.canonical_flat_qualification_contract(value)
+
+    def test_candidate_must_be_exact_admitted_root_consumed_by_partner_step(self):
+        value = contract()
+        value["request"]["candidate_artifact"]["raw_sha256"] = SHA("a")
+        with self.assertRaisesRegex(flat.FlatPartnerContractError, "direct root artifact"):
+            flat.canonical_flat_qualification_contract(value)
+
+        value = contract()
+        value["request"]["candidate_artifact"]["size_bytes"] += 1
+        with self.assertRaisesRegex(flat.FlatPartnerContractError, "exactly match"):
             flat.canonical_flat_qualification_contract(value)
 
     def test_review_gates_and_authority_flags_cannot_be_relaxed(self):
