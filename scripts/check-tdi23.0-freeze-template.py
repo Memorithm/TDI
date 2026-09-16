@@ -38,6 +38,29 @@ REQUIRED_TOP_KEYS = {
     "freeze",
 }
 
+BASIC_FIELD_KEYS = {"status", "value", "non_authorizing_candidates"}
+FIELD_ALLOWED_KEYS = {
+    "scalar_field_contract": BASIC_FIELD_KEYS,
+    "inner_product_contract": BASIC_FIELD_KEYS,
+    "linear_map_storage_contract": BASIC_FIELD_KEYS,
+    "dagger_semantics": BASIC_FIELD_KEYS,
+    "composition_semantics": BASIC_FIELD_KEYS,
+    "attention_score_mapping": BASIC_FIELD_KEYS,
+    "global_reduction_family": BASIC_FIELD_KEYS,
+    "global_reduction_preservation": {
+        "status",
+        "value",
+        "required_named_diagnostics",
+        "non_authorizing_candidates",
+    },
+    "nonlinear_boundary": {"status", "value", "required_named_boundaries"},
+    "numerical_tolerance_policy": BASIC_FIELD_KEYS,
+    "development_fixture_family": BASIC_FIELD_KEYS,
+    "control_battery": {"status", "value", "required_named_controls"},
+    "split_discipline": BASIC_FIELD_KEYS,
+    "provenance_contract": BASIC_FIELD_KEYS,
+}
+
 ALLOWED_DOMAINS = ["Development", "Validation"]
 REQUIRED_BOUNDARIES = [
     "softmax_external_to_fdhilb_linear_morphisms",
@@ -87,9 +110,14 @@ def load_document(path: Path) -> Any:
 
 
 def require_unresolved_field(name: str, entry: Any) -> None:
-    """Require one Stage-0 freeze field to remain unresolved and unpinned."""
+    """Require one Stage-0 freeze field to match its exact unpinned schema."""
     if not isinstance(entry, dict):
         fail(f"{name}: must be a JSON object")
+    allowed_keys = FIELD_ALLOWED_KEYS[name]
+    if set(entry) != allowed_keys:
+        unexpected = sorted(set(entry) - allowed_keys)
+        missing = sorted(allowed_keys - set(entry))
+        fail(f"{name}: field keys drifted; unexpected={unexpected}, missing={missing}")
     if entry.get("status") != "unresolved_blocking":
         fail(f"{name}: status must remain unresolved_blocking")
     if entry.get("value") is not None:
@@ -175,6 +203,24 @@ def self_test(template: Any) -> None:
         pass
     else:
         fail("self-test: invented dagger pin was accepted")
+
+    hidden_policy = copy.deepcopy(template)
+    hidden_policy["freeze"]["global_reduction_family"]["selected_policy"] = "learned_subspace"
+    try:
+        validate_template(hidden_policy)
+    except TemplateError:
+        pass
+    else:
+        fail("self-test: undeclared selected_policy key was accepted")
+
+    hidden_final_material = copy.deepcopy(template)
+    hidden_final_material["freeze"]["development_fixture_family"]["final_seed_list"] = [1, 2, 3]
+    try:
+        validate_template(hidden_final_material)
+    except TemplateError:
+        pass
+    else:
+        fail("self-test: undeclared final_seed_list key was accepted")
 
     reduction_pinned = copy.deepcopy(template)
     reduction_pinned["freeze"]["global_reduction_family"]["status"] = "pinned"
