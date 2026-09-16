@@ -1,6 +1,10 @@
 {
   "adapter_identity": "fixture-adapter/v1",
   "backend_identity": "linux-cgroup-v2",
+  "budgets": {
+    "max_observations": 8,
+    "max_steps": 4
+  },
   "checkpoint_ordinal": 2,
   "experiment_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "input_artifacts": [
