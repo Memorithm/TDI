@@ -278,3 +278,99 @@ mod transferable_fixture_tests {
         assert!(match_temporal_pattern(pattern, repeated.query()).exact);
     }
 }
+
+use super::tdi2_intuition_reliability::{ReliabilityError, ReliabilityEvidence};
+use super::tdi2_intuition_weight::ExperienceWeightPolicy;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TemporalExperience {
+    pattern: TemporalPattern,
+    evidence: ReliabilityEvidence,
+}
+impl TemporalExperience {
+    #[must_use]
+    pub const fn pattern(&self) -> &TemporalPattern {
+        &self.pattern
+    }
+    #[must_use]
+    pub const fn evidence(&self) -> ReliabilityEvidence {
+        self.evidence
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TemporalSelection {
+    pub template_id: TemplateId,
+    pub weight: f64,
+    pub support: u64,
+}
+
+#[must_use]
+pub fn temporal_experience_library(successes: u64) -> Vec<TemporalExperience> {
+    reusable_temporal_patterns()
+        .into_iter()
+        .map(|pattern| TemporalExperience {
+            pattern,
+            evidence: ReliabilityEvidence::new(successes, 0),
+        })
+        .collect()
+}
+
+pub fn select_temporal_experience(
+    experiences: &[TemporalExperience],
+    query: &BooleanSequence,
+    policy: ExperienceWeightPolicy,
+) -> Result<Option<TemporalSelection>, ReliabilityError> {
+    let mut candidates = Vec::new();
+    for experience in experiences {
+        if !match_temporal_pattern(experience.pattern(), query).exact {
+            continue;
+        }
+        let support = experience.evidence().support();
+        if support == 0 {
+            continue;
+        }
+        candidates.push(TemporalSelection {
+            template_id: experience.pattern().id(),
+            weight: policy.weight(experience.evidence())?,
+            support,
+        });
+    }
+    candidates.sort_by(|left, right| {
+        right
+            .weight
+            .total_cmp(&left.weight)
+            .then_with(|| left.template_id.cmp(&right.template_id))
+    });
+    Ok(candidates.into_iter().next())
+}
+
+#[cfg(test)]
+mod temporal_selection_tests {
+    use super::{
+        select_temporal_experience, temporal_experience_library, transferable_temporal_case,
+    };
+    use crate::experimental::tdi2_intuition_weight::ExperienceWeightPolicy;
+    #[test]
+    fn temporal_selection_requires_empirical_support() {
+        let case = transferable_temporal_case(7);
+        assert!(
+            select_temporal_experience(
+                &temporal_experience_library(0),
+                case.query(),
+                ExperienceWeightPolicy::default()
+            )
+            .unwrap()
+            .is_none()
+        );
+        let selected = select_temporal_experience(
+            &temporal_experience_library(4),
+            case.query(),
+            ExperienceWeightPolicy::default(),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(selected.template_id, case.expected_template());
+        assert_eq!(selected.support, 4);
+    }
+}
