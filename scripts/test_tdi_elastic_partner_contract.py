@@ -12,6 +12,7 @@ SHA = lambda c: c * 64
 def admitted_elastic_step():
     descriptor = partner_fixture.descriptor("elasticxxx")
     descriptor["source_sha"] = elastic.ELASTIC_SOURCE_SHA
+    descriptor.update(elastic.elastic_adapter_surface())
     descriptor["protocol"] = {
         "name": elastic.ELASTIC_PROTOCOL_NAME,
         "version": elastic.ELASTIC_PROTOCOL_VERSION,
@@ -70,6 +71,29 @@ def contract():
 
 
 class ElasticPartnerContractTests(unittest.TestCase):
+    def test_non_scalar_domain_and_mode_are_typed_contract_rejections(self):
+        for field in ("domain", "requested_mode"):
+            for invalid in ([], {}, None, True, 1):
+                value = contract()
+                value["request"][field] = invalid
+                with self.subTest(field=field, invalid=invalid), self.assertRaises(elastic.ElasticPartnerContractError):
+                    elastic.canonical_elastic_resource_contract(value)
+
+    def test_exact_capabilities_and_io_schema_pins_are_required(self):
+        mutations = [
+            ("capabilities", []), ("capabilities", ["runtime.apply"]),
+            ("capabilities", ["candidate.evaluate"]), ("inputs", []), ("outputs", []),
+            ("inputs", [{"name": "operator-config", "schema": 1, "identity": SHA("f")}]),
+            ("outputs", [{"name": "runtime-evidence", "schema": 2, "identity": elastic.ELASTIC_EVIDENCE_SCHEMA_IDENTITY}]),
+        ]
+        for field, replacement in mutations:
+            value = contract()
+            descriptor = value["partner_step"]["adapter"]
+            descriptor[field] = replacement
+            with self.subTest(field=field), self.assertRaises((elastic.ElasticPartnerContractError, partner.PartnerAdapterContractError)):
+                value["partner_step"] = partner.bind_admitted_partner_step(descriptor, hub_fixture.bind_fixture(), step_key="prepare")
+                elastic.canonical_elastic_resource_contract(value)
+
     def test_valid_dry_run_contract_compiles_non_executing_interchange(self):
         value = elastic.canonical_elastic_resource_contract(contract())
         self.assertEqual("elasticxxx", value["partner_step"]["adapter"]["partner"])
