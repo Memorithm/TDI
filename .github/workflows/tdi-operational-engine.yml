@@ -1,0 +1,77 @@
+name: TDI operational engine
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/tdi_*'
+      - 'scripts/test_tdi_*'
+      - 'tdi-ai/**'
+      - 'tdi-core/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'docs/engineering/**'
+      - '.github/workflows/tdi-operational-engine.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/tdi_*'
+      - 'scripts/test_tdi_*'
+      - 'tdi-ai/**'
+      - 'tdi-core/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'docs/engineering/**'
+      - '.github/workflows/tdi-operational-engine.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: operational-engine-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  boundaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONPATH: scripts
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate contracts and transport/storage failure boundaries
+        run: |
+          python3 -m unittest -v \
+            scripts/test_tdi_engine_unit.py \
+            scripts/test_tdi_artifact_contract.py \
+            scripts/test_tdi_hub_edge_contract.py \
+            scripts/test_tdi_hub_admission_contract.py
+  real-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONPATH: scripts
+      CARGO_INCREMENTAL: '0'
+      CARGO_BUILD_JOBS: '2'
+      RUSTFLAGS: '-C debuginfo=0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Memorithm/scirust-hub
+          ref: ccdcb99a4573dbefb944af0df713101b100b5f78
+          path: integration-hub
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.89.0
+      - name: Build actual Hub and TDI library worker
+        run: |
+          cargo build --locked --manifest-path integration-hub/Cargo.toml -p scirust-hubd -p scirust-hub-worker
+          cargo build --locked -p tdi-ai --example durable_worker
+      - name: Run real HTTP, process, SQLite, restart, cancellation, export and cache scenarios
+        env:
+          TDI_HUBD_BIN: ${{ github.workspace }}/integration-hub/target/debug/scirust-hubd
+          TDI_DURABLE_WORKER: ${{ github.workspace }}/target/debug/examples/durable_worker
+        run: python3 -m unittest -v scripts/test_tdi_engine_integration.py

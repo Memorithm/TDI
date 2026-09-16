@@ -14,6 +14,7 @@ exposes the declarative WorkflowSpec together with those pins in WorkflowDto.
 from __future__ import annotations
 
 import hashlib
+import copy
 
 import tdi_execution_graph as execution_graph
 import tdi_experiment_contract as experiment
@@ -245,7 +246,15 @@ def bind_exact_workflow_admission(graph, workflow_response, *, root_artifact_bin
     response = _canonical_workflow_record_projection(workflow_response)
     if response["name"] != graph_value["name"]:
         raise HubAdmissionContractError("Hub workflow name does not match TDI Graph/v1")
-    if not _json_equal(response["spec"], preview["workflow"]):
+    # Hub omits empty `after` arrays when serializing its real WorkflowDto.
+    # Restore only that documented default, preserving JSON type fidelity and
+    # rejecting every other semantic difference (including explicit retries).
+    wire_spec = copy.deepcopy(response["spec"])
+    if isinstance(wire_spec.get("steps"), list):
+        for wire_step in wire_spec["steps"]:
+            if isinstance(wire_step, dict) and "after" not in wire_step:
+                wire_step["after"] = []
+    if not _json_equal(wire_spec, preview["workflow"]):
         raise HubAdmissionContractError("Hub workflow spec does not exactly match TDI Graph/v1 compilation")
     admission = _canonical_admission(response["admission"], _expected_admission(graph_value))
     return {
