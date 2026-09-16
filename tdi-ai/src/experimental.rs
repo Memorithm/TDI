@@ -38,6 +38,8 @@ pub mod tdi2_intuition_analogy_tasks;
 pub mod tdi2_intuition_baselines;
 #[path = "tdi2_intuition_calibration.rs"]
 pub mod tdi2_intuition_calibration;
+#[path = "tdi2_intuition_campaign.rs"]
+pub mod tdi2_intuition_campaign;
 #[path = "tdi2_intuition_consolidation.rs"]
 pub mod tdi2_intuition_consolidation;
 #[path = "tdi2_intuition_controls.rs"]
