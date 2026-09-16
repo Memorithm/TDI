@@ -35,6 +35,22 @@ ELASTIC_EVIDENCE_SOURCE_COMMAND = "run"
 ELASTIC_HUB_CAPABILITY = "tdi.prepare"
 ELASTIC_HUB_CAPABILITY_CONTRACT_VERSION = "1.0.0"
 ELASTIC_CONFIG_MEDIA_TYPE = "application/json"
+# Ordinary SHA-256 of the schema-owning source files at ELASTIC_SOURCE_SHA.
+ELASTIC_CONFIG_SCHEMA_IDENTITY = "3830ca34d8724c4f5e1c7801472c67ba1394e235b23a6172565324b542f77d94"
+ELASTIC_EVIDENCE_SCHEMA_IDENTITY = "94e214e9649df75d896a0cb46e8065e56e927a6d01106fed575da30cd159b6cb"
+
+
+def elastic_adapter_surface():
+    """Return fresh exact process capability and schema-owner source pins.
+
+    This describes this contract's non-actuating projection and does not
+    authorize invoking the underlying process.
+    """
+    return {
+        "capabilities": [ELASTIC_PROTOCOL_NAME],
+        "inputs": [{"name": "operator-config", "schema": 1, "identity": ELASTIC_CONFIG_SCHEMA_IDENTITY}],
+        "outputs": [{"name": "runtime-evidence", "schema": 1, "identity": ELASTIC_EVIDENCE_SCHEMA_IDENTITY}],
+    }
 
 MAX_TEXT_BYTES = 512
 _ALLOWED_DOMAINS = {"Development", "Validation"}
@@ -160,10 +176,10 @@ def _canonical_request(value):
         "request",
     )
     domain = value["domain"]
-    if domain not in _ALLOWED_DOMAINS:
+    if not isinstance(domain, str) or domain not in _ALLOWED_DOMAINS:
         raise ElasticPartnerContractError("request.domain must be Development or Validation")
     mode = value["requested_mode"]
-    if mode not in _ALLOWED_MODES:
+    if not isinstance(mode, str) or mode not in _ALLOWED_MODES:
         raise ElasticPartnerContractError(
             "request.requested_mode must be observe-only, plan-only, or dry-run; apply is not authorized"
         )
@@ -245,6 +261,11 @@ def canonical_elastic_resource_contract(value):
         raise ElasticPartnerContractError(
             "ElasticXxx adapter Hub capability does not match the non-actuating preparation boundary"
         )
+    for field, expected in elastic_adapter_surface().items():
+        if adapter[field] != expected:
+            raise ElasticPartnerContractError(
+                f"ElasticXxx adapter {field} does not match the audited process surface"
+            )
 
     return {
         "schema": ELASTIC_RESOURCE_CONTRACT_SCHEMA,
