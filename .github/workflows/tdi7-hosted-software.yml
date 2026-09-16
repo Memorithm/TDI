@@ -20,7 +20,7 @@ env:
 jobs:
   formatting:
     name: Hosted full formatting
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, ARM64, tdi]
     timeout-minutes: 20
     steps:
       - name: Checkout repository
@@ -35,7 +35,7 @@ jobs:
 
   tests:
     name: Hosted full tests
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, ARM64, tdi]
     timeout-minutes: 30
     steps:
       - name: Checkout repository
@@ -49,7 +49,7 @@ jobs:
 
   clippy:
     name: Hosted full Clippy
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, ARM64, tdi]
     timeout-minutes: 30
     steps:
       - name: Checkout repository
