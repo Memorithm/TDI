@@ -136,3 +136,5 @@ pub mod tdi23_ir_equivalence;
 pub mod tdi23_ir_provenance;
 #[path = "tdi23_reduction.rs"]
 pub mod tdi23_reduction;
+#[path = "tdi23_rewrite.rs"]
+pub mod tdi23_rewrite;
