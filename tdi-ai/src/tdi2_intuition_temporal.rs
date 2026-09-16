@@ -58,6 +58,33 @@ impl BooleanSequence {
     }
 }
 
+/// Exact frame-by-frame temporal match.
+#[must_use]
+pub fn exact_sequence_match(template: &BooleanSequence, query: &BooleanSequence) -> bool {
+    template == query
+}
+
+/// Fraction of same-position frames that match exactly.
+///
+/// Returns `None` when sequence lengths differ or both are empty, preserving the
+/// distinction between incompatible horizons and observed partial agreement.
+#[must_use]
+pub fn frame_match_fraction(
+    template: &BooleanSequence,
+    query: &BooleanSequence,
+) -> Option<f64> {
+    if template.len() != query.len() || template.is_empty() {
+        return None;
+    }
+    let matched = template
+        .frames()
+        .iter()
+        .zip(query.frames())
+        .filter(|(left, right)| left == right)
+        .count();
+    Some(matched as f64 / template.len() as f64)
+}
+
 /// Temporal predicate validation failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TemporalError {
@@ -125,7 +152,10 @@ impl std::error::Error for TemporalError {}
 
 #[cfg(test)]
 mod tests {
-    use super::{BooleanSequence, DeltaDirection, DeltaPredicate, encode_temporal};
+    use super::{
+        BooleanSequence, DeltaDirection, DeltaPredicate, encode_temporal, exact_sequence_match,
+        frame_match_fraction,
+    };
     use crate::experimental::tdi2_intuition::{BooleanState, NumericState, PredicateId};
 
     #[test]
@@ -162,5 +192,15 @@ mod tests {
         let second = BooleanState::new(vec![PredicateId::new(2)]);
         let sequence = BooleanSequence::new(vec![first.clone(), second.clone()]);
         assert_eq!(sequence.frames(), &[first, second]);
+    }
+
+    #[test]
+    fn sequence_matching_respects_frame_order() {
+        let first = BooleanState::new(vec![PredicateId::new(1)]);
+        let second = BooleanState::new(vec![PredicateId::new(2)]);
+        let template = BooleanSequence::new(vec![first.clone(), second.clone()]);
+        let reversed = BooleanSequence::new(vec![second, first]);
+        assert!(!exact_sequence_match(&template, &reversed));
+        assert_eq!(frame_match_fraction(&template, &reversed), Some(0.0));
     }
 }
