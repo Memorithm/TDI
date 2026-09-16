@@ -123,15 +123,35 @@ TDI-12 must not invent TDI-8.1 / TDI-9.1 / TDI-11.2 freeze pins, must not contac
 
 Before a TDI-12 PR or merge decision, run `bash scripts/check-tdi12-stage0-bootstrap.sh` (which invokes `scripts/check-tdi12.0-freeze-template.py --self-test`) when that script exists on the branch.
 
+## TDI-22.x torsor-attention bootstrap and stage gate
+
+TDI-22.x is the distinct torsor-attention research line. Before TDI-22 work, read in order:
+
+1. `docs/TDI-22-PROGRAMME.md`;
+2. `docs/TDI-22.0-SCOPE.md`;
+3. `docs/TDI-22.0-STATUS.md`;
+4. `docs/TDI-22.0-FREEZE.md` when present;
+5. `docs/TDI-22.0-IMPLEMENTATION-GATE.md` when present.
+
+TDI-22.0 owns only the three-dimensional torsor/twist algebra, deterministic transport/factorization qualification, and the Stage-0 governance gate. It does not establish an attention-quality result, memory/computation advantage, novelty claim, or hardware result.
+
+TDI-22.1 may preregister non-final deterministic tasks, T0–T4 arms, matched budgets, geometry choices, metrics, split derivation, rejection rules, and provenance only after the TDI-22.0 freeze is merged and `bash scripts/check-tdi22-freeze.sh` passes on `main`. TDI-22.2+ evaluator/result surfaces remain forbidden until TDI-22.1 is itself merged, frozen, and explicitly authorizes the next stage.
+
+The critical torsor-specific control is T3 full-torsor versus T4 matched six-component non-torsor bilinear control. T3 versus T0 alone must never be interpreted as a torsor-specific effect. No TDI-22 stage may silently remove T4 after observing results.
+
+TDI-22 must remain isolated from protected TDI-7.2/TDI-8.2 material. FLAT-ATTENTION is a downstream execution/comparison target only; TDI-22 evidence does not authorize modifying FLAT production routing, Kernel IR, or making device-performance claims.
+
+Before a TDI-22 PR or merge decision, run `bash scripts/check-tdi22-bootstrap.sh`; after the Stage-0 freeze exists, also run `bash scripts/check-tdi22-freeze.sh`.
+
 ## Scientific boundary
 
-Frozen TDI-1 through TDI-6.x results remain scoped to their original finite-state experiments. They are not Transformer/attention results. TDI-7.x is the distinct attention/memory research programme. TDI-8.x is a separate recurrent/associative architecture programme. TDI-9.x is a separate adaptive-inference dynamics programme. TDI-10.x is a separate generic operator/resolvent programme. TDI-11.x is a separate hallucination-dynamics and control programme. TDI-12.x is a separate ordinal-universality-of-operator-responses programme (Stage-0 bootstrap; not frozen).
+Frozen TDI-1 through TDI-6.x results remain scoped to their original finite-state experiments. They are not Transformer/attention results. TDI-7.x is the distinct attention/memory research programme. TDI-8.x is a separate recurrent/associative architecture programme. TDI-9.x is a separate adaptive-inference dynamics programme. TDI-10.x is a separate generic operator/resolvent programme. TDI-11.x is a separate hallucination-dynamics and control programme. TDI-12.x is a separate ordinal-universality-of-operator-responses programme (Stage-0 bootstrap; not frozen). TDI-22.x is a separate torsor-attention research programme whose current evidence is limited to its declared stage.
 
 Preserve preregistration, untouched or future-derived final-evaluation lineage, frozen negative/null results, calibration limitations, and explicit boundaries between scientific reference evidence and downstream optimization.
 
 ADA is a semantic discovery/falsification partner, ITD Simulator is a comparative structural-diagnostics harness, Forge is a downstream candidate-search engine only after leak-safe bounded contracts exist, SciRust is a promotion target for reusable general primitives, NNIS owns later NVIDIA execution evidence, ElasticXxx owns production runtime/resource actuation, FLAT-ATTENTION remains an execution/comparison target, and SLHAv2 remains the primary owner of DA-LUC-like KV representation work. TDI remains the source of truth for its frozen experimental lineage.
 
-No TDI-8, TDI-9, TDI-11, or TDI-12 result may be described as a proprietary architecture reconstruction, Transformer replacement, superiority to a named commercial model, strict end-to-end O(N), constant total memory, tokenizer elimination, cognitive transparency, universal hallucination elimination, guaranteed factuality, production safety, or GPU/Jetson speedup without separate direct evidence.
+No TDI-8, TDI-9, TDI-11, TDI-12, or TDI-22 result may be described as a proprietary architecture reconstruction, Transformer replacement, superiority to a named commercial model, strict end-to-end O(N), constant total memory, tokenizer elimination, cognitive transparency, universal hallucination elimination, guaranteed factuality, production safety, or GPU/Jetson speedup without separate direct evidence.
 
 Required CI must be green on the exact PR head before merge.
 

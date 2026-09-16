@@ -1,0 +1,45 @@
+name: TDI-22 Stage-0 freeze integrity
+
+on:
+  pull_request:
+    paths:
+      - 'AGENTS.md'
+      - 'docs/TDI-22*'
+      - 'tdi-ai/src/tdi22*.rs'
+      - 'tdi-ai/src/tdi-22*.rs'
+      - 'tdi-ai/tests/tdi22*.rs'
+      - 'tdi-ai/tests/tdi-22*.rs'
+      - 'results/**'
+      - 'artifacts/**'
+      - 'scripts/check-tdi22-bootstrap.sh'
+      - 'scripts/check-tdi22-freeze.sh'
+      - '.github/workflows/tdi22-torsor-bootstrap.yml'
+      - '.github/workflows/tdi22-stage0-freeze.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'AGENTS.md'
+      - 'docs/TDI-22*'
+      - 'tdi-ai/src/tdi22*.rs'
+      - 'tdi-ai/src/tdi-22*.rs'
+      - 'tdi-ai/tests/tdi22*.rs'
+      - 'tdi-ai/tests/tdi-22*.rs'
+      - 'results/**'
+      - 'artifacts/**'
+      - 'scripts/check-tdi22-bootstrap.sh'
+      - 'scripts/check-tdi22-freeze.sh'
+      - '.github/workflows/tdi22-torsor-bootstrap.yml'
+      - '.github/workflows/tdi22-stage0-freeze.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  freeze-integrity:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Verify TDI-22.0 content-addressed freeze
+        run: bash scripts/check-tdi22-freeze.sh
