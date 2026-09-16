@@ -55,6 +55,13 @@ def _text(value, name, *, max_bytes=16_384):
     return value
 
 
+def _workflow_name(value):
+    value = _text(value, "name", max_bytes=128)
+    if "\0" in value:
+        raise ExecutionGraphError("name must not contain NUL")
+    return value
+
+
 def _key(value, name):
     if not isinstance(value, str) or _KEY.fullmatch(value) is None:
         raise ExecutionGraphError(f"{name} must match [a-z0-9][a-z0-9_-]{{0,63}}")
@@ -236,7 +243,7 @@ def canonical_graph(graph):
     if graph["schema"] != GRAPH_SCHEMA:
         raise ExecutionGraphError("unsupported execution graph schema")
     _text(graph["semantic_version"], "semantic_version", max_bytes=256)
-    _text(graph["name"], "name", max_bytes=128)
+    workflow_name = _workflow_name(graph["name"])
     _sha256(graph["root_plan_id"], "root_plan_id")
     _validate_hub_contract(graph["hub_contract"])
     _safe_integer(graph["max_concurrency"], "max_concurrency", positive=True)
@@ -363,7 +370,7 @@ def canonical_graph(graph):
     return {
         "schema": GRAPH_SCHEMA,
         "semantic_version": graph["semantic_version"],
-        "name": graph["name"],
+        "name": workflow_name,
         "root_plan_id": graph["root_plan_id"],
         "hub_contract": copy.deepcopy(graph["hub_contract"]),
         "max_concurrency": graph["max_concurrency"],
