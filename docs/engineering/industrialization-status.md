@@ -20,7 +20,6 @@ This is the durable engineering handoff for the industrialization programme. It 
 - Lot G3 exact execution-admission binding: PR #272, final head `a336f798ddbc230abc4a38e8233845d6c9b1e47d`, merged `39eb8a566855d017ea0dbb7094168b23c6655037` after all returned applicable exact-head workflows succeeded. The three review findings were resolved only after root-artifact proof became mandatory, restored evidence identities were recomputed from embedded canonical evidence, and WorkflowSpec equality preserved JSON type fidelity. Scientific-stage authorization remains hard-false.
 - Lot H common partner-adapter foundation: PR #273, final head `53316ef9af6c402fbda6728707da03903dcbfa0a`, merged `5905cfeed38f4a12ec6f8c9d238a0ede16815d2a` after all returned exact-head workflows succeeded, including the dedicated partner-adapter gate. PR #275 then hardened the public G3 version fields against JSON Boolean aliases on exact head `2cadda0ae0fe6511b7a90ba9b3e6a1c86ce9b4eb`, merged `c3e2275d807a67aac7ac1be36412d1f8e1ed7f07` after every returned applicable workflow succeeded.
 - Lot H Forge-specific boundary: PR #277, final head `942156e718c812ff0725f706ecc6adf51ea4a0a7`, merged `183fcd6af2ddfefce4a5708e72f683d14118dbdf` after every returned exact-head workflow completed successfully, including `TDI Forge partner contracts`, common partner/Hub/artifact gates, Rust/Public Rust and MSRV. It remains a non-executing interchange contract and grants no Forge, holdout, stage, verdict or actuation authority.
-- Lot H ElasticXxx-specific boundary: PR #279, final head `29d9f5555483b59c591ccb7d4871e84ac02d677c`, merged `6e2a15a5711f8dc2eb7e77886bbed247aa425e6b`. It pins the audited non-actuating `elastic.hub.run@1.0.0` / OperatorConfig/v1 / runtime-evidence-v1 surface, admits only observe/plan/dry-run intent, and grants no Elastic execution, physical actuation, holdout, stage or verdict authority.
 - Scientific constraints remain those in `AGENTS.md` and the ecosystem roadmap/overlays.
 
 ## Delivered / candidate capabilities
@@ -55,29 +54,50 @@ This is the durable engineering handoff for the industrialization programme. It 
 | G3 exact workflow execution admission | qualified | PR #272 final head `a336f798ddbc230abc4a38e8233845d6c9b1e47d`, merge `39eb8a566855d017ea0dbb7094168b23c6655037`: full returned exact-head qualification passed after all P1/P2 review findings were corrected and resolved. A combined v3 artifact binding keeps authoritative publication evidence, sets Hub execution admission true and keeps scientific-stage authorization false. |
 | H common partner adapter descriptor | qualified | PR #273 qualifies `PartnerAdapter/v1` + `AdmittedPartnerStep/v1` for ElasticXxx, Forge, SciRust, FLAT-ATTENTION and NNIS on exact admitted Hub steps while granting no holdout, verdict, stage, actuation or partner-execution authority; PR #275 hardens the embedded G3 version-type boundary. |
 | H Forge scientific-search boundary | qualified | PR #277 final head `942156e718c812ff0725f706ecc6adf51ea4a0a7`, merge `183fcd6af2ddfefce4a5708e72f683d14118dbdf`: all returned exact-head workflows succeeded. The contract pins Forge external/scientific domain v1, leak-safe generation/verification/final-holdout identities and authority-free manifest compilation without qualifying execution. |
-| H ElasticXxx resource-control boundary | qualified | PR #279 final head `29d9f5555483b59c591ccb7d4871e84ac02d677c`, merge `6e2a15a5711f8dc2eb7e77886bbed247aa425e6b`; the source-pinned contract remains non-actuating and grants no execution, holdout, stage, verdict or runtime-actuation authority. |
-| H SciRust reusable-primitive boundary | candidate | This branch pins SciRust `aa13f62ea829c5c42e370a32d51143f016a0dc44` and the exact `scirust-tensor-ir` representation module/API tuple, accepts only Development/Validation candidate artifacts, and compiles review metadata with promotion/execution/scientific authority hard-false. Exact-head PR qualification and review remain pending. |
+| H ElasticXxx resource-control boundary | candidate | PR #279 pins audited ElasticXxx source `50bb85ea84191c01d95e5b4e5e3c81af10e95ebd`, `elastic.hub.run@1.0.0`, OperatorConfig/v1 and runtime-evidence-v1; it admits only observe/plan/dry-run intent and keeps execution/actuation/scientific authority false. Exact-head qualification and review are pending. |
 
 ## Qualification matrix progress
 
-| ID | State | Evidence / remaining work |
+The original Q01–Q30 acceptance criteria are retained below. Earlier versions
+incorrectly substituted portable contract checks for Q11/Q13/Q14/Q16/Q18.
+Contract qualification alone does not establish an operational research product.
+“Local pass” means implemented and tested, with final-head CI/merge still required.
+
+| ID | Original requirement | State and evidence / remaining work |
 | --- | --- | --- |
-| Q01-Q03 | qualified | PR #250 subprocess failure/JSON/corruption/transition regressions. |
-| Q04 | qualified for hash-growth property | one new hash per append; Lot M still owes size-scaling benchmark and environment capture. |
-| Q05 | qualified at trial boundary | continuous/restart equivalence and interrupted trial retention. |
-| Q06 | partial | distinct storage failure exists; explicit disk-full/fsync injection remains. |
-| Q07 | qualified for declared cgroup-v2 profile | PR #252 exact-head real-kernel process-tree cleanup/recovery qualification. |
-| Q08 | qualified for declared cgroup-v2 profile | PR #252 real-kernel memory/PID/CPU limits and sibling isolation. |
-| Q09 | partial | unsupported hard VRAM quota fails closed; measured GPU qualification remains. |
-| Q10 | qualified for exact checkpoint lineage | PR #254 binds exact checkpoint identity, frozen budgets, immutable inputs, RNG streams and caller-owned execution identity. |
-| Q11 | qualified for authoritative execution admission | PR #254 remains the qualified Graph/v1 semantic/structural base; Hub #54 qualifies exact registry admission upstream and TDI PR #272 binds that evidence on a fully qualified exact head. |
-| Q12 | partial | The common Lot H boundary plus Forge and ElasticXxx interchanges are qualified by #273/#275/#277/#279. The SciRust reusable-primitive interchange is the current candidate; FLAT-ATTENTION and NNIS slices remain planned. Partner execution and primitive promotion remain separately unqualified. |
-| Q13-Q14 | qualified for portable contract verification | PR #261 exact-head qualification passed for descriptor/provenance/export verification; external export integration remains later work. |
-| Q15 | qualified for contract semantics | PR #261 exact-head qualification passed for exact-domain cache identity/refusal; durable cache index/storage remains outside this module and reuse still requires caller authorization. |
-| Q16 | qualified for portable artifact identity translation | PR #264 exact-head qualification passed for the fail-closed G1 contract pinned to Hub #47; it verifies portable raw-SHA256/size translation and source/repository pins while granting no execution or publication authority. |
-| Q17 | qualified for authoritative publication evidence binding | Hub #48/#49/#50/#51 qualify fence storage, orchestration use, downstream authoritative consumption and the authenticated read-only publication endpoint. TDI PR #270 final head `6c4e4d6bda4693033dc48ed405880cd609b4e5dd` binds that evidence to portable artifact identity with full returned exact-head qualification. |
-| Q18 | qualified | PR #272 binds Hub #54 exact execution admission to TDI Graph/v1 and composes it with G2 publication evidence only on identical workflow/step lineage; all returned exact-head workflows succeeded and the P1/P2 review threads were resolved before merge. |
-| Q19-Q30 | planned | remaining partner integrations, statistics, CLI/viewer/exports, hardware adapters, docs and final integrated qualification. |
+| Q01 | Failed worker has correct journal and CLI exit | Qualified #250; real Hub failure/restart scenario additionally passes locally. |
+| Q02 | Malformed/duplicate/overflow/nonfinite/deep JSON rejected | Qualified #250; real HTTP parser failure boundaries pass locally. |
+| Q03 | Impossible journal transitions and corruption detected | Qualified #250. |
+| Q04 | No quadratic append reread; documented benchmark | Hash-growth property qualified #250; measured scaling benchmark remains. |
+| Q05 | Crash before/after commit and consistent resume | Trial-boundary qualification #250/#252; real Hub restart without new attempts passes locally. |
+| Q06 | Interrupted creation, disk-full and persistence failures | Partial; new atomic export/fsync/disk-full and pre-dispatch persistence fault tests pass locally. |
+| Q07 | No abandoned descendant in qualified containment profile | Qualified cgroup-v2 profile #252; the Hub process path does not inherit that quota/sandbox qualification. |
+| Q08 | Real Linux RAM/CPU/process limits verified | Qualified cgroup-v2 profile #252; not claimed for the new process-only Hub fixture. |
+| Q09 | Explicit absent/insufficient GPU behavior | Unsupported hard VRAM quota fails closed; no hardware measurement qualification. |
+| Q10 | Changed plan or wrong checkpoint refuses resume | Qualified lineage/budget contracts #254. |
+| Q11 | Bounded concurrency, dependencies, aggregation order | Hub owns scheduling; real two-trial run→verify DAG passes locally. Broader remote failure/load matrix remains. |
+| Q12 | Independent source, branches, caches and RNG | Partial; partner descriptors do not qualify backend execution. Multi-domain SDK conformance remains. |
+| Q13 | Registry/artifact export/import preserves provenance | Local pass for result-evidence bundles, new Hub artifact receipts, re-export and SQLite backup; executable input/toolchain packaging is outside this bundle. |
+| Q14 | Legacy journal migration preserves old evidence | Qualified non-destructive journal migration #250; unrelated to portable artifact contract #261. |
+| Q15 | Cache dependency invalidation and domain separation | Local pass for durable exact deterministic-data index and verified lookup; source lineage preserved, no fresh trial/timing claim. |
+| Q16 | Old attempt/expired lease cannot publish | Hub #48–#51 owns qualified fencing/publication persistence; portable digest translation alone does not establish this. |
+| Q17 | Duplicate/disordered messages yield one authoritative commit | Hub publication contracts plus local no-redispatch/lost-response reconciliation; broader remote fault qualification remains. |
+| Q18 | Real TDI plan, worker execution and verified result | Local pass: actual Rust durable_worker, real Hub HTTP/process/SQLite and independent counter oracle; pinned Hub #55 transfer is merged. |
+| Q19 | Elastic resource control preserves protocol | Partial: #279 interchange and #282 validation repairs; actual resource-control integration remains. |
+| Q20 | Forge excludes incorrect candidates before measurement | Partial: #277 nonexecuting contract; real search/evaluation integration remains. |
+| Q21 | Shared SciRust primitive consumed against reference | Remaining; a promotion descriptor alone is insufficient. |
+| Q22 | Correct statistical units, exclusions and uncertainty | Remaining general analysis/report integration. |
+| Q23 | Search/sensitivity bounds, lineage and oracle qualification | Remaining. |
+| Q24 | Prepare→run→inspect→cancel→resume→export→verify | Local pass for documented CLI, separate cancellation scenario and read-only JSON API. |
+| Q25 | Real UI data, incomplete/error/permission states | Local pass for catalogue viewer, escaping, host policy and actual workflow results; statistical plots remain. |
+| Q26 | MLflow/telemetry failure visible without durable loss | Remaining optional export/telemetry integration. |
+| Q27 | Restricted data absent from logs/cache/exports/candidates | Partial: restricted roots rejected before reads and dedicated non-final store required; no per-artifact scientific ACL claim on a mixed Hub. |
+| Q28 | FLAT/NNIS differential contracts and exact hardware status | Remaining; no GPU evidence claimed. |
+| Q29 | Executed documentation on declared versions | Local pass for operational CLI examples with actual binaries; whole product documentation still in progress. |
+| Q30 | Final-head CI, merge SHA and post-merge verification | Hub #55 head `af0d8195a88f96e3172961b5e6ff6d08e2aa9300` passed CI before merge `ccdcb99a4573dbefb944af0df713101b100b5f78`; TDI operational PR qualification remains. |
+
+See [the executable operational guide](operational-engine.md) and the mandatory
+`TDI operational engine` workflow for reproducible commands and exact limits.
 
 ## Lot-E qualified validation
 
