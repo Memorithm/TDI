@@ -48,7 +48,7 @@ jobs:
             scripts/test_tdi_hub_edge_contract.py \
             scripts/test_tdi_hub_admission_contract.py
   real-worker:
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
       run:
