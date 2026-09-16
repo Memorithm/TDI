@@ -1,6 +1,6 @@
 # Lot H — TDI → ElasticXxx resource-control boundary
 
-Status: candidate until its pull request is fully qualified on the exact final head.
+Status: candidate hardening in PR #282 until every applicable workflow is green on its exact final head. The branch was resynchronized after TDI #281 onto default-branch commit `5f365613d466559a46c2de6d940aef8ffdd55da4`; this documentation commit exists to re-run normal exact-head qualification on that integrated base.
 
 The descriptor must advertise exactly `elastic.hub.run`, the `operator-config`
 input and `runtime-evidence` output. Their identities are ordinary SHA-256 of
