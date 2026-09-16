@@ -26,12 +26,18 @@ check_blob ".github/workflows/tdi22-torsor-bootstrap.yml" "6c53e2fee3023325b649d
 test -s "$root/docs/TDI-22.0-FREEZE.md"
 test -s "$root/docs/TDI-22.0-IMPLEMENTATION-GATE.md"
 
-if find "$root/results" "$root/artifacts" -type f -iname '*tdi22*' -print -quit 2>/dev/null | grep -q .; then
+# Reject premature TDI-22 evidence payloads under either canonical spelling.
+if find "$root/results" "$root/artifacts" -type f \
+  \( -iname '*tdi22*' -o -iname '*tdi-22*' \) -print -quit 2>/dev/null | grep -q .; then
   echo "TDI-22.0 freeze must not contain TDI-22 result/artifact payloads" >&2
   exit 1
 fi
 
-mapfile -t tdi22_rust < <(find "$root/tdi-ai" -type f -name '*tdi22*.rs' -printf '%P\n' | sort)
+# Reject any Stage-1+ Rust surface, including either filename spelling.
+mapfile -t tdi22_rust < <(
+  find "$root/tdi-ai" -type f \
+    \( -name '*tdi22*.rs' -o -name '*tdi-22*.rs' \) -printf '%P\n' | sort
+)
 expected_rust=(
   "src/tdi22_torsor.rs"
   "tests/tdi22_torsor_properties.rs"
@@ -43,4 +49,8 @@ if [[ "${tdi22_rust[*]}" != "${expected_rust[*]}" ]]; then
 fi
 
 bash "$root/scripts/check-tdi22-bootstrap.sh"
+# The bootstrap name filter exercises unit tests but filters these integration
+# test names; run the pinned integration target explicitly as a separate gate.
+cargo test -p tdi-ai --features experimental --test tdi22_torsor_properties
+
 echo "TDI-22.0 freeze integrity: OK"
