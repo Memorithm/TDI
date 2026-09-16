@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="720" viewBox="0 0 1600 720" role="img" aria-labelledby="title desc">
-  <title id="title">TDI research programme roadmap</title>
-  <desc id="desc">Dynamic Information Theory research programme from deterministic systems through hallucination dynamics and control.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="820" viewBox="0 0 1600 820" role="img" aria-labelledby="title desc">
+  <title id="title">TDI research programme roadmap through TDI-23</title>
+  <desc id="desc">Dynamic Information Theory research programme from completed finite-state evidence through active successor, causal representation, Boolean relational, torsor, and categorical dagger research lines.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#07111f"/>
@@ -11,68 +11,76 @@
       <stop offset="1" stop-color="#7aa7ff"/>
     </linearGradient>
     <style>
-      .title { font: 700 58px system-ui, -apple-system, Segoe UI, sans-serif; fill: #f7fbff; }
-      .subtitle { font: 400 24px system-ui, -apple-system, Segoe UI, sans-serif; fill: #bad0e5; }
-      .small { font: 600 18px system-ui, -apple-system, Segoe UI, sans-serif; fill: #8faec7; letter-spacing: 1.5px; }
-      .stage { font: 700 21px system-ui, -apple-system, Segoe UI, sans-serif; fill: #f5f9fd; }
+      .title { font: 700 54px system-ui, -apple-system, Segoe UI, sans-serif; fill: #f7fbff; }
+      .subtitle { font: 400 23px system-ui, -apple-system, Segoe UI, sans-serif; fill: #bad0e5; }
+      .small { font: 600 17px system-ui, -apple-system, Segoe UI, sans-serif; fill: #8faec7; letter-spacing: 1.35px; }
+      .stage { font: 700 23px system-ui, -apple-system, Segoe UI, sans-serif; fill: #f5f9fd; }
+      .status { font: 700 15px system-ui, -apple-system, Segoe UI, sans-serif; fill: #63e5c6; }
+      .done { font: 700 15px system-ui, -apple-system, Segoe UI, sans-serif; fill: #a8bfd2; }
       .desc { font: 400 15px system-ui, -apple-system, Segoe UI, sans-serif; fill: #bad0e5; }
-      .active { font: 700 16px system-ui, -apple-system, Segoe UI, sans-serif; fill: #63e5c6; }
-      .done { font: 700 16px system-ui, -apple-system, Segoe UI, sans-serif; fill: #9fb6ca; }
     </style>
   </defs>
-  <rect width="1600" height="720" rx="28" fill="url(#bg)"/>
+
+  <rect width="1600" height="820" rx="28" fill="url(#bg)"/>
   <rect x="54" y="48" width="1492" height="6" rx="3" fill="url(#accent)"/>
-  <text x="72" y="132" class="small">TDI · DYNAMIC INFORMATION THEORY</text>
-  <text x="72" y="205" class="title">Controlled research on predictive dynamics</text>
-  <text x="72" y="250" class="subtitle">Deterministic evaluators · preregistration · reproducible evidence · explicit negative results</text>
 
-  <g transform="translate(72 322)">
-    <rect width="278" height="138" rx="20" fill="#132b44" stroke="#274761"/>
-    <text x="22" y="37" class="stage">TDI-1 → TDI-6.x</text>
-    <text x="22" y="66" class="done">COMPLETED EVIDENCE BASE</text>
-    <text x="22" y="94" class="desc">Finite-state dynamics, branching,</text>
-    <text x="22" y="116" class="desc">controls, transfer and exact batteries.</text>
+  <text x="72" y="120" class="small">TDI · DYNAMIC INFORMATION THEORY · RESEARCH MAP 1 → 23.x</text>
+  <text x="72" y="188" class="title">Controlled research on predictive dynamics</text>
+  <text x="72" y="230" class="subtitle">Preregistration · deterministic evaluators · fail-closed gates · reproducible evidence · explicit negative results</text>
+
+  <g transform="translate(72 288)">
+    <rect width="456" height="158" rx="20" fill="#132b44" stroke="#274761"/>
+    <text x="24" y="40" class="stage">TDI-1 → TDI-6.x</text>
+    <text x="24" y="70" class="done">COMPLETED / PREREGISTERED EVIDENCE BASE</text>
+    <text x="24" y="101" class="desc">Finite-state dynamics, branching, exact batteries,</text>
+    <text x="24" y="124" class="desc">non-exact controls and transport/order questions.</text>
   </g>
 
-  <g transform="translate(370 322)">
-    <rect width="278" height="138" rx="20" fill="#132b44" stroke="#274761"/>
-    <text x="22" y="37" class="stage">TDI-7.x</text>
-    <text x="22" y="66" class="active">ATTENTION / MEMORY</text>
-    <text x="22" y="94" class="desc">Recovery, heterogeneity, long-horizon</text>
-    <text x="22" y="116" class="desc">information and identifiability.</text>
+  <g transform="translate(572 288)">
+    <rect width="456" height="158" rx="20" fill="#132b44" stroke="#274761"/>
+    <text x="24" y="40" class="stage">TDI-7.x → TDI-12.x</text>
+    <text x="24" y="70" class="status">ACTIVE SUCCESSOR PROGRAMMES</text>
+    <text x="24" y="101" class="desc">Attention/memory, recurrent association, adaptive</text>
+    <text x="24" y="124" class="desc">inference, operators and hallucination dynamics.</text>
   </g>
 
-  <g transform="translate(668 322)">
-    <rect width="278" height="138" rx="20" fill="#132b44" stroke="#274761"/>
-    <text x="22" y="37" class="stage">TDI-8.x</text>
-    <text x="22" y="66" class="active">ASSOCIATIVE ARCHITECTURES</text>
-    <text x="22" y="94" class="desc">Bounded recurrent state, ASSR and</text>
-    <text x="22" y="116" class="desc">VSA/holographic workspace controls.</text>
+  <g transform="translate(1072 288)">
+    <rect width="456" height="158" rx="20" fill="#132b44" stroke="#274761"/>
+    <text x="24" y="40" class="stage">TDI-13.x → TDI-20.x</text>
+    <text x="24" y="70" class="status">ACTIVE STAGE-0 CONJECTURE FRONTIER</text>
+    <text x="24" y="101" class="desc">Causal dimensionality, predictive geometry, event</text>
+    <text x="24" y="124" class="desc">triggers, verification and autonomous discovery.</text>
   </g>
 
-  <g transform="translate(966 322)">
-    <rect width="278" height="138" rx="20" fill="#132b44" stroke="#274761"/>
-    <text x="22" y="37" class="stage">TDI-9.x</text>
-    <text x="22" y="66" class="active">ADAPTIVE INFERENCE</text>
-    <text x="22" y="94" class="desc">Continue, stop, verify, recover and</text>
-    <text x="22" y="116" class="desc">backtrack under bounded compute.</text>
+  <g transform="translate(72 484)">
+    <rect width="456" height="158" rx="20" fill="#0e3540" stroke="#55d6be" stroke-width="2"/>
+    <text x="24" y="40" class="stage">TDI-21.x</text>
+    <text x="24" y="70" class="status">BOOLEAN RELATIONAL ARCHITECTURE</text>
+    <text x="24" y="101" class="desc">Attention-like functionality without attention scoring;</text>
+    <text x="24" y="124" class="desc">Boolean / F2 / ANF routing and bounded memory.</text>
   </g>
 
-  <g transform="translate(1264 322)">
-    <rect width="278" height="138" rx="20" fill="#132b44" stroke="#274761"/>
-    <text x="22" y="37" class="stage">TDI-10.x</text>
-    <text x="22" y="66" class="active">OPERATOR / RESOLVENT</text>
-    <text x="22" y="94" class="desc">Jacobi operators, cavities, Green</text>
-    <text x="22" y="116" class="desc">functions and bounded asymptotics.</text>
+  <g transform="translate(572 484)">
+    <rect width="456" height="158" rx="20" fill="#0e3540" stroke="#55d6be" stroke-width="2"/>
+    <text x="24" y="40" class="stage">TDI-22.x</text>
+    <text x="24" y="70" class="status">TORSOR ATTENTION · STAGE-0</text>
+    <text x="24" y="101" class="desc">Six-component torsor/twist semantics, exact transport</text>
+    <text x="24" y="124" class="desc">identities and matched representation controls.</text>
   </g>
 
-  <g transform="translate(72 494)">
-    <rect width="1470" height="150" rx="24" fill="#0e3540" stroke="#55d6be" stroke-width="2"/>
-    <text x="28" y="42" class="stage">TDI-11.x · HALLUCINATION DYNAMICS &amp; CONTROL</text>
-    <text x="28" y="72" class="active">NEW ACTIVE BOOTSTRAP</text>
-    <text x="28" y="103" class="desc">Study measurable precursors of unsupported generation, causal interventions and bounded adaptive control.</text>
-    <text x="28" y="126" class="desc">Target loop: OBSERVE → ESTIMATE RISK → LOCALIZE → VERIFY / RECOVER / ABSTAIN → MEASURE EFFECT.</text>
+  <g transform="translate(1072 484)">
+    <rect width="456" height="158" rx="20" fill="#0e3540" stroke="#7aa7ff" stroke-width="2"/>
+    <text x="24" y="40" class="stage">TDI-23.x</text>
+    <text x="24" y="70" class="status">CATEGORICAL / DAGGER ATTENTION</text>
+    <text x="24" y="101" class="desc">Typed IR, dagger semantics, reduction diagnostics,</text>
+    <text x="24" y="124" class="desc">rooted provenance and exact equivalence tooling.</text>
   </g>
 
-  <text x="72" y="686" class="small">EVIDENCE FIRST · CLAIMS BOUNDED BY FROZEN EXPERIMENTS</text>
+  <g transform="translate(72 678)">
+    <rect width="1456" height="76" rx="18" fill="#0b1f33" stroke="#274761"/>
+    <text x="24" y="30" class="small">SCIENTIFIC STATUS RULE</text>
+    <text x="24" y="55" class="desc">Active Stage-0 ≠ frozen protocol ≠ confirmatory result. Final execution and downstream product claims require their own explicit gates.</text>
+  </g>
+
+  <text x="72" y="793" class="small">EVIDENCE FIRST · CLAIMS BOUNDED BY FROZEN EXPERIMENTS</text>
 </svg>
