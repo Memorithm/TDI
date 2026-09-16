@@ -1,0 +1,62 @@
+name: TDI shared admission evidence
+on:
+  pull_request:
+    paths: ['scripts/tdi_*', 'scripts/test_tdi_*', 'scripts/fixtures/tdi-catalogue-*.sql', 'tdi-bench/**', 'tdi-core/**', 'tdi-ai/**', 'Cargo.*', 'docs/engineering/**', '.github/workflows/tdi-shared-evidence.yml']
+  push:
+    branches: [main]
+    paths: ['scripts/tdi_*', 'scripts/test_tdi_*', 'scripts/fixtures/tdi-catalogue-*.sql', 'tdi-bench/**', 'tdi-core/**', 'tdi-ai/**', 'Cargo.*', 'docs/engineering/**', '.github/workflows/tdi-shared-evidence.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tdi-shared-evidence-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  real-search:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_BUILD_JOBS: '2'
+      RUSTFLAGS: '-C debuginfo=0'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          path: integration-tdi
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: Memorithm/Forge
+          ref: 0d48a91a5eed6a9ae09a5eacd7c4f18df8bdd333
+          persist-credentials: false
+          path: integration-forge
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: Memorithm/scirust-hub
+          ref: ccdcb99a4573dbefb944af0df713101b100b5f78
+          persist-credentials: false
+          path: integration-hub
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+      - run: cargo build --locked -p forge-bridge --example scientific_search
+        working-directory: integration-forge
+      - run: cargo build --locked -p scirust-hubd -p scirust-hub-worker
+        working-directory: integration-hub
+      - run: cargo build --locked -p tdi-bench --example finite_search_worker
+        working-directory: integration-tdi
+      - run: cargo build --locked -p tdi-ai --example durable_worker
+        working-directory: integration-tdi
+      - name: Qualify actual search and catalogue compatibility
+        working-directory: integration-tdi
+        env:
+          PYTHONPATH: scripts
+          TDI_HUBD_BIN: ${{ github.workspace }}/integration-hub/target/debug/scirust-hubd
+          TDI_DURABLE_WORKER: ${{ github.workspace }}/integration-tdi/target/debug/examples/durable_worker
+          TDI_SEARCH_WORKER: ${{ github.workspace }}/integration-tdi/target/debug/examples/finite_search_worker
+          TDI_FORGE_WORKER: ${{ github.workspace }}/integration-forge/target/debug/examples/scientific_search
+          TDI_FORGE_SOURCE_COMMIT: 0d48a91a5eed6a9ae09a5eacd7c4f18df8bdd333
+          TDI_SEARCH_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 -m unittest -v scripts/test_tdi_shared_evidence.py scripts/test_tdi_forge_integration.py scripts/test_tdi_engine_integration.py scripts/test_tdi_engine_unit.py scripts/test_tdi_observability_unit.py

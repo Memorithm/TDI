@@ -138,10 +138,12 @@ distinguishable from an intentional pause.
 
 ## Storage and qualification
 
-Catalogue schema 3 adds searches, their events and attempt mappings. Writers
+Catalogue schema 3 introduced searches, their events and attempt mappings. Schema
+4 additionally interns repeated admission proofs and indexes catalogue queries.
+Writers
 atomically migrate deployed schemas 1 and 2; read-only access preserves those
 versions. Legacy evidence/export receipt bytes are unchanged. Migration failure
-rolls back DDL and version together. Old writers reject schema 3; upgrade them
+rolls back DDL and version together. Old writers reject schema 4; upgrade them
 before sharing the catalogue. SQLite backup includes search state. Export the
 linked stage campaigns with the existing `export` command to retain their actual
 Hub artifacts as portable bundles; a catalogue backup alone does not copy Hub CAS.
