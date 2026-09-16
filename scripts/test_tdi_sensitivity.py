@@ -120,6 +120,19 @@ class SensitivityTests(unittest.TestCase):
                 hub.cli("sensitivity-plan", "--protocol", paths["protocol"], "--output", paths["plan"])
                 plan = json.loads(paths["plan"].read_text())
                 hub.cli("sensitivity-fixture-plan", "--plan", paths["plan"], "--function", "additive", "--output", paths["campaign"])
+                if method == "morris":
+                    tampered_path = hub.root / "morris-coordinate-tampered-campaign.json"
+                    tampered_spec = json.loads(paths["campaign"].read_text())
+                    row = tampered_spec["graph"]["steps"][0]["parameters"]["rows"][0]
+                    row["values"][0] = repr(float(row["values"][0]) + .125)
+                    atomic_json(tampered_path, tampered_spec)
+                    tampered_key = hub.cli("submit", tampered_path)["campaign"]
+                    self.assertEqual("completed", hub.cli("run", tampered_key)["phase"])
+                    with EngineStore(hub.catalogue, readonly=True) as store:
+                        tampered_selections = [{"campaign": tampered_key, "step": s["key"], "output": "file:result"}
+                                               for s in store.get(tampered_key)["spec"]["graph"]["steps"]]
+                        with self.assertRaises(durable.ContractError):
+                            sensitivity.collect(store, plan, tampered_selections)
                 key = hub.cli("submit", paths["campaign"])["campaign"]
                 with EngineStore(hub.catalogue, readonly=True) as store:
                     selections = [{"campaign": key, "step": s["key"], "output": "file:result"} for s in store.get(key)["spec"]["graph"]["steps"]]
