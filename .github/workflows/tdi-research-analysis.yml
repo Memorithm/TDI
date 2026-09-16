@@ -23,7 +23,7 @@ jobs:
           persist-credentials: false
       - run: PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts python3 -m unittest -v scripts.test_tdi_research_analysis.ProtocolTests
   real-consumer:
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-24.04' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
       CARGO_INCREMENTAL: '0'
