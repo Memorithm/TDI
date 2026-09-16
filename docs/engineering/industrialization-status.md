@@ -15,7 +15,7 @@ This is the durable engineering handoff for the industrialization programme. It 
 - Hub portable-artifact prerequisite: `Memorithm/scirust-hub` PR #47 merged as `9f666225b186fbca6160dd34068aea1c9af57040`; the qualified endpoint re-verifies stored bytes against Hub digest and size before returning ordinary SHA-256, with bounded portable-digest scan concurrency.
 - Hub authoritative-publication prerequisite: `Memorithm/scirust-hub` PR #48 merged `18b6a39d48c20f98c997644b9a5d835bbc437cfe` with `PublicationFence/v1`, PR #49 merged `547f71f9f57fcd850deb8fe5206b7c82d1908cae` with durable SQLite fence/publication persistence, PR #50 merged `dfc14fe832fd4c5e30f228dc7075b41e0bee9118` after exact-head CI qualified attempt fencing + authoritative publication + `FromStep` consumption, and PR #51 merged `a98f77dc52caa30d055d62acc84f77b176b9bc9b` after exact-head targeted and repository CI qualified the authenticated read-only publication endpoint. Hub issue #46 is closed; TDI may consume this boundary but may not mint fences or publish outputs itself.
 - Lot G1 portable artifact binding: PR #264, final head `1d5e0d3df339ab18309b400cb7b2fbe867d48218`, merged `25292997f5ee30529e8fea08c09375d8158416bf` after all returned applicable exact-head workflows succeeded, including the dedicated `TDI Hub edge contracts` gate; no unresolved review thread remained.
-- Lot G2 authoritative publication binding: PR #270 is candidate. Its first code/test head `72e9a58d4578b9f0a89dd7be0674d9e2b58a8c91` passed the dedicated `TDI Hub edge contracts` gate; repository-wide exact-head qualification is still required on the final PR head before merge. The contract pins Hub #51 merge `a98f77dc52caa30d055d62acc84f77b176b9bc9b`, binds exact workflow/step/attempt/generation/output lineage to the existing portable artifact binding, and keeps execution authorization false.
+- Lot G2 authoritative publication binding: PR #270, final head `6c4e4d6bda4693033dc48ed405880cd609b4e5dd`, merged `7b6401e91973d4b4895d717393942aceb0cf4e6b` after every returned applicable exact-head workflow succeeded, including `TDI Hub edge contracts`, full hosted tests/Clippy/formatting, Rust/Public Rust and MSRV. The review-required output-label correction aligned publication labels with the 1..=128-byte Hub/Graph grammar while retaining the strict step-key grammar. The contract pins Hub #51 merge `a98f77dc52caa30d055d62acc84f77b176b9bc9b`, binds exact workflow/step/attempt/generation/output lineage to the existing portable artifact binding, and keeps execution authorization false.
 - Scientific constraints remain those in `AGENTS.md` and the ecosystem roadmap/overlays.
 
 ## Delivered / candidate capabilities
@@ -46,7 +46,7 @@ This is the durable engineering handoff for the industrialization programme. It 
 | F exact-domain cache semantics | qualified | PR #261: cache key binds domain/plan/step/implementation/backend/inputs/parameters; disabled and unauthorized reuse fail closed; no cache store or scientific authorization is implemented. |
 | F physical CAS/registry | intentionally delegated | Hub remains owner of physical content-addressed storage, registry persistence and transport. |
 | G1 Hub portable artifact binding | qualified | PR #264 qualifies `HubArtifactBinding/v1` against the pinned Hub #47 source: Hub artifact id/domain digest plus exact TDI ArtifactDescriptor identity and raw-SHA256/size agreement. Execution and authoritative publication remain hard-false. |
-| G2 authoritative publication binding | candidate | Hub PR #50 qualifies attempt fencing/publication and authoritative `FromStep` consumption; Hub PR #51 exposes the read-only authenticated publication DTO. TDI PR #270 validates and content-addresses exact publication lineage while keeping `execution_authorized: false`; final exact-head qualification remains required. |
+| G2 authoritative publication binding | qualified | PR #270 final head `6c4e4d6bda4693033dc48ed405880cd609b4e5dd`, merge `7b6401e91973d4b4895d717393942aceb0cf4e6b`: exact-head Hub-edge, hosted full tests/Clippy/formatting, Rust/Public Rust, MSRV and all other returned gates succeeded. TDI validates and content-addresses exact authoritative publication lineage while keeping `execution_authorized: false`. |
 
 ## Qualification matrix progress
 
@@ -65,7 +65,7 @@ This is the durable engineering handoff for the industrialization programme. It 
 | Q13-Q14 | qualified for portable contract verification | PR #261 exact-head qualification passed for descriptor/provenance/export verification; external export integration remains later work. |
 | Q15 | qualified for contract semantics | PR #261 exact-head qualification passed for exact-domain cache identity/refusal; durable cache index/storage remains outside this module and reuse still requires caller authorization. |
 | Q16 | qualified for portable artifact identity translation | PR #264 exact-head qualification passed for the fail-closed G1 contract pinned to Hub #47; it verifies portable raw-SHA256/size translation and source/repository pins while granting no execution or publication authority. |
-| Q17 | candidate | Hub #48/#49/#50/#51 now qualify fence storage, orchestration use, downstream authoritative consumption and an authenticated read-only publication endpoint. TDI PR #270 binds that evidence to portable artifact identity; final exact-head TDI qualification is pending and execution admission remains separately unauthorized. |
+| Q17 | qualified for authoritative publication evidence binding | Hub #48/#49/#50/#51 qualify fence storage, orchestration use, downstream authoritative consumption and the authenticated read-only publication endpoint. TDI PR #270 final head `6c4e4d6bda4693033dc48ed405880cd609b4e5dd` binds that evidence to portable artifact identity with full returned exact-head qualification. Execution admission remains separately unauthorized until Hub enforces exact component/capability pins. |
 | Q18-Q30 | planned | cross-repository integrations, statistics, CLI/viewer/exports, hardware adapters, docs and final integrated qualification. |
 
 ## Lot-E qualified validation
@@ -105,7 +105,7 @@ The dedicated `TDI artifact and provenance contracts` workflow succeeded on the 
 
 ## Next
 
-1. Finish exact-head qualification and merge of TDI PR #270, then promote Q17/G2 from candidate to qualified with its final SHA evidence.
-2. Next, bind exact component/capability registry pins at Hub execution admission; until that separate boundary is qualified, `execution_authorized` remains false even for an authoritative publication binding.
+1. Implement and qualify the Hub-owned exact component/capability execution-admission boundary tracked by `Memorithm/scirust-hub#52`; until that boundary is merged and consumed, `execution_authorized` remains false even for a qualified authoritative publication binding.
+2. Add the TDI-side versioned adapter for that qualified Hub admission surface without duplicating Hub registry/scheduler/lease/publication ownership.
 3. Add ElasticXxx, Forge, SciRust, FLAT-ATTENTION and NNIS integrations only through qualified versioned contracts.
 4. Continue statistics/sensitivity, CLI/API/viewer, external exports and measured engine benchmarks.
