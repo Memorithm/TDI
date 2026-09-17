@@ -6,7 +6,7 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 
 ## Default-branch checkpoint
 
-- TDI `main`: `9d24ec9ce73370f4948144b1c0ae55cd6c82ce91`, merge of qualified PR #467 after merged TDI-24.0 #406 and qualified PR #466.
+- TDI `main`: `807bc13d1d6389cb0314cc18be6c9bd7dc31126e`, merge of qualified PR #387 after qualified PR #467. PR #387 final head was `4fbd8f8a383a2bb5ddb156eb4fb4cdf8851fa9c2`.
 - Protected `main` requires the nine baseline contexts Formatting, Tests, Clippy, Preregistration integrity, their Public counterparts, and Rust MSRV. Conditional/domain/hardware gates remain additional application-level requirements when applicable.
 - PR #385 final head `b20cbaf053fa446dba9391e521edfdc167b881e5` was non-draft and mergeable, had no unresolved material review thread, and all 42 returned exact-head workflows completed successfully before merge. Its merge presence is therefore accompanied by recorded exact-head software evidence; it still creates no scientific-stage or partner-execution authority beyond the contracts it implements.
 - The branch still contains the older dated audit. Where that audit conflicts with this overlay on current repository state, use this overlay while retaining the older file as historical evidence.
@@ -53,10 +53,11 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 
 ### PR #387 — bounded sensitivity and ablation
 
-- After #467 merged, the branch was non-destructively refreshed through current `main`; current exact head is `4fbd8f8a383a2bb5ddb156eb4fb4cdf8851fa9c2`.
-- The branch pins qualified SciRust merge `be7fcca3b31cedf722d71a2a56db8f6d088037cf` and no longer has the former SciRust-candidate provenance blocker.
-- The dedicated exact-head `TDI sensitivity and ablation` and `TDI shared admission evidence` workflows have succeeded on this head. Several required/applicable workflows, including Rust/Public Rust/MSRV and additional research gates, remain queued or in progress.
-- State: **draft candidate; blocked on completion of its own refreshed exact-head workflow matrix and review reconciliation**. Queued/pending/in-progress checks are not green.
+- Final exact head `4fbd8f8a383a2bb5ddb156eb4fb4cdf8851fa9c2` pins qualified SciRust merge `be7fcca3b31cedf722d71a2a56db8f6d088037cf` and contains no stale SciRust candidate-source pin.
+- Every pull-request workflow returned by GitHub for that exact head completed with `success`, including Rust/Public Rust/MSRV, `TDI sensitivity and ablation`, `TDI shared admission evidence`, operational engine, Forge/Elastic partner gates and the applicable research-contract gates.
+- Two material Codex P1 review threads were corrected and resolved before promotion: collected sensitivity values are bound to the exact planned coordinates, and the operator build guide points at the qualified SciRust merge rather than the earlier candidate revision.
+- The PR was marked ready only after exact-head qualification and merged by squash as `807bc13d1d6389cb0314cc18be6c9bd7dc31126e` with expected head `4fbd8f8a383a2bb5ddb156eb4fb4cdf8851fa9c2`.
+- State: **qualified and merged for bounded sensitivity/ablation software integration**. This does not create a protected/final scientific result, hardware result, performance claim, universal estimator proof, or model-quality conclusion.
 
 
 ### PR #388 — measured engine baselines
@@ -94,7 +95,7 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 
 ### PR #390 — this reconciliation
 
-- The branch is based on current post-#385 `main` ancestry and is being updated only with current-state evidence.
+- The branch has been refreshed non-destructively through qualified #387 merge `807bc13d1d6389cb0314cc18be6c9bd7dc31126e` and is being updated only with current-state evidence.
 - This documentation PR itself remains a candidate until every applicable exact-head workflow on its final head succeeds and no material review thread remains.
 
 ## Evidence and ownership discipline retained
@@ -109,7 +110,7 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 
 ## Next closure order
 
-1. Complete #387 exact-head qualification on refreshed head `4fbd8f8a383a2bb5ddb156eb4fb4cdf8851fa9c2`; if every applicable workflow is green and review remains clear, promote it from draft and merge only on that exact head.
-2. Complete #388 exact-head qualification on refreshed head `9c1ea100aa2d6e1fcabe0f49dfb519c28eeda6d2` while preserving all retained negative/cancelled evidence; do not promote it from draft until every applicable benchmark/software gate is green.
-3. Complete #464 exact-head qualification on refreshed head `fbb5d3f1687c05d9e129cb642e7f26fbf2200858`. Preserve the nine protected baseline contexts and the qualified TDI-8.1/TDI-9.1 freeze workflows unchanged; do not promote until every applicable gate is green.
+1. Refresh #388 from qualified #387 merge `807bc13d1d6389cb0314cc18be6c9bd7dc31126e`, preserve all retained negative/cancelled benchmark evidence, and require a complete exact-head benchmark/software matrix before promotion from draft.
+2. Refresh #464 from the same current `main`; preserve the nine protected baseline contexts and the qualified TDI-8.1/TDI-9.1 freeze workflows unchanged, then require every applicable exact-head gate before promotion.
+3. Qualify this #390 reconciliation on its own final exact head; merge presence of the underlying programme slices is not a substitute for this documentation PR's CI.
 4. Continue FLAT/NNIS hardware qualification separately; do not convert software/canonical-evidence contracts into hardware, model-quality, or performance conclusions.
