@@ -16,11 +16,11 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 ### PR #296 — shared research analysis
 
 - PR #296 is merged on TDI as `cc07d5c55bd2b5aca78b6b8074da21e508a1c735`.
-- It still pins the earlier SciRust candidate `06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0`, despite its declared dependency on the reviewed final SciRust revision.
-- SciRust #1452 has been narrowed back to its statistics-only scope. Its current exact head is `b92414e88744315d19cf1810a0482040621a654b`; the Dream/Thor-only changes and their retained physical negative evidence were extracted to draft SciRust #1455 rather than silently discarded.
-- On #1452 head `b92414e...`, Research statistics reference qualification, Workspace Rustdoc, Native ARM64, M53/M54, WGPU, API lexicon and the other returned completed workflows are green; repository `CI` is still in progress at this refresh. Therefore #1452 is **not yet qualified or merged**, but it is no longer blocked by treating the unrelated Dream gate as applicable to the statistics diff.
-- The retained Dream negative result remains owned by draft #1455: on physical Thor the checkpoint loads, then the first attention `q_proj` fails with `CUBLAS_STATUS_NOT_INITIALIZED` from `cublasLtMatmulAlgoGetHeuristic`; no benchmark JSON exists and the root cause is not established.
-- State: **merged but not finally qualified across the TDI↔SciRust pin**. Closure requires a fully qualified SciRust #1452 merge, then a corrective TDI pin PR to the resulting merge SHA and its own exact-head qualification.
+- The merged #296 tree still contains the earlier SciRust candidate pin `06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0`; merge presence therefore does not by itself close provenance.
+- SciRust #1452 is now qualified and merged: final head `b92414e88744315d19cf1810a0482040621a654b` had every returned applicable pull-request workflow complete successfully, including repository CI and `Research statistics reference qualification`, and merged as `be7fcca3b31cedf722d71a2a56db8f6d088037cf`.
+- The unrelated Dream/Thor-only changes and retained physical negative evidence remain isolated in draft SciRust #1455 rather than being reinterpreted as statistics qualification. The retained observation is still `CUBLAS_STATUS_NOT_INITIALIZED` in the first Dream attention `q_proj`; no benchmark JSON exists and the root cause is not established.
+- Corrective TDI PR #466 now pins the shared analysis workflow and provenance environment to SciRust merge `be7fcca3...` and updates the paired-analysis documentation. Current #466 exact head is `3f8b0f6819ed0538af0433413761b5a0d6d6e273`; local YAML/diff/rustfmt checks and the 4/4 protocol tests passed, while its GitHub exact-head matrix remains incomplete and therefore non-green as a whole.
+- State: **merged #296 with corrective provenance candidate #466**. The stale source-pin debt closes only after #466 itself completes exact-head qualification, clears material review, and merges.
 
 ### PR #331 — real library replay adapters
 
@@ -55,9 +55,10 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 
 ### PR #387 — bounded sensitivity and ablation
 
-- Current published head is `d5e5115add1689a59b0514fe999a636b5c2e404a`.
-- It still depends on the eventual reviewed, fully exact-head-green SciRust #1452 merge and must then be repinned to that final merge SHA.
-- State: **draft/blocked on final SciRust provenance plus its own exact-head gates**.
+- The branch is non-destructively refreshed through TDI `main` `84ab1e81693fa7ddbe9ead67c44c740495d1b430`; current exact head is `9c5866e35cc5f484ae53d31ec503c6dc25988949`.
+- The former upstream provenance blocker is resolved at source: workflow checkout and `TDI_SCIRUST_SOURCE_COMMIT` now pin qualified SciRust #1452 merge `be7fcca3b31cedf722d71a2a56db8f6d088037cf`.
+- The dedicated `TDI sensitivity and ablation` workflow has completed successfully on this exact head, but many baseline/repository workflows remain queued; the PR intentionally remains draft.
+- State: **draft candidate; upstream pin corrected, still blocked on its own complete exact-head qualification and final material review**.
 
 ### PR #388 — measured engine baselines
 
@@ -95,7 +96,7 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 
 ## Next closure order
 
-1. Finish SciRust #1452 on its statistics-only exact head. If every applicable workflow is green and review remains clear, merge it; then open the corrective TDI #296 source-pin PR and repin #387 to the resulting SciRust merge SHA.
-2. Complete #389 exact-head qualification on its refreshed `main` ancestry and resolve any material P1/P2 findings before considering it ready.
-3. Requalify #388 on its final head while preserving all cancelled/negative executions.
-4. Continue FLAT/NNIS hardware qualification separately; do not convert software/canonical-evidence contracts into hardware, model-quality, or performance conclusions.
+1. Complete corrective #466 exact-head qualification and merge it only if every applicable gate and material review is green; this is the closure point for #296's stale SciRust source pin.
+2. Complete #387 exact-head qualification on its refreshed, final-SciRust-pinned head before considering it ready.
+3. Complete #389 exact-head qualification on its refreshed `main` ancestry and resolve any material P1/P2 findings before considering it ready.
+4. Requalify #388 on its final head while preserving all cancelled/negative executions; continue FLAT/NNIS hardware qualification separately without converting software contracts into hardware, model-quality, or performance conclusions.
