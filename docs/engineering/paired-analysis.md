@@ -9,8 +9,8 @@ seed and multiplicity. A common seed or repeated row is not proof of independenc
 SciRust owns numerical resampling and sensitivity primitives. TDI owns protocol
 semantics, provenance selection and reports. The integration uses
 `scirust-research-stats-json/v1` at SciRust commit
-`06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0` (PR Memorithm/scirust#1452).
-This source is pending upstream integration; use the exact pin for qualification.
+`be7fcca3b31cedf722d71a2a56db8f6d088037cf` (qualified merge of Memorithm/scirust#1452).
+Use this immutable merge pin for qualification; the earlier candidate pin is retained only in Git history.
 The installed binary's SHA-256 is recorded separately; this is not a build
 attestation. No new numerical Python dependency or TDI Rust MSRV bump is required.
 
@@ -52,7 +52,7 @@ Build SciRust independently, outside TDI's Cargo configuration directory:
 
 ```bash
 cd ../scirust
-git checkout 06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0
+git checkout be7fcca3b31cedf722d71a2a56db8f6d088037cf
 cargo build --locked -p scirust-stats --example research_stats
 sha256sum target/debug/examples/research_stats
 cd ../TDI
@@ -67,7 +67,7 @@ python3 scripts/tdi_engine.py --catalogue tdi-campaigns.sqlite analyze \
   --protocol protocol.json --selections selections.json \
   --worker ../scirust/target/debug/examples/research_stats \
   --worker-sha256 "$STATS_SHA256" \
-  --source-commit 06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0 \
+  --source-commit be7fcca3b31cedf722d71a2a56db8f6d088037cf \
   --output analysis.json
 ```
 
