@@ -107,15 +107,18 @@ impl Chiral6 {
         Self { data }
     }
 
-    /// Euclidean pairing with fail-closed overflow detection.
+    /// Euclidean pairing with fail-closed product and accumulation checks.
+    ///
+    /// Every product and every partial sum must remain finite. This deliberately
+    /// rejects a computation as soon as overflow occurs rather than allowing a
+    /// later term to hide the invalid intermediate through cancellation.
     pub fn dot(self, rhs: Self) -> Result<f64, ChiralError> {
-        let value = self
-            .data
-            .iter()
-            .zip(rhs.data.iter())
-            .map(|(lhs, rhs)| lhs * rhs)
-            .sum::<f64>();
-        finite_scalar(value, "dot")
+        let mut accumulator = 0.0;
+        for (lhs, rhs) in self.data.iter().zip(rhs.data.iter()) {
+            let product = finite_mul(*lhs, *rhs, "dot_product")?;
+            accumulator = finite_add(accumulator, product, "dot_accumulator")?;
+        }
+        Ok(accumulator)
     }
 
     /// Mirror-even bilinear `q^T M k`.
@@ -187,10 +190,11 @@ pub fn chiral_score(
     weights: ChiralScoreWeights,
 ) -> Result<f64, ChiralError> {
     let channels = observables(query, key)?;
-    let value = weights.alpha * channels.direct
-        + weights.beta * channels.mirrored
-        + weights.gamma * channels.chiral;
-    finite_scalar(value, "chiral_score")
+    let direct = finite_mul(weights.alpha, channels.direct, "weighted_direct")?;
+    let mirrored = finite_mul(weights.beta, channels.mirrored, "weighted_mirrored")?;
+    let chiral = finite_mul(weights.gamma, channels.chiral, "weighted_chiral")?;
+    let even = finite_add(direct, mirrored, "chiral_even_sum")?;
+    finite_add(even, chiral, "chiral_score")
 }
 
 /// Right/left enantiomorphic scores. Reflection swaps the two scores because
@@ -201,12 +205,22 @@ pub fn enantiomorphic_scores(
     weights: ChiralScoreWeights,
 ) -> Result<(f64, f64), ChiralError> {
     let channels = observables(query, key)?;
-    let common = weights.alpha * channels.direct + weights.beta * channels.mirrored;
-    let odd = weights.gamma * channels.chiral;
+    let direct = finite_mul(weights.alpha, channels.direct, "weighted_direct")?;
+    let mirrored = finite_mul(weights.beta, channels.mirrored, "weighted_mirrored")?;
+    let common = finite_add(direct, mirrored, "enantiomorphic_common")?;
+    let odd = finite_mul(weights.gamma, channels.chiral, "weighted_chiral")?;
     Ok((
-        finite_scalar(common + odd, "right_score")?,
-        finite_scalar(common - odd, "left_score")?,
+        finite_add(common, odd, "right_score")?,
+        finite_add(common, -odd, "left_score")?,
     ))
+}
+
+fn finite_mul(lhs: f64, rhs: f64, field: &'static str) -> Result<f64, ChiralError> {
+    finite_scalar(lhs * rhs, field)
+}
+
+fn finite_add(lhs: f64, rhs: f64, field: &'static str) -> Result<f64, ChiralError> {
+    finite_scalar(lhs + rhs, field)
 }
 
 fn finite_scalar(value: f64, field: &'static str) -> Result<f64, ChiralError> {
@@ -320,19 +334,71 @@ mod tests {
 
     #[test]
     fn non_finite_inputs_and_derived_overflow_fail_closed() {
-        assert_eq!(
-            Chiral6::new([f64::NAN, 0.0, 0.0], [0.0; 3]),
-            Err(ChiralError::NonFiniteVector)
-        );
-        assert_eq!(
-            ChiralScoreWeights::new(1.0, f64::INFINITY, 0.0),
-            Err(ChiralError::NonFiniteWeights)
-        );
+        for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(
+                Chiral6::new([invalid, 0.0, 0.0], [0.0; 3]),
+                Err(ChiralError::NonFiniteVector)
+            );
+            assert_eq!(
+                ChiralScoreWeights::new(1.0, invalid, 0.0),
+                Err(ChiralError::NonFiniteWeights)
+            );
+        }
 
         let huge = c([f64::MAX, 0.0, 0.0], [0.0; 3]);
         assert_eq!(
             huge.dot(huge),
-            Err(ChiralError::NonFiniteScalar { field: "dot" })
+            Err(ChiralError::NonFiniteScalar {
+                field: "dot_product"
+            })
         );
+
+        let accumulation = c([f64::MAX, f64::MAX, 0.0], [0.0; 3]);
+        let ones = c([1.0, 1.0, 0.0], [0.0; 3]);
+        assert_eq!(
+            accumulation.dot(ones),
+            Err(ChiralError::NonFiniteScalar {
+                field: "dot_accumulator"
+            })
+        );
+
+        let finite_channels = c([2.0, 0.0, 0.0], [0.0; 3]);
+        let huge_weight = ChiralScoreWeights::new(f64::MAX, 0.0, 0.0).unwrap();
+        assert_eq!(
+            chiral_score(finite_channels, finite_channels, huge_weight),
+            Err(ChiralError::NonFiniteScalar {
+                field: "weighted_direct"
+            })
+        );
+    }
+
+    #[test]
+    fn deterministic_property_fixture_preserves_stage0_algebra() {
+        let fixtures = [
+            c([0.0, 0.0, 0.0], [0.0, 0.0, 0.0]),
+            c([1.0, -2.0, 3.0], [-4.0, 5.0, -6.0]),
+            c([-0.5, 0.25, 2.0], [1.5, -3.0, 0.75]),
+            c([8.0, -1.0, 0.125], [-0.25, 4.0, -2.0]),
+            c([-7.0, 3.5, -1.75], [0.5, -0.125, 2.25]),
+        ];
+
+        for q in fixtures {
+            assert_eq!(q.mirror().mirror(), q);
+            assert_eq!(q.complex_structure().complex_structure(), q.negate());
+            assert_eq!(
+                q.mirror().complex_structure().mirror(),
+                q.complex_structure().negate()
+            );
+            close(q.chiral_pairing(q).unwrap(), 0.0);
+
+            for k in fixtures {
+                let channels = observables(q, k).unwrap();
+                let reflected = observables(q.mirror(), k.mirror()).unwrap();
+                close(reflected.direct, channels.direct);
+                close(reflected.mirrored, channels.mirrored);
+                close(reflected.chiral, -channels.chiral);
+                close(q.chiral_pairing(k).unwrap(), -k.chiral_pairing(q).unwrap());
+            }
+        }
     }
 }
