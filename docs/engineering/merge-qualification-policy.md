@@ -79,6 +79,26 @@ For each candidate:
 If a later commit changes the candidate head, prior exact-head qualification is
 stale and the applicable gates must qualify the new head again.
 
+## Auditable exception path
+
+There is no standing branch-protection bypass: administrators are subject to the
+same protected-main baseline and the repository has no bypass actor configured.
+An emergency exception therefore requires an explicit, temporary administrative
+policy change rather than a silent merge override.
+
+Any such exception must be recorded before use in a dedicated issue or incident
+record with the exact base/head SHAs, the blocked context, the reason normal
+qualification cannot complete, the approving repository administrator, and the
+bounded restoration condition. The protection change itself and its restoration
+must be captured through the repository administration audit trail, and the live
+protection endpoint must be re-read after restoration.
+
+An exception cannot authorize protected/final holdout access, weaken a frozen
+scientific decision rule, substitute missing hardware evidence, or relabel a
+failed/cancelled/missing conditional gate as success. If those gates are material
+to the change, the candidate remains scientifically or operationally unqualified
+even if an emergency repository update is administratively permitted.
+
 ## Runner-load path scoping
 
 Path filters are allowed only to remove genuinely inapplicable workflows. They
