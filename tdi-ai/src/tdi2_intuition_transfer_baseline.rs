@@ -46,7 +46,10 @@ pub fn evaluate_transfer_ablation(
     let transfer_exact = evaluate_transfer(&transferred, &case.expected).is_exact();
     let no_transfer_exact = canonical_expected(literal_role_identity_baseline(&case.template))
         == canonical_expected(case.expected.clone());
-    Ok(TransferAblationResult { transfer_exact, no_transfer_exact })
+    Ok(TransferAblationResult {
+        transfer_exact,
+        no_transfer_exact,
+    })
 }
 
 #[cfg(test)]

@@ -20,7 +20,9 @@ impl core::fmt::Display for ReliabilityError {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::CounterOverflow => formatter.write_str("reliability evidence counter overflow"),
-            Self::InvalidPrior => formatter.write_str("reliability prior must be finite and positive"),
+            Self::InvalidPrior => {
+                formatter.write_str("reliability prior must be finite and positive")
+            }
         }
     }
 }
