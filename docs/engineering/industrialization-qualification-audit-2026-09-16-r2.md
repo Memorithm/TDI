@@ -6,7 +6,7 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 
 ## Default-branch checkpoint
 
-- TDI `main`: `eca2f3d6892b9a8758e067140297993208ffb4c3`, merge of PR #385.
+- TDI `main`: `84ab1e81693fa7ddbe9ead67c44c740495d1b430`, merge of PR #465 after qualified PR #385.
 - Protected `main` requires the nine baseline contexts Formatting, Tests, Clippy, Preregistration integrity, their Public counterparts, and Rust MSRV. Conditional/domain/hardware gates remain additional application-level requirements when applicable.
 - PR #385 final head `b20cbaf053fa446dba9391e521edfdc167b881e5` was non-draft and mergeable, had no unresolved material review thread, and all 42 returned exact-head workflows completed successfully before merge. Its merge presence is therefore accompanied by recorded exact-head software evidence; it still creates no scientific-stage or partner-execution authority beyond the contracts it implements.
 - The branch still contains the older dated audit. Where that audit conflicts with this overlay on current repository state, use this overlay while retaining the older file as historical evidence.
@@ -66,10 +66,10 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 
 ### PR #465 — local industrial contract routing
 
-- Current exact head: `884c458d0c5d903414526f1e10a973a14519c129`.
-- Scope is limited to eight `runs-on` changes for artifact/provenance, Hub edge, common partner, Forge, ElasticXxx, SciRust, FLAT-ATTENTION and NNIS contract workflows: same-repository work may use the repository-scoped `tdi` runner while fork PRs remain on GitHub-hosted `ubuntu-24.04`.
-- At this refresh the PR is non-draft and mergeable, Codex review completed with no material finding, and multiple exact-head gates are green including Public Rust, MSRV, Forge/ElasticXxx/SciRust/FLAT partner contracts and Hub edge. Rust validation and several unrelated research workflows are still queued.
-- State: **candidate; not mergeable under programme policy until every applicable exact-head workflow is complete and green**.
+- Final exact head: `884c458d0c5d903414526f1e10a973a14519c129`; merged as `84ab1e81693fa7ddbe9ead67c44c740495d1b430`.
+- Scope is limited to eight `runs-on` changes for artifact/provenance, Hub edge, common partner, Forge, ElasticXxx, SciRust, FLAT-ATTENTION and NNIS contract workflows: same-repository work uses the repository-scoped `tdi` runner while fork PRs remain on GitHub-hosted `ubuntu-24.04`.
+- Immediately before merge, every workflow returned for the exact final head had completed with `success`, including Rust/Public Rust/MSRV, artifact/provenance, Hub edge and all five partner-contract gates. Codex review had completed with no material finding and GitHub returned no unresolved review thread.
+- State: **qualified and merged for the declared CI-routing scope**. This changes runner placement only; it grants no scientific stage, partner execution, actuation, scheduler, lease or artifact-store authority.
 
 ### PR #464 — runner-load scoping
 
@@ -95,7 +95,6 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 ## Next closure order
 
 1. Finish SciRust #1452 on its statistics-only exact head. If every applicable workflow is green and review remains clear, merge it; then open the corrective TDI #296 source-pin PR and repin #387 to the resulting SciRust merge SHA.
-2. Complete #465 exact-head qualification before merging the local industrial-contract runner route; queued workflows are not evidence.
-3. Complete #389 exact-head qualification on its refreshed `main` ancestry and resolve any material P1/P2 findings before considering it ready.
-4. Requalify #388 on its final head while preserving all cancelled/negative executions.
-5. Continue FLAT/NNIS hardware qualification separately; do not convert software/canonical-evidence contracts into hardware, model-quality, or performance conclusions.
+2. Complete #389 exact-head qualification on its refreshed `main` ancestry and resolve any material P1/P2 findings before considering it ready.
+3. Requalify #388 on its final head while preserving all cancelled/negative executions.
+4. Continue FLAT/NNIS hardware qualification separately; do not convert software/canonical-evidence contracts into hardware, model-quality, or performance conclusions.
