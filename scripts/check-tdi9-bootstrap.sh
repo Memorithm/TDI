@@ -12,6 +12,11 @@ PROGRAMME="docs/TDI-9-PROGRAMME.md"
 GATE="docs/TDI-9.0-IMPLEMENTATION-GATE.md"
 STATUS="docs/TDI-9.0-STATUS.md"
 
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/tdi9-bootstrap.XXXXXX")"
+trap 'rm -rf "$tmp_dir"' EXIT
+token_scan="$tmp_dir/token-scan.log"
+tdi8_log="$tmp_dir/tdi8-bootstrap.log"
+
 for file in \
     "$PREREG" \
     "$MANIFEST" \
@@ -82,16 +87,16 @@ fi
 # narrowly scoped so historical TDI-7 contracts remain untouched.
 if grep -R -n -E 'TDI9_(CONFIRM|FULL|FINAL_TOKEN|HUMAN_TOKEN)' \
     docs/TDI-9* AGENTS.md .github/copilot-instructions.md .github/workflows \
-    >/tmp/tdi9-token-scan.log; then
-    cat /tmp/tdi9-token-scan.log >&2
+    >"$token_scan"; then
+    cat "$token_scan" >&2
     fail "TDI-9 must not introduce a human/full-run confirmation token"
 fi
-rm -f /tmp/tdi9-token-scan.log
+rm -f "$token_scan"
 
 # Preserve the independently frozen earlier-series gate.
 if test -f scripts/check-tdi8-bootstrap.sh; then
-    bash scripts/check-tdi8-bootstrap.sh >/tmp/tdi9-tdi8-bootstrap.log
-    rm -f /tmp/tdi9-tdi8-bootstrap.log
+    bash scripts/check-tdi8-bootstrap.sh >"$tdi8_log"
+    rm -f "$tdi8_log"
 fi
 
 printf 'TDI-9.0 preregistration blob: VERIFIED (%s)\n' "$actual_blob"
