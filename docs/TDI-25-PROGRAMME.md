@@ -1,6 +1,6 @@
 # TDI-25.x — Torsor vs Chiral Attention Research Programme
 
-Status: **Stage-0 bootstrap; stacked on TDI-24 chiral foundation; experimental; non-confirmatory**.
+Status: **Stage-0 bootstrap; consumes the merged TDI-24 chiral foundation; experimental; non-confirmatory**.
 
 Tracker: #392.
 

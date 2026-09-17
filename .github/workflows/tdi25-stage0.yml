@@ -1,0 +1,39 @@
+name: TDI-25 Stage-0 torsor vs chiral bootstrap
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tdi25-stage0-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stage0-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact candidate head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+
+      - name: Qualify bounded TDI-25 Stage-0 contract
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy -p tdi-ai --features experimental --all-targets -- -D warnings
+          cargo test -p tdi-ai --features experimental tdi25
+          grep -Fq 'T6 vs C6 remains the primary contrast.' docs/TDI-25-PROGRAMME.md
+          grep -Fq 'No premature hybrid' docs/TDI-25-PROGRAMME.md
+          grep -Fq '50 substantive PR slices' docs/TDI-25-PROGRAMME.md
