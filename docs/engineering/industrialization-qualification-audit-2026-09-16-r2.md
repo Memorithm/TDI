@@ -20,6 +20,8 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 - SciRust #1452 subsequently qualified on exact head `b92414e88744315d19cf1810a0482040621a654b` and merged as `be7fcca3b31cedf722d71a2a56db8f6d088037cf`; the unrelated Dream/Thor negative result remains isolated in draft SciRust #1455.
 - Corrective TDI #466 pins that qualified SciRust merge in checkout and `TDI_SCIRUST_SOURCE_COMMIT`, qualified on exact head `729f35693e21ab93c4522987cca7ca70cb62feaa` with all 50 returned pull-request workflows successful and no unresolved review thread, then merged as `c43baf742ad3c85674b83956a01807bf7664771b`.
 - State: **qualified provenance correction on `main` for the shared research-analysis consumer**. This closes the stale #296 SciRust source pin only; it does not retroactively create hardware, performance, model-quality or scientific-stage evidence.
+- The unrelated Dream/Thor negative evidence remains owned by draft SciRust #1455: the checkpoint loads, then the first attention `q_proj` fails with `CUBLAS_STATUS_NOT_INITIALIZED` from `cublasLtMatmulAlgoGetHeuristic`; no benchmark JSON exists and the root cause remains unestablished.
+
 
 ### PR #331 — real library replay adapters
 
@@ -55,6 +57,7 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 - The branch pins qualified SciRust merge `be7fcca3b31cedf722d71a2a56db8f6d088037cf` and no longer has the former SciRust-candidate provenance blocker.
 - Local refresh checks pass for Rust 1.97.1 formatting, workflow YAML parsing, `git diff --check`, and the four paired-analysis protocol tests. The optional SALib profile is not installed in the ambient local environment, so the dedicated GitHub sensitivity workflow remains authoritative for the full integration suite.
 - State: **draft candidate; blocked only on its own refreshed exact-head workflow matrix and review reconciliation**. Queued/pending/in-progress checks are not green.
+
 
 ### PR #388 — measured engine baselines
 
