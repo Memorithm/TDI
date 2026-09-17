@@ -120,7 +120,7 @@ jobs:
         uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
         with:
           toolchain: ${{ env.TDI_CI_RUST }}
-          components: rustfmt
+          components: rustfmt, clippy
       - name: Verify immutable preregistration hashes
         run: |
           sha256sum -c docs/TDI-2-CONTINUOUS-PREREGISTRATION.sha256
