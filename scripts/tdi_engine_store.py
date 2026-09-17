@@ -457,10 +457,22 @@ class EngineStore:
         if type(after) is not int or after < 0 or type(limit) is not int or not 1 <= limit <= MAX_PAGE:
             raise durable.ContractError("invalid catalogue pagination")
 
-    def list(self, *, after=0, limit=MAX_PAGE, phase=None):
-        """List campaigns in insertion order with an optional exact phase filter."""
+    def list(self, *, after=0, limit=MAX_PAGE, phase=None, domain=None):
+        """List campaigns in insertion order with optional exact phase/domain filters."""
         self._page(after, limit)
-        if phase is None:
+        if domain is not None:
+            if domain not in ("Development", "Validation"):
+                raise durable.ContractError("only non-final catalogue filters are supported")
+            clause = "json_extract(spec,'$.domain')=?"
+            values = [domain]
+            if phase is not None:
+                clause += " AND phase=?"
+                values.append(phase)
+            rows = self.db.execute(
+                "SELECT id,phase,workflow,created_ns FROM campaigns WHERE " + clause + " ORDER BY created_ns,id LIMIT ? OFFSET ?",
+                (*values, limit, after),
+            )
+        elif phase is None:
             rows = self.db.execute("SELECT id,phase,workflow,created_ns FROM campaigns ORDER BY created_ns,id LIMIT ? OFFSET ?", (limit, after))
         else:
             rows = self.db.execute("SELECT id,phase,workflow,created_ns FROM campaigns WHERE phase=? ORDER BY created_ns,id LIMIT ? OFFSET ?", (phase, limit, after))
