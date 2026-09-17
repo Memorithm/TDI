@@ -78,7 +78,11 @@ impl core::fmt::Display for RelationError {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::UnknownRole { role } => {
-                write!(formatter, "relation references undeclared role {}", role.raw())
+                write!(
+                    formatter,
+                    "relation references undeclared role {}",
+                    role.raw()
+                )
             }
             Self::DuplicateRelation { relation } => write!(
                 formatter,
@@ -154,7 +158,12 @@ mod tests {
             )],
         )
         .expect_err("unknown role must be rejected");
-        assert_eq!(error, RelationError::UnknownRole { role: RoleId::new(99) });
+        assert_eq!(
+            error,
+            RelationError::UnknownRole {
+                role: RoleId::new(99)
+            }
+        );
     }
 
     #[test]

@@ -22,10 +22,14 @@ impl ExperienceEntry {
     }
     /// Structural template carried by this entry.
     #[must_use]
-    pub const fn template(&self) -> &RelationalTemplate { &self.template }
+    pub const fn template(&self) -> &RelationalTemplate {
+        &self.template
+    }
     /// Historical success/failure evidence.
     #[must_use]
-    pub const fn evidence(&self) -> ReliabilityEvidence { self.evidence }
+    pub const fn evidence(&self) -> ReliabilityEvidence {
+        self.evidence
+    }
 }
 
 /// Deterministically ordered bounded memory of experiential templates.
@@ -66,7 +70,9 @@ impl core::fmt::Display for StoreError {
             Self::DuplicateTemplate { template } => {
                 write!(formatter, "template {} already exists", template.raw())
             }
-            Self::Full { capacity } => write!(formatter, "experience store capacity {capacity} reached"),
+            Self::Full { capacity } => {
+                write!(formatter, "experience store capacity {capacity} reached")
+            }
         }
     }
 }
@@ -78,16 +84,24 @@ impl ExperienceStore {
         if capacity == 0 {
             return Err(StoreError::ZeroCapacity);
         }
-        Ok(Self { capacity, entries: Vec::with_capacity(capacity) })
+        Ok(Self {
+            capacity,
+            entries: Vec::with_capacity(capacity),
+        })
     }
 
     /// Insert an entry while preserving ascending template-id order.
     pub fn insert(&mut self, entry: ExperienceEntry) -> Result<(), StoreError> {
         let id = entry.template().base().id();
-        match self.entries.binary_search_by_key(&id, |candidate| candidate.template().base().id()) {
+        match self
+            .entries
+            .binary_search_by_key(&id, |candidate| candidate.template().base().id())
+        {
             Ok(_) => return Err(StoreError::DuplicateTemplate { template: id }),
             Err(_) if self.entries.len() == self.capacity => {
-                return Err(StoreError::Full { capacity: self.capacity });
+                return Err(StoreError::Full {
+                    capacity: self.capacity,
+                });
             }
             Err(index) => self.entries.insert(index, entry),
         }
@@ -105,16 +119,24 @@ impl ExperienceStore {
 
     /// Canonically ordered entries.
     #[must_use]
-    pub fn entries(&self) -> &[ExperienceEntry] { &self.entries }
+    pub fn entries(&self) -> &[ExperienceEntry] {
+        &self.entries
+    }
     /// Declared maximum number of entries.
     #[must_use]
-    pub const fn capacity(&self) -> usize { self.capacity }
+    pub const fn capacity(&self) -> usize {
+        self.capacity
+    }
     /// Current number of entries.
     #[must_use]
-    pub fn len(&self) -> usize { self.entries.len() }
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
     /// Whether no experience is currently stored.
     #[must_use]
-    pub fn is_empty(&self) -> bool { self.entries.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
 
     /// Read-only memory utilization. This never triggers eviction or mutation.
     #[must_use]
@@ -154,7 +176,10 @@ mod tests {
         let mut store = ExperienceStore::new(3).expect("positive capacity");
         store.insert(entry(9)).expect("insert");
         store.insert(entry(2)).expect("insert");
-        assert_eq!(store.entries()[0].template().base().id(), TemplateId::new(2));
+        assert_eq!(
+            store.entries()[0].template().base().id(),
+            TemplateId::new(2)
+        );
         assert!(store.get(TemplateId::new(9)).is_some());
         assert_eq!(store.len(), 2);
     }
@@ -165,9 +190,14 @@ mod tests {
         store.insert(entry(1)).expect("insert");
         assert_eq!(
             store.insert(entry(1)),
-            Err(StoreError::DuplicateTemplate { template: TemplateId::new(1) })
+            Err(StoreError::DuplicateTemplate {
+                template: TemplateId::new(1)
+            })
         );
-        assert_eq!(store.insert(entry(2)), Err(StoreError::Full { capacity: 1 }));
+        assert_eq!(
+            store.insert(entry(2)),
+            Err(StoreError::Full { capacity: 1 })
+        );
     }
 
     #[test]

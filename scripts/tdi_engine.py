@@ -38,6 +38,16 @@ def main(argv=None):
     parser.add_argument("--timeout", type=float, default=30)
     sub = parser.add_subparsers(dest="operation", required=True)
     sub.add_parser("doctor")
+    p = sub.add_parser("sensitivity-plan")
+    p.add_argument("--protocol", type=Path, required=True); p.add_argument("--output", type=Path, required=True)
+    p = sub.add_parser("sensitivity-fixture-plan")
+    p.add_argument("--plan", type=Path, required=True); p.add_argument("--function", choices=("additive", "ishigami"), required=True)
+    p.add_argument("--output", type=Path, required=True)
+    p = sub.add_parser("sensitivity-analyze")
+    p.add_argument("--plan", type=Path, required=True); p.add_argument("--output", type=Path, required=True)
+    source = p.add_mutually_exclusive_group(required=True)
+    source.add_argument("--selections", type=Path); source.add_argument("--observations", type=Path); source.add_argument("--campaign")
+    p.add_argument("--worker", type=Path); p.add_argument("--worker-sha256"); p.add_argument("--source-commit")
     for verb in ("validate", "plan"):
         p = sub.add_parser(verb); p.add_argument("spec", type=Path)
     p = sub.add_parser("fixture-plan")
@@ -79,11 +89,21 @@ def main(argv=None):
     p.add_argument("--source-commit", required=True); p.add_argument("--output", type=Path, required=True)
     for verb in ("retry-export", "reconcile-export"):
         p = sub.add_parser(verb); p.add_argument("export_id"); p.add_argument("--run-id")
+    p = sub.add_parser("search-fixture")
+    p.add_argument("--worker", type=Path, required=True); p.add_argument("--tdi-source-commit", required=True)
+    p.add_argument("--forge-worker", type=Path, required=True); p.add_argument("--forge-sha256", required=True); p.add_argument("--forge-source-commit", required=True)
+    p.add_argument("--strategy", choices=("grid", "random-without-replacement"), default="grid"); p.add_argument("--seed", default="0")
+    p = sub.add_parser("searches"); p.add_argument("--after", type=int, default=0); p.add_argument("--limit", type=int, default=100)
+    p = sub.add_parser("search-inspect"); p.add_argument("search")
+    for verb in ("search-run", "search-resume", "search-cancel"):
+        p = sub.add_parser(verb); p.add_argument("search")
+        if verb != "search-cancel":
+            p.add_argument("--max-stages", type=int, default=128)
     args = parser.parse_args(argv)
     try:
         result = dispatch(args)
         code = durable.EXIT_OK
-        if isinstance(result, dict) and result.get("phase") in ("failed", "cancelled"):
+        if isinstance(result, dict) and (result.get("phase") in ("failed", "cancelled") or result.get("execution_error") is True):
             code = durable.EXIT_TRIAL_FAILURE
         if isinstance(result, dict) and result.get("status") == "resource-rejected":
             code = durable.EXIT_TRIAL_FAILURE
@@ -111,6 +131,42 @@ def main(argv=None):
 def dispatch(args):
     """Execute one CLI operation; network clients are created only when needed."""
     op = args.operation
+    if op in ("sensitivity-plan", "sensitivity-fixture-plan", "sensitivity-analyze"):
+        from tdi_sensitivity import make_plan, validate_plan, collect, analyze
+        if args.output.exists() or args.output.is_symlink():
+            raise durable.StorageError("sensitivity output already exists")
+        if op == "sensitivity-plan":
+            plan = make_plan(read_json(args.protocol))
+            atomic_json(args.output, plan)
+            return {"identity": plan["identity"], "rows": len(plan["rows"]), "path": str(args.output), "execution_started": False}
+        plan = validate_plan(read_json(args.plan, max_items=1000000))
+        if op == "sensitivity-fixture-plan":
+            from tdi_sensitivity_fixture import prepare
+            client = HubClient(args.hub, token=os.environ.get("TDI_HUB_TOKEN"), allow_loopback_http=args.allow_loopback_http, timeout=args.timeout)
+            spec = prepare(client, plan, args.function)
+            atomic_json(args.output, spec)
+            return {"campaign_identity": identity("tdi-operational-campaign/v1", spec), "path": str(args.output), "execution_started": False}
+        worker = None
+        if plan["protocol"]["method"] != "ablation":
+            if not all((args.worker, args.worker_sha256, args.source_commit)):
+                raise durable.ContractError("sensitivity analysis requires a pinned SciRust worker")
+            from tdi_scirust_client import SciRustStats
+            worker = SciRustStats(args.worker, args.worker_sha256, args.source_commit)
+        if args.observations:
+            observations = read_json(args.observations, max_items=1000000)
+        else:
+            with EngineStore(args.catalogue, readonly=True) as store:
+                if args.campaign:
+                    campaign = store.get(args.campaign)
+                    selections = [{"campaign": args.campaign, "step": step, "output": output}
+                                  for step, outputs in campaign["spec"]["outputs"].items() for output, contract in outputs.items()
+                                  if contract["json_fields"].get("plan_identity") == plan["identity"]]
+                else:
+                    selections = read_json(args.selections)
+                observations = collect(store, plan, selections)
+        report = analyze(plan, observations, worker)
+        atomic_json(args.output, report)
+        return {"identity": report["identity"], "path": str(args.output), "result": report["result"], "scientific_verdict": report["scientific_verdict"]}
     if op == "capacity":
         from tdi_physical_telemetry import capacity_snapshot
         return capacity_snapshot()
@@ -147,8 +203,8 @@ def dispatch(args):
         from tdi_engine_viewer import serve
         serve(args.catalogue, args.port)
         return {"status": "stopped"}
-    readonly = op in ("status", "inspect", "compare", "events", "backup", "export", "cache-request", "cache-get", "exports", "inspect-export")
-    if op in ("fixture-plan", "library-fixture-plan", "submit", "run-local-admitted", "run", "resume", "cancel", "attach", "export", "restore", "cache-get"):
+    readonly = op in ("status", "inspect", "compare", "events", "backup", "export", "cache-request", "cache-get", "exports", "inspect-export", "searches", "search-inspect")
+    if op in ("fixture-plan", "library-fixture-plan", "submit", "run-local-admitted", "run", "resume", "cancel", "attach", "export", "restore", "cache-get", "search-fixture", "search-run", "search-resume", "search-cancel"):
         client = HubClient(args.hub, token=os.environ.get("TDI_HUB_TOKEN"),
                            allow_loopback_http=args.allow_loopback_http, timeout=args.timeout)
     if op in ("fixture-plan", "library-fixture-plan"):
@@ -163,6 +219,18 @@ def dispatch(args):
         atomic_json(args.output, spec)
         return {"path": str(args.output), "campaign_identity": identity("tdi-operational-campaign/v1", spec)}
     with EngineStore(args.catalogue, readonly=readonly) as store:
+        if op == "searches":
+            return store.list_searches(after=args.after, limit=args.limit)
+        if op == "search-inspect":
+            return store.get_search(args.search)
+        if op in ("search-fixture", "search-run", "search-resume", "search-cancel"):
+            from tdi_forge_search import ForgeClient, prepare_fixture, run_search, cancel_search
+            if op == "search-fixture":
+                forge = ForgeClient(args.forge_worker, args.forge_sha256, args.forge_source_commit)
+                return prepare_fixture(client, store, forge, args.worker, args.tdi_source_commit, strategy=args.strategy, seed=args.seed)
+            if op == "search-cancel":
+                return cancel_search(client, store, args.search)
+            return run_search(client, store, args.search, max_stages=args.max_stages)
         if op == "run-local-admitted":
             from tdi_resource_admission import execute_local_admitted
             return execute_local_admitted(client, store, read_json(args.spec), read_json(args.roots) if args.roots else {},

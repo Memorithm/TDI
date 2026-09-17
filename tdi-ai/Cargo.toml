@@ -38,3 +38,111 @@ required-features = ["experimental"]
 [[example]]
 name = "tdi2_intuition_development"
 required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_validation"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_motif_b2"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_motif_b0"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_motif_b1"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_support_scaling"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_evidence_quality"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_threshold_sweep"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_distractor_stress"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_ood_abstention"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_ambiguity"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_context_development"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_context_ablation"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_context_validation"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_temporal_transfer_development"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_temporal_order_control"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_temporal_transfer_validation"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_analogy_development"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_analogy_relation_ablation"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_analogy_validation"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_generalization_review"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_specialization_review"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_consolidation_sequence"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_calibration_diagnostic"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_operation_accounting"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_external_latency"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_logical_memory"
+required-features = ["experimental"]
+
+[[example]]
+name = "tdi2_intuition_deterministic_replay"
+required-features = ["experimental"]

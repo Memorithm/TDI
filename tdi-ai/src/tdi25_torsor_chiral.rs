@@ -13,7 +13,7 @@ use super::tdi22_torsor::{
     TORSOR_CONTRACT, Torsor3, TorsorError, Twist3, Vec3, factorized_pairing,
 };
 use super::tdi24_chiral::{
-    CHIRAL_CONTRACT, CHIRAL_WIDTH, Chiral6, ChiralError, ChiralScoreWeights, chiral_score,
+    CHIRAL_CONTRACT, Chiral6, ChiralError, ChiralScoreWeights, chiral_score,
 };
 
 /// Versioned Stage-0 TDI-25 comparison contract.
@@ -166,7 +166,9 @@ impl fmt::Display for Tdi25Error {
         match self {
             Self::Torsor(error) => write!(formatter, "torsor arm rejected fixture: {error}"),
             Self::Chiral(error) => write!(formatter, "chiral arm rejected fixture: {error}"),
-            Self::NonFiniteGeneric => formatter.write_str("generic six-component carrier must be finite"),
+            Self::NonFiniteGeneric => {
+                formatter.write_str("generic six-component carrier must be finite")
+            }
             Self::NonFiniteScalar { field } => write!(formatter, "{field} must be finite"),
         }
     }
@@ -176,9 +178,9 @@ impl std::error::Error for Tdi25Error {}
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::tdi22_torsor::direct_pairing;
-    use super::super::tdi24_chiral::observables;
+    use super::super::tdi24_chiral::{CHIRAL_WIDTH, observables};
+    use super::*;
 
     fn v(x: f64, y: f64, z: f64) -> Vec3 {
         Vec3::new(x, y, z).unwrap()
@@ -213,12 +215,8 @@ mod tests {
     #[test]
     fn torsor_bridge_matches_upstream_factorized_and_direct_pairings() {
         let query = Twist3::new(v(1.0, -2.0, 3.0), v(0.5, 4.0, -1.0)).unwrap();
-        let key = Torsor3::new(
-            v(2.0, 3.0, -4.0),
-            v(-5.0, 7.0, 11.0),
-            v(13.0, -17.0, 19.0),
-        )
-        .unwrap();
+        let key =
+            Torsor3::new(v(2.0, 3.0, -4.0), v(-5.0, 7.0, 11.0), v(13.0, -17.0, 19.0)).unwrap();
         let position = v(-23.0, 29.0, 31.0);
         let bridged = torsor_arm_score(query, key, position).unwrap();
         close(bridged, factorized_pairing(query, key, position).unwrap());
@@ -238,7 +236,10 @@ mod tests {
     fn generic_control_is_plain_six_dimensional_dot_product() {
         let q = Generic6::new([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
         let k = Generic6::new([-1.0, 0.5, 2.0, -3.0, 4.0, 1.5]).unwrap();
-        close(generic_arm_score(q, k).unwrap(), 1.0 * -1.0 + 2.0 * 0.5 + 3.0 * 2.0 + 4.0 * -3.0 + 5.0 * 4.0 + 6.0 * 1.5);
+        close(
+            generic_arm_score(q, k).unwrap(),
+            -1.0 + 2.0 * 0.5 + 3.0 * 2.0 - 4.0 * 3.0 + 5.0 * 4.0 + 6.0 * 1.5,
+        );
     }
 
     #[test]
