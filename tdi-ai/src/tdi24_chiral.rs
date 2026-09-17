@@ -127,8 +127,28 @@ impl Chiral6 {
     }
 
     /// Parity-odd bilinear `chi(q,k)=q^T J k`.
+    ///
+    /// The six products are accumulated as three coordinate-local antisymmetric
+    /// differences `q+_i k-_i - q-_i k+_i`.  This keeps the fail-closed success
+    /// domain symmetric under argument exchange: swapping `(q, k)` negates each
+    /// coordinate contribution before the same accumulation order is applied.
     pub fn chiral_pairing(self, key: Self) -> Result<f64, ChiralError> {
-        self.dot(key.complex_structure())
+        let query_even = self.even();
+        let query_odd = self.odd();
+        let key_even = key.even();
+        let key_odd = key.odd();
+        let mut accumulator = 0.0;
+
+        for index in 0..3 {
+            let even_odd =
+                finite_mul(query_even[index], key_odd[index], "chiral_even_odd_product")?;
+            let odd_even =
+                finite_mul(query_odd[index], key_even[index], "chiral_odd_even_product")?;
+            let component = finite_add(even_odd, -odd_even, "chiral_component")?;
+            accumulator = finite_add(accumulator, component, "chiral_accumulator")?;
+        }
+
+        Ok(accumulator)
     }
 }
 
@@ -318,6 +338,18 @@ mod tests {
         let k = c([-4.0, 1.0, 2.0], [3.0, 0.25, -0.75]);
         close(q.chiral_pairing(k).unwrap(), -k.chiral_pairing(q).unwrap());
         close(q.chiral_pairing(q).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn chiral_pairing_overflow_domain_is_symmetric_under_argument_exchange() {
+        let q = c([f64::MAX, f64::MAX, 0.0], [f64::MAX, 0.0, 0.0]);
+        let k = c([1.0, 0.0, 0.0], [1.0, 1.0, 0.0]);
+
+        let qk = q.chiral_pairing(k).unwrap();
+        let kq = k.chiral_pairing(q).unwrap();
+        assert_eq!(qk, f64::MAX);
+        assert_eq!(kq, -f64::MAX);
+        assert_eq!(qk, -kq);
     }
 
     #[test]
