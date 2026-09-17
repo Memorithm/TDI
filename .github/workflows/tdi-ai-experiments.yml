@@ -1,6 +1,8 @@
 name: TDI AI experimental contracts
 on:
   pull_request:
+    paths-ignore:
+      - 'docs/engineering/**'
   push:
     branches: [main]
 permissions:

@@ -2,6 +2,8 @@ name: TDI-11.2 model observation freeze
 
 on:
   pull_request:
+    paths-ignore:
+      - 'docs/engineering/**'
   push:
     branches:
       - main

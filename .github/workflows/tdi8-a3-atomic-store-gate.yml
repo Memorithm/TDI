@@ -2,6 +2,8 @@ name: TDI-8.1 A3 atomic store gate
 
 on:
   pull_request:
+    paths-ignore:
+      - 'docs/engineering/**'
   push:
     branches:
       - main

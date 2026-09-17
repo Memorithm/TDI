@@ -2,6 +2,8 @@ name: TDI-8.1 A0 A1 adapter preflight
 
 on:
   pull_request:
+    paths-ignore:
+      - 'docs/engineering/**'
   push:
     branches:
       - main

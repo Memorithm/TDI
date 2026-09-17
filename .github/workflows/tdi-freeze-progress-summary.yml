@@ -2,6 +2,8 @@ name: TDI freeze progress summary
 
 on:
   pull_request:
+    paths-ignore:
+      - 'docs/engineering/**'
   push:
     branches:
       - main
