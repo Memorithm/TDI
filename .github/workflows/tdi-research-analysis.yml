@@ -41,7 +41,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           repository: Memorithm/scirust
-          ref: 06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0
+          ref: be7fcca3b31cedf722d71a2a56db8f6d088037cf
           persist-credentials: false
           path: integration-scirust
       - name: Check out the pinned Hub dependency
@@ -65,7 +65,7 @@ jobs:
         env:
           PYTHONPATH: scripts
           TDI_SCIRUST_STATS_BIN: ${{ github.workspace }}/integration-scirust/target/debug/examples/research_stats
-          TDI_SCIRUST_SOURCE_COMMIT: 06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0
+          TDI_SCIRUST_SOURCE_COMMIT: be7fcca3b31cedf722d71a2a56db8f6d088037cf
           TDI_HUBD_BIN: ${{ github.workspace }}/integration-hub/target/debug/scirust-hubd
           TDI_DURABLE_WORKER: ${{ github.workspace }}/integration-tdi/target/debug/examples/durable_worker
         run: python3 -m unittest -v scripts/test_tdi_research_analysis.py scripts/test_tdi_analysis_integration.py

@@ -2,6 +2,8 @@
 
 This is the durable engineering handoff for the industrialization programme. It records software evidence only and does not authorize or reinterpret a scientific stage.
 
+**SciRust statistics provenance update (2026-09-17):** Memorithm/scirust#1452 qualified on final head `b92414e88744315d19cf1810a0482040621a654b` and merged as `be7fcca3b31cedf722d71a2a56db8f6d088037cf`. The shared TDI research-analysis consumer is repinned to that immutable merge on this corrective branch. This closes the stale candidate-source pin in the #296 integration only after this branch itself passes exact-head qualification; sensitivity PR #387 must independently repin and requalify its own final head.
+
 **Current exact-head qualification note (2026-09-16):** later Lot-H/operational/export work advanced after several rows below were written. For current qualification state of PRs #279, #283–#288 and active candidates #296/#331, this handoff explicitly delegates to [`industrialization-qualification-audit-2026-09-16.md`](industrialization-qualification-audit-2026-09-16.md). Where an older row below conflicts with that dated exact-head audit, use the audit for current state and retain the older row only as historical programme context. Merge presence alone is not a qualification result.
 
 ## Baseline
