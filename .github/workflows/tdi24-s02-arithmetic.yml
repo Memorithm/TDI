@@ -1,0 +1,37 @@
+name: TDI-24.0 slice 02 arithmetic hardening
+
+on:
+  pull_request:
+    paths:
+      - 'tdi-ai/src/tdi24_chiral.rs'
+      - 'tdi-ai/src/experimental.rs'
+      - 'docs/TDI-24-CAMPAIGN-50.md'
+      - 'scripts/check-tdi24-s02.sh'
+      - '.github/workflows/tdi24-s02-arithmetic.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tdi-ai/src/tdi24_chiral.rs'
+      - 'tdi-ai/src/experimental.rs'
+      - 'docs/TDI-24-CAMPAIGN-50.md'
+      - 'scripts/check-tdi24-s02.sh'
+      - '.github/workflows/tdi24-s02-arithmetic.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tdi24-s02-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  arithmetic-hardening:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: clippy
+      - run: bash scripts/check-tdi24-s02.sh
