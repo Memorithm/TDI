@@ -64,9 +64,7 @@ pub fn match_template(template: &Template, state: &BooleanState) -> TemplateMatc
 #[cfg(test)]
 mod tests {
     use super::match_template;
-    use crate::experimental::tdi2_intuition::{
-        BooleanState, PredicateId, Template, TemplateId,
-    };
+    use crate::experimental::tdi2_intuition::{BooleanState, PredicateId, Template, TemplateId};
 
     fn template() -> Template {
         Template::new(

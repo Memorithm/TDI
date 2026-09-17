@@ -54,10 +54,7 @@ pub fn capacity_schedule(max_capacity: usize) -> Vec<usize> {
 }
 
 /// Evenly spaced inference-weight thresholds from zero through `max_threshold`.
-pub fn threshold_schedule(
-    max_threshold: f64,
-    steps: usize,
-) -> Result<Vec<f64>, ScalingError> {
+pub fn threshold_schedule(max_threshold: f64, steps: usize) -> Result<Vec<f64>, ScalingError> {
     if !max_threshold.is_finite() || max_threshold < 0.0 {
         return Err(ScalingError::InvalidEndpoint);
     }
@@ -72,8 +69,12 @@ pub fn threshold_schedule(
 impl core::fmt::Display for ScalingError {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::InvalidEndpoint => formatter.write_str("scaling endpoint must be finite and non-negative"),
-            Self::ZeroSteps => formatter.write_str("scaling schedule requires at least one interval"),
+            Self::InvalidEndpoint => {
+                formatter.write_str("scaling endpoint must be finite and non-negative")
+            }
+            Self::ZeroSteps => {
+                formatter.write_str("scaling schedule requires at least one interval")
+            }
         }
     }
 }
@@ -97,6 +98,9 @@ mod tests {
 
     #[test]
     fn threshold_schedule_includes_both_endpoints() {
-        assert_eq!(threshold_schedule(1.0, 4), Ok(vec![0.0, 0.25, 0.5, 0.75, 1.0]));
+        assert_eq!(
+            threshold_schedule(1.0, 4),
+            Ok(vec![0.0, 0.25, 0.5, 0.75, 1.0])
+        );
     }
 }
