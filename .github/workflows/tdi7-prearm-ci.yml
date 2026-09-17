@@ -2,6 +2,8 @@ name: TDI-7 pre-arm integrity
 
 on:
   pull_request:
+    paths-ignore:
+      - 'docs/engineering/**'
   push:
     branches:
       - main
