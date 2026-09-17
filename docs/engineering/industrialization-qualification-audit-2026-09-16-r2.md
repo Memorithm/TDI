@@ -46,9 +46,10 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 ### PR #389 — shared admission-evidence storage
 
 - Parent #385 is now merged on `main`.
-- #389 has been retargeted to `main` and non-destructively refreshed. Current exact head: `2a74502d5b84d17658db5fd7467b3108646a6d56`.
+- #389 has been retargeted to `main` and non-destructively refreshed through merged #465. Current exact head: `4cc7c022f74c780b3d01af8cac2a188d84bc3f23`.
 - The refresh preserved the implementation tree while adding current `main` ancestry; the branch also pins the qualified Forge #39 merge `28067ab0aa1d52a2260d9bb2bf35a346547a292a`.
-- The PR remains **draft**. Queued/pending/in-progress checks are not green and prior-head evidence does not qualify the current head.
+- The preceding head `2a74502d5b84d17658db5fd7467b3108646a6d56` completed every returned exact-head workflow successfully, including Rust/Public Rust/MSRV, operational engine, real-library adapters, Forge search, shared research analysis and the dedicated shared-admission-evidence gate. That evidence does not qualify `4cc7c022...`.
+- The PR remains **draft**. On the refreshed head the dedicated shared-admission-evidence gate, real-library adapters, Elastic admission and Forge search are already green while many baseline/research workflows are still queued; queued/pending/in-progress checks are not green.
 - The retained 16-trial/32-output fixture records 1,328,144 reconstructed JSON bytes versus 150,890 stored result-plus-proof JSON bytes. This is a scoped logical/storage-fixture observation only: it is not SQLite-page savings, latency, total memory, DRAM, general throughput, or disk power-loss durability evidence (`fsync=volatile`).
 - State: **candidate; blocked on its own complete exact-head qualification and final review**.
 
