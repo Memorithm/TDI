@@ -204,7 +204,7 @@ class SearchMigrationTests(unittest.TestCase):
                 self.assertEqual(2, db.execute("PRAGMA user_version").fetchone()[0])
                 self.assertIsNone(db.execute("SELECT name FROM sqlite_master WHERE name='searches'").fetchone())
             with EngineStore(path) as current:
-                self.assertEqual(3, current.db.execute("PRAGMA user_version").fetchone()[0])
+                self.assertEqual(4, current.db.execute("PRAGMA user_version").fetchone()[0])
                 self.assertEqual('{ "original": true }', current.db.execute("SELECT receipt FROM exports").fetchone()[0])
                 current.backup(Path(directory) / "backup.sqlite")
             with EngineStore(Path(directory) / "backup.sqlite", readonly=True) as backup:
