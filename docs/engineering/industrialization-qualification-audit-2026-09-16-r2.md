@@ -6,7 +6,7 @@ No statement below authorizes a protected/final scientific stage, a hardware cla
 
 ## Default-branch checkpoint
 
-- TDI `main`: `d8785a04d112e732bf92bd115d23640e7bfb60e7` (merge of PR #332).
+- TDI `main`: `71f49fa6335aae51845e92b36a71ca5e7beec6fa` (current default-branch checkpoint through merged PR #462).
 - The branch contains the older dated audit. Where that audit still calls #296 or #331 open candidates, this R2 overlay supersedes only that stale repository-state fact; its qualification cautions remain in force.
 
 ## Reconciled merged work
@@ -15,7 +15,7 @@ No statement below authorizes a protected/final scientific stage, a hardware cla
 
 - PR #296 is merged on TDI; merge SHA `cc07d5c55bd2b5aca78b6b8074da21e508a1c735`.
 - Its consumer was pinned to SciRust candidate revision `06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0` with an explicit requirement to repin after the reviewed, fully exact-head-green SciRust #1452 merge.
-- SciRust #1452 is still open. Its current candidate head is `7981120d9b703a5d82796608e7565e3763d8c611`; at this reconciliation the Dream Real Cache Policy run on that exact head is failed and multiple other workflows are queued.
+- SciRust #1452 is still open. Its current candidate head is `cbfb6b43ea7f9e0fd303008ef5e701620fe905a2`. The preceding exact head retained a physical Thor/cuBLASLt failure; the new head pins model/tokenizer/dataset/source provenance and preserves failure artifacts, so its newly started exact-head workflow set must complete before any downstream promotion.
 - Therefore the TDI↔SciRust analysis path is **merged but not finally qualified**. Required closure: qualify and merge SciRust #1452, repin TDI to its resulting merge SHA in a new PR, then run all applicable TDI gates on that new exact head.
 
 ### PR #331 — real library replay adapters
@@ -34,10 +34,10 @@ No statement below authorizes a protected/final scientific stage, a hardware cla
 
 ### PR #385 — durable Forge search
 
-- TDI head: `135fc20520fed390d23e78f6374a6a0207a26a4d`.
-- It pins Forge #39 candidate `0d48a91a5eed6a9ae09a5eacd7c4f18df8bdd333`.
-- Forge #39 is open; both `Scientific ask tell process qualification` and `CI` are queued on that candidate revision at this reconciliation.
-- State: **blocked on upstream final Forge qualification**. TDI #385 must also satisfy its own full exact-head gate set afterward.
+- TDI head: `c270ac658384aa2ea732418c5f2c9927b2480754`.
+- Forge #39 is now merged as `28067ab0aa1d52a2260d9bb2bf35a346547a292a`, and #385 is repinned to that merge revision.
+- The refreshed TDI branch is mergeable and has no unresolved material review thread, but its current exact-head workflow set remains incomplete/queued.
+- State: **candidate, upstream Forge pin resolved; blocked on TDI exact-head qualification**. No partner execution, holdout or scientific verdict authority is inferred from the merged Forge dependency.
 
 ### PR #389 — shared evidence storage
 
@@ -53,9 +53,9 @@ No statement below authorizes a protected/final scientific stage, a hardware cla
 
 ### PR #388 — measured engine benchmarks
 
-- Head: `fdd0f57dc3f5fe885601229b9c2d570e54b35635`.
+- Current head: `9e8ba6bb5e2cad4d6fa1eca6b33b3fb0a371f6da`; the PR remains draft and currently non-mergeable against the advanced default branch.
 - The dedicated benchmark workflow checks out the exact PR head and pins scirust-hub `ccdcb99a4573dbefb944af0df713101b100b5f78`.
-- At this reconciliation the returned workflow set is not green: many runs are queued and several runs, including `TDI measured engine benchmarks`, are currently cancelled.
+- Earlier cancelled/partial runs are retained as negative infrastructure evidence. The current head must receive a fresh complete exact-head qualification after synchronization before promotion.
 - State: **candidate, not qualified**. No cancelled, queued or partial result is converted into a benchmark or performance claim.
 
 ## Evidence discipline retained
@@ -70,7 +70,7 @@ No statement below authorizes a protected/final scientific stage, a hardware cla
 
 ## Next closure order
 
-1. Qualify Forge #39, then TDI #385, then the stacked #389 path without bypassing Hub/TDI ownership boundaries.
+1. Complete TDI #385 exact-head qualification on the final Forge #39 merge pin, then resynchronize/qualify the stacked #389 path without bypassing Hub/TDI ownership boundaries.
 2. Qualify and merge SciRust #1452; open a corrective TDI pin PR for merged #296 and repin #387 before either path is considered final.
-3. Re-run/complete #388 measured-engine gates on its exact final head; preserve cancelled or negative executions as evidence rather than silently replacing them with claims.
+3. Resynchronize #388 with the current default branch, then re-run/complete its measured-engine gates on the exact final head; preserve cancelled or negative executions as evidence rather than silently replacing them with claims.
 4. Keep FLAT/NNIS hardware qualification separate and blocked until the required physical evidence exists.
