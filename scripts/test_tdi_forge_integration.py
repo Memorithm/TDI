@@ -55,6 +55,11 @@ class SearchIntegrationTests(unittest.TestCase):
             self.assertGreater(c["metrics"][1]["value"], 0)
         self.assertEqual(completed, self.cli("search-resume", key))
         with EngineStore(self.catalogue, readonly=True) as store:
+            from tdi_research_views import render_searches
+            page = render_searches(store, key)
+            self.assertIn(b'incorrect', page)
+            self.assertIn(b'Unmeasured attempts', page)
+            self.assertIn(b'Stored Forge projection', page)
             stages = store.db.execute("SELECT campaign FROM search_stages WHERE search=?", (key,)).fetchall()
             self.assertEqual(8, len(stages))
             values = [store.results(row[0])[0]["evidence"]["json"] for row in stages]
