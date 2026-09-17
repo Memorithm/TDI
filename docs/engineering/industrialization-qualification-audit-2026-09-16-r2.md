@@ -17,7 +17,9 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 
 - PR #296 is merged on TDI as `cc07d5c55bd2b5aca78b6b8074da21e508a1c735`.
 - It still pins the earlier SciRust candidate `06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0`, despite its declared dependency on the reviewed final SciRust revision.
-- SciRust #1452 remains open at `96bad0998db5a3361a013fb4e1b29470f8ddaf35`. Its statistics-reference, CI, Rustdoc, ARM64, M53 and M54 gates are green, while `Dream Real Cache Policy` remains a real exact-head failure. The retained physical Thor run reaches the Dream checkpoint and fails in the first attention `q_proj` with `CUBLAS_STATUS_NOT_INITIALIZED` from `cublasLtMatmulAlgoGetHeuristic`; no benchmark JSON is produced. Reduced probes do not establish the root cause.
+- SciRust #1452 has been narrowed back to its statistics-only scope. Its current exact head is `b92414e88744315d19cf1810a0482040621a654b`; the Dream/Thor-only changes and their retained physical negative evidence were extracted to draft SciRust #1455 rather than silently discarded.
+- On #1452 head `b92414e...`, Research statistics reference qualification, Workspace Rustdoc, Native ARM64, M53/M54, WGPU, API lexicon and the other returned completed workflows are green; repository `CI` is still in progress at this refresh. Therefore #1452 is **not yet qualified or merged**, but it is no longer blocked by treating the unrelated Dream gate as applicable to the statistics diff.
+- The retained Dream negative result remains owned by draft #1455: on physical Thor the checkpoint loads, then the first attention `q_proj` fails with `CUBLAS_STATUS_NOT_INITIALIZED` from `cublasLtMatmulAlgoGetHeuristic`; no benchmark JSON exists and the root cause is not established.
 - State: **merged but not finally qualified across the TDI↔SciRust pin**. Closure requires a fully qualified SciRust #1452 merge, then a corrective TDI pin PR to the resulting merge SHA and its own exact-head qualification.
 
 ### PR #331 — real library replay adapters
@@ -46,25 +48,38 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 - Parent #385 is now merged on `main`.
 - #389 has been retargeted to `main` and non-destructively refreshed. Current exact head: `2a74502d5b84d17658db5fd7467b3108646a6d56`.
 - The refresh preserved the implementation tree while adding current `main` ancestry; the branch also pins the qualified Forge #39 merge `28067ab0aa1d52a2260d9bb2bf35a346547a292a`.
-- The PR remains **draft**. Its refreshed exact-head matrix contains 43 workflows and is not yet complete; queued/pending/in-progress checks are not green.
+- The PR remains **draft**. Queued/pending/in-progress checks are not green and prior-head evidence does not qualify the current head.
 - The retained 16-trial/32-output fixture records 1,328,144 reconstructed JSON bytes versus 150,890 stored result-plus-proof JSON bytes. This is a scoped logical/storage-fixture observation only: it is not SQLite-page savings, latency, total memory, DRAM, general throughput, or disk power-loss durability evidence (`fsync=volatile`).
 - State: **candidate; blocked on its own complete exact-head qualification and final review**.
 
 ### PR #387 — bounded sensitivity and ablation
 
-- Current published head remains `d5e5115add1689a59b0514fe999a636b5c2e404a`.
+- Current published head is `d5e5115add1689a59b0514fe999a636b5c2e404a`.
 - It still depends on the eventual reviewed, fully exact-head-green SciRust #1452 merge and must then be repinned to that final merge SHA.
 - State: **draft/blocked on final SciRust provenance plus its own exact-head gates**.
 
 ### PR #388 — measured engine baselines
 
-- The PR remains draft. Its current published branch records measured development baselines but no universal hardware/scaling result.
-- Cancelled, partial, or superseded executions remain non-green evidence and are not converted into performance claims.
-- State: **candidate, not qualified**; synchronization and a complete exact-head benchmark/software matrix are required before promotion.
+- Current published head is `b16b0701f13aeabe68d886723c471827d461a195` and the PR remains draft.
+- Its retained development baseline remains scoped evidence only; cancelled, partial, or superseded executions remain non-green evidence and are not converted into performance claims.
+- State: **candidate, not qualified**; a complete exact-head benchmark/software matrix is required before promotion.
+
+### PR #465 — local industrial contract routing
+
+- Current exact head: `884c458d0c5d903414526f1e10a973a14519c129`.
+- Scope is limited to eight `runs-on` changes for artifact/provenance, Hub edge, common partner, Forge, ElasticXxx, SciRust, FLAT-ATTENTION and NNIS contract workflows: same-repository work may use the repository-scoped `tdi` runner while fork PRs remain on GitHub-hosted `ubuntu-24.04`.
+- At this refresh the PR is non-draft and mergeable, Codex review completed with no material finding, and multiple exact-head gates are green including Public Rust, MSRV, Forge/ElasticXxx/SciRust/FLAT partner contracts and Hub edge. Rust validation and several unrelated research workflows are still queued.
+- State: **candidate; not mergeable under programme policy until every applicable exact-head workflow is complete and green**.
+
+### PR #464 — runner-load scoping
+
+- Current published head: `0d265b7754dbcd892ba0961bd8028b97a106cfa6`.
+- It remains draft and preserves the nine server-required baseline contexts while scoping non-baseline engineering-document work and cancelling superseded runs only within workflow/ref scope.
+- State: **draft candidate; exact-head qualification required before promotion**.
 
 ### PR #390 — this reconciliation
 
-- The branch has been non-destructively refreshed from current `main` after #385.
+- The branch is based on current post-#385 `main` ancestry and is being updated only with current-state evidence.
 - This documentation PR itself remains a candidate until every applicable exact-head workflow on its final head succeeds and no material review thread remains.
 
 ## Evidence and ownership discipline retained
@@ -79,7 +94,8 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 
 ## Next closure order
 
-1. Complete #389 exact-head qualification on its refreshed `main` ancestry; resolve any material P1/P2 review findings before considering it ready.
-2. Qualify and merge SciRust #1452 only after the real Dream/Thor failure is either fixed or otherwise resolved without weakening its declared gate; then open the corrective TDI #296 source-pin PR and repin #387.
-3. Resynchronize and qualify #388 on its final head while preserving all cancelled/negative executions.
-4. Continue FLAT/NNIS hardware qualification separately; do not convert software/canonical-evidence contracts into hardware, model-quality, or performance conclusions.
+1. Finish SciRust #1452 on its statistics-only exact head. If every applicable workflow is green and review remains clear, merge it; then open the corrective TDI #296 source-pin PR and repin #387 to the resulting SciRust merge SHA.
+2. Complete #465 exact-head qualification before merging the local industrial-contract runner route; queued workflows are not evidence.
+3. Complete #389 exact-head qualification on its refreshed `main` ancestry and resolve any material P1/P2 findings before considering it ready.
+4. Requalify #388 on its final head while preserving all cancelled/negative executions.
+5. Continue FLAT/NNIS hardware qualification separately; do not convert software/canonical-evidence contracts into hardware, model-quality, or performance conclusions.
