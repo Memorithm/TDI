@@ -8,6 +8,7 @@ and adversarial writers are outside this storage profile.
 from __future__ import annotations
 
 import contextlib
+import copy
 import fcntl
 import hashlib
 import os
@@ -19,7 +20,7 @@ import urllib.parse
 import tdi_artifact_contract as artifacts
 import tdi_experiment_supervisor as durable
 
-SCHEMA = 3
+SCHEMA = 4
 MAX_PAGE = 200
 
 
@@ -79,7 +80,7 @@ class EngineStore:
                 # short mutations. Never hold a file lock across a network wait:
                 # another CLI process must be able to persist cancellation.
                 fcntl.flock(self.lock, fcntl.LOCK_UN)
-            if self.db.execute("PRAGMA user_version").fetchone()[0] not in ((1, 2, SCHEMA) if readonly else (SCHEMA,)):
+            if self.db.execute("PRAGMA user_version").fetchone()[0] not in ((1, 2, 3, SCHEMA) if readonly else (SCHEMA,)):
                 raise durable.StorageError("unsupported catalogue schema")
             self.db.row_factory = sqlite3.Row
             self.db.execute("PRAGMA foreign_keys=ON")
@@ -94,18 +95,22 @@ class EngineStore:
         version = self.db.execute("PRAGMA user_version").fetchone()[0]
         if version == SCHEMA:
             return
-        if version in (1, 2):
+        if version in (1, 2, 3):
             tables = {row[0] for row in self.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             expected = {"campaigns", "events", "results", "cache", "restored_artifacts"}
-            if version == 2:
+            if version >= 2:
                 expected.add("exports")
+            if version >= 3:
+                expected.update(("searches", "search_events", "search_stages"))
             if tables != expected:
                 raise durable.StorageError("unrecognized previous catalogue tables")
             self.db.execute("BEGIN IMMEDIATE")
             try:
                 if version == 1:
                     self._create_exports()
-                self._create_searches()
+                if version < 3:
+                    self._create_searches()
+                self._create_shared_proofs()
                 self.db.execute(f"PRAGMA user_version={SCHEMA}")
                 self.db.commit()
                 durable._fsync_directory(self.path.parent)
@@ -129,6 +134,7 @@ class EngineStore:
                 self.db.execute(sql)
             self._create_exports()
             self._create_searches()
+            self._create_shared_proofs()
             self.db.execute(f"PRAGMA user_version={SCHEMA}")
             self.db.commit()
             durable._fsync_directory(self.path.parent)
@@ -139,6 +145,55 @@ class EngineStore:
     def _create_exports(self):
         self.db.execute("CREATE TABLE exports (id TEXT PRIMARY KEY, campaign TEXT NOT NULL REFERENCES campaigns(id), kind TEXT NOT NULL, endpoint TEXT NOT NULL, plan TEXT NOT NULL, state TEXT NOT NULL, receipt TEXT NOT NULL, updated_ns INTEGER NOT NULL)")
         self.db.execute("CREATE INDEX campaign_exports ON exports(campaign, updated_ns)")
+
+    def _create_shared_proofs(self):
+        self.db.execute("CREATE TABLE shared_proofs (id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
+        self.db.execute("CREATE INDEX campaigns_by_time ON campaigns(created_ns,id)")
+        self.db.execute("CREATE INDEX campaigns_by_phase_time ON campaigns(phase,created_ns,id)")
+
+    def _pack_result(self, evidence):
+        """Intern one repeated G3 admission inside the caller's transaction.
+
+        Legacy rows remain byte-for-byte unchanged. Public readers reconstruct
+        the complete original evidence; the private storage envelope never
+        becomes an artifact, exported proof or changed scientific identity.
+        """
+        if evidence.get("kind") == "tdi-stored-result/v1":
+            raise durable.ContractError("private result storage envelope is reserved")
+        binding = evidence.get("binding")
+        if not isinstance(binding, dict) or not isinstance(binding.get("workflow_admission_binding"), dict):
+            return durable.canonical(evidence)
+        compact = copy.deepcopy(evidence)
+        proof = compact["binding"].pop("workflow_admission_binding")
+        key = identity("tdi-shared-admission/v1", proof)
+        raw = durable.canonical(proof)
+        self.db.execute("INSERT OR IGNORE INTO shared_proofs VALUES (?,?)", (key, raw))
+        if self.db.execute("SELECT payload FROM shared_proofs WHERE id=?", (key,)).fetchone()[0] != raw:
+            raise durable.ContractError("shared proof identity collision or corruption")
+        stored = {"kind": "tdi-stored-result/v1", "admission_identity": key,
+                  "evidence_identity": identity("tdi-result-evidence/v1", evidence), "evidence": compact}
+        return durable.canonical(stored)
+
+    def _unpack_result(self, raw):
+        """Verify the stored reference and reconstruct the exact complete evidence."""
+        value = durable.strict_json(raw)
+        if not isinstance(value, dict) or value.get("kind") != "tdi-stored-result/v1":
+            return value
+        if set(value) != {"kind", "admission_identity", "evidence_identity", "evidence"}:
+            raise durable.ContractError("invalid stored result envelope")
+        row = self.db.execute("SELECT payload FROM shared_proofs WHERE id=?", (value["admission_identity"],)).fetchone()
+        if row is None:
+            raise durable.ContractError("shared admission proof missing")
+        proof = durable.strict_json(row[0])
+        if identity("tdi-shared-admission/v1", proof) != value["admission_identity"]:
+            raise durable.ContractError("shared admission proof corrupted")
+        evidence = value["evidence"]
+        if not isinstance(evidence, dict) or not isinstance(evidence.get("binding"), dict) or "workflow_admission_binding" in evidence["binding"]:
+            raise durable.ContractError("invalid compact evidence binding")
+        evidence["binding"]["workflow_admission_binding"] = proof
+        if identity("tdi-result-evidence/v1", evidence) != value["evidence_identity"]:
+            raise durable.ContractError("stored evidence identity mismatch")
+        return evidence
 
     def _create_searches(self):
         self.db.execute("CREATE TABLE searches (id TEXT PRIMARY KEY, spec TEXT NOT NULL, binding TEXT NOT NULL, response TEXT NOT NULL, phase TEXT NOT NULL, sequence INTEGER NOT NULL, created_ns INTEGER NOT NULL)")
@@ -374,10 +429,11 @@ class EngineStore:
             row = self.db.execute("SELECT evidence FROM results WHERE campaign=? AND step=? AND output=?",
                                   (campaign, step, output)).fetchone()
             if row:
-                if row[0] != raw:
+                if durable.canonical(self._unpack_result(row[0])) != raw:
                     raise durable.ContractError("authoritative result changed")
                 return
-            self.db.execute("INSERT INTO results VALUES (?,?,?,?)", (campaign, step, output, raw))
+            packed = self._pack_result(evidence)
+            self.db.execute("INSERT INTO results VALUES (?,?,?,?)", (campaign, step, output, packed))
             self._event(campaign, "result-verified", {"step": step, "output": output,
                                                       "evidence_id": identity("tdi-result-evidence/v1", evidence)})
 
@@ -386,7 +442,7 @@ class EngineStore:
         self._page(after, limit)
         rows = self.db.execute("SELECT step,output,evidence FROM results WHERE campaign=? ORDER BY step,output LIMIT ? OFFSET ?",
                                (campaign, limit, after))
-        return [{"step": r[0], "output": r[1], "evidence": durable.strict_json(r[2])} for r in rows]
+        return [{"step": r[0], "output": r[1], "evidence": self._unpack_result(r[2])} for r in rows]
 
     def result(self, campaign, step, output):
         """Read one exact verified output, rejecting absent or incomplete evidence."""
@@ -394,7 +450,7 @@ class EngineStore:
                               (campaign, step, output)).fetchone()
         if row is None:
             raise durable.ContractError("verified output is unavailable")
-        return durable.strict_json(row[0])
+        return self._unpack_result(row[0])
 
     @staticmethod
     def _page(after, limit):
@@ -404,8 +460,10 @@ class EngineStore:
     def list(self, *, after=0, limit=MAX_PAGE, phase=None):
         """List campaigns in insertion order with an optional exact phase filter."""
         self._page(after, limit)
-        rows = self.db.execute("SELECT id,phase,workflow,created_ns FROM campaigns WHERE (? IS NULL OR phase=?) ORDER BY created_ns,id LIMIT ? OFFSET ?",
-                               (phase, phase, limit, after))
+        if phase is None:
+            rows = self.db.execute("SELECT id,phase,workflow,created_ns FROM campaigns ORDER BY created_ns,id LIMIT ? OFFSET ?", (limit, after))
+        else:
+            rows = self.db.execute("SELECT id,phase,workflow,created_ns FROM campaigns WHERE phase=? ORDER BY created_ns,id LIMIT ? OFFSET ?", (phase, limit, after))
         return [dict(row) for row in rows]
 
     def events(self, campaign, *, after=0, limit=MAX_PAGE):
@@ -426,7 +484,7 @@ class EngineStore:
                               (campaign, step, output)).fetchone()
         if not row or self.get(campaign)["phase"] != "completed":
             raise durable.ContractError("cache source must be a completed verified result")
-        evidence = durable.strict_json(row[0])
+        evidence = self._unpack_result(row[0])
         if (evidence.get("cache_eligible") is not True
                 or evidence["artifact_identity"] != entry["artifact_identity"]
                 or evidence["provenance_identity"] != entry["provenance_identity"]):
@@ -485,7 +543,7 @@ class EngineStore:
                             (campaign, durable.canonical(record["spec"]), endpoint, "imported", record["workflow"],
                              durable.canonical(record["admission"]), durable.canonical(record["snapshot"]), record["created_ns"]))
             for result in results:
-                self.db.execute("INSERT INTO results VALUES (?,?,?,?)", (campaign, result["step"], result["output"], durable.canonical(result["evidence"])))
+                self.db.execute("INSERT INTO results VALUES (?,?,?,?)", (campaign, result["step"], result["output"], self._pack_result(result["evidence"])))
             for artifact, location in locations.items():
                 self.db.execute("INSERT INTO restored_artifacts VALUES (?,?,?)", (campaign, artifact, durable.canonical(location)))
             self._event(campaign, "imported", {"source_endpoint": record["endpoint"], "source_phase": record["phase"]})

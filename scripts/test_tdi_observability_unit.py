@@ -34,7 +34,7 @@ class ObservabilityUnitTests(unittest.TestCase):
             original = old.get(campaign)
             self.assertEqual(1, old.db.execute("PRAGMA user_version").fetchone()[0])
         with EngineStore(self.path) as upgraded:
-            self.assertEqual(3, upgraded.db.execute("PRAGMA user_version").fetchone()[0])
+            self.assertEqual(4, upgraded.db.execute("PRAGMA user_version").fetchone()[0])
             self.assertEqual(original, upgraded.get(campaign))
             self.assertEqual('{"legacy": true}', upgraded.db.execute("SELECT payload FROM events WHERE sequence=1").fetchone()[0])
             self.assertEqual('{"historical": "unaltered bytes"}', upgraded.db.execute("SELECT evidence FROM results").fetchone()[0])
