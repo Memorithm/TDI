@@ -61,7 +61,7 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 
 ### PR #388 — measured engine baselines
 
-- Current published head is `24981bb99a1662502c901f62d1b1da035fe8fa96` and the PR remains draft. GitHub currently reports it non-mergeable against the newer default branch, so it must be refreshed before a new exact-head matrix can qualify it.
+- The branch has been refreshed non-destructively from current `main`; current published head is `9c1ea100aa2d6e1fcabe0f49dfb519c28eeda6d2`. GitHub reports it structurally mergeable, but the PR remains draft and only its complete refreshed exact-head matrix can qualify it. Prior cancelled/partial runs remain retained as non-green evidence.
 - Its retained development baseline remains scoped evidence only; cancelled, partial, or superseded executions remain non-green evidence and are not converted into performance claims.
 - State: **candidate, not qualified**; a complete exact-head benchmark/software matrix is required before promotion.
 
@@ -88,7 +88,7 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 
 ### PR #464 — runner-load scoping
 
-- Current published head: `115581115cfeaaeca77d09555dce25fe87e5311d`. GitHub currently reports it non-mergeable against the newer default branch, so it must be refreshed before promotion.
+- The branch has been refreshed non-destructively from current `main`; current published head is `fbb5d3f1687c05d9e129cb642e7f26fbf2200858`. GitHub reports it structurally mergeable, but the PR remains draft and its exact-head matrix is incomplete. The refreshed branch explicitly restores `tdi8-configuration-freeze.yml` and `tdi9-configuration-freeze.yml` from qualified `main`, so the runner-load optimization does not alter those frozen gates.
 - It remains draft and preserves the nine server-required baseline contexts while scoping non-baseline engineering-document work and cancelling superseded runs only within workflow/ref scope.
 - State: **draft candidate; exact-head qualification required before promotion**.
 
@@ -110,6 +110,6 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 ## Next closure order
 
 1. Complete #387 exact-head qualification on refreshed head `4fbd8f8a383a2bb5ddb156eb4fb4cdf8851fa9c2`; if every applicable workflow is green and review remains clear, promote it from draft and merge only on that exact head.
-2. Refresh #388 from current `main`, resolve its non-mergeable state without dropping retained negative/cancelled evidence, then re-run the complete exact-head benchmark/software matrix.
-3. Refresh #464 from current `main`, preserve the frozen-workflow exclusions and nine protected baseline contexts, then qualify its new exact head before promotion.
+2. Complete #388 exact-head qualification on refreshed head `9c1ea100aa2d6e1fcabe0f49dfb519c28eeda6d2` while preserving all retained negative/cancelled evidence; do not promote it from draft until every applicable benchmark/software gate is green.
+3. Complete #464 exact-head qualification on refreshed head `fbb5d3f1687c05d9e129cb642e7f26fbf2200858`. Preserve the nine protected baseline contexts and the qualified TDI-8.1/TDI-9.1 freeze workflows unchanged; do not promote until every applicable gate is green.
 4. Continue FLAT/NNIS hardware qualification separately; do not convert software/canonical-evidence contracts into hardware, model-quality, or performance conclusions.
