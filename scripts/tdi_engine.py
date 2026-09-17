@@ -8,6 +8,7 @@ Execution uses an explicitly selected Hub deployment and trusted-software policy
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 import sqlite3
@@ -36,6 +37,7 @@ def main(argv=None):
     parser.add_argument("--hub", default="https://127.0.0.1:8477")
     parser.add_argument("--allow-loopback-http", action="store_true")
     parser.add_argument("--timeout", type=float, default=30)
+    parser.add_argument("--format", choices=("json", "pretty"), default="json", help="compact versioned JSON or indented readable JSON")
     sub = parser.add_subparsers(dest="operation", required=True)
     sub.add_parser("doctor")
     p = sub.add_parser("sensitivity-plan")
@@ -83,6 +85,12 @@ def main(argv=None):
     p = sub.add_parser("cache-get"); p.add_argument("request", type=Path)
     p.add_argument("--allow-exact-reuse", action="store_true")
     p = sub.add_parser("view"); p.add_argument("--port", type=int, default=8765)
+    p.add_argument("--report", type=Path, action="append", default=[])
+    p.add_argument("--figures", action="store_true", help="render selected reports with the optional pinned figure profile")
+    p = sub.add_parser("report-export"); p.add_argument("report", type=Path); p.add_argument("output", type=Path)
+    p.add_argument("--figures", action="store_true")
+    p = sub.add_parser("series-export"); p.add_argument("--selections", type=Path, required=True)
+    p.add_argument("--output", type=Path, required=True); p.add_argument("--figures", action="store_true")
     p = sub.add_parser("export-mlflow"); p.add_argument("campaign"); p.add_argument("--endpoint", required=True); p.add_argument("--experiment-id", required=True); p.add_argument("--metrics", type=Path)
     p = sub.add_parser("export-otlp"); p.add_argument("campaign"); p.add_argument("--endpoint", required=True)
     p = sub.add_parser("exports"); p.add_argument("--after", type=int, default=0)
@@ -113,7 +121,8 @@ def main(argv=None):
             code = durable.EXIT_TRIAL_FAILURE
         if isinstance(result, dict) and result.get("status") == "resource-rejected":
             code = durable.EXIT_TRIAL_FAILURE
-        print(durable.canonical({"schema": 1, "operation": args.operation, "exit_code": code, "result": result}))
+        envelope = {"schema": 1, "operation": args.operation, "exit_code": code, "result": result}
+        print(json.dumps(envelope, indent=2, ensure_ascii=False, allow_nan=False) if args.format == "pretty" else durable.canonical(envelope))
         return code
     except ExportError as error:
         code, status, message = EXIT_EXPORT, "external-export-error", str(error)
@@ -128,8 +137,8 @@ def main(argv=None):
         message = str(error)
     except KeyboardInterrupt:
         code, status, message = durable.EXIT_CANCELLED, "client-interrupted", "inspect the durable campaign before another execution"
-    print(durable.canonical({"schema": 1, "operation": args.operation, "exit_code": code,
-                             "status": status, "error": message}))
+    envelope = {"schema": 1, "operation": args.operation, "exit_code": code, "status": status, "error": message}
+    print(json.dumps(envelope, indent=2, ensure_ascii=False, allow_nan=False) if args.format == "pretty" else durable.canonical(envelope))
     print(message, file=sys.stderr)
     return code
 
@@ -140,6 +149,14 @@ def dispatch(args):
     if op == "nnis-qualification-review":
         from tdi_nnis_qualification_review import review_checkout
         return review_checkout(args.checkout)
+    if op in ("report-export", "series-export"):
+        from tdi_research_reporting import read_report, series_from_catalogue, export_report
+        if op == "report-export":
+            report = read_report(args.report)
+        else:
+            with EngineStore(args.catalogue, readonly=True) as store:
+                report = series_from_catalogue(store, read_json(args.selections))
+        return export_report(report, args.output, figures=args.figures)
     if op in ("sensitivity-plan", "sensitivity-fixture-plan", "sensitivity-analyze"):
         from tdi_sensitivity import make_plan, validate_plan, collect, analyze
         if args.output.exists() or args.output.is_symlink():
@@ -210,7 +227,7 @@ def dispatch(args):
                 "execution_backend": "explicit Hub deployment", "scientific_execution_started": False}
     if op == "view":
         from tdi_engine_viewer import serve
-        serve(args.catalogue, args.port)
+        serve(args.catalogue, args.port, reports=args.report, figures=args.figures)
         return {"status": "stopped"}
     readonly = op in ("status", "inspect", "compare", "events", "backup", "export", "cache-request", "cache-get", "exports", "inspect-export", "searches", "search-inspect")
     if op in ("fixture-plan", "library-fixture-plan", "attention-fixture-plan", "submit", "run-local-admitted", "run", "resume", "cancel", "attach", "export", "restore", "cache-get", "search-fixture", "search-run", "search-resume", "search-cancel"):
