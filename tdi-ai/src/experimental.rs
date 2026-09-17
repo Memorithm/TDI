@@ -70,6 +70,8 @@ pub mod tdi23_ir_equivalence;
 pub mod tdi23_ir_provenance;
 #[path = "tdi23_reduction.rs"]
 pub mod tdi23_reduction;
+#[path = "tdi24_chiral.rs"]
+pub mod tdi24_chiral;
 #[path = "tdi2_intuition.rs"]
 pub mod tdi2_intuition;
 #[path = "tdi2_intuition_ablations.rs"]
