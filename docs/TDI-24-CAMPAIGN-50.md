@@ -8,8 +8,8 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 
 | Slice | Deliverable | Gate / definition of done |
 | ---: | --- | --- |
-| 01 | Stage-0 programme + shared `M/J` algebra scaffold | exact tests for `M²=I`, `J²=-I`, `MJM=-J`, parity sign; experimental API only |
-| 02 | Arithmetic hardening | finite-input checks, overflow rejection, property fixtures |
+| 01 | Stage-0 programme + shared `M/J` algebra scaffold | **landed** in #406; exact tests for `M²=I`, `J²=-I`, `MJM=-J`, parity sign; experimental API only |
+| 02 | Arithmetic hardening | **current slice**; finite-input checks, product/accumulator/weighted overflow rejection, deterministic algebra property fixtures |
 | 03 | Matched V6 vector reference | identical 6D carrier; direct score only; no hidden extra state |
 | 04 | Channel decomposition contract | expose `s`, `m`, `chi` separately with provenance/version tags |
 | 05 | R/L enantiomorphic score pair | reflection must swap R/L scores within declared tolerance |
