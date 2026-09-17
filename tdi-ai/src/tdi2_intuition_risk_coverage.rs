@@ -114,3 +114,60 @@ mod tests {
         assert_eq!(points[2].selective_risk, None);
     }
 }
+
+/// Compact summary of an already computed risk-coverage curve.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RiskCoverageSummary {
+    /// Highest observed coverage across supplied thresholds.
+    pub max_coverage: f64,
+    /// Lowest defined selective risk, if any threshold selected a case.
+    pub min_defined_risk: Option<f64>,
+    /// Highest coverage attained with exactly zero observed selective risk.
+    pub max_zero_risk_coverage: f64,
+}
+
+/// Summarize a fixed risk-coverage curve without choosing a new threshold.
+#[must_use]
+pub fn summarize_risk_coverage(points: &[RiskCoveragePoint]) -> RiskCoverageSummary {
+    let mut max_coverage = 0.0_f64;
+    let mut min_defined_risk: Option<f64> = None;
+    let mut max_zero_risk_coverage = 0.0_f64;
+    for point in points {
+        max_coverage = max_coverage.max(point.coverage);
+        if let Some(risk) = point.selective_risk {
+            min_defined_risk = Some(min_defined_risk.map_or(risk, |current| current.min(risk)));
+            if risk == 0.0 {
+                max_zero_risk_coverage = max_zero_risk_coverage.max(point.coverage);
+            }
+        }
+    }
+    RiskCoverageSummary {
+        max_coverage,
+        min_defined_risk,
+        max_zero_risk_coverage,
+    }
+}
+
+#[cfg(test)]
+mod risk_coverage_summary_tests {
+    use super::{ScoredDecision, risk_coverage_curve, summarize_risk_coverage};
+
+    #[test]
+    fn summary_reports_zero_risk_coverage_without_retuning() {
+        let decisions = [
+            ScoredDecision {
+                weight: 0.2,
+                correct: false,
+            },
+            ScoredDecision {
+                weight: 0.8,
+                correct: true,
+            },
+        ];
+        let points = risk_coverage_curve(&decisions, &[0.0, 0.5, 0.9], 3).unwrap();
+        let summary = summarize_risk_coverage(&points);
+        assert_eq!(summary.max_coverage, 2.0 / 3.0);
+        assert_eq!(summary.min_defined_risk, Some(0.0));
+        assert_eq!(summary.max_zero_risk_coverage, 1.0 / 3.0);
+    }
+}

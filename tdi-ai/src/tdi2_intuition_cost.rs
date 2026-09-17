@@ -192,3 +192,47 @@ mod tests {
         assert_eq!(samples.len(), 5);
     }
 }
+
+use super::tdi2_intuition::BooleanState;
+use super::tdi2_intuition_matching::match_template;
+
+/// Reproduce the scalar reference path's logical work counts for one state.
+///
+/// This is observational instrumentation. It does not alter ranking, inference,
+/// consolidation, or abstention and makes no claim about CPU instructions.
+#[must_use]
+pub fn reference_operation_accounting(
+    store: &ExperienceStore,
+    state: &BooleanState,
+) -> OperationAccounting {
+    let mut accounting = OperationAccounting::default();
+    for entry in store.entries() {
+        accounting.templates_considered += 1;
+        accounting.boolean_clauses_checked += (entry.template().base().required().len()
+            + entry.template().base().forbidden().len())
+            as u64;
+        if match_template(entry.template().base(), state).is_exact() {
+            accounting.weights_computed += 1;
+            accounting.candidates_selected += 1;
+        }
+    }
+    accounting
+}
+
+#[cfg(test)]
+mod reference_operation_tests {
+    use super::reference_operation_accounting;
+    use crate::experimental::tdi2_intuition_experience::motif_experience_store;
+    use crate::experimental::tdi2_intuition_tasks::motif_retrieval_case;
+
+    #[test]
+    fn motif_reference_run_counts_all_templates_but_one_candidate() {
+        let store = motif_experience_store(4);
+        let case = motif_retrieval_case(1_000);
+        let accounting = reference_operation_accounting(&store, case.query());
+        assert_eq!(accounting.templates_considered, 17);
+        assert_eq!(accounting.boolean_clauses_checked, 17);
+        assert_eq!(accounting.weights_computed, 1);
+        assert_eq!(accounting.candidates_selected, 1);
+    }
+}

@@ -6,7 +6,8 @@ use super::tdi2_intuition_analogy_tasks::{AnalogyCase, analogy_case};
 use super::tdi2_intuition_evaluation::{EvaluationSummary, PairedComparison};
 use super::tdi2_intuition_inference::IntuitionOutcome;
 use super::tdi2_intuition_tasks::{
-    SyntheticCase, TemporalCase, context_reversal_pair, motif_retrieval_case, temporal_trend_case,
+    SyntheticCase, TemporalCase, context_reversal_pair, context_template_pair,
+    motif_retrieval_case, temporal_trend_case,
 };
 
 /// Allowed non-final experimental domains for this harness.
@@ -25,6 +26,8 @@ pub enum CampaignFamily {
     MotifRetrieval,
     /// Context-conditioned reversal.
     ContextReversal,
+    /// Reusable context templates over novel case identities.
+    ContextTemplateTransfer,
     /// Ordered temporal trend.
     TemporalTrend,
     /// Novel-identity structural transfer.
@@ -54,6 +57,56 @@ pub fn frozen_motif_manifest(domain: CampaignDomain) -> CampaignManifest {
         0.0,
     )
     .expect("frozen motif manifest constants are valid")
+}
+
+/// Frozen transferable-context Development pair-id start.
+pub const CONTEXT_DEVELOPMENT_START: u32 = 3_000;
+/// Frozen transferable-context Validation pair-id start.
+pub const CONTEXT_VALIDATION_START: u32 = 4_000;
+/// Number of pair ids per non-final context domain.
+pub const CONTEXT_DOMAIN_PAIRS: usize = 26;
+
+/// Return the frozen context-template manifest for one non-final domain.
+#[must_use]
+pub fn frozen_context_manifest(domain: CampaignDomain) -> CampaignManifest {
+    let start_id = match domain {
+        CampaignDomain::Development => CONTEXT_DEVELOPMENT_START,
+        CampaignDomain::Validation => CONTEXT_VALIDATION_START,
+    };
+    CampaignManifest::new(
+        domain,
+        CampaignFamily::ContextTemplateTransfer,
+        start_id,
+        CONTEXT_DOMAIN_PAIRS,
+        0,
+        0.0,
+    )
+    .expect("frozen context manifest constants are valid")
+}
+
+/// Frozen analogy Development case-id start.
+pub const ANALOGY_DEVELOPMENT_START: u32 = 7_000;
+/// Frozen analogy Validation case-id start.
+pub const ANALOGY_VALIDATION_START: u32 = 8_000;
+/// Number of analogy cases per non-final domain.
+pub const ANALOGY_DOMAIN_CASES: usize = 32;
+
+/// Return the frozen analogy manifest for one non-final domain.
+#[must_use]
+pub fn frozen_analogy_manifest(domain: CampaignDomain) -> CampaignManifest {
+    let start_id = match domain {
+        CampaignDomain::Development => ANALOGY_DEVELOPMENT_START,
+        CampaignDomain::Validation => ANALOGY_VALIDATION_START,
+    };
+    CampaignManifest::new(
+        domain,
+        CampaignFamily::AnalogyTransfer,
+        start_id,
+        ANALOGY_DOMAIN_CASES,
+        0,
+        0.0,
+    )
+    .expect("frozen analogy manifest constants are valid")
 }
 
 /// Canonical non-final campaign manifest.
@@ -106,6 +159,7 @@ impl CampaignManifest {
         let family = match self.family {
             CampaignFamily::MotifRetrieval => "motif-retrieval",
             CampaignFamily::ContextReversal => "context-reversal",
+            CampaignFamily::ContextTemplateTransfer => "context-template-transfer",
             CampaignFamily::TemporalTrend => "temporal-trend",
             CampaignFamily::AnalogyTransfer => "analogy-transfer",
         };
@@ -247,6 +301,25 @@ pub fn context_cases(start: u32, pair_count: usize) -> Result<Vec<SyntheticCase>
             .checked_add(offset)
             .ok_or(CampaignError::CaseIdOverflow)?;
         cases.extend(context_reversal_pair(id));
+    }
+    Ok(cases)
+}
+
+/// Materialize reusable context-template pairs for a checked id range.
+pub fn transferable_context_cases(
+    start: u32,
+    pair_count: usize,
+) -> Result<Vec<SyntheticCase>, CampaignError> {
+    let capacity = pair_count
+        .checked_mul(2)
+        .ok_or(CampaignError::CaseCountOverflow)?;
+    let mut cases = Vec::with_capacity(capacity);
+    for offset in 0..pair_count {
+        let offset = u32::try_from(offset).map_err(|_| CampaignError::CaseIdOverflow)?;
+        let id = start
+            .checked_add(offset)
+            .ok_or(CampaignError::CaseIdOverflow)?;
+        cases.extend(context_template_pair(id));
     }
     Ok(cases)
 }
@@ -393,6 +466,27 @@ mod tests {
         assert_eq!(validation.start_id, MOTIF_VALIDATION_START);
         assert_eq!(development.count, MOTIF_DOMAIN_CASES);
         assert_eq!(validation.count, MOTIF_DOMAIN_CASES);
+        assert!(development.start_id + development.count as u32 <= validation.start_id);
+    }
+
+    #[test]
+    fn frozen_context_populations_are_disjoint_and_cover_repeated_classes() {
+        let development = super::frozen_context_manifest(CampaignDomain::Development);
+        let validation = super::frozen_context_manifest(CampaignDomain::Validation);
+        assert_eq!(development.count, super::CONTEXT_DOMAIN_PAIRS);
+        assert_eq!(validation.count, super::CONTEXT_DOMAIN_PAIRS);
+        assert!(development.start_id + development.count as u32 <= validation.start_id);
+        let cases = super::transferable_context_cases(development.start_id, development.count)
+            .expect("cases");
+        assert_eq!(cases.len(), 52);
+    }
+
+    #[test]
+    fn frozen_analogy_populations_are_disjoint() {
+        let development = super::frozen_analogy_manifest(CampaignDomain::Development);
+        let validation = super::frozen_analogy_manifest(CampaignDomain::Validation);
+        assert_eq!(development.count, super::ANALOGY_DOMAIN_CASES);
+        assert_eq!(validation.count, super::ANALOGY_DOMAIN_CASES);
         assert!(development.start_id + development.count as u32 <= validation.start_id);
     }
 }
