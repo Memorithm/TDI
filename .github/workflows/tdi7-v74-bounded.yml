@@ -2,6 +2,8 @@ name: TDI-7.4 bounded Gaussian MMI
 
 on:
   pull_request:
+    paths-ignore:
+      - 'docs/engineering/**'
   push:
     branches:
       - main
@@ -20,7 +22,7 @@ env:
 jobs:
   bounded-information:
     name: TDI-7.4 bounded Gaussian MMI
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
       - name: Checkout repository

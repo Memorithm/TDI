@@ -1,0 +1,67 @@
+name: TDI measured engine benchmarks
+on:
+  pull_request:
+    paths: ['scripts/tdi_*', 'scripts/test_tdi_*', 'tdi-ai/**', 'tdi-core/**', 'Cargo.*', 'docs/engineering/**', '.github/workflows/tdi-engine-benchmarks.yml']
+  push:
+    branches: [main]
+    paths: ['scripts/tdi_*', 'scripts/test_tdi_*', 'tdi-ai/**', 'tdi-core/**', 'Cargo.*', 'docs/engineering/**', '.github/workflows/tdi-engine-benchmarks.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tdi-engine-benchmarks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  real-consumer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_BUILD_JOBS: '2'
+      RUSTFLAGS: '-C debuginfo=0'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Check out the exact TDI candidate head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          path: integration-tdi
+      - name: Check out the pinned Hub dependency
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: Memorithm/scirust-hub
+          ref: ccdcb99a4573dbefb944af0df713101b100b5f78
+          persist-credentials: false
+          path: integration-hub
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+      - run: cargo build --locked -p scirust-hubd -p scirust-hub-worker
+        working-directory: integration-hub
+      - run: cargo build --locked -p tdi-ai --example durable_worker
+        working-directory: integration-tdi
+      - name: Check counters and comparison policy
+        working-directory: integration-tdi
+        run: PYTHONPATH=scripts python3 -m unittest -v scripts/test_tdi_engine_benchmark.py
+      - name: Execute the bounded real-engine measurement profile
+        working-directory: integration-tdi
+        env:
+          PYTHONPATH: scripts
+          TDI_SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          python3 scripts/tdi_engine_benchmark.py \
+            --hubd ../integration-hub/target/debug/scirust-hubd \
+            --worker target/debug/examples/durable_worker \
+            --source-commit "$TDI_SOURCE_REVISION" \
+            --hub-source-commit ccdcb99a4573dbefb944af0df713101b100b5f78 \
+            --sizes 16 64 --hub-trials 1 4 --repetitions 2 --warmup 0 \
+            --max-seconds 240 --output engine-measurements
+      - name: Preserve measurement records even when incomplete
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tdi-engine-measurements
+          path: integration-tdi/engine-measurements
+          if-no-files-found: warn
+          retention-days: 14

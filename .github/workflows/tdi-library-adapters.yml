@@ -45,6 +45,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
         with:
           toolchain: 1.89.0
+          components: clippy
       - name: Build pinned actual Hub in its own Cargo context
         working-directory: integration-hub
         run: cargo build --locked -p scirust-hubd -p scirust-hub-worker
@@ -54,7 +55,7 @@ jobs:
           cargo test --locked -p tdi-ai --test experiment_contract --test bounded_migration
           cargo test --locked -p tdi-bench --doc engine_adapters
           cargo build --locked -p tdi-bench --example engine_adapter_worker
-          cargo clippy --locked -p tdi-bench --example engine_adapter_worker --test engine_adapters
+          cargo clippy --locked -p tdi-bench --example engine_adapter_worker --test engine_adapters -- -D warnings
       - name: Exercise actual four-stage Hub graphs, separate-process restore and independent oracles
         env:
           TDI_HUBD_BIN: ${{ github.workspace }}/integration-hub/target/debug/scirust-hubd
