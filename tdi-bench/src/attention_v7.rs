@@ -335,17 +335,17 @@ impl DeterministicLocalMixer {
         let side = 0.15 + 0.10 * spread;
         let center = 1.0 - 2.0 * side;
         let mut matrix = vec![vec![0.0; n]; n];
-        for row in 0..n {
+        for (row, weights) in matrix.iter_mut().enumerate() {
             if row == 0 {
-                matrix[row][row] = center + side;
-                matrix[row][row + 1] = side;
+                weights[row] = center + side;
+                weights[row + 1] = side;
             } else if row + 1 == n {
-                matrix[row][row - 1] = side;
-                matrix[row][row] = center + side;
+                weights[row - 1] = side;
+                weights[row] = center + side;
             } else {
-                matrix[row][row - 1] = side;
-                matrix[row][row] = center;
-                matrix[row][row + 1] = side;
+                weights[row - 1] = side;
+                weights[row] = center;
+                weights[row + 1] = side;
             }
         }
         Self { matrix }
