@@ -55,7 +55,7 @@ jobs:
           cargo test --locked -p tdi-ai --test experiment_contract --test bounded_migration
           cargo test --locked -p tdi-bench --doc engine_adapters
           cargo build --locked -p tdi-bench --example engine_adapter_worker
-          cargo clippy --locked -p tdi-bench --example engine_adapter_worker --test engine_adapters
+          cargo clippy --locked -p tdi-bench --example engine_adapter_worker --test engine_adapters -- -D warnings
       - name: Exercise actual four-stage Hub graphs, separate-process restore and independent oracles
         env:
           TDI_HUBD_BIN: ${{ github.workspace }}/integration-hub/target/debug/scirust-hubd
