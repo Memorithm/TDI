@@ -2,6 +2,8 @@ name: TDI-7.4 bounded Gaussian MMI
 
 on:
   pull_request:
+    paths-ignore:
+      - 'docs/engineering/**'
   push:
     branches:
       - main
