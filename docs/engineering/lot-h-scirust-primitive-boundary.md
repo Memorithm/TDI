@@ -1,8 +1,8 @@
 # Lot H — SciRust reusable-primitive promotion boundary
 
-Status: **candidate / non-executing / no scientific authority**
+Status: **current-main requalification candidate / non-executing / no scientific authority**
 
-Tracking PR: **#283**. The branch was resynchronized after TDI #281 onto default-branch commit `5f365613d466559a46c2de6d940aef8ffdd55da4`; this documentation commit exists to re-run normal exact-head qualification on that integrated base. This status remains candidate until every applicable workflow succeeds on the exact final head and material review findings are resolved.
+The #283 boundary is present on `main`. This refresh re-runs its dedicated exact-head contract gate over the integrated implementation rather than inferring qualification from merge presence. This historical reusable-primitive boundary remains pinned to its audited SciRust API source below. Separately, TDI's real research-analysis/sensitivity workflows now pin qualified SciRust #1452 merge `be7fcca3b31cedf722d71a2a56db8f6d088037cf`; that newer execution dependency does not silently rewrite this older interchange contract.
 
 This slice defines the TDI-owned interchange boundary for proposing a genuinely reusable mathematical or representation primitive to `Memorithm/scirust`. It does not copy SciRust implementation code into TDI, execute SciRust, modify a SciRust branch, or authorize promotion.
 

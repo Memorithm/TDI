@@ -1,6 +1,6 @@
 # Lot H — TDI → ElasticXxx resource-control boundary
 
-Status: candidate hardening in PR #282 until every applicable workflow is green on its exact final head. The branch was resynchronized after TDI #281 onto default-branch commit `5f365613d466559a46c2de6d940aef8ffdd55da4`; this documentation commit exists to re-run normal exact-head qualification on that integrated base.
+Status: **current-main requalification candidate / non-actuating / no scientific authority**. The original #279 contract and later root-evidence hardening are present on `main`; this refresh deliberately re-runs the dedicated exact-head partner-contract gate over the integrated implementation instead of treating merge presence as qualification. The separate executable capacity-admission path is independently pinned to ElasticXxx #95 head `f8e10b1a1d05d6c22c0f56fed87252bc65d4e66a`, whose upstream `ci` and `packageability` runs are now successful; that later path does not turn this interchange contract into execution authority.
 
 The descriptor must advertise exactly `elastic.hub.run`, the `operator-config`
 input and `runtime-evidence` output. Their identities are ordinary SHA-256 of
