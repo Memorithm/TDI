@@ -79,6 +79,29 @@ For each candidate:
 If a later commit changes the candidate head, prior exact-head qualification is
 stale and the applicable gates must qualify the new head again.
 
+## Auditable exception path
+
+There is no standing branch-protection bypass: administrators are subject to the
+same protected-main baseline and the repository has no bypass actor configured.
+A temporary administrative protection change is therefore a recovery mechanism
+only; it is not a merge-qualification exception and must never be used to merge
+an unqualified candidate head.
+
+Any recovery change must be recorded before use in a dedicated issue or incident
+record with the exact base/head SHAs, the blocked context, the reason normal
+qualification cannot complete, the approving repository administrator, and the
+bounded restoration condition. The protection change itself and its restoration
+must be captured through the repository administration audit trail, and the live
+protection endpoint must be re-read after restoration. Recovery actions may
+repair protection configuration, runner routing, or other repository controls,
+but the candidate must remain unmerged while qualification is incomplete.
+
+No recovery action can authorize protected/final holdout access, weaken a frozen
+scientific decision rule, substitute missing hardware evidence, or relabel a
+failed, cancelled, missing, queued, or stale required/conditional gate as
+success. After restoration, every globally required context and every applicable
+conditional gate must still succeed on the exact final head SHA before merge.
+
 ## Runner-load path scoping
 
 Path filters are allowed only to remove genuinely inapplicable workflows. They
