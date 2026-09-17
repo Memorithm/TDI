@@ -1,6 +1,8 @@
 # Lot H — FLAT-ATTENTION qualification boundary
 
-Status: **candidate / non-executing / no performance or scientific authority**
+Status: **current-main requalification candidate / non-executing / no performance or scientific authority**
+
+The #285 boundary is present on `main`. This refresh exists to obtain fresh exact-head contract evidence on the integrated default-branch implementation. Passing this gate qualifies only the versioned review/interchange contract below; it does not qualify FLAT execution, model quality, routing, device behavior or performance.
 
 This slice defines the TDI-owned interchange boundary for presenting an exact Development/Validation candidate to `Memorithm/FLAT-ATTENTION` for independent contract qualification. It does not invoke FLAT, select a backend, stage K/V, execute attention, open a protected/final holdout, or transfer FLAT attention semantics into TDI.
 

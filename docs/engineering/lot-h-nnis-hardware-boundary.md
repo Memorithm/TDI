@@ -2,7 +2,7 @@
 
 ## Status
 
-Candidate contract only. This document does not qualify NNIS execution, CUDA-Rust SIMT, a GPU device, serving performance, production routing, or any scientific result.
+**Current-main requalification candidate / contract only.** The #286 boundary is present on `main`; this refresh re-runs its dedicated exact-head contract gate on the integrated implementation. Even a green TDI contract gate does not qualify NNIS execution, CUDA-Rust SIMT, a GPU device, serving performance, production routing, or any scientific result. The upstream manifest state described below remains authoritative and fail-closed.
 
 The audited NNIS source for this slice is `5436736002834dd6dd7d5ace8c1c044b47aed18f`. Its `docs/cuda-rust-simt-qualification.json` is currently `unresolved_blocking`; the TDI contract preserves that state exactly rather than converting it into success.
 
