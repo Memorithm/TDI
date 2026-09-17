@@ -2,8 +2,6 @@ name: TDI-23.1 rooted IR provenance
 
 on:
   pull_request:
-    paths-ignore:
-      - 'docs/engineering/**'
   push:
     branches:
       - main

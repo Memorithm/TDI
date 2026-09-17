@@ -2,8 +2,6 @@ name: TDI-11.2 readiness integrity
 
 on:
   pull_request:
-    paths-ignore:
-      - 'docs/engineering/**'
   push:
     branches:
       - main

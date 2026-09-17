@@ -2,8 +2,6 @@ name: TDI-23.1 categorical attention IR
 
 on:
   pull_request:
-    paths-ignore:
-      - 'docs/engineering/**'
   push:
     branches:
       - main
