@@ -106,15 +106,15 @@ units. Neither choice is a concrete TDI research-series model.
 
 Build the real SciRust `research_stats` example as described in the
 [paired-analysis guide](paired-analysis.md). The current CI dependency is
-SciRust candidate `06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0`; promotion remains
-blocked until upstream #1452 is fully qualified and the final merge is repinned.
+SciRust qualified merge `be7fcca3b31cedf722d71a2a56db8f6d088037cf` from #1452.
+This consumer is pinned to that immutable merge revision; its own exact-head qualification remains required before promotion.
 
 ```bash
 .sensitivity-venv/bin/python scripts/tdi_engine.py sensitivity-analyze \
   --plan sensitivity-plan.json --campaign CAMPAIGN_ID \
   --worker ../scirust/target/debug/examples/research_stats \
   --worker-sha256 "$(sha256sum ../scirust/target/debug/examples/research_stats | cut -d ' ' -f 1)" \
-  --source-commit 06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0 \
+  --source-commit be7fcca3b31cedf722d71a2a56db8f6d088037cf \
   --output sensitivity-report.json
 ```
 
@@ -154,6 +154,6 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts \
 TDI_HUBD_BIN="$PWD/../scirust-hub/target/debug/scirust-hubd" \
 TDI_DURABLE_WORKER="$PWD/target/debug/examples/durable_worker" \
 TDI_SCIRUST_STATS_BIN="$PWD/../scirust/target/debug/examples/research_stats" \
-TDI_SCIRUST_SOURCE_COMMIT=06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0 \
+TDI_SCIRUST_SOURCE_COMMIT=be7fcca3b31cedf722d71a2a56db8f6d088037cf \
 .sensitivity-venv/bin/python -m unittest -v scripts/test_tdi_sensitivity.py
 ```
