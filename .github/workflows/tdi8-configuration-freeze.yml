@@ -2,15 +2,9 @@ name: TDI-8.1 configuration freeze contract
 
 on:
   pull_request:
-    paths-ignore:
-      - 'docs/engineering/**'
   push:
     branches:
       - main
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
