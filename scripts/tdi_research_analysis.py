@@ -170,7 +170,7 @@ def observations_from_catalogue(store, protocol, selections):
             continue
         if step is None or step["state"] != "succeeded":
             raise durable.ContractError("verified result conflicts with terminal step state")
-        evidence = durable.strict_json(found[0])
+        evidence = store.result(campaign, selection["step"], selection["output"])
         descriptor = artifacts.canonical_artifact(evidence["descriptor"])
         if (descriptor["access_class"] != p["domain"].lower()
                 or artifacts.artifact_identity(descriptor) != evidence["artifact_identity"]

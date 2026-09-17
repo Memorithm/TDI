@@ -28,13 +28,13 @@ class ObservabilityUnitTests(unittest.TestCase):
             db.execute("INSERT INTO results VALUES (?,'fixture','value',?)", (campaign, '{"historical": "unaltered bytes"}'))
         return campaign
 
-    def test_v1_readonly_and_atomic_v2_migration_preserve_existing_evidence(self):
+    def test_v1_readonly_and_atomic_current_migration_preserve_existing_evidence(self):
         campaign = self.legacy()
         with EngineStore(self.path, readonly=True) as old:
             original = old.get(campaign)
             self.assertEqual(1, old.db.execute("PRAGMA user_version").fetchone()[0])
         with EngineStore(self.path) as upgraded:
-            self.assertEqual(2, upgraded.db.execute("PRAGMA user_version").fetchone()[0])
+            self.assertEqual(4, upgraded.db.execute("PRAGMA user_version").fetchone()[0])
             self.assertEqual(original, upgraded.get(campaign))
             self.assertEqual('{"legacy": true}', upgraded.db.execute("SELECT payload FROM events WHERE sequence=1").fetchone()[0])
             self.assertEqual('{"historical": "unaltered bytes"}', upgraded.db.execute("SELECT evidence FROM results").fetchone()[0])

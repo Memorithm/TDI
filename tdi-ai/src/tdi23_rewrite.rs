@@ -271,18 +271,13 @@ mod tests {
         apply_local_rewrite,
     };
     use crate::experimental::tdi23_categorical::RealLinearMap;
-    use crate::experimental::tdi23_ir::{
-        CategoricalAttentionIr, IrError, NonlinearBoundaryKind,
-    };
+    use crate::experimental::tdi23_ir::{CategoricalAttentionIr, IrError, NonlinearBoundaryKind};
     use crate::experimental::tdi23_ir_equivalence::{ComparisonSide, EquivalenceError};
     use crate::experimental::tdi23_ir_provenance::ProvenanceError;
 
     #[test]
     fn tdi23_2_rewrite_contract_is_versioned() {
-        assert_eq!(
-            LOCAL_REWRITE_CONTRACT,
-            "tdi23.2-local-rewrite-calculus-v1"
-        );
+        assert_eq!(LOCAL_REWRITE_CONTRACT, "tdi23.2-local-rewrite-calculus-v1");
     }
 
     #[test]
@@ -304,8 +299,8 @@ mod tests {
 
         let left_application =
             apply_local_rewrite(&ir, left, RewriteRule::LeftIdentity).expect("left identity");
-        let right_application = apply_local_rewrite(&ir, right, RewriteRule::RightIdentity)
-            .expect("right identity");
+        let right_application =
+            apply_local_rewrite(&ir, right, RewriteRule::RightIdentity).expect("right identity");
 
         assert_eq!(left_application.replacement(), f);
         assert_eq!(right_application.replacement(), f);
@@ -422,10 +417,12 @@ mod tests {
 
         assert!(matches!(
             apply_local_rewrite(&ir, composed, RewriteRule::LeftIdentity),
-            Err(RewriteError::Equivalence(EquivalenceError::NonlinearBoundary {
-                side: ComparisonSide::Left,
-                boundary: NonlinearBoundaryKind::Softmax,
-            }))
+            Err(RewriteError::Equivalence(
+                EquivalenceError::NonlinearBoundary {
+                    side: ComparisonSide::Left,
+                    boundary: NonlinearBoundaryKind::Softmax,
+                }
+            ))
         ));
     }
 
@@ -435,11 +432,7 @@ mod tests {
         let a = ir.add_atomic_object("A", 2).expect("A");
         let b = ir.add_atomic_object("B", 2).expect("B");
         let f = ir
-            .add_linear_map(
-                a,
-                b,
-                RealLinearMap::identity(2).expect("carrier identity"),
-            )
+            .add_linear_map(a, b, RealLinearMap::identity(2).expect("carrier identity"))
             .expect("A to B map");
 
         assert!(matches!(

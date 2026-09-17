@@ -35,13 +35,16 @@ concurrency:
 
 jobs:
   minimal:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-24.04' }}
     timeout-minutes: 5
     env:
       PYTHONDONTWRITEBYTECODE: '1'
       PYTHONPATH: scripts
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - run: python3 -m unittest -v scripts/test_tdi_observability_unit.py scripts/test_tdi_engine_unit.py
       - run: python3 scripts/tdi_engine.py doctor
   external:
@@ -57,15 +60,18 @@ jobs:
       CARGO_BUILD_JOBS: '2'
       RUSTFLAGS: '-C debuginfo=0'
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
           path: integration-tdi
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: Memorithm/scirust-hub
           ref: ccdcb99a4573dbefb944af0df713101b100b5f78
+          persist-credentials: false
           path: integration-hub
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
         with:
           toolchain: 1.89.0
       - name: Build independent Hub checkout

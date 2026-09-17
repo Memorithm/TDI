@@ -41,7 +41,10 @@ mod tests {
         let second = novel_identity_bindings(&roles, 8);
         assert_eq!(first.len(), 3);
         assert_ne!(first, second);
-        let mut entities = first.iter().map(|binding| binding.entity()).collect::<Vec<_>>();
+        let mut entities = first
+            .iter()
+            .map(|binding| binding.entity())
+            .collect::<Vec<_>>();
         entities.sort_unstable();
         entities.dedup();
         assert_eq!(entities.len(), 3);
