@@ -6,7 +6,7 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 
 ## Default-branch checkpoint
 
-- TDI `main`: `c43baf742ad3c85674b83956a01807bf7664771b`, merge of qualified PR #466 after qualified PR #389.
+- TDI `main`: `9d24ec9ce73370f4948144b1c0ae55cd6c82ce91`, merge of qualified PR #467 after merged TDI-24.0 #406 and qualified PR #466.
 - Protected `main` requires the nine baseline contexts Formatting, Tests, Clippy, Preregistration integrity, their Public counterparts, and Rust MSRV. Conditional/domain/hardware gates remain additional application-level requirements when applicable.
 - PR #385 final head `b20cbaf053fa446dba9391e521edfdc167b881e5` was non-draft and mergeable, had no unresolved material review thread, and all 42 returned exact-head workflows completed successfully before merge. Its merge presence is therefore accompanied by recorded exact-head software evidence; it still creates no scientific-stage or partner-execution authority beyond the contracts it implements.
 - The branch still contains the older dated audit. Where that audit conflicts with this overlay on current repository state, use this overlay while retaining the older file as historical evidence.
@@ -53,15 +53,15 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 
 ### PR #387 — bounded sensitivity and ablation
 
-- After #466 merged, the branch was non-destructively refreshed through current `main`; current exact head is `34193f2498d37552ed68faccfb29c57ec528c6b2`.
+- After #467 merged, the branch was non-destructively refreshed through current `main`; current exact head is `4fbd8f8a383a2bb5ddb156eb4fb4cdf8851fa9c2`.
 - The branch pins qualified SciRust merge `be7fcca3b31cedf722d71a2a56db8f6d088037cf` and no longer has the former SciRust-candidate provenance blocker.
-- Local refresh checks pass for Rust 1.97.1 formatting, workflow YAML parsing, `git diff --check`, and the four paired-analysis protocol tests. The optional SALib profile is not installed in the ambient local environment, so the dedicated GitHub sensitivity workflow remains authoritative for the full integration suite.
-- State: **draft candidate; blocked only on its own refreshed exact-head workflow matrix and review reconciliation**. Queued/pending/in-progress checks are not green.
+- The dedicated exact-head `TDI sensitivity and ablation` and `TDI shared admission evidence` workflows have succeeded on this head. Several required/applicable workflows, including Rust/Public Rust/MSRV and additional research gates, remain queued or in progress.
+- State: **draft candidate; blocked on completion of its own refreshed exact-head workflow matrix and review reconciliation**. Queued/pending/in-progress checks are not green.
 
 
 ### PR #388 — measured engine baselines
 
-- Current published head is `b16b0701f13aeabe68d886723c471827d461a195` and the PR remains draft.
+- Current published head is `24981bb99a1662502c901f62d1b1da035fe8fa96` and the PR remains draft. GitHub currently reports it non-mergeable against the newer default branch, so it must be refreshed before a new exact-head matrix can qualify it.
 - Its retained development baseline remains scoped evidence only; cancelled, partial, or superseded executions remain non-green evidence and are not converted into performance claims.
 - State: **candidate, not qualified**; a complete exact-head benchmark/software matrix is required before promotion.
 
@@ -72,6 +72,13 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 - Immediately before merge, every workflow returned for the exact final head had completed with `success`, including Rust/Public Rust/MSRV, artifact/provenance, Hub edge and all five partner-contract gates. Codex review had completed with no material finding and GitHub returned no unresolved review thread.
 - State: **qualified and merged for the declared CI-routing scope**. This changes runner placement only; it grants no scientific stage, partner execution, actuation, scheduler, lease or artifact-store authority.
 
+### PR #467 — deterministic TDI-8/9 freeze qualification
+
+- Final head `4cf21995d105dc64d978b2a1f3744bec62dbac83` merged as `9d24ec9ce73370f4948144b1c0ae55cd6c82ce91`.
+- The repair was triggered by exact-head failures where self-hosted runners selected Rust 1.85 without `rustfmt`, despite another workflow step having installed Rust 1.97.1. The affected TDI-8.1/TDI-9.1 freeze workflows now pin immutable checkout/toolchain actions, bind checkout to the exact PR head, disable persisted credentials, install Rust 1.97.1 with `rustfmt`/`clippy`, and export `RUSTUP_TOOLCHAIN=1.97.1` for nested bootstrap scripts.
+- Every workflow returned by GitHub for the final head completed with `success`, including Rust/Public Rust/MSRV and both repaired configuration-freeze workflows.
+- State: **qualified and merged for deterministic freeze-gate execution**. This is CI/reproducibility evidence only; it creates no scientific, novelty, performance, hardware, or final-stage result.
+
 ### PR #466 — qualified SciRust source correction
 
 - Final head `729f35693e21ab93c4522987cca7ca70cb62feaa` was based on merged #389.
@@ -81,7 +88,7 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 
 ### PR #464 — runner-load scoping
 
-- Current published head: `0d265b7754dbcd892ba0961bd8028b97a106cfa6`.
+- Current published head: `115581115cfeaaeca77d09555dce25fe87e5311d`. GitHub currently reports it non-mergeable against the newer default branch, so it must be refreshed before promotion.
 - It remains draft and preserves the nine server-required baseline contexts while scoping non-baseline engineering-document work and cancelling superseded runs only within workflow/ref scope.
 - State: **draft candidate; exact-head qualification required before promotion**.
 
@@ -102,7 +109,7 @@ Nothing in this overlay authorizes a protected/final scientific stage, hardware 
 
 ## Next closure order
 
-1. Complete #387 exact-head qualification on refreshed head `34193f2498d37552ed68faccfb29c57ec528c6b2`; if every applicable workflow is green and review remains clear, promote it from draft and merge only on that exact head.
-2. Requalify #388 on its final head while preserving all cancelled/negative executions and keeping development benchmark scope explicit.
-3. Complete #464 runner-load scoping only after its exact-head matrix proves that no frozen scientific workflow or required baseline context was weakened.
+1. Complete #387 exact-head qualification on refreshed head `4fbd8f8a383a2bb5ddb156eb4fb4cdf8851fa9c2`; if every applicable workflow is green and review remains clear, promote it from draft and merge only on that exact head.
+2. Refresh #388 from current `main`, resolve its non-mergeable state without dropping retained negative/cancelled evidence, then re-run the complete exact-head benchmark/software matrix.
+3. Refresh #464 from current `main`, preserve the frozen-workflow exclusions and nine protected baseline contexts, then qualify its new exact head before promotion.
 4. Continue FLAT/NNIS hardware qualification separately; do not convert software/canonical-evidence contracts into hardware, model-quality, or performance conclusions.
