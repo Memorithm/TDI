@@ -21,7 +21,7 @@ permissions:
   contents: read
 jobs:
   reference:
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
@@ -33,7 +33,7 @@ jobs:
       - run: cargo test --locked -p tdi-ai --all-features
       - run: cargo run --locked -p tdi-ai --example tdi2_intuition_development --features experimental
   experimental-msrv:
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master

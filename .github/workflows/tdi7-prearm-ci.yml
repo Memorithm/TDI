@@ -2,6 +2,8 @@ name: TDI-7 pre-arm integrity
 
 on:
   pull_request:
+    paths-ignore:
+      - 'docs/engineering/**'
   push:
     branches:
       - main
@@ -21,7 +23,7 @@ jobs:
   prearm-integrity:
     # Historical context name kept stable for branch-protection compatibility.
     name: TDI-7 pre-arm fail-closed audit
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-24.04' }}
     timeout-minutes: 30
 
     steps:

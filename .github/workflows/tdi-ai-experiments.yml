@@ -1,13 +1,19 @@
 name: TDI AI experimental contracts
 on:
   pull_request:
+    paths-ignore:
+      - 'docs/engineering/**'
   push:
     branches: [main]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 jobs:
   contracts:
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,7 +38,7 @@ jobs:
         env:
           TDI_DURABLE_WORKER: target/debug/examples/durable_worker
   experimental-msrv:
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
