@@ -18,9 +18,20 @@ permissions:
 jobs:
   configuration-freeze:
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-24.04' }}
+    env:
+      RUSTUP_TOOLCHAIN: 1.97.1
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
 
       - name: Verify TDI-8 bootstrap integrity
         run: bash scripts/check-tdi8-bootstrap.sh

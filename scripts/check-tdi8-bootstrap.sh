@@ -10,6 +10,10 @@ PREREG="docs/TDI-8.0-ASSR-PREREGISTRATION.md"
 MANIFEST="docs/TDI-8.0-ASSR-PREREGISTRATION.gitblob"
 GATE="docs/TDI-8.0-IMPLEMENTATION-GATE.md"
 
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/tdi8-bootstrap.XXXXXX")"
+trap 'rm -rf "$tmp_dir"' EXIT
+token_scan="$tmp_dir/token-scan.log"
+
 for file in \
     "$PREREG" \
     "$MANIFEST" \
@@ -91,11 +95,11 @@ fi
 # the literal pattern used to detect leakage.
 if grep -R -n -F 'TDI7_CONFIRM_FINAL_HOLDOUT' \
     docs/TDI-8* AGENTS.md .github/copilot-instructions.md .github/workflows/public-ci.yml \
-    >/tmp/tdi8-bootstrap-token-scan.log; then
-    cat /tmp/tdi8-bootstrap-token-scan.log >&2
+    >"$token_scan"; then
+    cat "$token_scan" >&2
     fail "TDI-8 bootstrap must not carry the TDI-7.2 confirmation surface"
 fi
-rm -f /tmp/tdi8-bootstrap-token-scan.log
+rm -f "$token_scan"
 
 # Once the TDI-8.1 foundation exists, its reviewed resource-accounting
 # invariants become part of the bootstrap gate for later TDI-8.1 work.
