@@ -34,26 +34,27 @@ No statement below authorizes a protected/final scientific stage, a hardware cla
 
 ### PR #385 — durable Forge search
 
-- TDI head: `c270ac658384aa2ea732418c5f2c9927b2480754`.
+- TDI head: `83025c6ed34dee858920a41eebcccf8820a9b155`.
 - Forge #39 is now merged as `28067ab0aa1d52a2260d9bb2bf35a346547a292a`, and #385 is repinned to that merge revision.
 - The refreshed TDI branch is mergeable and has no unresolved material review thread, but its current exact-head workflow set remains incomplete/queued.
 - State: **candidate, upstream Forge pin resolved; blocked on TDI exact-head qualification**. No partner execution, holdout or scientific verdict authority is inferred from the merged Forge dependency.
+- A `TDI real library adapters` exact-head run on the preceding #385 head failed because the pinned Rust 1.89 toolchain lacked `cargo-clippy`; the refreshed #385 head installs the clippy component and fixes the two `-D warnings` defects exposed by the exact gate. The new GitHub run is authoritative and remains required; the local pass is not promoted to qualification.
 
 ### PR #389 — shared evidence storage
 
-- Head: `13d46681f8a9f629680eb9c9b77180bf5db8484b`.
+- Head: `7f9ac53573f123b9a1b72aa00baed4d4158d26e0`.
 - Base is `industrialize/scientific-search`, not `main`; it is intentionally stacked on #385.
 - State: **stacked candidate**. Do not retarget or promote it before #385 and its upstream Forge dependency are qualified and integrated.
 
 ### PR #387 — bounded sensitivity and ablation
 
-- Head: `54dff997ede3b948b420ab0c021af2933334ad63`.
+- Head: `d5e5115add1689a59b0514fe999a636b5c2e404a`.
 - It still identifies SciRust #1452 as the numerical dependency that must be reviewed, fully exact-head green and merged before final repin/promotion.
 - State: **blocked on final SciRust #1452 provenance and its own exact-head gates**.
 
 ### PR #388 — measured engine benchmarks
 
-- Current head: `9e8ba6bb5e2cad4d6fa1eca6b33b3fb0a371f6da`; the PR remains draft and currently non-mergeable against the advanced default branch.
+- Current head: `3d31ae65546ada0ae8265ab624046eadd8c789a5`; the PR remains draft and currently non-mergeable against the advanced default branch.
 - The dedicated benchmark workflow checks out the exact PR head and pins scirust-hub `ccdcb99a4573dbefb944af0df713101b100b5f78`.
 - Earlier cancelled/partial runs are retained as negative infrastructure evidence. The current head must receive a fresh complete exact-head qualification after synchronization before promotion.
 - State: **candidate, not qualified**. No cancelled, queued or partial result is converted into a benchmark or performance claim.
