@@ -67,20 +67,18 @@ mod tests {
 
     #[test]
     fn catalogue_record_changes_when_threshold_bits_change() {
-        let first = [ScalarPredicate::new(
-            PredicateId::new(1),
-            0,
-            Comparison::GreaterOrEqual,
-            1.0,
-        )
-        .expect("predicate")];
-        let second = [ScalarPredicate::new(
-            PredicateId::new(1),
-            0,
-            Comparison::GreaterOrEqual,
-            1.5,
-        )
-        .expect("predicate")];
-        assert_ne!(predicate_catalogue_record(&first), predicate_catalogue_record(&second));
+        let first = [
+            ScalarPredicate::new(PredicateId::new(1), 0, Comparison::GreaterOrEqual, 1.0)
+                .expect("predicate"),
+        ];
+        let second =
+            [
+                ScalarPredicate::new(PredicateId::new(1), 0, Comparison::GreaterOrEqual, 1.5)
+                    .expect("predicate"),
+            ];
+        assert_ne!(
+            predicate_catalogue_record(&first),
+            predicate_catalogue_record(&second)
+        );
     }
 }

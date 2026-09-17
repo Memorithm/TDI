@@ -32,19 +32,29 @@ impl EvaluationSummary {
 
     /// Total number of evaluated cases.
     #[must_use]
-    pub const fn total(self) -> u64 { self.total }
+    pub const fn total(self) -> u64 {
+        self.total
+    }
     /// Number of non-abstained predictions.
     #[must_use]
-    pub const fn selected(self) -> u64 { self.selected }
+    pub const fn selected(self) -> u64 {
+        self.selected
+    }
     /// Number of correct selected predictions.
     #[must_use]
-    pub const fn correct(self) -> u64 { self.correct }
+    pub const fn correct(self) -> u64 {
+        self.correct
+    }
     /// Number of incorrect selected predictions.
     #[must_use]
-    pub const fn incorrect(self) -> u64 { self.incorrect }
+    pub const fn incorrect(self) -> u64 {
+        self.incorrect
+    }
     /// Number of abstentions.
     #[must_use]
-    pub const fn abstained(self) -> u64 { self.abstained }
+    pub const fn abstained(self) -> u64 {
+        self.abstained
+    }
     /// Fraction of cases for which the system produced a prediction.
     #[must_use]
     pub fn coverage(self) -> Option<f64> {
@@ -101,6 +111,20 @@ impl PairedComparison {
     #[must_use]
     pub fn net_advantage(self) -> i128 {
         i128::from(self.intuition_only) - i128::from(self.baseline_only)
+    }
+
+    /// Stable record for paired Development/Validation evidence.
+    #[must_use]
+    pub fn canonical_record(self) -> String {
+        format!(
+            "tdi2.1-paired-comparison-v1;total={};both_correct={};intuition_only={};baseline_only={};neither={};net_advantage={}",
+            self.total(),
+            self.both_correct,
+            self.intuition_only,
+            self.baseline_only,
+            self.neither,
+            self.net_advantage()
+        )
     }
 }
 

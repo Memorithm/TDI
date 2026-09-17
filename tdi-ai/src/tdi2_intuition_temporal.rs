@@ -69,10 +69,7 @@ pub fn exact_sequence_match(template: &BooleanSequence, query: &BooleanSequence)
 /// Returns `None` when sequence lengths differ or both are empty, preserving the
 /// distinction between incompatible horizons and observed partial agreement.
 #[must_use]
-pub fn frame_match_fraction(
-    template: &BooleanSequence,
-    query: &BooleanSequence,
-) -> Option<f64> {
+pub fn frame_match_fraction(template: &BooleanSequence, query: &BooleanSequence) -> Option<f64> {
     if template.len() != query.len() || template.is_empty() {
         return None;
     }
@@ -105,7 +102,12 @@ impl DeltaPredicate {
         if !threshold.is_finite() || threshold < 0.0 {
             return Err(TemporalError::InvalidThreshold);
         }
-        Ok(Self { id, feature, direction, threshold })
+        Ok(Self {
+            id,
+            feature,
+            direction,
+            threshold,
+        })
     }
 
     /// Evaluate the temporal clause between previous and current states.
@@ -114,8 +116,14 @@ impl DeltaPredicate {
         previous: &NumericState,
         current: &NumericState,
     ) -> Result<bool, TemporalError> {
-        let before = *previous.values().get(self.feature).ok_or(TemporalError::FeatureOutOfBounds)?;
-        let after = *current.values().get(self.feature).ok_or(TemporalError::FeatureOutOfBounds)?;
+        let before = *previous
+            .values()
+            .get(self.feature)
+            .ok_or(TemporalError::FeatureOutOfBounds)?;
+        let after = *current
+            .values()
+            .get(self.feature)
+            .ok_or(TemporalError::FeatureOutOfBounds)?;
         let delta = after - before;
         Ok(match self.direction {
             DeltaDirection::Increase => delta >= self.threshold,
@@ -143,8 +151,12 @@ pub fn encode_temporal(
 impl core::fmt::Display for TemporalError {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::InvalidThreshold => formatter.write_str("temporal threshold must be finite and non-negative"),
-            Self::FeatureOutOfBounds => formatter.write_str("temporal feature index is out of bounds"),
+            Self::InvalidThreshold => {
+                formatter.write_str("temporal threshold must be finite and non-negative")
+            }
+            Self::FeatureOutOfBounds => {
+                formatter.write_str("temporal feature index is out of bounds")
+            }
         }
     }
 }
@@ -162,13 +174,9 @@ mod tests {
     fn increase_predicate_detects_direction() {
         let previous = NumericState::new(vec![1.0]).expect("state");
         let current = NumericState::new(vec![2.5]).expect("state");
-        let predicate = DeltaPredicate::new(
-            PredicateId::new(100),
-            0,
-            DeltaDirection::Increase,
-            1.0,
-        )
-        .expect("predicate");
+        let predicate =
+            DeltaPredicate::new(PredicateId::new(100), 0, DeltaDirection::Increase, 1.0)
+                .expect("predicate");
         assert_eq!(predicate.evaluate(&previous, &current), Ok(true));
     }
 
@@ -183,7 +191,10 @@ mod tests {
                 .expect("predicate"),
         ];
         let encoded = encode_temporal(&previous, &current, &predicates).expect("encode");
-        assert_eq!(encoded.predicates(), &[PredicateId::new(1), PredicateId::new(2)]);
+        assert_eq!(
+            encoded.predicates(),
+            &[PredicateId::new(1), PredicateId::new(2)]
+        );
     }
 
     #[test]
