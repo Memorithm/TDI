@@ -10,14 +10,13 @@ use core::fmt;
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::tdi23_ir::{
-    CategoricalAttentionIr, HilbertObjectKind, IrError, IrNodeKind, NodeId,
-    NonlinearBoundaryKind, ObjectId,
+    CategoricalAttentionIr, HilbertObjectKind, IrError, IrNodeKind, NodeId, NonlinearBoundaryKind,
+    ObjectId,
 };
 use super::tdi23_ir_provenance::{ProvenanceError, validate_rooted_subgraph};
 
 /// Versioned exact boundary-aware equivalence contract.
-pub const EXACT_EQUIVALENCE_CONTRACT: &str =
-    "tdi23.1-boundary-aware-exact-equivalence-v1";
+pub const EXACT_EQUIVALENCE_CONTRACT: &str = "tdi23.1-boundary-aware-exact-equivalence-v1";
 /// Versioned explicit reduction-summary contract.
 pub const REDUCTION_CONTRACT_SUMMARY: &str = "tdi23.1-reduction-contract-summary-v1";
 
@@ -469,8 +468,7 @@ mod tests {
             .add_linear_map(
                 a,
                 b,
-                RealLinearMap::new(2, 3, vec![1.0, -2.0, 3.0, 4.0, 5.0, -6.0])
-                    .expect("map"),
+                RealLinearMap::new(2, 3, vec![1.0, -2.0, 3.0, 4.0, 5.0, -6.0]).expect("map"),
             )
             .expect("f");
         let dagger = ir.dagger(f).expect("dagger");
