@@ -773,7 +773,7 @@ fn effective_visible_facts(
             None => {
                 functional.insert(key, (entry.revision(), fact.object().clone()));
             }
-            Some((revision, object)) if entry.revision() > *revision => {
+            Some((revision, _)) if entry.revision() > *revision => {
                 functional.insert(key, (entry.revision(), fact.object().clone()));
             }
             Some((revision, object))
