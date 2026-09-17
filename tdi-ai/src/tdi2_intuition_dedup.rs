@@ -30,7 +30,10 @@ pub fn structural_duplicates(store: &ExperienceStore) -> Vec<DuplicatePair> {
                     entries[right].template().base().id(),
                 ];
                 ids.sort_unstable();
-                duplicates.push(DuplicatePair { left: ids[0], right: ids[1] });
+                duplicates.push(DuplicatePair {
+                    left: ids[0],
+                    right: ids[1],
+                });
             }
         }
     }
@@ -67,7 +70,10 @@ mod tests {
         store.insert(entry(2)).expect("insert");
         assert_eq!(
             structural_duplicates(&store),
-            vec![DuplicatePair { left: TemplateId::new(2), right: TemplateId::new(9) }]
+            vec![DuplicatePair {
+                left: TemplateId::new(2),
+                right: TemplateId::new(9)
+            }]
         );
     }
 }

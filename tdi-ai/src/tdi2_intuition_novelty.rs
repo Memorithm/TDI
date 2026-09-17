@@ -32,9 +32,13 @@ pub fn diagnose_novelty(store: &ExperienceStore, state: &BooleanState) -> Novelt
             exact_applicable += 1;
         }
         let fraction = matched.score();
-        best_partial_match = Some(best_partial_match.map_or(fraction, |current| current.max(fraction)));
+        best_partial_match =
+            Some(best_partial_match.map_or(fraction, |current| current.max(fraction)));
     }
-    NoveltyDiagnostic { exact_applicable, best_partial_match }
+    NoveltyDiagnostic {
+        exact_applicable,
+        best_partial_match,
+    }
 }
 
 #[cfg(test)]
@@ -61,10 +65,7 @@ mod tests {
                 ReliabilityEvidence::new(3, 0),
             ))
             .expect("insert");
-        let diagnostic = diagnose_novelty(
-            &store,
-            &BooleanState::new(vec![PredicateId::new(99)]),
-        );
+        let diagnostic = diagnose_novelty(&store, &BooleanState::new(vec![PredicateId::new(99)]));
         assert!(diagnostic.is_uncovered());
         assert_eq!(diagnostic.best_partial_match, Some(0.0));
     }

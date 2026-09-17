@@ -32,7 +32,9 @@ pub enum CalibrationError {
 impl core::fmt::Display for CalibrationError {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::InvalidPrediction => formatter.write_str("calibration predictions must be finite values in [0, 1]"),
+            Self::InvalidPrediction => {
+                formatter.write_str("calibration predictions must be finite values in [0, 1]")
+            }
             Self::ZeroBins => formatter.write_str("calibration bin count must be positive"),
         }
     }
@@ -100,8 +102,7 @@ pub fn expected_calibration_error(
         summaries
             .iter()
             .map(|bin| {
-                (bin.count as f64 / total)
-                    * (bin.mean_prediction - bin.empirical_accuracy).abs()
+                (bin.count as f64 / total) * (bin.mean_prediction - bin.empirical_accuracy).abs()
             })
             .sum(),
     ))
@@ -133,8 +134,14 @@ mod tests {
     #[test]
     fn perfectly_calibrated_two_bin_fixture_has_zero_error() {
         let observations = [
-            CalibrationObservation { predicted: 0.0, correct: false },
-            CalibrationObservation { predicted: 1.0, correct: true },
+            CalibrationObservation {
+                predicted: 0.0,
+                correct: false,
+            },
+            CalibrationObservation {
+                predicted: 1.0,
+                correct: true,
+            },
         ];
         assert_eq!(expected_calibration_error(&observations, 2), Ok(Some(0.0)));
         assert_eq!(brier_score(&observations), Ok(Some(0.0)));
@@ -142,7 +149,44 @@ mod tests {
 
     #[test]
     fn half_confidence_has_quarter_brier_error() {
-        let observations = [CalibrationObservation { predicted: 0.5, correct: true }];
+        let observations = [CalibrationObservation {
+            predicted: 0.5,
+            correct: true,
+        }];
         assert_eq!(brier_score(&observations), Ok(Some(0.25)));
+    }
+}
+
+use super::tdi2_intuition_reliability::{ReliabilityError, ReliabilityEvidence};
+
+/// Convert empirical template evidence into a calibration observation.
+///
+/// The probability-like prediction is the Beta-posterior mean, not the
+/// experience ranking weight. This preserves the distinction between ranking
+/// strength and calibrated correctness probability.
+pub fn calibration_observation_from_evidence(
+    evidence: ReliabilityEvidence,
+    alpha: f64,
+    beta: f64,
+    correct: bool,
+) -> Result<CalibrationObservation, ReliabilityError> {
+    Ok(CalibrationObservation {
+        predicted: evidence.posterior_mean(alpha, beta)?,
+        correct,
+    })
+}
+
+#[cfg(test)]
+mod evidence_calibration_tests {
+    use super::calibration_observation_from_evidence;
+    use crate::experimental::tdi2_intuition_reliability::ReliabilityEvidence;
+
+    #[test]
+    fn calibration_uses_reliability_not_ranking_weight() {
+        let observation =
+            calibration_observation_from_evidence(ReliabilityEvidence::new(8, 2), 1.0, 1.0, true)
+                .unwrap();
+        assert_eq!(observation.predicted, 0.75);
+        assert!(observation.correct);
     }
 }
