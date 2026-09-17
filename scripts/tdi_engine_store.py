@@ -19,7 +19,7 @@ import urllib.parse
 import tdi_artifact_contract as artifacts
 import tdi_experiment_supervisor as durable
 
-SCHEMA = 2
+SCHEMA = 3
 MAX_PAGE = 200
 
 
@@ -79,7 +79,7 @@ class EngineStore:
                 # short mutations. Never hold a file lock across a network wait:
                 # another CLI process must be able to persist cancellation.
                 fcntl.flock(self.lock, fcntl.LOCK_UN)
-            if self.db.execute("PRAGMA user_version").fetchone()[0] not in ((1, SCHEMA) if readonly else (SCHEMA,)):
+            if self.db.execute("PRAGMA user_version").fetchone()[0] not in ((1, 2, SCHEMA) if readonly else (SCHEMA,)):
                 raise durable.StorageError("unsupported catalogue schema")
             self.db.row_factory = sqlite3.Row
             self.db.execute("PRAGMA foreign_keys=ON")
@@ -94,13 +94,18 @@ class EngineStore:
         version = self.db.execute("PRAGMA user_version").fetchone()[0]
         if version == SCHEMA:
             return
-        if version == 1:
+        if version in (1, 2):
             tables = {row[0] for row in self.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-            if tables != {"campaigns", "events", "results", "cache", "restored_artifacts"}:
-                raise durable.StorageError("unrecognized v1 catalogue tables")
+            expected = {"campaigns", "events", "results", "cache", "restored_artifacts"}
+            if version == 2:
+                expected.add("exports")
+            if tables != expected:
+                raise durable.StorageError("unrecognized previous catalogue tables")
             self.db.execute("BEGIN IMMEDIATE")
             try:
-                self._create_exports()
+                if version == 1:
+                    self._create_exports()
+                self._create_searches()
                 self.db.execute(f"PRAGMA user_version={SCHEMA}")
                 self.db.commit()
                 durable._fsync_directory(self.path.parent)
@@ -123,6 +128,7 @@ class EngineStore:
             for sql in statements:
                 self.db.execute(sql)
             self._create_exports()
+            self._create_searches()
             self.db.execute(f"PRAGMA user_version={SCHEMA}")
             self.db.commit()
             durable._fsync_directory(self.path.parent)
@@ -133,6 +139,105 @@ class EngineStore:
     def _create_exports(self):
         self.db.execute("CREATE TABLE exports (id TEXT PRIMARY KEY, campaign TEXT NOT NULL REFERENCES campaigns(id), kind TEXT NOT NULL, endpoint TEXT NOT NULL, plan TEXT NOT NULL, state TEXT NOT NULL, receipt TEXT NOT NULL, updated_ns INTEGER NOT NULL)")
         self.db.execute("CREATE INDEX campaign_exports ON exports(campaign, updated_ns)")
+
+    def _create_searches(self):
+        self.db.execute("CREATE TABLE searches (id TEXT PRIMARY KEY, spec TEXT NOT NULL, binding TEXT NOT NULL, response TEXT NOT NULL, phase TEXT NOT NULL, sequence INTEGER NOT NULL, created_ns INTEGER NOT NULL)")
+        self.db.execute("CREATE TABLE search_events (sequence INTEGER PRIMARY KEY, search TEXT NOT NULL REFERENCES searches(id), kind TEXT NOT NULL, payload TEXT NOT NULL, recorded_ns INTEGER NOT NULL)")
+        self.db.execute("CREATE INDEX search_events_by_search ON search_events(search,sequence)")
+        self.db.execute("CREATE TABLE search_stages (search TEXT NOT NULL REFERENCES searches(id), attempt TEXT NOT NULL, campaign TEXT NOT NULL REFERENCES campaigns(id), roots TEXT NOT NULL, PRIMARY KEY(search,attempt))")
+
+    def create_search(self, spec, binding, response):
+        """Persist an immutable search and its initial Forge checkpoint, without execution."""
+        key = identity("tdi-scientific-search/v1", {"spec": spec, "binding": binding})
+        with self.db:
+            row = self.db.execute("SELECT id FROM searches WHERE id=?", (key,)).fetchone()
+            if row is None:
+                self.db.execute("INSERT INTO searches VALUES (?,?,?,?, 'prepared',0,?)",
+                    (key, durable.canonical(spec), durable.canonical(binding), durable.canonical(response), time.time_ns()))
+                self._search_event(key, "prepared", {"identity": key})
+        return self.get_search(key)
+
+    def get_search(self, key):
+        """Read administrative state; candidate proposal code must not receive it."""
+        row = self.db.execute("SELECT * FROM searches WHERE id=?", (key,)).fetchone()
+        if row is None:
+            raise durable.ContractError("unknown scientific search")
+        record = dict(row)
+        for field in ("spec", "binding", "response"):
+            record[field] = durable.strict_json(record[field], max_bytes=8 * 1024 * 1024, max_items=1000000)
+        if identity("tdi-scientific-search/v1", {k: record[k] for k in ("spec", "binding")}) != key:
+            raise durable.ContractError("scientific search contract/binding integrity mismatch")
+        row = self.db.execute("SELECT payload FROM search_events WHERE search=? AND kind='transition' ORDER BY sequence DESC LIMIT 1", (key,)).fetchone()
+        record["last_transition"] = durable.strict_json(row[0]) if row else None
+        record["execution_error"] = record["phase"] == "cancel-requested" or bool(record["last_transition"] and
+                                         ({"stage_failure", "budget_or_prerequisite_stop"} & set(record["last_transition"])))
+        record["stages"] = [{"attempt": r[0], "campaign": r[1], "roots": durable.strict_json(r[2]), "phase": r[3], "workflow": r[4]}
+                            for r in self.db.execute("SELECT ss.attempt,ss.campaign,ss.roots,c.phase,c.workflow FROM search_stages ss JOIN campaigns c ON c.id=ss.campaign WHERE ss.search=? ORDER BY ss.rowid", (key,))]
+        return record
+
+    def _search_event(self, key, kind, payload):
+        self.db.execute("INSERT INTO search_events(search,kind,payload,recorded_ns) VALUES (?,?,?,?)",
+                        (key, kind, durable.canonical(payload), time.time_ns()))
+
+    def search_event(self, key, kind, payload):
+        """Retain execution mappings/diagnostics without changing Forge authority."""
+        with self.db:
+            self._search_event(key, kind, payload)
+
+    def update_search(self, key, sequence, phase, response, event):
+        """CAS checkpoint and audit event in one FULL-synchronous transaction."""
+        origins = {"prepared": ("prepared",), "running": ("prepared", "running", "paused"),
+                   "paused": ("running",), "completed": ("running", "completed"),
+                   "cancel-requested": ("prepared", "running", "paused", "cancel-requested"),
+                   "cancelled": ("cancel-requested", "cancelled")}
+        if phase not in origins:
+            raise durable.ContractError("unknown scientific search phase")
+        placeholders = ",".join("?" for _ in origins[phase])
+        with self.db:
+            changed = self.db.execute("UPDATE searches SET response=?,phase=?,sequence=sequence+1 WHERE id=? AND sequence=? "
+                f"AND phase IN ({placeholders}) "
+                "AND NOT (? AND EXISTS (SELECT 1 FROM search_stages ss JOIN campaigns c ON c.id=ss.campaign WHERE ss.search=searches.id AND c.phase NOT IN ('completed','failed','cancelled')))",
+                (durable.canonical(response), phase, key, sequence, *origins[phase], phase == "cancelled"))
+            if changed.rowcount != 1:
+                raise durable.ContractError("scientific search transition invalid, cleanup incomplete or state changed")
+            self._search_event(key, "transition", event)
+        return self.get_search(key)
+
+    def list_searches(self, *, after=0, limit=MAX_PAGE):
+        """Page actual search phases; v1/v2 read-only catalogues contain no searches."""
+        self._page(after, limit)
+        if self.db.execute("PRAGMA user_version").fetchone()[0] < 3:
+            return []
+        return [dict(row) for row in self.db.execute("SELECT id,phase,sequence,created_ns FROM searches ORDER BY created_ns,id LIMIT ? OFFSET ?", (limit, after))]
+
+    def bind_search_stage(self, key, attempt, spec, roots, endpoint):
+        """Bind a prepared Hub campaign before dispatch, atomically with cancellation."""
+        campaign = identity("tdi-operational-campaign/v1", spec)
+        self.db.execute("BEGIN IMMEDIATE")
+        with self.db:
+            row = self.db.execute("SELECT phase FROM searches WHERE id=?", (key,)).fetchone()
+            if row is None or row[0] != "running":
+                raise durable.ContractError("search stopped before stage admission")
+            existing = self.db.execute("SELECT campaign,roots FROM search_stages WHERE search=? AND attempt=?", (key, attempt)).fetchone()
+            if existing:
+                if tuple(existing) != (campaign, durable.canonical(roots)):
+                    raise durable.ContractError("search stage plan changed after binding")
+                return campaign
+            previous = self.db.execute("SELECT spec,endpoint FROM campaigns WHERE id=?", (campaign,)).fetchone()
+            if previous and tuple(previous) != (durable.canonical(spec), endpoint):
+                raise durable.ContractError("search stage campaign binding mismatch")
+            if previous is None:
+                self.db.execute("INSERT INTO campaigns VALUES (?,?,?,?,NULL,NULL,NULL,?)",
+                                (campaign, durable.canonical(spec), endpoint, "prepared", time.time_ns()))
+                self._event(campaign, "prepared", {"spec_identity": campaign})
+            self.db.execute("INSERT INTO search_stages VALUES (?,?,?,?)", (key, attempt, campaign, durable.canonical(roots)))
+            self._search_event(key, "stage-plan", {"attempt_id": attempt, "campaign": campaign})
+        return campaign
+
+    def search_stage(self, key, attempt):
+        """Recover an exact attempt mapping without creating another workflow."""
+        row = self.db.execute("SELECT campaign,roots FROM search_stages WHERE search=? AND attempt=?", (key, attempt)).fetchone()
+        return {"campaign": row[0], "roots": durable.strict_json(row[1])} if row else None
 
     @contextlib.contextmanager
     def delivery_lock(self):
@@ -241,7 +346,7 @@ class EngineStore:
     def transition(self, campaign, expected, phase, *, workflow=None, admission=None, snapshot=None):
         """Atomically compare the prior phase, update evidence, and append its event."""
         allowed = {
-            "prepared": {"submitting"},
+            "prepared": {"submitting", "cancelled"},
             "submitting": {"admitted", "submission-unknown"},
             "submission-unknown": {"admitted"},
             "admitted": {"executing", "cancel-requested", "completed", "failed", "cancelled"},
@@ -253,9 +358,10 @@ class EngineStore:
             raise durable.ContractError("invalid campaign transition")
         with self.db:
             cursor = self.db.execute(
-                "UPDATE campaigns SET phase=?,workflow=COALESCE(?,workflow),admission=COALESCE(?,admission),snapshot=COALESCE(?,snapshot) WHERE id=? AND phase=?",
+                "UPDATE campaigns SET phase=?,workflow=COALESCE(?,workflow),admission=COALESCE(?,admission),snapshot=COALESCE(?,snapshot) WHERE id=? AND phase=? "
+                "AND NOT (? AND EXISTS (SELECT 1 FROM search_stages ss JOIN searches s ON s.id=ss.search WHERE ss.campaign=campaigns.id AND s.phase IN ('cancel-requested','cancelled')))",
                 (phase, workflow, durable.canonical(admission) if admission else None,
-                 durable.canonical(snapshot) if snapshot else None, campaign, expected),
+                 durable.canonical(snapshot) if snapshot else None, campaign, expected, phase == "executing" and expected == "admitted"),
             )
             if cursor.rowcount != 1:
                 raise durable.ContractError("campaign state changed or is unknown")

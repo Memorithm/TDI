@@ -169,6 +169,8 @@ def refresh(client, store, campaign):
     beneficial verdict. Pending/running snapshots do not trigger execution.
     """
     record = store.get(campaign)
+    if record["phase"] == "cancelled" and record["workflow"] is None:
+        return record
     if record["phase"] == "imported":
         raise durable.ContractError("imported evidence is read-only and cannot resume execution")
     _check_endpoint(client, record)
@@ -289,6 +291,9 @@ def cancel(client, store, campaign):
         raise durable.ContractError("imported evidence cannot cancel its original workflow")
     if record["phase"] in TERMINAL.values():
         return record
+    if record["phase"] == "prepared":
+        store.transition(campaign, "prepared", "cancelled")
+        return store.get(campaign)
     workflow = entity_id(record["workflow"])
     if record["phase"] != "cancel-requested":
         store.transition(campaign, record["phase"], "cancel-requested")
