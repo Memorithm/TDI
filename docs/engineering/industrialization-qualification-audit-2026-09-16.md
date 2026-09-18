@@ -2,11 +2,11 @@
 
 This audit is a durable software-engineering evidence snapshot. It does **not** authorize or reinterpret any scientific stage, protected/final holdout, hardware result, performance claim, novelty claim, or production actuation.
 
-`docs/engineering/industrialization-status.md` remains the durable programme handoff and, in this PR, explicitly delegates current exact-head qualification state to this dated audit where older Lot-H/Q19–Q30 rows conflict. This audit reports only what is verifiable from the workflow state observed now; it does not infer what required checks were or were not green at an earlier merge time unless that historical evidence is explicitly available.
+`docs/engineering/industrialization-status.md` remains the durable programme handoff and explicitly delegates current exact-head qualification state to this dated audit where older Lot-H/Q19–Q30 rows conflict. This audit reports only what is verifiable from the workflow state observed now; it does not infer what required checks were or were not green at an earlier merge time unless that historical evidence is explicitly available.
 
 ## Default-branch snapshot
 
-Audited `Memorithm/TDI` default branch: `main` at `1e1c9f2d30a92c3f3c835932e39b1a13a0184f3b` (merge of PR #330, `docs(tdi-2.1): close implementation cycle two`).
+Audited `Memorithm/TDI` default branch: `main` at `d8785a04d112e732bf92bd115d23640e7bfb60e7` (merge of PR #332, `docs(engine): record exact-head industrialization qualification audit`).
 
 ## Industrialization lots E→H
 
@@ -33,12 +33,13 @@ This audit focuses on later merged/open work whose current exact-head evidence d
 | SciRust reusable-primitive boundary | #283 | `f05351ecf082591d2a93a33628621f98f89d81aa` | merged | dedicated SciRust, operational-engine and some repository gates succeeded; other workflow runs observed now are queued/in-progress | **current exact-head qualification not established by this audit** |
 | FLAT-ATTENTION qualification boundary | #285 | `735bd1fb78644ff1124844c795e4dba7f32980b3` | merged | the workflow query returned **no runs** for this exact final head | **unverified by this audit** |
 | NNIS qualification boundary | #286 | `f46eae12dae981de2057768ab64ff953da939e8e` | merged | Rust/Public Rust/MSRV, operational-engine, dedicated NNIS and multiple repository runs observed now are queued/pending | **current exact-head qualification not established by this audit**; upstream NNIS hardware qualification remains independently blocking |
-| Shared replay SDK + real finite/Jacobi libraries | #331 | `58f399b139834efeb255c9e9126809762d9cb28b` | open, non-draft, mergeable | the material resume-depth P1 review thread is resolved on the current head; dedicated real-library, Rust/Public Rust/MSRV, operational-engine and repository workflows are queued | **candidate** |
-| Paired analysis consuming SciRust | #296 | `29294e801234e858e122bf32ed694acbb3190d54` | open, non-draft, mergeable | both material P2 review threads are resolved; dedicated analysis and repository workflows are queued/pending | **candidate, dependency-gated by SciRust #1452** |
+| Shared replay SDK + real finite/Jacobi libraries | #331 | `58f399b139834efeb255c9e9126809762d9cb28b` | merged as `c5f6dcad6094f945af3d4df211490a76a24f8416` | the material resume-depth P1 review was resolved, but the current workflow query for this exact final head still reports the dedicated real-library, Rust/Public Rust/MSRV, operational-engine and many repository workflows queued | **merge present; current exact-head qualification not established by this audit** |
+| Paired analysis consuming SciRust | #296 | `29294e801234e858e122bf32ed694acbb3190d54` | merged as `cc07d5c55bd2b5aca78b6b8074da21e508a1c735` | material review findings were resolved, but the current exact-head workflow query is queued/pending and the merged source still pins pre-final SciRust candidate `06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0` | **merged but not final-integration qualified; corrective final SciRust pin still required** |
+| Durable Forge scientific search through Hub | #385 | `9f1578f50ee5661545604b4e5179e8f12106c6c8` | open, non-draft, mergeable | ambiguous-submission cancellation review is resolved with a durable `cancel-requested` state; current head blocks new/already-admitted dispatch during pending cleanup and requires Hub attachment before terminal cancellation of unknown submissions; dedicated Forge-search and repository workflows remain exact-head gated | **candidate, final Forge #39 merge pin applied; exact-head TDI CI remains required** |
 
 ## Evidence rule: merge presence is not a substitute for current qualification evidence
 
-For #283, #285, #286 and #288, the current audit cannot verify a complete green exact-head suite from the workflow state it observes now. That statement is deliberately narrower than saying the PRs were merged incorrectly: queued/pending runs may be reruns or non-required workflows, and the absence of a returned run does not by itself reconstruct merge-time required-check state.
+For #283, #285, #286, #288, #296 and #331, the current audit cannot verify a complete green exact-head suite from the workflow state it observes now. That statement is deliberately narrower than saying the PRs were merged incorrectly: queued/pending runs may be reruns or non-required workflows, and the absence of a returned run does not by itself reconstruct merge-time required-check state.
 
 The evidence-preserving handling is therefore:
 
@@ -51,26 +52,30 @@ The evidence-preserving handling is therefore:
 ## Q19–Q30 implications
 
 - **Q19 Elastic resource control:** partial. The non-actuating #279 contract has complete exact-head evidence, but the current audit does not establish qualification of merged #288 hardening and no actual ElasticXxx actuation/control effectiveness is established.
-- **Q20 Forge:** still partial. #277 qualifies interchange only; it does not establish a real Forge PROPOSE/MUTATE→COMPILE→VERIFY→MEASURE→SELECT execution path.
+- **Q20 Forge:** candidate execution path #385 now connects a pinned Forge process to independently evaluated authoritative Hub workflows with durable checkpoints/recovery, and now pins the qualified Forge #39 merge revision; exact-head TDI qualification is still pending. #277 remains the qualified interchange-only foundation.
 - **Q21 SciRust primitive consumption:** remains incomplete. #283 is structural and the current audit does not establish complete qualification of its final head; real primitive consumption against an independent reference remains required.
-- **Q22 statistical units/exclusions/uncertainty:** active candidate #296. It keeps unit weighting, explicit exclusions and non-assessed scientific verdicts, but remains dependency/CI gated.
+- **Q22 statistical units/exclusions/uncertainty:** code from #296 is merged, but its current exact-head evidence is incomplete and its embedded SciRust source pin is explicitly not final. Treat the integration as unqualified until the final reviewed SciRust revision is pinned and requalified in TDI.
 - **Q23 sensitivity/search bounds:** active upstream candidate `Memorithm/scirust#1452`; no TDI promotion until upstream exact-head qualification and final pinning are complete.
 - **Q24/Q25 operational CLI/API/viewer:** #284 exact-head workflows are fully green for its declared Development/Validation software scope. This does not extend cgroup/GPU/sandbox claims beyond the explicitly qualified paths.
 - **Q26 external tracking:** #287 exact-head workflows are fully green for its declared MLflow/OTLP software boundary. Retry may duplicate remote metrics; exactly-once delivery is not claimed.
 - **Q28 FLAT/NNIS hardware:** blocked/unqualified. No exact-head FLAT final-head workflow evidence was returned for #285; the current audit does not establish complete #286 qualification, and NNIS upstream hardware qualification remains separate.
-- **Q30 final-head discipline:** current evidence is incomplete for #283/#285/#286/#288. This audit records the gap without inferring historical merge-time check state that it cannot reconstruct.
+- **Q30 final-head discipline:** current evidence is incomplete for #283/#285/#286/#288/#296/#331 and active candidates remain unqualified until every applicable final-head gate completes successfully. This audit records gaps without inferring historical merge-time check state that it cannot reconstruct.
 
 ## Current coding frontier
 
-### #331 — reusable real-library adapter SDK
+### #385 — durable Forge scientific search
 
-The candidate adds `ReplayCodec` on top of the existing `ReplayAdapter`, bounded complete checkpoint codecs, actual `tdi_core::TableSystem` and `tdi_operator::GreenBands` adapters, and a Hub-owned four-stage prefix/resume/full/verify DAG. The verifier uses independent modular/analytic oracles and compares split replay with uninterrupted execution. The current head also addresses the material review finding that restored paired execution must offset context depth from checkpoint progress. It does not add a scheduler, protected population, GPU execution, scientific confirmation, or performance claim.
+The candidate adds resumable Forge ask/tell search over actual Hub-owned workflows rather than recreating scheduling in TDI. TDI persists the Forge checkpoint and the attempt-to-Hub campaign mapping before the first workflow mutation; stage evidence is consumed only through authoritative Hub artifacts and Forge retains proposal/budget/Pareto mechanics. A material cancellation review exposed an unsafe boundary when a Hub workflow had been created but its identity was not yet durably bound. Cancellation now persists a non-dispatchable `cancel-requested` state before cleanup. Unknown submissions retain explicit pending-cleanup campaign identities until the existing `runtime.attach` path reconciles the workflow. The terminal `cancelled` state requires every mapped campaign to be terminal. The regression creates a real Hub workflow, loses its response, proves pending cancellation blocks resume and already-admitted dispatch, attaches the existing workflow, then verifies cleanup completes.
 
-Its dedicated workflow now checks out the explicit PR head SHA with pinned checkout/toolchain actions. Merge remains forbidden until the dedicated real-library workflow and every applicable exact-head repository gate are complete and green.
+Forge PR #39 completed both returned exact-head workflows successfully on head `0d48a91a5eed6a9ae09a5eacd7c4f18df8bdd333`, had its material review finding resolved, and was squash-merged as `28067ab0aa1d52a2260d9bb2bf35a346547a292a`. The #385 workflow and operator documentation now pin that immutable merge revision. This closes the Forge source-pin dependency only; merge remains forbidden until every applicable TDI workflow is green on the resulting exact final head.
 
-### #296 / SciRust #1452 — general analysis
+### #331 — merged replay SDK requiring evidence reconciliation
 
-TDI #296 remains non-confirmatory and preserves explicit unit/exclusion accounting. Its two material review findings are resolved, but it depends on SciRust #1452. Its dedicated workflow now checks out the explicit TDI PR head SHA with pinned actions. The SciRust PR likewise has an exact-head dedicated qualification checkout. Both current exact heads still have queued/pending workflows. TDI must record the final reviewed SciRust source pin before integration; a temporary candidate SHA is not sufficient.
+PR #331 merged as `c5f6dcad6094f945af3d4df211490a76a24f8416`. Its code adds `ReplayCodec`, bounded complete checkpoints, real `tdi_core::TableSystem` and `tdi_operator::GreenBands` adapters, and a Hub-owned four-stage replay DAG with independent modular/analytic verification. The material resume-depth finding was fixed before merge. However, the current query for the final head still reports the dedicated real-library and repository workflows queued, so this audit does not promote it to qualified solely from merge presence. New current-main regression evidence may be recorded separately when available.
+
+### #296 / SciRust #1452 — merged TDI consumer awaiting final upstream pin
+
+TDI #296 merged as `cc07d5c55bd2b5aca78b6b8074da21e508a1c735` while its own PR body still declared the embedded SciRust SHA `06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0` candidate-only. SciRust #1452 remains open. Therefore the merged paired-analysis implementation must not be treated as finally qualified against SciRust. After #1452 is fully reviewed, exact-head green and merged, TDI needs a corrective source-pin PR to the resulting SciRust merge SHA and its own exact-head qualification before Q22/Q23 integration is promoted.
 
 ## Ownership invariants
 

@@ -16,11 +16,7 @@ pub struct InferenceTrace {
 impl InferenceTrace {
     /// Capture a canonical trace from an already-canonical state and ranked candidates.
     #[must_use]
-    pub fn new(
-        state: &BooleanState,
-        candidates: &[Candidate],
-        outcome: IntuitionOutcome,
-    ) -> Self {
+    pub fn new(state: &BooleanState, candidates: &[Candidate], outcome: IntuitionOutcome) -> Self {
         let predicate_ids = state
             .predicates()
             .iter()
@@ -36,7 +32,11 @@ impl InferenceTrace {
                 )
             })
             .collect();
-        Self { predicate_ids, candidate_records, outcome }
+        Self {
+            predicate_ids,
+            candidate_records,
+            outcome,
+        }
     }
 
     /// Stable textual record suitable for artifact hashing by the surrounding TDI harness.
@@ -55,7 +55,11 @@ impl InferenceTrace {
             .collect::<Vec<_>>()
             .join(",");
         let outcome = match self.outcome {
-            IntuitionOutcome::Selected { template_id, weight, support } => format!(
+            IntuitionOutcome::Selected {
+                template_id,
+                weight,
+                support,
+            } => format!(
                 "selected:{}:{:016x}:{}",
                 template_id.raw(),
                 weight.to_bits(),
@@ -70,7 +74,9 @@ impl InferenceTrace {
 
     /// Captured outcome.
     #[must_use]
-    pub const fn outcome(&self) -> IntuitionOutcome { self.outcome }
+    pub const fn outcome(&self) -> IntuitionOutcome {
+        self.outcome
+    }
 }
 
 /// Canonical structural record that intentionally excludes the template id and evidence.
@@ -121,9 +127,13 @@ pub fn template_structure_record(template: &RelationalTemplate) -> String {
 #[cfg(test)]
 mod tests {
     use super::{InferenceTrace, template_structure_record};
-    use crate::experimental::tdi2_intuition::{BooleanState, PredicateId, RoleId, Template, TemplateId};
+    use crate::experimental::tdi2_intuition::{
+        BooleanState, PredicateId, RoleId, Template, TemplateId,
+    };
     use crate::experimental::tdi2_intuition_inference::IntuitionOutcome;
-    use crate::experimental::tdi2_intuition_relations::{RelationId, RelationalTemplate, RoleRelation};
+    use crate::experimental::tdi2_intuition_relations::{
+        RelationId, RelationalTemplate, RoleRelation,
+    };
     use crate::experimental::tdi2_intuition_selection::Candidate;
 
     #[test]
@@ -154,10 +164,17 @@ mod tests {
             .expect("template");
             RelationalTemplate::new(
                 base,
-                vec![RoleRelation::new(RoleId::new(1), RelationId::new(3), RoleId::new(2))],
+                vec![RoleRelation::new(
+                    RoleId::new(1),
+                    RelationId::new(3),
+                    RoleId::new(2),
+                )],
             )
             .expect("relation")
         };
-        assert_eq!(template_structure_record(&make(1)), template_structure_record(&make(9)));
+        assert_eq!(
+            template_structure_record(&make(1)),
+            template_structure_record(&make(9))
+        );
     }
 }

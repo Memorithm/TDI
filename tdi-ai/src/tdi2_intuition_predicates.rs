@@ -46,12 +46,20 @@ impl ScalarPredicate {
         if !threshold.is_finite() {
             return Err(PredicateError::NonFiniteThreshold);
         }
-        Ok(Self { id, feature, comparison, threshold })
+        Ok(Self {
+            id,
+            feature,
+            comparison,
+            threshold,
+        })
     }
 
     /// Evaluate the predicate against a validated numeric state.
     pub fn evaluate(self, state: &NumericState) -> Result<bool, PredicateError> {
-        let value = *state.values().get(self.feature).ok_or(PredicateError::FeatureOutOfBounds)?;
+        let value = *state
+            .values()
+            .get(self.feature)
+            .ok_or(PredicateError::FeatureOutOfBounds)?;
         Ok(match self.comparison {
             Comparison::GreaterOrEqual => value >= self.threshold,
             Comparison::LessOrEqual => value <= self.threshold,
@@ -64,7 +72,10 @@ pub fn validate_catalogue(
     predicates: &[ScalarPredicate],
     feature_count: usize,
 ) -> Result<(), PredicateError> {
-    let mut ids = predicates.iter().map(|predicate| predicate.id).collect::<Vec<_>>();
+    let mut ids = predicates
+        .iter()
+        .map(|predicate| predicate.id)
+        .collect::<Vec<_>>();
     ids.sort_unstable();
     if let Some(id) = ids
         .windows(2)
@@ -72,7 +83,10 @@ pub fn validate_catalogue(
     {
         return Err(PredicateError::DuplicatePredicateId { id });
     }
-    if predicates.iter().any(|predicate| predicate.feature >= feature_count) {
+    if predicates
+        .iter()
+        .any(|predicate| predicate.feature >= feature_count)
+    {
         return Err(PredicateError::FeatureOutOfBounds);
     }
     Ok(())
@@ -82,9 +96,15 @@ impl core::fmt::Display for PredicateError {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::NonFiniteThreshold => formatter.write_str("predicate threshold must be finite"),
-            Self::FeatureOutOfBounds => formatter.write_str("predicate feature index is out of bounds"),
+            Self::FeatureOutOfBounds => {
+                formatter.write_str("predicate feature index is out of bounds")
+            }
             Self::DuplicatePredicateId { id } => {
-                write!(formatter, "predicate id {} appears more than once", id.raw())
+                write!(
+                    formatter,
+                    "predicate id {} appears more than once",
+                    id.raw()
+                )
             }
         }
     }
@@ -99,8 +119,9 @@ mod tests {
     #[test]
     fn scalar_predicate_is_deterministic() {
         let state = NumericState::new(vec![1.0, 3.0]).expect("state");
-        let predicate = ScalarPredicate::new(PredicateId::new(7), 1, Comparison::GreaterOrEqual, 2.0)
-            .expect("predicate");
+        let predicate =
+            ScalarPredicate::new(PredicateId::new(7), 1, Comparison::GreaterOrEqual, 2.0)
+                .expect("predicate");
         assert_eq!(predicate.evaluate(&state), Ok(true));
     }
 
@@ -114,7 +135,9 @@ mod tests {
         ];
         assert_eq!(
             validate_catalogue(&predicates, 2),
-            Err(PredicateError::DuplicatePredicateId { id: PredicateId::new(1) })
+            Err(PredicateError::DuplicatePredicateId {
+                id: PredicateId::new(1)
+            })
         );
     }
 }

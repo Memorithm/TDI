@@ -70,7 +70,8 @@ pub fn logical_memory_accounting(store: &ExperienceStore) -> LogicalMemoryAccoun
     for entry in store.entries() {
         accounting.templates += 1;
         accounting.boolean_clauses += (entry.template().base().required().len()
-            + entry.template().base().forbidden().len()) as u64;
+            + entry.template().base().forbidden().len())
+            as u64;
         accounting.roles += entry.template().base().roles().len() as u64;
         accounting.relations += entry.template().relations().len() as u64;
         accounting.reliability_counters += 2;
@@ -98,7 +99,10 @@ where
 {
     let start = Instant::now();
     let value = operation();
-    ExternalTiming { value, elapsed: start.elapsed() }
+    ExternalTiming {
+        value,
+        elapsed: start.elapsed(),
+    }
 }
 
 /// Collect raw wall-clock durations over repeated externally timed calls.
@@ -124,7 +128,9 @@ mod tests {
         OperationAccounting, logical_memory_accounting, measure_external, measure_repeated_external,
     };
     use crate::experimental::tdi2_intuition::{PredicateId, RoleId, Template, TemplateId};
-    use crate::experimental::tdi2_intuition_relations::{RelationId, RelationalTemplate, RoleRelation};
+    use crate::experimental::tdi2_intuition_relations::{
+        RelationId, RelationalTemplate, RoleRelation,
+    };
     use crate::experimental::tdi2_intuition_reliability::ReliabilityEvidence;
     use crate::experimental::tdi2_intuition_store::{ExperienceEntry, ExperienceStore};
 
@@ -152,12 +158,19 @@ mod tests {
         .expect("template");
         let relational = RelationalTemplate::new(
             base,
-            vec![RoleRelation::new(RoleId::new(1), RelationId::new(7), RoleId::new(2))],
+            vec![RoleRelation::new(
+                RoleId::new(1),
+                RelationId::new(7),
+                RoleId::new(2),
+            )],
         )
         .expect("relations");
         let mut store = ExperienceStore::new(2).expect("store");
         store
-            .insert(ExperienceEntry::new(relational, ReliabilityEvidence::new(3, 1)))
+            .insert(ExperienceEntry::new(
+                relational,
+                ReliabilityEvidence::new(3, 1),
+            ))
             .expect("insert");
         let accounting = logical_memory_accounting(&store);
         assert_eq!(accounting.templates, 1);
@@ -177,5 +190,49 @@ mod tests {
     fn repeated_timing_returns_exact_requested_sample_count() {
         let samples = measure_repeated_external(5, || 7_u64);
         assert_eq!(samples.len(), 5);
+    }
+}
+
+use super::tdi2_intuition::BooleanState;
+use super::tdi2_intuition_matching::match_template;
+
+/// Reproduce the scalar reference path's logical work counts for one state.
+///
+/// This is observational instrumentation. It does not alter ranking, inference,
+/// consolidation, or abstention and makes no claim about CPU instructions.
+#[must_use]
+pub fn reference_operation_accounting(
+    store: &ExperienceStore,
+    state: &BooleanState,
+) -> OperationAccounting {
+    let mut accounting = OperationAccounting::default();
+    for entry in store.entries() {
+        accounting.templates_considered += 1;
+        accounting.boolean_clauses_checked += (entry.template().base().required().len()
+            + entry.template().base().forbidden().len())
+            as u64;
+        if match_template(entry.template().base(), state).is_exact() {
+            accounting.weights_computed += 1;
+            accounting.candidates_selected += 1;
+        }
+    }
+    accounting
+}
+
+#[cfg(test)]
+mod reference_operation_tests {
+    use super::reference_operation_accounting;
+    use crate::experimental::tdi2_intuition_experience::motif_experience_store;
+    use crate::experimental::tdi2_intuition_tasks::motif_retrieval_case;
+
+    #[test]
+    fn motif_reference_run_counts_all_templates_but_one_candidate() {
+        let store = motif_experience_store(4);
+        let case = motif_retrieval_case(1_000);
+        let accounting = reference_operation_accounting(&store, case.query());
+        assert_eq!(accounting.templates_considered, 17);
+        assert_eq!(accounting.boolean_clauses_checked, 17);
+        assert_eq!(accounting.weights_computed, 1);
+        assert_eq!(accounting.candidates_selected, 1);
     }
 }
