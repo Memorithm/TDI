@@ -623,6 +623,8 @@ optuna_comparison_2026_09_18:
   status: public_development_comparison_implemented_qualification_pending
   consumer_pull_request: https://github.com/Memorithm/TDI/pull/499
   code_revision: 2c185982f1d62cd73b5dcf59c5c0f487b0165c3b
+  evidence_revision: eef520fb80772365ff924e83856bde99aa54c8c1
+  report_identity: 351107ef4847e87f5870a4a18ac9c9001fd064c44e775839cf9ba9bb5bc4a68f
   protocol: docs/engineering/optuna-comparison.md
   scope: public_finite_polynomial_optimizer_comparison_not_any_frozen_research_series
   ownership:
@@ -636,8 +638,9 @@ optuna_comparison_2026_09_18:
   evidence:
     - five_methodology_regressions_passed_locally
     - actual_debug_Forge_and_Optuna_smoke_completed_192_evaluations_and_report_verification
+    - actual_release_Forge_and_Optuna_development_completed_all_7680_evaluations_and_report_verification
+    - explicit_deadline_failure_keeps_partial_evidence_and_no_complete_report
   pending:
-    - release_build_development_profile_7680_evaluations
     - exact_PR_head_CI_and_material_review_resolution
   interpretation:
     - fixed_three_public_tasks_are_not_an_independent_task_population
