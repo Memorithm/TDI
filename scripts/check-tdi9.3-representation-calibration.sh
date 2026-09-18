@@ -61,6 +61,8 @@ cargo run --locked -p tdi-ai --features experimental --example boolean_c3_calibr
   || fail "C3 search calibration report failed"
 cargo test --locked -p tdi-ai --features experimental --lib boolean_policy_sensitivity \
   || fail "C3 local sensitivity tests failed"
+bash scripts/check-tdi9.3-elastic-interop.sh \
+  || fail "TDI-9.3 ElasticXxx interop fixture failed"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 cargo run --locked -p tdi-ai --features experimental --example boolean_c3_sensitivity \
