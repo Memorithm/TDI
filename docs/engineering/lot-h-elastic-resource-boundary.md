@@ -1,6 +1,6 @@
 # Lot H — TDI → ElasticXxx resource-control boundary
 
-Status: **current-main requalification candidate / non-actuating / no scientific authority**. The original #279 contract and later root-evidence hardening are present on `main`; this refresh deliberately re-runs the dedicated exact-head partner-contract gate over the integrated implementation instead of treating merge presence as qualification. The separate executable capacity-admission path is independently pinned to ElasticXxx #95 head `f8e10b1a1d05d6c22c0f56fed87252bc65d4e66a`, whose upstream `ci` and `packageability` runs are now successful; that later path does not turn this interchange contract into execution authority.
+Status: **current-main requalification candidate / non-actuating / no scientific authority**. The original #279 contract and later root-evidence hardening are present on `main`; this refresh deliberately re-runs the dedicated exact-head partner-contract gate over the integrated implementation instead of treating merge presence as qualification. The separate executable capacity-admission path is independently pinned to qualified ElasticXxx #135 merge `f5af4f3129100f4bb52d47d1adfc202347d0b098`; its upstream exact-head `ci`, `packageability`, and `continuous-hardening` gates completed successfully before merge. That later path does not turn this interchange contract into execution authority.
 
 The descriptor must advertise exactly `elastic.hub.run`, the `operator-config`
 input and `runtime-evidence` output. Their identities are ordinary SHA-256 of
