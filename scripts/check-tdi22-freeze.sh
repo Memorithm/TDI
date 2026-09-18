@@ -57,12 +57,7 @@ if [[ ! -s "$root/docs/TDI-22.1-FREEZE.md" ]]; then
   }
 fi
 
-# The historical bootstrap script is itself content-pinned above, but its
-# pre-freeze status assertions intentionally describe the old Stage-0 state.
-# Re-running those mutable-status assertions after the freeze would make this
-# verifier fail as the status document records qualified downstream progress.
-# Preserve the executable coverage directly instead.
-cargo test -p tdi-ai --features experimental tdi22_torsor
+bash "$root/scripts/check-tdi22-bootstrap.sh"
 cargo test -p tdi-ai --features experimental --test tdi22_torsor_properties
 
 echo 'TDI-22.0 freeze integrity: OK'
