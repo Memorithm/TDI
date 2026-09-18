@@ -618,3 +618,33 @@ research_engine_integrated_consumer_2026_09_16:
     - final_upstream_merge_pins_reviews_exact_head_and_post_merge_gates_remain
     - NNIS_CUDA_device_execution_and_CUDA_RUST_SIMT_qualification_remain_unresolved
   review_partitions: [385, 387, 388, 389, 409, 411]
+
+optuna_comparison_2026_09_18:
+  status: public_development_comparison_implemented_qualification_pending
+  consumer_pull_request: https://github.com/Memorithm/TDI/pull/499
+  code_revision: 2c185982f1d62cd73b5dcf59c5c0f487b0165c3b
+  protocol: docs/engineering/optuna-comparison.md
+  scope: public_finite_polynomial_optimizer_comparison_not_any_frozen_research_series
+  ownership:
+    comparison_protocol_oracles_and_reports: Memorithm/TDI
+    native_proposals_and_search_state: Memorithm/Forge
+    reusable_future_numerical_estimators: Memorithm/scirust
+  consumed_forge_merge: 28067ab0aa1d52a2260d9bb2bf35a346547a292a
+  optuna_version: 5.0.0
+  existing_forge_bridge_strategies: [grid, random-without-replacement]
+  comparator_strategies: [Optuna_RandomSampler, Optuna_TPESampler]
+  evidence:
+    - five_methodology_regressions_passed_locally
+    - actual_debug_Forge_and_Optuna_smoke_completed_192_evaluations_and_report_verification
+  pending:
+    - release_build_development_profile_7680_evaluations
+    - exact_PR_head_CI_and_material_review_resolution
+  interpretation:
+    - fixed_three_public_tasks_are_not_an_independent_task_population
+    - equal_numeric_seeds_do_not_mean_equal_random_draws
+    - timing_describes_asymmetric_adapter_paths_not_intrinsic_optimizer_speed
+    - no_general_superiority_model_GPU_production_or_confirmatory_claim
+  coordination_note: >
+    The 2026-09-16 engine entries above retain historical observations and are
+    not live dependency status. This new comparison consumes the verified Forge
+    merge shown here and does not promote any existing scientific stage.
