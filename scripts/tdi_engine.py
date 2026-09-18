@@ -59,6 +59,12 @@ def main(argv=None):
     p.add_argument("--worker", type=Path, required=True); p.add_argument("--output", type=Path, required=True)
     p.add_argument("--adapter", choices=("finite", "jacobi"), required=True)
     p.add_argument("--trials", type=int, default=2); p.add_argument("--domain", choices=("Development", "Validation"), default="Development")
+    p = sub.add_parser("attention-fixture-plan")
+    p.add_argument("--worker", type=Path, required=True); p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--backend", choices=("flat-reference", "nnis-cuda-fused"), default="flat-reference")
+    p.add_argument("--trials", type=int, default=6); p.add_argument("--domain", choices=("Development", "Validation"), default="Development")
+    p.add_argument("--allow-cuda", action="store_true")
+    p = sub.add_parser("nnis-qualification-review"); p.add_argument("checkout", type=Path)
     p = sub.add_parser("submit"); p.add_argument("spec", type=Path); p.add_argument("--roots", type=Path)
     p = sub.add_parser("run-local-admitted")
     p.add_argument("spec", type=Path); p.add_argument("--roots", type=Path)
@@ -140,6 +146,9 @@ def main(argv=None):
 def dispatch(args):
     """Execute one CLI operation; network clients are created only when needed."""
     op = args.operation
+    if op == "nnis-qualification-review":
+        from tdi_nnis_qualification_review import review_checkout
+        return review_checkout(args.checkout)
     if op in ("report-export", "series-export"):
         from tdi_research_reporting import read_report, series_from_catalogue, export_report
         if op == "report-export":
@@ -221,14 +230,18 @@ def dispatch(args):
         serve(args.catalogue, args.port, reports=args.report, figures=args.figures)
         return {"status": "stopped"}
     readonly = op in ("status", "inspect", "compare", "events", "backup", "export", "cache-request", "cache-get", "exports", "inspect-export", "searches", "search-inspect")
-    if op in ("fixture-plan", "library-fixture-plan", "submit", "run-local-admitted", "run", "resume", "cancel", "attach", "export", "restore", "cache-get", "search-fixture", "search-run", "search-resume", "search-cancel"):
+    if op in ("fixture-plan", "library-fixture-plan", "attention-fixture-plan", "submit", "run-local-admitted", "run", "resume", "cancel", "attach", "export", "restore", "cache-get", "search-fixture", "search-run", "search-resume", "search-cancel"):
         client = HubClient(args.hub, token=os.environ.get("TDI_HUB_TOKEN"),
                            allow_loopback_http=args.allow_loopback_http, timeout=args.timeout)
-    if op in ("fixture-plan", "library-fixture-plan"):
+    if op in ("fixture-plan", "library-fixture-plan", "attention-fixture-plan"):
         from tdi_hub_fixture import prepare_fixture
         if args.output.exists() or args.output.is_symlink():
             raise durable.ContractError("fixture plan output already exists")
-        if op == "library-fixture-plan":
+        if op == "attention-fixture-plan":
+            from tdi_attention_fixture import prepare_attention_fixture
+            spec = prepare_attention_fixture(client, args.worker, backend=args.backend, domain=args.domain,
+                                             trials=args.trials, allow_cuda=args.allow_cuda)
+        elif op == "library-fixture-plan":
             from tdi_library_fixture import prepare_library_fixture
             spec = prepare_library_fixture(client, args.worker, adapter=args.adapter, domain=args.domain, trials=args.trials)
         else:

@@ -1,0 +1,28 @@
+[package]
+name = "tdi-attention-probe"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.89"
+publish = false
+license = "PolyForm-Noncommercial-1.0.0"
+description = "Bounded public numerical probes through pinned FLAT and NNIS APIs"
+
+# This optional integration has a separate toolchain/dependency profile from
+# the TDI workspace. It does not raise TDI's or NNIS's declared MSRV.
+[workspace]
+
+[features]
+default = []
+nnis-cuda = ["dep:nnis-kernels", "dep:nnis-jit", "dep:nnis-rt", "dep:nnis-sys"]
+
+[dependencies]
+flat-attention = { git = "https://github.com/Memorithm/FLAT-ATTENTION", rev = "1d5ac64cc87c5dd526e04527c3bb4b78ba0add33", default-features = false, features = ["std"] }
+nnis-kernels = { git = "https://github.com/Memorithm/NNIS", rev = "5436736002834dd6dd7d5ace8c1c044b47aed18f", optional = true }
+nnis-jit = { git = "https://github.com/Memorithm/NNIS", rev = "5436736002834dd6dd7d5ace8c1c044b47aed18f", optional = true }
+nnis-rt = { git = "https://github.com/Memorithm/NNIS", rev = "5436736002834dd6dd7d5ace8c1c044b47aed18f", optional = true }
+nnis-sys = { git = "https://github.com/Memorithm/NNIS", rev = "5436736002834dd6dd7d5ace8c1c044b47aed18f", optional = true }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.145"
+
+[lints.rust]
+unsafe_code = "forbid"
