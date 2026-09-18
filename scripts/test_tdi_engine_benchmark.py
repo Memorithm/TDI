@@ -1,5 +1,6 @@
 """Benchmark counter correctness and predeclared comparison policy boundaries."""
 import copy
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -83,6 +84,37 @@ class BenchmarkTests(unittest.TestCase):
             with self.assertRaises(durable.ContractError): benchmark.validate_baseline(baseline, invalid)
         corrupted = copy.deepcopy(baseline); corrupted['summary'][0]['metrics']['/wall_ns']['median'] = 99
         with self.assertRaises(durable.ContractError): benchmark.validate_baseline(corrupted, policy)
+
+    def test_committed_q04_evidence_binds_no_history_reread_to_measured_scaling(self):
+        path = Path(__file__).resolve().parents[1] / 'docs' / 'engineering' / 'benchmarks' / '2026-09-16-engine-baseline-qualified.json'
+        report = json.loads(path.read_text())
+        evidence = benchmark.validate_q04_evidence(report)
+        self.assertEqual('no-history-reread-with-measured-scaling-observations', evidence['qualification'])
+        self.assertEqual(report['identity'], evidence['report_identity'])
+        self.assertEqual([64, 4096], [profile['payload_bytes'] for profile in evidence['profiles']])
+        self.assertTrue(all(profile['counts'] == [32, 128, 512] for profile in evidence['profiles']))
+        self.assertIn('no asymptotic latency class', evidence['limitations'])
+
+    def test_q04_evidence_rejects_tampered_summary_even_with_recomputed_identity(self):
+        path = Path(__file__).resolve().parents[1] / 'docs' / 'engineering' / 'benchmarks' / '2026-09-16-engine-baseline-qualified.json'
+        report = json.loads(path.read_text())
+        tampered = copy.deepcopy(report)
+        row = next(summary for summary in tampered['summary'] if summary['case'].get('kind') == 'journal')
+        row['metrics']['/write/wall_ns']['median'] += 1
+        tampered['identity'] = identity('tdi-engine-benchmark/v1', {k: v for k, v in tampered.items() if k != 'identity'})
+        with self.assertRaises(durable.ContractError):
+            benchmark.validate_q04_evidence(tampered)
+
+    def test_q04_evidence_rejects_tampered_append_work_even_with_recomputed_identity(self):
+        path = Path(__file__).resolve().parents[1] / 'docs' / 'engineering' / 'benchmarks' / '2026-09-16-engine-baseline-qualified.json'
+        report = json.loads(path.read_text())
+        tampered = copy.deepcopy(report)
+        row = next(record for record in tampered['records']
+                   if record['phase'] == 'measured' and record['case'].get('kind') == 'journal')
+        row['measurements']['append_work']['full_scans'] = 1
+        tampered['identity'] = identity('tdi-engine-benchmark/v1', {k: v for k, v in tampered.items() if k != 'identity'})
+        with self.assertRaises(durable.ContractError):
+            benchmark.validate_q04_evidence(tampered)
 
     def test_process_duration_strings_cpu_and_outer_rss_remain_comparable(self):
         records = [{'phase': 'measured', 'measurements': {'worker_process': {'wall_ns': '100', 'user_cpu_seconds': .001, 'system_cpu_seconds': .002}},
