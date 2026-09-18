@@ -5,11 +5,13 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import os
 from pathlib import Path
+import signal
 import sqlite3
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -100,6 +102,43 @@ class StoreAndPolicyTests(unittest.TestCase):
             expected_returncode,
             completed.returncode,
             msg=f"child stderr={completed.stderr!r}; stdout={completed.stdout!r}",
+        )
+
+    def _run_signaled_child(self, code, *args, marker, signum):
+        env = os.environ.copy()
+        scripts = str(Path(__file__).resolve().parent)
+        env["PYTHONPATH"] = scripts + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+        process = subprocess.Popen(
+            [sys.executable, "-c", code, *map(str, args), str(marker)],
+            cwd=Path(__file__).resolve().parents[1],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        deadline = time.monotonic() + 10
+        try:
+            while not marker.exists():
+                returncode = process.poll()
+                if returncode is not None:
+                    stdout, stderr = process.communicate()
+                    self.fail(
+                        f"child exited before interruption point: returncode={returncode}; "
+                        f"stderr={stderr!r}; stdout={stdout!r}"
+                    )
+                if time.monotonic() >= deadline:
+                    self.fail("child did not reach interruption point")
+                time.sleep(0.01)
+            process.send_signal(signum)
+            stdout, stderr = process.communicate(timeout=10)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=5)
+        self.assertEqual(
+            -signum,
+            process.returncode,
+            msg=f"child stderr={stderr!r}; stdout={stdout!r}",
         )
 
     def test_atomic_json_process_crash_never_exposes_partial_named_payload(self):
@@ -213,6 +252,147 @@ raise SystemExit("crash hook was not reached")
                         },
                         tables,
                     )
+
+    @unittest.skipUnless(hasattr(signal, "SIGHUP"), "requires POSIX SIGHUP")
+    def test_atomic_json_external_sighup_preserves_publication_boundary(self):
+        child = r'''\
+import os
+from pathlib import Path
+import signal
+import sys
+import tdi_engine_store as store
+
+target = Path(sys.argv[1])
+stage = sys.argv[2]
+marker = Path(sys.argv[3])
+
+def pause_for_parent_signal():
+    with marker.open("xb") as stream:
+        stream.write(b"ready")
+        stream.flush()
+        os.fsync(stream.fileno())
+    signal.pause()
+
+if stage == "before-link":
+    store._publish_completed_temp = lambda *_args: pause_for_parent_signal()
+elif stage == "after-link-before-directory-fsync":
+    store.durable._fsync_directory = lambda *_args: pause_for_parent_signal()
+elif stage == "after-directory-fsync":
+    original = store._publish_completed_temp
+    def publish_then_pause(temporary, destination):
+        original(temporary, destination)
+        pause_for_parent_signal()
+    store._publish_completed_temp = publish_then_pause
+else:
+    raise SystemExit("unknown stage")
+store.atomic_json(target, {"value": "complete"})
+raise SystemExit("signal interruption point was not reached")
+'''
+        expected = (durable.canonical({"value": "complete"}) + "\n").encode()
+        cases = (
+            ("before-link", False),
+            ("after-link-before-directory-fsync", True),
+            ("after-directory-fsync", True),
+        )
+        for stage, published in cases:
+            with self.subTest(stage=stage):
+                root = self.root / f"json-sighup-{stage}"
+                root.mkdir()
+                target = root / "artifact.json"
+                marker = root / ".ready"
+                self._run_signaled_child(
+                    child, target, stage, marker=marker, signum=signal.SIGHUP
+                )
+                self.assertEqual(published, target.exists())
+                if published:
+                    self.assertEqual(expected, target.read_bytes())
+                else:
+                    temporaries = list(root.glob(".tdi-*"))
+                    self.assertEqual(1, len(temporaries))
+                    self.assertEqual(expected, temporaries[0].read_bytes())
+
+    @unittest.skipUnless(hasattr(signal, "SIGHUP"), "requires POSIX SIGHUP")
+    def test_backup_external_sighup_preserves_publication_boundary(self):
+        child = r'''\
+import os
+from pathlib import Path
+import signal
+import sys
+import tdi_engine_store as store
+
+source = Path(sys.argv[1])
+destination = Path(sys.argv[2])
+stage = sys.argv[3]
+marker = Path(sys.argv[4])
+
+def pause_for_parent_signal():
+    with marker.open("xb") as stream:
+        stream.write(b"ready")
+        stream.flush()
+        os.fsync(stream.fileno())
+    signal.pause()
+
+with store.EngineStore(source) as catalogue:
+    if stage == "before-link":
+        store._publish_completed_temp = lambda *_args: pause_for_parent_signal()
+    elif stage == "after-link-before-directory-fsync":
+        store.durable._fsync_directory = lambda *_args: pause_for_parent_signal()
+    elif stage == "after-directory-fsync":
+        original = store._publish_completed_temp
+        def publish_then_pause(temporary, target):
+            original(temporary, target)
+            pause_for_parent_signal()
+        store._publish_completed_temp = publish_then_pause
+    else:
+        raise SystemExit("unknown stage")
+    catalogue.backup(destination)
+raise SystemExit("signal interruption point was not reached")
+'''
+        cases = (
+            ("before-link", False),
+            ("after-link-before-directory-fsync", True),
+            ("after-directory-fsync", True),
+        )
+        expected_tables = {
+            "campaigns",
+            "events",
+            "results",
+            "cache",
+            "restored_artifacts",
+            "exports",
+            "searches",
+            "search_events",
+            "search_stages",
+            "shared_proofs",
+        }
+        for stage, published in cases:
+            with self.subTest(stage=stage):
+                root = self.root / f"backup-sighup-{stage}"
+                root.mkdir()
+                source = root / "catalogue.sqlite"
+                destination = root / "backup.sqlite"
+                marker = root / ".ready"
+                self._run_signaled_child(
+                    child,
+                    source,
+                    destination,
+                    stage,
+                    marker=marker,
+                    signum=signal.SIGHUP,
+                )
+                self.assertEqual(published, destination.exists())
+                candidates = [destination] if published else list(root.glob(".tdi-backup-*"))
+                self.assertEqual(1, len(candidates))
+                with sqlite3.connect(candidates[0]) as backup:
+                    self.assertEqual(("ok",), backup.execute("PRAGMA integrity_check").fetchone())
+                    self.assertEqual((4,), backup.execute("PRAGMA user_version").fetchone())
+                    tables = {
+                        row[0]
+                        for row in backup.execute(
+                            "SELECT name FROM sqlite_master WHERE type='table'"
+                        )
+                    }
+                    self.assertEqual(expected_tables, tables)
 
     def test_backup_storage_failures_never_publish_named_partial_catalogue(self):
         destination = self.root / "backup.sqlite"
