@@ -105,9 +105,9 @@ units. Neither choice is a concrete TDI research-series model.
 ## Analyze and preserve evidence
 
 Build the real SciRust `research_stats` example as described in the
-[paired-analysis guide](paired-analysis.md). The current CI dependency is
-SciRust qualified merge `be7fcca3b31cedf722d71a2a56db8f6d088037cf` from #1452.
-This consumer is pinned to that immutable merge revision; its own exact-head qualification remains required before promotion.
+[paired-analysis guide](paired-analysis.md). The current CI dependency is the qualified SciRust #1452 merge
+`be7fcca3b31cedf722d71a2a56db8f6d088037cf`. Historical reports that used the earlier candidate SHA remain
+unchanged provenance and are not retroactively relabelled.
 
 ```bash
 .sensitivity-venv/bin/python scripts/tdi_engine.py sensitivity-analyze \

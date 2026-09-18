@@ -152,6 +152,13 @@ class SensitivityTests(unittest.TestCase):
                 self.assertEqual("not-assessed", result["scientific_verdict"])
                 report = json.loads(paths["report"].read_text())
                 self.assertEqual(len(plan["rows"]), report["included_rows"])
+                # Exercise the reporting consumer against actual stored Hub
+                # responses and SciRust estimates, including schema-4 proofs.
+                from tdi_research_reporting import export_report, read_report
+                export_path = hub.root / (method + "-report-export")
+                exported = export_report(report, export_path, figures=os.environ.get("TDI_REPORT_FIGURES") == "1")
+                self.assertEqual(report, read_report(export_path / "report.json"))
+                self.assertEqual(report["identity"], exported["report_identity"])
                 hub.cli("sensitivity-analyze", "--plan", paths["plan"], "--campaign", key, "--output", paths["report"], *extra, expected_code=22)
 
     def test_actual_altered_workflows_cannot_substitute_coordinates_or_response(self):

@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           repository: Memorithm/Forge
-          ref: 28067ab0aa1d52a2260d9bb2bf35a346547a292a
+          ref: 0d48a91a5eed6a9ae09a5eacd7c4f18df8bdd333
           persist-credentials: false
           path: integration-forge
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -57,6 +57,6 @@ jobs:
           TDI_DURABLE_WORKER: ${{ github.workspace }}/integration-tdi/target/debug/examples/durable_worker
           TDI_SEARCH_WORKER: ${{ github.workspace }}/integration-tdi/target/debug/examples/finite_search_worker
           TDI_FORGE_WORKER: ${{ github.workspace }}/integration-forge/target/debug/examples/scientific_search
-          TDI_FORGE_SOURCE_COMMIT: 28067ab0aa1d52a2260d9bb2bf35a346547a292a
+          TDI_FORGE_SOURCE_COMMIT: 0d48a91a5eed6a9ae09a5eacd7c4f18df8bdd333
           TDI_SEARCH_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: python3 -m unittest -v scripts/test_tdi_shared_evidence.py scripts/test_tdi_forge_integration.py scripts/test_tdi_engine_integration.py scripts/test_tdi_engine_unit.py scripts/test_tdi_observability_unit.py

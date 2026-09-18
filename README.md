@@ -4,131 +4,154 @@
 
 # TDI — Dynamic Information Theory
 
-**A deterministic Rust research programme studying which structural, dynamical and representational descriptions of a system retain useful predictive information under controlled, falsifiable experiments.**
+**A deterministic Rust research programme studying which structural and dynamical descriptions of a system retain predictive information beyond simple scalar summaries.**
 
-TDI develops preregistered questions, deterministic reference semantics, explicit controls, fail-closed gates and reproducible evidence. The programme now spans exact finite-state dynamics, attention and memory, recurrent/associative architectures, adaptive inference, operator/resolvent research, hallucination dynamics, causal representation geometry, autonomous scientific discovery, Boolean relational systems, torsor attention, and categorical/dagger attention.
+TDI develops falsifiable experiments, preregistered decision rules, deterministic evaluators and reproducible evidence. The programme started with exact finite-state dynamics and has expanded into attention / memory, bounded recurrent-associative architectures, adaptive inference dynamics, generic operator / resolvent research, hallucination dynamics / control, ordinal universality of operator responses, and Boolean relational architectures that explicitly test whether useful attention functions can be reproduced without attention scoring.
 
-> The illustration above is a visual index. The status table below is the homepage research map. Canonical programme, scope, preregistration and status files under [`docs/`](docs/) remain authoritative whenever a summary and a stage document differ.
+> The illustration above is a visual introduction. The status table below is the authoritative research map for the repository.
+
+For the executable research bench, start with the [research engine guide](docs/engineering/research-engine.md): local campaigns, recovery, bounded search, analysis, figures and exports. Its [delivery record](docs/engineering/integration-delivery-2026-09-16.md) distinguishes implemented software from pending release and hardware qualification.
 
 ## Why TDI matters
 
-TDI is not a collection of benchmark claims. It is a sequence of controlled research programmes designed to ask narrower questions with stronger evidence.
+TDI is not a collection of benchmark claims. It is a sequence of controlled research programmes designed to answer narrower questions with stronger evidence.
 
-The project retains positive, negative, equivalent and inconclusive outcomes. A failed preregistered criterion is not rewritten as success; a useful mechanism discovered during a failure becomes a new bounded question with its own controls.
+The project has already established a useful pattern: simple summaries can miss predictive structure, stronger controls can absorb apparent effects, transfer can preserve ordering while losing calibration, and a failed preregistered criterion can still reveal a concrete mechanism worth testing next. Positive, negative, equivalent and inconclusive outcomes are all retained.
 
-The intended output is therefore **code + preregistration + evaluator + provenance + evidence**, not a narrative reconstructed after the experiment.
+The result is a growing body of **code + preregistration + evaluator + provenance + result artefacts**, rather than a narrative reconstructed after the experiment.
 
 ## Research map at a glance
 
 | Series | Research line | Repository status | What it contributes |
 | --- | --- | --- | --- |
-| **TDI-1** | **Deterministic systems** | ✅ Completed | Shows that equal Shannon block entropy need not imply equal perturbation recovery, while the tested TDI-1 signal is subsumed by a stronger orbital baseline. |
-| **TDI-2** | **Branching systems** | ✅ Completed | Continuous branching evaluation; predictive signal is measurable, but universal cross-width calibration is not established. |
-| **TDI-3** | **Inter-width evaluation** | ✅ Completed | The preregistered inter-width criteria fail and isolate a width-sensitive rather than universal representation. |
-| **TDI-4** | **Target geometry** | ✅ Completed | The two-head protocol fails formally while the continuous deficit geometry remains informative in the tested regime. |
-| **TDI-5.x** | **Exact confirmatory battery** | ✅ Completed line | Exact-rational, SHA-frozen experiments covering overlap ablation, nonlinear sufficiency, spectral controls, generator robustness and cross-width behaviour. |
-| **TDI-6.1–6.7** | **Non-exact frontier** | ✅ Completed line | Extends controls to literal spectral gap, nonlinear models, information decomposition, causal probes and cross-generator transfer under declared floating-point discipline. |
-| **TDI-6.8** | **Transportable Ordering Across Generator Families** | 🟠 Preregistered / research line | Tests whether rank ordering transports more robustly than absolute calibration across fresh generator-family populations. |
-| **TDI-7.x** | **Attention / Memory** | 🟠 Active | Intervention-conditioned recovery, heterogeneity, long-horizon joint information and identifiability in deterministic attention/memory tasks. |
-| **TDI-8.x** | **Recurrent Associative Architecture** | 🟠 Active | Matched-budget A0/A1/A2/A3 programme spanning full-history reference, bounded recurrent state, bounded associative memory and VSA/holographic workspace. |
-| **TDI-9.x** | **Autonomous Adaptive Inference Dynamics** | 🟠 Active | Fixed/static/adaptive policy ladder plus Boolean policy synthesis over leakage-safe trajectory predicates. |
-| **TDI-10.x** | **Operator / Resolvent Research** | 🟠 Active | Jacobi/tridiagonal operators, shifted resolvents, Schur cavities, Green functions, finite transport and explicitly classified exact/asymptotic claims. |
-| **TDI-11.x** | **Hallucination Dynamics & Control** | 🟠 Active bootstrap | Controlled worlds, measurable precursors, causal interventions and bounded verification/recovery/abstention policies. |
-| **TDI-12.x** | **Ordinal Universality of Operator Responses** | 🟠 Active Stage-0 bootstrap | Tests whether ordinal relations among resolvent/Green observables transport more stably than absolute calibration. |
-| **TDI-13.x** | **Causally Conditioned Dimensional Collapse** | 🟠 Active Stage-0 bootstrap; not frozen | Tests whether conditioning on a causally coherent region reduces the intrinsic dimension needed for retrieval or prediction beyond size, topic and leakage controls. |
-| **TDI-14.x** | **Common Predictive Geometry Across Internal States** | 🟠 Active Stage-0 bootstrap; not frozen | Tests whether KV, recurrent and associative-memory states preserve a shared predictive neighbourhood geometry on held-out trajectories. |
-| **TDI-15.x** | **Attention/Associative-Memory Phase Transition** | 🟠 Active Stage-0 bootstrap; not frozen | Searches for a task-dependent effective memory dimension where matched-budget bounded-memory systems exhibit a transition-like deficit. |
-| **TDI-16.x** | **Event-Triggered Attention** | 🟠 Active Stage-0 bootstrap; not frozen | Tests whether attention/retrieval invoked only on prospectively observable events improves a matched quality/cost frontier. |
-| **TDI-17.x** | **Pre-Hallucinatory Representation Divergence** | 🟠 Active Stage-0 bootstrap; not frozen | Tests whether divergence between available evidence, recoverable state and predictive trajectory precedes some unsupported generations. |
-| **TDI-18.x** | **Elastic Verification Thresholds** | 🟠 Active Stage-0 bootstrap; not frozen | Studies threshold-structured CONTINUE/VERIFY/RECOVER/ABSTAIN policies under finite resource and risk budgets. |
-| **TDI-19.x** | **Approximate Submodularity of Scientific Discovery** | 🟠 Active Stage-0 bootstrap; not frozen | Tests when greedy expected-information-gain-per-cost planning approaches stronger non-myopic scientific-search policies. |
-| **TDI-20.x** | **Convergence of an Autonomous Discovery Ecosystem** | 🟠 Active Stage-0 bootstrap; not frozen | Tests whether modular proposal, experiment, falsification/proof, optimization, deployment and observation improve held-out knowledge quality over repeated cycles. |
-| **TDI-21.x** | **Boolean Relational Architecture** | 🟠 Active Stage-0 development; not frozen | Tests attention-like functionality without attention scoring, with Boolean/F2/ANF relational routing and bounded causal memory separated from numerical controls. |
-| **TDI-22.x** | **Torsor Attention** | 🟠 22.0/22.1 frozen; bounded non-final 22.2 implementation active | Frozen torsor semantics and matched controls; deterministic evaluator and P1–P5 generator infrastructure are merged, without a campaign result or final/confirmatory authorisation. |
-| **TDI-23.x** | **Categorical / Dagger Attention** | 🟠 Active TDI-23.1 development; not frozen | Typed categorical attention IR, real finite-dimensional dagger semantics, explicit nonlinear boundaries, global-reduction diagnostics, provenance and exact-equivalence tooling. |
+| **TDI-1** | **Deterministic systems** | ✅ Completed | Shows that equal Shannon block entropy need not imply equal perturbation recovery, while also showing that the tested TDI-1 signal is subsumed by a stronger orbital baseline. |
+| **TDI-2** | **Branching systems** | ✅ Completed | Preregistered continuous branching evaluation; predictive signal is measurable, but universal cross-width calibration is not established. |
+| **TDI-3** | **Inter-width evaluation** | ✅ Completed | The preregistered inter-width criteria fail; the experiment isolates a width-sensitive signal rather than a universal representation. |
+| **TDI-4** | **Target geometry** | ✅ Completed | The preregistered two-head protocol fails formally, while the continuous deficit geometry remains strongly informative in the tested regime. |
+| **TDI-5.x** | **Exact confirmatory battery** | ✅ Completed line | Exact-rational, SHA-frozen, confirmation-gated experiments covering overlap ablation, nonlinear sufficiency, spectral controls, generator robustness and cross-width behaviour. |
+| **TDI-6.1–6.7** | **Non-exact frontier** | ✅ Completed line | Extends the controls to literal spectral gap, nonlinear models, information decomposition, causal probes and cross-generator transfer diagnostics under declared floating-point discipline. |
+| **TDI-6.8** | **Transportable Ordering Across Generator Families** | 🟠 Preregistered / research line | Tests whether rank ordering — rather than absolute calibration — transports across fresh generator-family populations under a frozen per-block criterion. |
+| **TDI-7.x** | **Attention / Memory research programme** | 🟠 Active | Moves the intervention-conditioned recovery question into deterministic attention / memory tasks, then studies heterogeneity, long-horizon joint information and successor semantic questions. |
+| **TDI-8.x** | **Recurrent Associative Architecture Research Programme** | 🟠 Active | Matched-budget A0/A1/A2/A3 programme comparing full-history reference, bounded recurrent state, associative memory, and a bounded VSA / holographic workspace. |
+| **TDI-9.x** | **Autonomous Adaptive Inference Dynamics Research Programme** | 🟠 Active | C0/C1/C2/C3 policy ladder plus **TDI-9.3 Boolean Policy Synthesis**, which represents and later searches explicit Boolean action policies over frozen leakage-safe trajectory predicates. |
+| **TDI-10.x** | **Operator / Resolvent Research** | 🟠 Active | Generic Jacobi / tridiagonal operator work on shifted resolvents, Schur cavities, Green functions, finite transport and explicitly classified asymptotic claims. |
+| **TDI-11.x** | **Hallucination Dynamics & Control Research Programme** | 🟠 Active bootstrap | Studies supported vs unsupported generation in fully specified worlds, measurable precursors, causal perturbations, risk estimation and bounded adaptive verification / recovery / abstention. |
+| **TDI-12.x** | **Ordinal Universality of Operator Responses** | 🟠 Active Stage-0 bootstrap | Tests whether ordinal/rank relations among resolvent and Green response observables transport more stably than absolute calibration across dimension, coefficient family and perturbation regime. |
+| **TDI-21.x** | **Boolean Relational Architecture Research Programme** | 🟠 Active Stage-0 development | Isolated B0/B1 attention references, causal B2/B3 Boolean memories and two competence controls on shared public development inputs; no trained-model or matched-budget superiority claim. |
 
-All Stage-0 lines marked **not frozen** remain development research. They do **not** authorize confirmatory/final execution, downstream product claims or hardware-performance claims. A frozen non-final contract such as TDI-22.1 likewise does not authorize final/confirmatory execution.
+The table currently surfaces the programme lines documented in this homepage plus TDI-21. It is not a claim that intermediate series numbers are absent; canonical programme files under [`docs/`](docs/) remain authoritative for series not yet summarized here.
 
 ## Current research frontier
 
-### TDI-7.x → TDI-12.x — successor programmes
+The repository no longer stops at TDI-6.x.
 
-- [`TDI-7.x`](docs/TDI-7.0-ATTENTION-RECOVERY-PREREGISTRATION.md) moves intervention-conditioned recovery into deterministic attention/memory tasks. The programme distinguishes confirmatory results, frozen protocols, identifiability blockers and unauthorised final holdouts.
-- [`TDI-8.x`](docs/TDI-8-PROGRAMME.md) compares a full-history reference, bounded recurrent state, bounded associative memory and a VSA/holographic workspace under declared resource accounting. TDI-8.2 remains a separately gated future holdout.
-- [`TDI-9.x`](docs/TDI-9-PROGRAMME.md) studies how much computation to spend and when to continue, stop, verify or recover. TDI-9.3 adds deterministic Boolean-policy synthesis without altering protected final surfaces.
-- [`TDI-10.x`](docs/TDI-10-PROGRAMME.md) develops a generic operator/resolvent line with exact, proved-under-assumptions, formal-asymptotic, numerical-evidence, conjecture and refuted labels kept distinct.
-- [`TDI-11.x`](docs/TDI-11-PROGRAMME.md) studies hallucination dynamics and adaptive control in controlled worlds. Its HAC controller label is a working research label, not a universality or novelty claim.
-- [`TDI-12.x`](docs/TDI-12-PROGRAMME.md) asks whether ordinal/rank information among finite operator responses transports more robustly than absolute calibration. TDI-12.0 remains Stage-0 and unfrozen.
+### TDI-7.x — Attention / Memory
 
-### TDI-13.x → TDI-20.x — conjecture frontier
+The programme begins with [`TDI-7.0 — Attention recovery preregistration`](docs/TDI-7.0-ATTENTION-RECOVERY-PREREGISTRATION.md): deterministic associative-recall and copy tasks test whether early intervention-conditioned recovery descriptors predict later retrieval deficit beyond competent static attention diagnostics.
 
-These programmes are all **active Stage-0 bootstraps, not frozen, with no confirmatory execution authorised**.
+Later TDI-7 work must preserve the distinction between a **confirmatory result**, a **frozen protocol**, an **identifiability blocker**, and an **unauthorised final holdout**. In particular, the current TDI-7.4 identifiability finding is a blocker for the present H-AI-3 realisation, not a confirmatory negative result.
 
-- [`TDI-13.x — Causally Conditioned Dimensional Collapse`](docs/TDI-13-PROGRAMME.md): tests whether causally coherent conditioning reduces the intrinsic dimension required for useful retrieval/prediction after matched non-causal controls.
-- [`TDI-14.x — Common Predictive Geometry Across Internal States`](docs/TDI-14-PROGRAMME.md): tests whether distinct memory/state families preserve common predictive relations beyond nuisance structure.
-- [`TDI-15.x — Attention/Associative-Memory Phase Transition`](docs/TDI-15-PROGRAMME.md): searches for transition-like capacity regimes under matched compute and dynamic-memory budgets.
-- [`TDI-16.x — Event-Triggered Attention`](docs/TDI-16-PROGRAMME.md): studies bounded controllers that invoke expensive attention/retrieval only on prospectively observable events.
-- [`TDI-17.x — Pre-Hallucinatory Representation Divergence`](docs/TDI-17-PROGRAMME.md): studies prospective divergence between evidence, recoverable internal state and predictive trajectory.
-- [`TDI-18.x — Elastic Verification Thresholds`](docs/TDI-18-PROGRAMME.md): studies threshold structure in bounded verification/recovery/abstention policies.
-- [`TDI-19.x — Approximate Submodularity of Scientific Discovery`](docs/TDI-19-PROGRAMME.md): tests diminishing-return structure and greedy EIG/cost planning against stronger baselines and exact small-environment counterexamples.
-- [`TDI-20.x — Convergence of an Autonomous Discovery Ecosystem`](docs/TDI-20-PROGRAMME.md): studies whether a modular autonomous discovery loop improves a frozen held-out knowledge-quality frontier without evaluator self-approval or leakage.
+### TDI-8.x — Recurrent Associative Architecture Research Programme
 
-### TDI-21.x — Boolean Relational Architecture
+[`TDI-8.x`](docs/TDI-8-PROGRAMME.md) is the bounded alternative recurrent / associative architecture line.
 
-[`TDI-21.x`](docs/TDI-21-PROGRAMME.md) asks whether deterministic Boolean relational systems can reproduce useful functions normally supplied by token attention **without attention scoring**.
+- **A0** — competent attention-like full-history reference;
+- **A1** — bounded recurrent-state-only reference;
+- **A2** — A1 + explicit bounded associative memory (working label: ASSR);
+- **A3** — A2 + bounded VSA / holographic workspace paid from the same dynamic-memory budget (working label: ASSR-H).
 
-The candidate family deliberately keeps numerical controls and Boolean candidates separate. B2–B5 forbid Q/K/V projections, `QK^T`, all-pairs learned similarity, softmax/equivalent token-score distributions, dense `N x N` token-score matrices, hidden attention fallback, and address lookup implemented by scanning all prior tokens. Boolean, `F2`, algebraic-normal-form/Zhegalkin and bounded-memory laws remain explicit rather than being relabeled as numerical attention.
+TDI-8.0 is frozen. TDI-8.1 builds the deterministic evaluator. TDI-8.2 remains a future human-only confirmatory holdout and is not authorised by ordinary development or CI.
 
-TDI-21.0 remains development-only and unfrozen. No trained-model, matched-total-budget, hardware-speed or general language-model superiority claim follows from its current deterministic fixtures.
+### TDI-9.x — Autonomous Adaptive Inference Dynamics Research Programme
 
-### TDI-22.x — Torsor Attention
+[`TDI-9.x`](docs/TDI-9-PROGRAMME.md) studies how much computation to spend and when to continue, stop, verify or recover.
 
-[`TDI-22.x`](docs/TDI-22-PROGRAMME.md) studies whether a six-component torsor/twist representation can provide useful attention semantics under matched controls. TDI-22.0 fixes and freezes the explicit three-dimensional sign convention and exact transport/factorization scaffolding; TDI-22.1 freezes the bounded non-final T0–T4 comparison contract, including matched controls, geometry families, splits and rejection rules.
+Its policy ladder deliberately separates **fixed compute**, **static preallocation**, **adaptive stopping**, and **adaptive verification / recovery**. The final confirmation design uses a frozen derivation from future public entropy rather than a discretionary post-hoc seed choice.
 
-TDI-22.2 is now the active bounded implementation stage. Its deterministic evaluator foundation and deterministic P1–P5 episode generator are merged on `main`. Those changes provide infrastructure only: they explicitly contain no full campaign execution or committed result payload, and they do not authorise T2, final/confirmatory execution, FLAT-ATTENTION integration or any hardware/performance claim.
+**TDI-9.3 — Boolean Policy Synthesis** is now the explicit Boolean-policy extension of that line. It starts from the observation that the current hand-written C2 stopping policy is already a Boolean composition of trajectory predicates, then generalizes this into a deterministic Boolean-expression IR and a future bounded search programme. The initial implementation remains non-final and available only through the `tdi-ai` `experimental` feature; TDI-9.3.0 adds exhaustive exact truth-table calibration for the hand-written C2 STOP Boolean shape and the documented C3 ordered multi-action state machine, plus exact synthesis-search envelopes, fail-closed IR mutation, C2↔C3 joint ABSENT/`BASE_STOP` projection invariants, and complexity Pareto-dominance lemmas, without pinning TDI-9.1 fields or altering C2/C3 reference semantics or creating a TDI-9.2 final-evaluation surface. See [`docs/TDI-9.3-BOOLEAN-POLICY-SYNTHESIS.md`](docs/TDI-9.3-BOOLEAN-POLICY-SYNTHESIS.md).
 
-The critical scientific comparison remains the full torsor score against a **matched six-component non-torsor control**, not merely against a lower-dimensional vector baseline. Later TDI-22 stages remain gated by the frozen contract and evidence from preceding stages.
+### TDI-10.x — Operator / Resolvent Research
 
-### TDI-23.x — Categorical / Dagger Attention
+[`TDI-10.x`](docs/TDI-10-PROGRAMME.md) is a scientifically autonomous generic operator line for real symmetric tridiagonal / Jacobi operators.
 
-[`TDI-23.x`](docs/TDI-23-PROGRAMME.md) studies whether a typed categorical representation can make semantic equivalence, legal rewrites, global representation reduction and later lowering decisions explicit without changing declared attention semantics.
+The latest `main` state includes TDI-10.5 (**REFUTED** pointwise-subunit decay), TDI-10.6 (**EXACT** uniform geometric bound), TDI-10.7 (**EXACT** divergent-remainder decay lemma), TDI-10.8 (**EXACT** witness trichotomy for Types S/U/D), TDI-10.9 (**EXACT** harmonic remainder-rate lemma + closed-form witness calculus), TDI-10.10 (**EXACT** remainder / product / log-sum equivalence under `0 < alpha_k <= 1`), and TDI-10.11 (**EXACT** quantitative product / exponential bounds companion to 10.10), and TDI-10.12 (**EXACT** Cesàro / mean-remainder exponential rate; **REFUTED** necessity of positive Cesàro limit for product → 0), and TDI-10.13 (**EXACT** named operator families `F_S`/`F_U`/`F_D` realizing the trichotomy through cavity transport; **REFUTED** that every cavity family forces decay; subunit-product arc 10.5–10.12 closed, operator-family chapter open), and TDI-10.14 (**EXACT** contraction ↔ Type-U ρ bridge with dual-path `ρ^n` identity; **REFUTED** that every frozen Toeplitz symbol yields Type D), and TDI-10.15 (**EXACT** `F_U` then `F_D`/`F_S` family composition with closed concatenation products; **REFUTED** that a Type-S suffix erases Type-U prefix decay uniformly in `m`), and TDI-10.16 (**EXACT** κ(a,b) domain/monotonicity + matched TDI-10.3 factorization → Type-U ρ; **REFUTED** that κ → 0 as `a ↓ 2|b|+`; **REFUTED** that larger diagonal alone forces smaller κ without fixing `|b|`), and TDI-10.17 (**EXACT** family↔10.4 affine-unrolling link with constant-drift `F_U`/`F_D` closed `B_n`; **REFUTED** that Type-U product decay alone forces cavity-error → 0 under nonzero constant drift), and TDI-10.18 (**EXACT** operator-family finite hypothesis checklist: Item D via TDI-10.9 `1-alpha_k ≥ L/k` eventually + Item T = TDI-10.2 on family steps; **REFUTED** that informal `alpha_k → 1` meets Item D; **REFUTED** that a finite-window harmonic bound alone forces product → 0). TDI-10 explicitly labels its evidence as **EXACT**, **PROVED UNDER DECLARED ASSUMPTIONS**, **FORMAL ASYMPTOTIC**, **NUMERICAL EVIDENCE**, **CONJECTURE**, or **REFUTED**. Numerical evidence is never silently promoted to proof.
 
-TDI-23.0 has merged a bounded real finite-dimensional dagger scaffold and coordinate-reduction diagnostics. **TDI-23.1 is the active development stage and is not frozen**: it provides typed IR objects/morphisms, explicit nonlinear boundaries, deterministic rooted provenance and exact-equivalence tooling. The scientific freeze remains unresolved and no confirmatory execution is authorised.
+### TDI-11.x — Hallucination Dynamics & Control Research Programme
 
-TDI-23 keeps a hard semantic boundary: complete softmax attention is not treated as a morphism of `FdHilb`; Boolean, `F2`, ANF/Zhegalkin and max-plus operations retain their own laws. Multi-head concatenation is represented as a direct-sum construction unless a true tensor-product interaction is explicitly intended.
+[`TDI-11.x`](docs/TDI-11-PROGRAMME.md) studies hallucination as an inference phenomenon rather than only as a benchmark score. The programme begins from fully specified deterministic worlds so the evaluator can separate facts explicitly available to a model, facts derivable from those inputs, hidden-but-true facts, contradictions, nonexistent entities and genuinely unsupported assertions.
 
-**TDI-23.2 bounded rewrite-calculus code is merged on `main` through PR #384, but the scientific stage remains blocked on an explicit compatible TDI-23.1 freeze.** The merged slice is preparatory infrastructure only: it does not promote/freeze TDI-23.2, authorize rewrite search, confirmatory/final execution, FLAT-ATTENTION integration, or a performance claim.
+TDI-11 deliberately separates **detection**, **localization**, **diagnosis**, **intervention** and **decision**. Its working controller label is **HAC — Hallucination Adaptive Controller**, with candidate bounded actions such as `CONTINUE`, `VERIFY`, `BACKTRACK`, `RECOVER`, `EMIT` and `ABSTAIN`. HAC is a working label, not a novelty or universality claim.
+
+TDI-11.0 is an active bootstrap/scope stage and is **not frozen**. TDI-11.1 evaluator implementation is not authorised until an explicit preregistration and implementation gate freeze the taxonomy, controlled-world oracle, allowed observables, interventions, resource accounting, split discipline, metrics and provenance rules. See [`TDI-11.0 — Hallucination Dynamics Scope and Stage Gate`](docs/TDI-11.0-HALLUCINATION-DYNAMICS-SCOPE.md).
+
+### TDI-12.x — Ordinal Universality of Operator Responses
+
+[`TDI-12.x`](docs/TDI-12-PROGRAMME.md) asks whether rank/order information among finite Jacobi / resolvent / Green response observables is a more transportable object than absolute calibration.
+
+TDI-12.0 is an **active Stage-0 bootstrap** and is **not frozen**. It lands exact average-rank / Spearman / Kendall τ-b primitives, candidate Green-band response extractors with EXACT `GreenBands` wiring tests, Stage-0 controls (identity, dimension-only, monotone affine, full-tie fail-closed, reverse-order, coefficient-norm / Gershgorin-margin, deterministic shuffle, tie-heavy adversarial), EXACT constant-Toeplitz Frobenius / Gershgorin closed forms, EXACT constant **diagonal-only** Frobenius / Gershgorin / Green identities (including MidDiagonalGreen width-invariance REFUTE and GreenTrace concordance on `DiagonalOnlyWidthLadder`), rank-normalize / negate-response scaffolding, observable ladders, a machine-readable freeze template whose scientific fields remain `unresolved_blocking` (with non-authorizing candidate lists) with confirmatory/final execution flags **false**, and a fail-closed freeze-template validator that refuses invented pins. See [`docs/TDI-12.0-SCOPE.md`](docs/TDI-12.0-SCOPE.md) and [`docs/TDI-12.0-STATUS.md`](docs/TDI-12.0-STATUS.md).
+
+Stage 0 does not authorize confirmatory populations, does not invent TDI-8.1 / TDI-9.1 / TDI-11.2 freeze pins, and does not contact TDI-7.2 / TDI-8.2 / TDI-9.2 surfaces.
+
+### TDI-21.x — Boolean Relational Architecture Research Programme
+
+[`TDI-21.x`](docs/TDI-21-PROGRAMME.md) asks a deliberately stronger question than binary or sparse attention: can a deterministic Boolean relational system reproduce useful functions normally supplied by token attention **without using attention scoring at all**?
+
+The candidate family is separated from its controls:
+
+- **B0** — floating Q/K dot-product attention; bounded identity/recency development adapter implemented, not a trained Transformer;
+- **B1** — equivalent packed-binary Q/K attention with the same f64 values and softmax; development control implemented, not a Boolean candidate;
+- **B2** — Boolean predicates plus bounded direct-address memory; causal development reference implemented;
+- **B3** — Boolean routing plus bounded two-way memory; causal development reference implemented with explicit eviction semantics;
+- **B4** — planned B3 plus learned or synthesized `F2` / algebraic-normal-form (Zhegalkin) relational composition;
+- **B5** — planned learned Boolean state evolution, routing, bounded memory and relation composition without an attention primitive.
+
+For B2–B5, the programme explicitly forbids Q/K/V projections, `QK^T`, dot-product/cosine or learned pairwise similarity scores, softmax or equivalent normalized token-score distributions, Hamming/POPCOUNT used as an all-pairs attention-score substitute, dense `N x N` token-score matrices, hidden attention fallback, and address lookup implemented by scanning all prior tokens. Exact identifier checks in a bounded memory bucket are not token-similarity scoring and are accounted separately.
+
+TDI-21.0 remains **development-only, not frozen, with no confirmatory execution authorised**. The [bootstrap audit](docs/TDI-21.0-AUDIT-20260914.md) found and corrected a rank-61 route aliasing defect, invalid negated literals, incomplete accounting, misleading absence scoring and unsafe text provenance. Counter consistency and SHA syntax are explicitly distinguished from execution attestation.
+
+The [causal B2/B3 reference](docs/TDI-21.0-CAUSAL-STREAM.md) processes writes, recalls, conjunctions and delay events without receiving the evaluator's answer. Development tests cover an independent dictionary oracle, all length-four streams over a seven-event alphabet, 4,096-event delays, overwritten facts, absent facts, marker rejection, bounded probes, reset and explicit capacity failures. These hand-written memories are **not trained language models**. B3's replacement metadata is charged separately; equal entry counts are not equal resource budgets. No quality or hardware-speed superiority is claimed. See [current status](docs/TDI-21.0-STATUS.md).
+
+The [shared development evaluator and competence controls](docs/TDI-21.0-EVALUATION-CONTROLS.md) now score evaluator-expected queries, so silence, truncated output and execution errors cannot improve the denominator. An independent prefix-history oracle is separate from both candidate memory and the exact-dictionary control. B2/B3 share an explicit memory-substrate ceiling that includes B3 replacement bits; the dictionary and no-memory controls are not mislabeled attention baselines or matched total-resource competitors. Reports preserve wrong values, false hits, forgotten facts and omitted replies separately.
+
+The [isolated B0/B1 attention references](docs/TDI-21.0-ATTENTION-REFERENCES.md) implement numerical versus XOR/POPCOUNT Q/K scores, stable softmax, weighted values and explicit absence readout without receiving oracle answers. Tests cover 2,145 query-containing four-event strings, 64-bit identities, 256 overrides, delays, capacity rejection and separate native counters. A six-mechanism example uses the same public inputs for B0/B1/B2/B3 and both competence controls. Its attention-history reservations and Boolean memory ceilings are explicitly **not matched total budgets**; these hand-constructed controls do not establish learned semantic addressing, model quality or hardware speedups. B4/B5 learning and competent trained-model comparisons remain future work.
+
+Reproduce the non-final software fixtures from a clean checkout:
+
+```bash
+bash scripts/check-tdi21-development.sh
+```
+
+A future FLAT-ATTENTION hybrid remains downstream and conditional on reproducible TDI-21 evidence. The intended research boundary is: TDI-21 validates Boolean semantics; SciRust may later receive stable reusable primitives; hardware-specific realization is evaluated separately; FLAT-ATTENTION may only then compare Boolean-only, softmax-only and Boolean-pre-routing-to-restricted-softmax modes. Switching costs, retained/reconstructed numerical KV state and quality calibration must be measured before claiming an elastic hybrid advantage.
 
 ## What the completed programme has taught us
 
-Across the historical finite-state campaign, the strongest supported conclusion is deliberately narrower than a grand-theory claim.
+Across the historical finite-state campaign, the strongest supported conclusion is deliberately narrower than a grand theory claim.
 
 Within the tested synthetic branching families, early intervention-conditioned distribution overlap contains predictive information beyond entropy/topology controls, exact contraction descriptors, exact spectral moments, the literal spectral gap, ε-mixing time, and the tested degree-2 interaction model. The effect replicates across multiple generator families and widths.
 
-At the same time, **transportable calibration fails** across widths and generators, effect size is not universal, and two label-free calibration repairs were refuted. This is retained as part of the scientific result and directly motivates the transport/order and successor programmes.
+At the same time, **transportable calibration fails** across widths and generators, effect size is not universal, and two label-free calibration repairs were refuted. This is not hidden as a weakness: it is part of the scientific result and directly motivates the transport/order and successor programmes.
 
 ## Evidence discipline
 
 TDI uses a fail-closed research workflow:
 
 1. **Preregister** the question, controls, split discipline, metric and decision rule.
-2. **Freeze** scientific artefacts and hashes before confirmatory evidence.
+2. **Freeze** the scientific artefacts and their hashes before confirmatory evidence.
 3. **Implement** deterministic reference semantics and bounded validation tests.
 4. **Keep final material isolated** from ordinary development surfaces.
-5. **Execute only under the declared gate** when a final run is explicitly authorised.
-6. **Publish the outcome even when it fails**, including provenance, limitations and counterexamples.
+5. **Execute once under the declared gate** when a final run is authorised.
+6. **Publish the result even when it fails**, including provenance, limitations and counterexamples.
 
 TDI-5.x uses exact-rational, bit-reproducible computation. TDI-6.x and later non-exact work must declare numerical policies and evidence boundaries explicitly.
 
 ## Explore the evidence
 
-- [`docs/`](docs/) — programme maps, preregistrations, scientific reports, status documents, audits and limitations.
+- [`docs/`](docs/) — preregistrations, scientific reports, status documents, audits and limitations.
 - [`results/`](results/) — captured deterministic reference outputs and result artefacts.
 - [`scripts/`](scripts/) — reproduction commands and integrity checks.
 - [`tdi-core/`](tdi-core/) — finite-state dynamics and structural primitives.
 - [`tdi-bench/`](tdi-bench/) — evaluators, scans, models and deterministic statistical procedures.
-- [`tdi-ai/`](tdi-ai/) — bounded experimental AI/research contracts, including feature-gated successor scaffolds.
-- [`tdi-operator/`](tdi-operator/) — generic operator/resolvent primitives for the TDI-10 line.
+- [`tdi-operator/`](tdi-operator/) — generic operator / resolvent primitives for the TDI-10 line.
 
 ## Reproducibility
 
