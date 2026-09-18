@@ -1,0 +1,66 @@
+name: TDI Forge persistent session
+on:
+  pull_request:
+    paths: ['scripts/tdi_*.py', 'scripts/check-tdi-forge-session.py', 'scripts/test_tdi_optuna_benchmark.py', 'scripts/requirements-optuna-benchmark.txt', 'docs/engineering/forge-session-comparison.md', '.github/workflows/tdi-forge-session.yml']
+  push:
+    branches: [main]
+    paths: ['scripts/tdi_*.py', 'scripts/check-tdi-forge-session.py', 'scripts/test_tdi_optuna_benchmark.py', 'scripts/requirements-optuna-benchmark.txt', 'docs/engineering/forge-session-comparison.md', '.github/workflows/tdi-forge-session.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tdi-forge-session-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  persistent-session:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_BUILD_JOBS: '2'
+      RUSTFLAGS: '-C debuginfo=0'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: integration-tdi
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: Memorithm/Forge
+          ref: 83c8c572a692016fb786e661c47a249112b6cadd
+          path: integration-forge
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+      - run: cargo build --release --locked -p forge-bridge --example scientific_search
+        working-directory: integration-forge
+      - name: Install pinned comparator and check numerical/report contracts
+        working-directory: integration-tdi
+        run: |
+          python3 -m venv .venv-optuna
+          .venv-optuna/bin/python -m pip install -r scripts/requirements-optuna-benchmark.txt
+          .venv-optuna/bin/python -m pip check
+          PYTHONPATH=scripts .venv-optuna/bin/python -m unittest -v scripts/test_tdi_optuna_benchmark.py
+      - name: Actual session, crash recovery, corruption, deadline and pidfd checks
+        working-directory: integration-tdi
+        run: .venv-optuna/bin/python scripts/check-tdi-forge-session.py --forge-worker ../integration-forge/target/release/examples/scientific_search
+      - name: Actual paired transport and optimizer smoke runs
+        working-directory: integration-tdi
+        run: |
+          .venv-optuna/bin/python scripts/tdi_optuna_benchmark.py --forge-worker ../integration-forge/target/release/examples/scientific_search --profile transport-smoke --max-seconds 600 --output session-transport
+          .venv-optuna/bin/python scripts/tdi_optuna_benchmark.py --verify-report session-transport/report.json
+          .venv-optuna/bin/python scripts/tdi_optuna_benchmark.py --forge-worker ../integration-forge/target/release/examples/scientific_search --profile session-smoke --max-seconds 600 --output session-quality
+          .venv-optuna/bin/python scripts/tdi_optuna_benchmark.py --verify-report session-quality/report.json
+      - name: Retain complete or partial evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tdi-forge-session
+          path: |
+            integration-tdi/session-transport
+            integration-tdi/session-quality
+          if-no-files-found: warn
+          retention-days: 14

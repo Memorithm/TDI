@@ -10,6 +10,7 @@ import math
 import os
 from pathlib import Path, PurePosixPath
 import platform
+import select
 import signal
 import subprocess
 import tempfile
@@ -112,7 +113,9 @@ def capacity_snapshot():
 def measured_process(command, *, input_bytes=b"", timeout=10.0, max_output=1048576, env=None):
     """Run one pinned trusted process with bounded captured files and wait4 usage.
 
-    Wall time includes launch, I/O and up to 5 ms completion polling latency.
+    Wall time includes launch and I/O. Linux pidfds wake immediately on exit;
+    unavailable pidfds retain up to 5 ms completion polling latency. Output-size
+    checks retain the same 5 ms cadence. wait4 remains the sole CPU/RSS sensor.
     Child user/system CPU seconds and Linux ru_maxrss bytes are actual OS
     measurements. Unsupported platforms fail explicitly. Exit/timeout/output
     failure remains visible in the returned record; no performance is invented.
@@ -142,7 +145,18 @@ def measured_process(command, *, input_bytes=b"", timeout=10.0, max_output=10485
                 "rss_scope": "unavailable: process launch failed", "stdout_bytes": 0, "stderr_bytes": 0,
                 "gpu_time": None, "accelerator_memory_bytes": None, "energy_joules": None}
         launched = time.monotonic_ns()
+        pidfd = None
+        exit_poll = None
         try:
+            try:
+                pidfd = os.pidfd_open(child.pid)
+                exit_poll = select.poll()
+                exit_poll.register(pidfd, select.POLLIN)
+            except (AttributeError, OSError):
+                if pidfd is not None:
+                    os.close(pidfd)
+                pidfd = None
+                exit_poll = None  # Kernel/Python/container may not expose pidfds.
             while True:
                 pid, status, usage = os.wait4(child.pid, os.WNOHANG)
                 if pid:
@@ -157,8 +171,15 @@ def measured_process(command, *, input_bytes=b"", timeout=10.0, max_output=10485
                     _, status, usage = os.wait4(child.pid, 0)
                     child.returncode = os.waitstatus_to_exitcode(status)
                     break
-                time.sleep(0.005)
+                remaining = max(0.0, timeout - (time.monotonic_ns() - start) / 1e9)
+                if pidfd is None:
+                    time.sleep(min(0.005, remaining))
+                else:
+                    # poll supports descriptors above select's FD_SETSIZE.
+                    exit_poll.poll(min(5, math.ceil(remaining * 1000)))
         finally:
+            if pidfd is not None:
+                os.close(pidfd)
             try: os.killpg(child.pid, signal.SIGKILL)
             except ProcessLookupError: pass
             if child.returncode is None:
@@ -172,6 +193,7 @@ def measured_process(command, *, input_bytes=b"", timeout=10.0, max_output=10485
         measurements = {"schema": 1, "sensor": "python-os.wait4/linux/v1", "clock": "time.monotonic_ns",
                         "wall_ns": str(finish - start), "launch_ns": str(launched - start),
                         "completion_polling_granularity_ns": 5000000, "exit_code": child.returncode,
+                        "completion_wait_method": "pidfd" if pidfd is not None else "poll",
                         "technical_failure": reason, "user_cpu_seconds": usage.ru_utime,
                         "system_cpu_seconds": usage.ru_stime, "peak_rss_bytes": int(usage.ru_maxrss) * 1024,
                         "rss_scope": "wait4 child high-water mark; not summed concurrent descendants",
