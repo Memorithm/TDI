@@ -102,7 +102,8 @@ class SharedEvidenceTests(unittest.TestCase):
 
     def test_indexed_pagination_keeps_exact_order_and_phase_filter(self):
         with tempfile.TemporaryDirectory() as directory, EngineStore(Path(directory) / 'catalogue.sqlite') as store:
-            keys = [store.create({'synthetic': i}, 'http://127.0.0.1:8477') for i in range(80)]
+            keys = [store.create({'schema': 1, 'purpose': 'development-software', 'domain': 'Development',
+                                  'synthetic': i}, 'http://127.0.0.1:8477') for i in range(80)]
             self.assertEqual(keys[30:50], [row['id'] for row in store.list(after=30, limit=20)])
             self.assertEqual(keys[30:50], [row['id'] for row in store.list(after=30, limit=20, phase='prepared')])
             self.assertEqual([], store.list(phase='failed'))

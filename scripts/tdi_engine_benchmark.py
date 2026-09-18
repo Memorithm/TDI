@@ -284,7 +284,9 @@ def catalogue_case(root, count):
     with EngineStore(root / 'catalogue.sqlite') as store:
         def populate():
             for i in range(count):
-                store.create({"kind": "synthetic-benchmark-catalogue-record", "index": i}, 'http://127.0.0.1:8477')
+                store.create({"schema": 1, "purpose": "development-software", "domain": "Development",
+                              "kind": "synthetic-benchmark-catalogue-record", "index": i},
+                             'http://127.0.0.1:8477')
         _, writing = measure(populate)
         statements = []; store.db.set_trace_callback(statements.append)
         store.list(after=max(0, count - 50), limit=50, phase='prepared')
