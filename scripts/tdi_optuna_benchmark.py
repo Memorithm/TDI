@@ -131,11 +131,25 @@ def record(stream, value):
     os.fsync(stream.fileno())
 
 
+def require_before_deadline(deadline, context):
+    """Fail closed once the whole-run monotonic acceptance deadline expires."""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError(f"whole-run deadline reached {context}")
+    return remaining
+
+
+def forge_timeout(deadline):
+    """Bound one Forge subprocess by the remaining whole-run budget."""
+    return min(30.0, require_before_deadline(deadline, "before Forge control call"))
+
+
 class ForgeArm:
     """Use the existing TDI client and real Rust ask/begin/finish state machine."""
     def __init__(self, name, seed, budget, task, client, manifest_id, env_id,
-                 source_commit, directory):
+                 source_commit, directory, deadline):
         self.client, self.directory, self.env_id = client, directory, env_id
+        self.deadline = deadline
         self.checkpoint = None
         self.snapshot = None
         self.sequence = 0
@@ -162,11 +176,15 @@ class ForgeArm:
                                 "max_attempts_per_stage": 1, "stage_timeout_ms": 1000,
                                 "max_reserved_ms": budget * 3000}}
         self.task = task
-        self.client.call(self.spec)  # actual protocol validation, included in setup
+        # Actual protocol validation, included in setup and bounded by the
+        # remaining whole-run wall-clock budget.
+        self.client.call(self.spec, timeout=forge_timeout(self.deadline))
 
     def command(self, operation):
-        response, _ = self.client.call(self.spec, self.checkpoint,
-                                      {"request_id": str(self.sequence), "operation": operation})
+        response, _ = self.client.call(
+            self.spec, self.checkpoint,
+            {"request_id": str(self.sequence), "operation": operation},
+            timeout=forge_timeout(self.deadline))
         receipt = response["snapshot"]["receipts"][-1]
         if receipt["status"] in ("rejected", "duplicate"):
             raise ValueError("Forge refused transition: " + durable.canonical(receipt))
@@ -248,10 +266,10 @@ class OptunaArm:
 def run_arm(arm, task, seed, budget, directory, stream, deadline):
     best, seen, rows = None, set(), []
     for index in range(budget):
-        if time.monotonic() >= deadline:
-            raise TimeoutError("whole-run deadline reached")
+        require_before_deadline(deadline, "before trial")
         start = time.perf_counter_ns()
         point = arm.ask()
+        require_before_deadline(deadline, "after proposal")
         checked_point(point)
         if index == 0 and point != {"x": -8, "y": -8}:
             raise ValueError("common baseline missing")
@@ -261,6 +279,7 @@ def run_arm(arm, task, seed, budget, directory, stream, deadline):
         stages = {}
         for stage in ("compile", "verify", "measure"):
             arm.begin(stage)
+            require_before_deadline(deadline, f"after {stage} begin")
             tick = time.perf_counter_ns()
             if stage == "compile":
                 payload = {"task": task, "parameters": point, "materialization": "precompiled-configuration"}
@@ -277,8 +296,13 @@ def run_arm(arm, task, seed, budget, directory, stream, deadline):
             elapsed = time.perf_counter_ns() - tick
             # Save evidence before telling the optimizer; reuse no hidden cache.
             atomic_json(directory / f"trial-{index:03d}-{stage}.json", evidence)
+            require_before_deadline(deadline, f"after {stage} evidence persistence")
             arm.finish(stage, evidence, elapsed)
+            require_before_deadline(deadline, f"after {stage} finish")
             stages[stage + "_body_ns"] = str(elapsed)
+        # Do not accept a completed trial after the run deadline. Durable stage
+        # evidence may remain for diagnosis, but it is not counted as a result.
+        require_before_deadline(deadline, "before accepting completed trial")
         best = loss if best is None else min(best, loss)
         row = {"trial": index, "parameters": point, "loss": loss, "best_loss": best,
                "duplicate": duplicate, **stages,
@@ -286,7 +310,9 @@ def run_arm(arm, task, seed, budget, directory, stream, deadline):
         rows.append(row)
         record(stream, {"kind": "trial", "task": task, "seed": seed,
                         "arm": directory.name, **row})
+        require_before_deadline(deadline, "after durable trial record")
     arm.close()
+    require_before_deadline(deadline, "after arm close")
     return rows
 
 
@@ -390,18 +416,23 @@ def run(output, forge_binary, profile, max_seconds=1800):
                         start = time.perf_counter_ns()
                         record(stream, {"kind": "start", "task": task, "seed": seed, "arm": name})
                         arm = (ForgeArm(name, seed, p["evaluations_per_arm"], task, client,
-                                        manifest_id, env_id, manifest["tdi_source_commit"], directory)
+                                        manifest_id, env_id, manifest["tdi_source_commit"], directory,
+                                        deadline)
                                if name.startswith("forge-") else OptunaArm(name, seed, p["tpe"]))
                         rows = run_arm(arm, task, seed, p["evaluations_per_arm"], directory, stream, deadline)
+                        require_before_deadline(deadline, "before accepting completed arm")
                         result = {"task": task, "seed": seed, "arm": name, "trials": rows,
                                   "observed_adapter_ns": str(time.perf_counter_ns() - start)}
                         atomic_json(directory / "run.json", result)
                         runs.append(result)
                     print(f"completed {task} seed {seed}", flush=True)
+        require_before_deadline(deadline, "before final source verification")
         if sources() != source_hashes or file_hash(binary) != client.binding["sha256"]:
             raise ValueError("source or Forge binary changed during comparison")
+        require_before_deadline(deadline, "after final source verification")
         report = {"schema": 1, "status": "complete", "manifest_identity": manifest_id,
                   "manifest": manifest, "raw_runs": runs, "summary": summarize(manifest, runs)}
+        require_before_deadline(deadline, "before complete report publication")
         report["identity"] = identity("tdi-optuna-report/v1", report)
         atomic_json(output / "report.json", report)
         return report
