@@ -197,8 +197,20 @@ raise SystemExit("crash hook was not reached")
                             "SELECT name FROM sqlite_master WHERE type='table'"
                         )
                     }
-                    self.assertTrue(
-                        {"campaigns", "events", "results", "cache", "exports"} <= tables
+                    self.assertEqual(
+                        {
+                            "campaigns",
+                            "events",
+                            "results",
+                            "cache",
+                            "restored_artifacts",
+                            "exports",
+                            "searches",
+                            "search_events",
+                            "search_stages",
+                            "shared_proofs",
+                        },
+                        tables,
                     )
 
     def test_backup_storage_failures_never_publish_named_partial_catalogue(self):
