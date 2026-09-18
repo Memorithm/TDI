@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import resource
 import subprocess
 import sys
 import tempfile
@@ -47,6 +48,20 @@ with tempfile.TemporaryDirectory() as tmp:
             arm.session.abort()
         recovered = recover_session_log(directory)
         assert recovered["checkpoint"] == arm.checkpoint
+        opening_path = directory / "session-open.json"
+        opening = opening_path.read_bytes()
+        for field in ("source_commit", "sha256", "repository", "path"):
+            altered = json.loads(opening)
+            altered["binding"][field] += "0"
+            opening_path.write_text(json.dumps(altered))
+            rejected(lambda: recover_session_log(directory))
+        altered = json.loads(opening)
+        altered["binding"]["source_commit"] = "not-a-commit"
+        altered["identity"] = bench.identity("tdi-forge-session-open/v2",
+                                               {k: v for k, v in altered.items() if k != "identity"})
+        opening_path.write_text(json.dumps(altered))
+        rejected(lambda: recover_session_log(directory))
+        opening_path.write_bytes(opening)
         replay, _ = client.call(arm.spec, arm.checkpoint)
         assert replay["snapshot"] == arm.snapshot
         if args.historical_worker and name != "forge-tpe-early-session":
@@ -120,4 +135,17 @@ for use_pidfd in (True, False):
         assert costs["technical_failure"] == "timeout"
         _, out, _, costs = measured_process([sys.executable, "-c", "print('x'*100000)"], max_output=1024)
         assert costs["technical_failure"] == "output-budget" and len(out) == 1024
-print("PASS: actual replay/session parity, log corruption/gaps, crash with active permit, duplicate/no-charge, protocol bounds, timeout/flood/identity cleanup, pidfd and polling telemetry")
+
+soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+fds = []
+try:
+    resource.setrlimit(resource.RLIMIT_NOFILE, (max(soft, 1200), hard))
+    while not fds or fds[-1] < 1100:
+        fds.append(os.open(os.devnull, os.O_RDONLY))
+    code, out, _, costs = measured_process([sys.executable, "-c", "print('high-fd')"])
+    assert code == 0 and out == b"high-fd\n" and costs["completion_wait_method"] == "pidfd"
+finally:
+    for fd in fds:
+        os.close(fd)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (soft, hard))
+print("PASS: actual replay/session parity, journal/provenance corruption and gaps, crash with active permit, duplicate/no-charge, protocol bounds, timeout/flood/identity cleanup, pidfd/poll and high-descriptor telemetry")

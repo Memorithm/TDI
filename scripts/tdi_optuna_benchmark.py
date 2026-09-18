@@ -362,10 +362,10 @@ class SessionForgeArm(ForgeArm):
             self.snapshot = self.session.initial["snapshot"]
             self.journal = self.directory / "session-commands"
             self.journal.mkdir()
-            self.previous = identity("tdi-forge-session-open/v1", self.session.initial)
-            atomic_json(self.directory / "session-open.json",
-                        {"spec": self.spec, "response": self.session.initial,
-                         "binding": self.session.binding, "identity": self.previous})
+            opened = {"schema_version": 2, "spec": self.spec,
+                      "response": self.session.initial, "binding": self.session.binding}
+            self.previous = identity("tdi-forge-session-open/v2", opened)
+            atomic_json(self.directory / "session-open.json", dict(opened, identity=self.previous))
         except BaseException:
             self.session.abort()
             raise

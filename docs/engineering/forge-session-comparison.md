@@ -46,6 +46,12 @@ can be used. Full checkpoints remain portable and replayable. Recovery validates
 sequence, byte/command bounds and hashes, then Forge reconstructs authoritative
 state; an outstanding external operation still needs explicit reconciliation.
 
+The opening record uses `tdi-forge-session-open/v2`: its identity covers the
+schema version, complete specification, response and deployment binding together.
+Recovery validates repository, protocol, absolute path, source-commit and binary
+hash structure. The earlier candidate v1 opening identity is rejected because it
+did not cover all provenance fields; it is not silently upgraded.
+
 Tests kill an actual worker with an active permit and check that restoration and
 duplicate delivery allocate no second reservation. They reject a missing/corrupt
 journal entry, altered specification, changed executable, protocol/sequence
@@ -55,6 +61,8 @@ signatures. Tests do not establish power-loss durability or hostile-code isolati
 TDI's shared Linux process telemetry also uses `pidfd` exit notifications when
 available. It retains `wait4` CPU/RSS readings, process-group cleanup and 5 ms
 output-budget monitoring; unavailable pidfds use the original polling path.
+The notification uses `poll`, supporting descriptors above `select`'s limit;
+the actual process tests also run with more than 1,100 descriptors open.
 Both paths are exercised with real exit, timeout and output-overflow cases.
 The paired replay baseline also benefits from this common improvement; the
 transport ratio therefore does not attribute all earlier polling cost to sessions.
@@ -88,3 +96,13 @@ file hashes are recorded. A declared source commit is not a build attestation.
 Shared-host timings and the differing Optuna/Forge durability architectures do
 not establish intrinsic optimizer speed. Preserve partial evidence on failure;
 do not rerun a frozen result-conditioned subset.
+
+## Qualification correction
+
+The initial candidate was published as TDI `d7c0714267e4428f386f2661f31ab825fbe51552`.
+Review then identified the high-descriptor `select` failure and incomplete
+opening-provenance hash. Its preliminary evidence remains attributed to that
+source. Qualification repeats each complete fixed profile on the corrected
+source, retaining earlier completed/partial evidence. Tasks, seeds, objective
+budgets, search algorithms and comparator settings do not change. This is a
+robustness correction, with no result-conditioned algorithm tuning or seed retry.

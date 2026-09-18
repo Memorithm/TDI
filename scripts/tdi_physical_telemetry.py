@@ -146,11 +146,17 @@ def measured_process(command, *, input_bytes=b"", timeout=10.0, max_output=10485
                 "gpu_time": None, "accelerator_memory_bytes": None, "energy_joules": None}
         launched = time.monotonic_ns()
         pidfd = None
+        exit_poll = None
         try:
             try:
                 pidfd = os.pidfd_open(child.pid)
+                exit_poll = select.poll()
+                exit_poll.register(pidfd, select.POLLIN)
             except (AttributeError, OSError):
-                pass  # Kernel/Python/container may not expose pidfds.
+                if pidfd is not None:
+                    os.close(pidfd)
+                pidfd = None
+                exit_poll = None  # Kernel/Python/container may not expose pidfds.
             while True:
                 pid, status, usage = os.wait4(child.pid, os.WNOHANG)
                 if pid:
@@ -169,7 +175,8 @@ def measured_process(command, *, input_bytes=b"", timeout=10.0, max_output=10485
                 if pidfd is None:
                     time.sleep(min(0.005, remaining))
                 else:
-                    select.select([pidfd], [], [], min(0.005, remaining))
+                    # poll supports descriptors above select's FD_SETSIZE.
+                    exit_poll.poll(min(5, math.ceil(remaining * 1000)))
         finally:
             if pidfd is not None:
                 os.close(pidfd)

@@ -40,10 +40,20 @@ def recover_session_log(directory):
                                        max_bytes=4 * 1024 * 1024, max_items=1000000)
 
     opened = read(directory / "session-open.json")
-    if (set(opened) != {"spec", "response", "binding", "identity"}
-            or opened["binding"]["protocol"] != PROTOCOL
-            or opened["identity"] != identity("tdi-forge-session-open/v1", opened["response"])):
+    if (set(opened) != {"schema_version", "spec", "response", "binding", "identity"}
+            or type(opened["schema_version"]) is not int or opened["schema_version"] != 2
+            or opened["identity"] != identity("tdi-forge-session-open/v2",
+                                               {k: v for k, v in opened.items() if k != "identity"})):
         raise durable.ContractError("invalid session open identity")
+    binding = opened["binding"]
+    if (not isinstance(binding, dict)
+            or set(binding) != {"path", "sha256", "source_commit", "repository", "protocol"}
+            or not all(isinstance(v, str) for v in binding.values())
+            or binding["protocol"] != PROTOCOL or binding["repository"] != "Memorithm/Forge"
+            or not re.fullmatch(r"[0-9a-f]{40}", binding["source_commit"])
+            or not re.fullmatch(r"[0-9a-f]{64}", binding["sha256"])
+            or not Path(binding["path"]).is_absolute()):
+        raise durable.ContractError("invalid session provenance structure")
     checkpoint = copy.deepcopy(opened["response"]["checkpoint"])
     previous = opened["identity"]
     journal = directory / "session-commands"
