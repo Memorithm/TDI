@@ -77,10 +77,11 @@ jobs:
         run: |
           cargo build --locked -p tdi-ai --example durable_worker
           cargo build --locked -p tdi-bench --example engine_adapter_worker --example finite_search_worker
-          cargo build --locked --manifest-path integrations/attention-probe/Cargo.toml
           python3 -m venv .venv-research
           .venv-research/bin/python -m pip install -r scripts/requirements-research-qualification.txt
           .venv-research/bin/python -m pip check
+      - name: Build public attention probe outside the offline TDI source root
+        run: cargo build --locked --manifest-path integration-tdi/integrations/attention-probe/Cargo.toml
       - name: Run the complete public software suite with no skipped tests
         working-directory: integration-tdi
         env:
