@@ -50,9 +50,8 @@ fn main() -> Result<()> {
     let mut invalid = 0usize;
 
     for address in 0..(1usize << REFERENCE_C3_PREDICATE_COUNT) {
-        let row = std::array::from_fn::<_, REFERENCE_C3_PREDICATE_COUNT, _>(|bit| {
-            address & (1usize << bit) != 0
-        });
+        let row: [bool; REFERENCE_C3_PREDICATE_COUNT] =
+            std::array::from_fn(|bit| address & (1usize << bit) != 0);
         match ValidatedC3PredicateRow::new(&row) {
             Ok(validated) => {
                 let decision = validated.decide(&policy)?;
