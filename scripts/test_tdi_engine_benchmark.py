@@ -95,6 +95,16 @@ class BenchmarkTests(unittest.TestCase):
         self.assertTrue(all(profile['counts'] == [32, 128, 512] for profile in evidence['profiles']))
         self.assertIn('no asymptotic latency class', evidence['limitations'])
 
+    def test_q04_evidence_rejects_tampered_summary_even_with_recomputed_identity(self):
+        path = Path(__file__).resolve().parents[1] / 'docs' / 'engineering' / 'benchmarks' / '2026-09-16-engine-baseline-qualified.json'
+        report = json.loads(path.read_text())
+        tampered = copy.deepcopy(report)
+        row = next(summary for summary in tampered['summary'] if summary['case'].get('kind') == 'journal')
+        row['metrics']['/write/wall_ns']['median'] += 1
+        tampered['identity'] = identity('tdi-engine-benchmark/v1', {k: v for k, v in tampered.items() if k != 'identity'})
+        with self.assertRaises(durable.ContractError):
+            benchmark.validate_q04_evidence(tampered)
+
     def test_q04_evidence_rejects_tampered_append_work_even_with_recomputed_identity(self):
         path = Path(__file__).resolve().parents[1] / 'docs' / 'engineering' / 'benchmarks' / '2026-09-16-engine-baseline-qualified.json'
         report = json.loads(path.read_text())

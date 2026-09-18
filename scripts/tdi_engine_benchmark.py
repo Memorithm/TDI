@@ -373,18 +373,24 @@ def validate_q04_evidence(report):
                 or not isinstance(metric, dict) or type(metric.get('median')) not in (int, float)
                 or not math.isfinite(metric['median']) or metric['median'] <= 0):
             raise durable.ContractError('Q04 journal summary contains invalid workload or timing evidence')
-        payloads.setdefault(payload, {})[count] = metric['median']
+        counts = payloads.setdefault(payload, {})
+        if count in counts:
+            raise durable.ContractError('Q04 journal summary contains a duplicate workload')
+        counts[count] = metric
 
     if not payloads or any(len(counts) < 3 for counts in payloads.values()):
         raise durable.ContractError('Q04 requires at least three measured journal sizes per payload profile')
 
     measured = [row for row in records if row.get('phase') == 'measured'
                 and isinstance(row.get('case'), dict) and row['case'].get('kind') == 'journal']
-    for payload, timings in payloads.items():
-        for count in timings:
+    for payload, metrics_by_count in payloads.items():
+        for count, reported_metric in metrics_by_count.items():
             matching = [row for row in measured if row['case'].get('payload_bytes') == payload and row['case'].get('count') == count]
             if len(matching) < 2:
                 raise durable.ContractError('Q04 requires repeated measured records for every journal workload')
+            recomputed_metric = summarize(matching).get('/write/wall_ns')
+            if recomputed_metric != reported_metric:
+                raise durable.ContractError('Q04 journal summary does not match its raw timing repetitions')
             for row in matching:
                 work = row.get('measurements', {}).get('append_work')
                 if (not isinstance(work, dict) or work.get('full_scans') != 0
@@ -392,9 +398,10 @@ def validate_q04_evidence(report):
                         or type(work.get('hash_input_bytes')) is not int or work['hash_input_bytes'] <= 0):
                     raise durable.ContractError('Q04 append rescanned history or changed its exact per-trial hashing contract')
 
-    profiles = [{"payload_bytes": payload, "counts": sorted(timings),
-                 "observed_write_wall_ns_medians": [timings[count] for count in sorted(timings)]}
-                for payload, timings in sorted(payloads.items())]
+    profiles = [{"payload_bytes": payload, "counts": sorted(metrics_by_count),
+                 "observed_write_wall_ns_medians":
+                     [metrics_by_count[count]['median'] for count in sorted(metrics_by_count)]}
+                for payload, metrics_by_count in sorted(payloads.items())]
     return {"schema": 1, "qualification": "no-history-reread-with-measured-scaling-observations",
             "report_identity": report['identity'], "profiles": profiles,
             "limitations": "bounded observed timings only; no asymptotic latency class, SLO, significance, or hardware-generalization claim"}
