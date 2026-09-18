@@ -146,9 +146,6 @@ def main(argv=None):
 def dispatch(args):
     """Execute one CLI operation; network clients are created only when needed."""
     op = args.operation
-    if op == "nnis-qualification-review":
-        from tdi_nnis_qualification_review import review_checkout
-        return review_checkout(args.checkout)
     if op in ("report-export", "series-export"):
         from tdi_research_reporting import read_report, series_from_catalogue, export_report
         if op == "report-export":
@@ -193,6 +190,9 @@ def dispatch(args):
         report = analyze(plan, observations, worker)
         atomic_json(args.output, report)
         return {"identity": report["identity"], "path": str(args.output), "result": report["result"], "scientific_verdict": report["scientific_verdict"]}
+    if op == "nnis-qualification-review":
+        from tdi_nnis_qualification_review import review_checkout
+        return review_checkout(args.checkout)
     if op == "capacity":
         from tdi_physical_telemetry import capacity_snapshot
         return capacity_snapshot()

@@ -29,36 +29,11 @@ def identity(kind, value):
     return hashlib.sha256(kind.encode() + b"\0" + durable.canonical(value).encode()).hexdigest()
 
 
-def _unlink_if_same_file(path, reference):
-    """Remove ``path`` only while it still names the completed reference file."""
-    try:
-        reference_stat = Path(reference).lstat()
-        path_stat = Path(path).lstat()
-        if (reference_stat.st_dev, reference_stat.st_ino) == (path_stat.st_dev, path_stat.st_ino):
-            Path(path).unlink()
-    except FileNotFoundError:
-        pass
-
-
-def _publish_completed_temp(temporary, destination):
-    """Publish one complete temporary file without deleting a competing writer."""
-    temporary = Path(temporary)
-    destination = Path(destination)
-    os.link(temporary, destination, follow_symlinks=False)
-    try:
-        durable._fsync_directory(destination.parent)
-    except BaseException:
-        _unlink_if_same_file(destination, temporary)
-        raise
-
-
 def atomic_json(path, value):
     """Publish a new JSON file atomically, refusing an existing destination.
 
     Example: ``atomic_json(Path('export.json'), {'schema': 1})``. The parent
-    directory must exist. A failed publication removes only the name created by
-    this call and never deletes a destination concurrently replaced by another
-    writer. Broader crash/power-loss durability remains a separate qualification.
+    directory must exist. Failure leaves no successful-looking partial file.
     """
     path = Path(path)
     raw = (durable.canonical(value) + "\n").encode()
@@ -69,7 +44,8 @@ def atomic_json(path, value):
             stream.write(raw)
             stream.flush()
             os.fsync(stream.fileno())
-        _publish_completed_temp(temp, path)
+        os.link(temp, path, follow_symlinks=False)
+        durable._fsync_directory(path.parent)
     finally:
         os.unlink(temp)
 
@@ -482,20 +458,18 @@ class EngineStore:
             raise durable.ContractError("invalid catalogue pagination")
 
     def list(self, *, after=0, limit=MAX_PAGE, phase=None, domain=None):
-        """List campaigns in insertion order with optional exact phase/domain filters."""
+        """List campaigns in insertion order with an optional exact phase filter."""
         self._page(after, limit)
         if domain is not None:
             if domain not in ("Development", "Validation"):
                 raise durable.ContractError("only non-final catalogue filters are supported")
+            # Domain filtering scans stored JSON, while a phase equality can
+            # still use the existing phase/order index. No migration required.
             clause = "json_extract(spec,'$.domain')=?"
             values = [domain]
             if phase is not None:
-                clause += " AND phase=?"
-                values.append(phase)
-            rows = self.db.execute(
-                "SELECT id,phase,workflow,created_ns FROM campaigns WHERE " + clause + " ORDER BY created_ns,id LIMIT ? OFFSET ?",
-                (*values, limit, after),
-            )
+                clause += " AND phase=?"; values.append(phase)
+            rows = self.db.execute("SELECT id,phase,workflow,created_ns FROM campaigns WHERE " + clause + " ORDER BY created_ns,id LIMIT ? OFFSET ?", (*values, limit, after))
         elif phase is None:
             rows = self.db.execute("SELECT id,phase,workflow,created_ns FROM campaigns ORDER BY created_ns,id LIMIT ? OFFSET ?", (limit, after))
         else:
@@ -546,33 +520,21 @@ class EngineStore:
         return {"entry": entry, "campaign": row["campaign"], "step": row["step"], "output": row["output"]}
 
     def backup(self, destination):
-        """Publish a coherent SQLite backup atomically and refuse an existing target.
-
-        The externally named destination is linked only after SQLite backup,
-        integrity validation and file ``fsync`` have completed. A process crash
-        or storage failure before that point can therefore leave at most a hidden
-        temporary file, never a successful-looking partial export. Directory
-        ``fsync`` failure removes the just-linked destination best-effort before
-        surfacing the persistence error.
-        """
-        import tempfile
-
+        """Create a coherent SQLite backup and refuse an existing target."""
         destination = Path(destination)
-        if destination.exists() or destination.is_symlink():
-            raise FileExistsError(destination)
-        fd, temporary = tempfile.mkstemp(prefix=".tdi-backup-", dir=destination.parent)
+        fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         os.close(fd)
-        temporary = Path(temporary)
         try:
-            with contextlib.closing(sqlite3.connect(temporary)) as target:
+            with contextlib.closing(sqlite3.connect(destination)) as target:
                 self.db.backup(target)
                 if target.execute("PRAGMA integrity_check").fetchone() != ("ok",):
                     raise durable.StorageError("backup integrity failure")
-            with temporary.open("rb") as stream:
+            with destination.open("rb") as stream:
                 os.fsync(stream.fileno())
-            _publish_completed_temp(temporary, destination)
-        finally:
-            temporary.unlink(missing_ok=True)
+            durable._fsync_directory(destination.parent)
+        except BaseException:
+            destination.unlink()
+            raise
 
     def restore(self, record, results, locations, endpoint):
         """Commit an imported evidence catalogue after all payloads were verified.

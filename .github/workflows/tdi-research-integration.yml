@@ -1,0 +1,121 @@
+name: TDI research integration
+
+# Always scheduled: a required integration context cannot disappear due to
+# transitive-path filtering. Existing repository and physical gates remain.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tdi-research-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  public-software:
+    name: Research public software
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_BUILD_JOBS: '2'
+      RUSTFLAGS: '-C debuginfo=0'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          path: integration-tdi
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: Memorithm/scirust-hub
+          ref: ccdcb99a4573dbefb944af0df713101b100b5f78
+          persist-credentials: false
+          path: integration-hub
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: Memorithm/scirust
+          ref: be7fcca3b31cedf722d71a2a56db8f6d088037cf
+          persist-credentials: false
+          path: integration-scirust
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: Memorithm/Forge
+          ref: 28067ab0aa1d52a2260d9bb2bf35a346547a292a
+          persist-credentials: false
+          path: integration-forge
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: Memorithm/ElasticXxx
+          ref: f8e10b1a1d05d6c22c0f56fed87252bc65d4e66a
+          persist-credentials: false
+          path: integration-elastic
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: Memorithm/NNIS
+          ref: 5436736002834dd6dd7d5ace8c1c044b47aed18f
+          persist-credentials: false
+          path: integration-nnis
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.89.0
+      - run: cargo build --locked -p scirust-hubd -p scirust-hub-worker
+        working-directory: integration-hub
+      - run: cargo build --locked -p scirust-stats --example research_stats
+        working-directory: integration-scirust
+      - run: cargo build --locked -p forge-bridge --example scientific_search
+        working-directory: integration-forge
+      - run: cargo build --locked -p elastic-cli
+        working-directory: integration-elastic
+      - name: Build all public TDI workers and install the pinned optional profile
+        working-directory: integration-tdi
+        run: |
+          cargo build --locked -p tdi-ai --example durable_worker
+          cargo build --locked -p tdi-bench --example engine_adapter_worker --example finite_search_worker
+          cargo build --locked --manifest-path integrations/attention-probe/Cargo.toml
+          python3 -m venv .venv-research
+          .venv-research/bin/python -m pip install -r scripts/requirements-research-qualification.txt
+          .venv-research/bin/python -m pip check
+      - name: Run the complete public software suite with no skipped tests
+        working-directory: integration-tdi
+        env:
+          TDI_HUBD_BIN: ${{ github.workspace }}/integration-hub/target/debug/scirust-hubd
+          TDI_DURABLE_WORKER: ${{ github.workspace }}/integration-tdi/target/debug/examples/durable_worker
+          TDI_LIBRARY_WORKER: ${{ github.workspace }}/integration-tdi/target/debug/examples/engine_adapter_worker
+          TDI_SCIRUST_STATS_BIN: ${{ github.workspace }}/integration-scirust/target/debug/examples/research_stats
+          TDI_SCIRUST_SOURCE_COMMIT: be7fcca3b31cedf722d71a2a56db8f6d088037cf
+          TDI_SEARCH_WORKER: ${{ github.workspace }}/integration-tdi/target/debug/examples/finite_search_worker
+          TDI_FORGE_WORKER: ${{ github.workspace }}/integration-forge/target/debug/examples/scientific_search
+          TDI_FORGE_SOURCE_COMMIT: 28067ab0aa1d52a2260d9bb2bf35a346547a292a
+          TDI_SEARCH_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          TDI_ELASTIC_BIN: ${{ github.workspace }}/integration-elastic/target/debug/elastic-cli
+          TDI_ELASTIC_SOURCE_COMMIT: f8e10b1a1d05d6c22c0f56fed87252bc65d4e66a
+          TDI_ATTENTION_PROBE: ${{ github.workspace }}/integration-tdi/integrations/attention-probe/target/debug/tdi-attention-probe
+          TDI_NNIS_CHECKOUT: ${{ github.workspace }}/integration-nnis
+          TDI_MLFLOW_BIN: ${{ github.workspace }}/integration-tdi/.venv-research/bin/mlflow
+          TDI_REPORT_FIGURES: '1'
+        run: .venv-research/bin/python scripts/check_tdi_research_integration.py --report research-integration.json
+      - name: Retain bounded public diagnostics on success or failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: research-integration-${{ github.event.pull_request.head.sha || github.sha }}
+          path: integration-tdi/research-integration.json
+          if-no-files-found: warn
+          retention-days: 14
+  qualification:
+    name: Research integration qualification
+    needs: [public-software]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Refuse absent, skipped, cancelled or failed software evidence
+        env:
+          SOFTWARE_RESULT: ${{ needs.public-software.result }}
+        run: test "$SOFTWARE_RESULT" = success

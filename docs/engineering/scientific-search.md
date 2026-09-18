@@ -21,7 +21,7 @@ TDI's Cargo configuration:
 
 ```sh
 cd ../Forge
-git checkout 28067ab0aa1d52a2260d9bb2bf35a346547a292a
+git checkout 0d48a91a5eed6a9ae09a5eacd7c4f18df8bdd333
 cargo build --locked -p forge-bridge --example scientific_search
 cd ../scirust-hub
 git checkout ccdcb99a4573dbefb944af0df713101b100b5f78
@@ -40,7 +40,7 @@ python3 scripts/tdi_engine.py --hub http://127.0.0.1:8477 --allow-loopback-http 
   --tdi-source-commit "$(git rev-parse HEAD)" \
   --forge-worker "$PWD/../Forge/target/debug/examples/scientific_search" \
   --forge-sha256 "$(sha256sum ../Forge/target/debug/examples/scientific_search | cut -d ' ' -f 1)" \
-  --forge-source-commit 28067ab0aa1d52a2260d9bb2bf35a346547a292a \
+  --forge-source-commit 0d48a91a5eed6a9ae09a5eacd7c4f18df8bdd333 \
   --strategy grid --seed 18446744073709551615
 ```
 
@@ -155,7 +155,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts \
 TDI_HUBD_BIN="$PWD/../scirust-hub/target/debug/scirust-hubd" \
 TDI_SEARCH_WORKER="$PWD/target/debug/examples/finite_search_worker" \
 TDI_FORGE_WORKER="$PWD/../Forge/target/debug/examples/scientific_search" \
-TDI_FORGE_SOURCE_COMMIT=28067ab0aa1d52a2260d9bb2bf35a346547a292a \
+TDI_FORGE_SOURCE_COMMIT=0d48a91a5eed6a9ae09a5eacd7c4f18df8bdd333 \
 TDI_SEARCH_SOURCE_COMMIT="$(git rev-parse HEAD)" \
 python3 -m unittest -v scripts/test_tdi_forge_integration.py
 ```

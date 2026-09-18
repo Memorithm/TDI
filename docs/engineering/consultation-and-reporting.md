@@ -110,7 +110,7 @@ apply to all successful views. Non-GET control operations are unsupported.
 
 ## Executed qualification
 
-On Python 3.12/Linux with actual pinned Hub, counter, Forge and SciRust binaries (Hub `ccdcb99a4573dbefb944af0df713101b100b5f78`, Forge merge `28067ab0aa1d52a2260d9bb2bf35a346547a292a`, SciRust merge `be7fcca3b31cedf722d71a2a56db8f6d088037cf`),
+On Python 3.12/Linux with actual pinned Hub, counter, Forge and SciRust binaries,
 19 tests pass: five report/HTTP boundary tests, one full actual Forge search,
 nine engine boundary tests and four operational integrations. The optional run
 also renders PNG/SVG/PDF, verifies file hashes, checks the image endpoint, preserves
