@@ -125,6 +125,14 @@ class ComparisonTests(unittest.TestCase):
             with self.assertRaises(TimeoutError):
                 bench.forge_timeout(10.0)
 
+    def test_report_crossing_deadline_is_removed_and_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "report.json"
+            with mock.patch.object(bench.time, "monotonic", return_value=2.0):
+                with self.assertRaises(TimeoutError):
+                    bench.publish_complete_report(path, {"status": "complete"}, deadline=1.0)
+            self.assertFalse(path.exists())
+
     def test_real_optuna_seed_replay_and_common_first_observation(self):
         bench.check_packages()
         for name in ("optuna-random", "optuna-tpe"):

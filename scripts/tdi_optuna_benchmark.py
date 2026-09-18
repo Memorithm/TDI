@@ -144,6 +144,20 @@ def forge_timeout(deadline):
     return min(30.0, require_before_deadline(deadline, "before Forge control call"))
 
 
+def publish_complete_report(path, report, deadline):
+    """Publish a complete report only if publication itself stays inside the deadline."""
+    path = Path(path)
+    atomic_json(path, report)
+    try:
+        require_before_deadline(deadline, "after complete report publication")
+    except TimeoutError:
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+
+
 class ForgeArm:
     """Use the existing TDI client and real Rust ask/begin/finish state machine."""
     def __init__(self, name, seed, budget, task, client, manifest_id, env_id,
@@ -434,7 +448,7 @@ def run(output, forge_binary, profile, max_seconds=1800):
                   "manifest": manifest, "raw_runs": runs, "summary": summarize(manifest, runs)}
         require_before_deadline(deadline, "before complete report publication")
         report["identity"] = identity("tdi-optuna-report/v1", report)
-        atomic_json(output / "report.json", report)
+        publish_complete_report(output / "report.json", report, deadline)
         return report
     except BaseException as error:
         atomic_json(output / "failure.json", {"status": "incomplete", "manifest_identity": manifest_id,
