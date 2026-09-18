@@ -21,7 +21,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: tdi24-s03-\${{ github.event.pull_request.number || github.ref }}
+  group: tdi24-s03-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -32,7 +32,7 @@ jobs:
       - name: Checkout exact candidate head
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          ref: \${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Install pinned Rust toolchain
