@@ -60,6 +60,45 @@ class StoreAndPolicyTests(unittest.TestCase):
             atomic_json(target, {"value": "replacement"})
         self.assertEqual({"value": "original"}, json.loads(target.read_text()))
 
+    def test_backup_storage_failures_never_publish_named_partial_catalogue(self):
+        destination = self.root / "backup.sqlite"
+        with EngineStore(self.root / "catalogue.sqlite") as store:
+            for call in ("os.fsync", "os.link"):
+                with self.subTest(call=call):
+                    with patch(call, side_effect=OSError(errno.ENOSPC, "synthetic disk full")):
+                        with self.assertRaises(OSError):
+                            store.backup(destination)
+                    self.assertFalse(destination.exists())
+                    self.assertEqual([], list(self.root.glob(".tdi-backup-*")))
+
+            with patch("tdi_engine_store.durable._fsync_directory",
+                       side_effect=OSError(errno.EIO, "synthetic directory fsync failure")):
+                with self.assertRaises(OSError):
+                    store.backup(destination)
+            self.assertFalse(destination.exists())
+            self.assertEqual([], list(self.root.glob(".tdi-backup-*")))
+
+            def competing_publication(_source, target, **_kwargs):
+                Path(target).write_bytes(b"external-writer")
+                raise FileExistsError(target)
+
+            with patch("os.link", side_effect=competing_publication):
+                with self.assertRaises(FileExistsError):
+                    store.backup(destination)
+            self.assertEqual(b"external-writer", destination.read_bytes())
+            destination.unlink()
+            self.assertEqual([], list(self.root.glob(".tdi-backup-*")))
+
+            store.backup(destination)
+            self.assertTrue(destination.exists())
+            with sqlite3.connect(destination) as backup:
+                self.assertEqual(("ok",), backup.execute("PRAGMA integrity_check").fetchone())
+
+            original = destination.read_bytes()
+            with self.assertRaises(FileExistsError):
+                store.backup(destination)
+            self.assertEqual(original, destination.read_bytes())
+
     def test_failure_to_persist_submission_intent_prevents_network_mutation(self):
         spec = campaign_fixture()
         spec["graph"]["steps"][0]["inputs"] = {}
