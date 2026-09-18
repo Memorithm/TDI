@@ -56,14 +56,19 @@ class ForgeClient:
         return dict(self.binary, source_commit=self.source_commit, repository="Memorithm/Forge",
                     protocol="forge-finite-search/v1")
 
-    def call(self, spec, checkpoint=None, command=None):
-        """Return a verified checkpoint projection and measured control costs."""
+    def call(self, spec, checkpoint=None, command=None, *, timeout=30):
+        """Return a verified checkpoint projection and measured control costs.
+
+        ``timeout`` bounds the Forge child process only. Callers with a stricter
+        whole-operation deadline may pass their remaining wall-clock budget; the
+        default preserves the existing 30-second control-plane bound.
+        """
         request = {"spec": spec, "checkpoint": checkpoint, "command": command}
         raw = durable.canonical(request).encode()
         if len(raw) > 1024 * 1024:
             raise durable.ContractError("TDI Forge process request exceeds 1 MiB")
         pinned_file(self.binary["path"], self.binary["sha256"])
-        code, out, _, costs = measured_process([self.binary["path"]], input_bytes=raw, timeout=30, max_output=8 * 1024 * 1024)
+        code, out, _, costs = measured_process([self.binary["path"]], input_bytes=raw, timeout=timeout, max_output=8 * 1024 * 1024)
         pinned_file(self.binary["path"], self.binary["sha256"])
         if code != 0 or costs["technical_failure"]:
             raise ForgeError("Forge process rejected or failed", costs, hashlib.sha256(out).hexdigest())
