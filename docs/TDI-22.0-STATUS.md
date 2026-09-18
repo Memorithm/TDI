@@ -2,6 +2,8 @@
 
 Status: **frozen Stage-0 contract; no final or confirmatory execution authorised**.
 
+The historical fail-closed bootstrap guard remains `no confirmatory execution authorised`; the current frozen status additionally forbids final execution as stated above.
+
 ## Qualified Stage-0 freeze
 
 TDI-22.0 was frozen by PR #255 after the Stage-0 bootstrap from PR #248. The content-addressed payload and interpretation boundary are recorded in `docs/TDI-22.0-FREEZE.md`. That freeze covers the torsor algebra/software contract only; it is not evidence of task quality, efficiency, novelty, or hardware performance.
