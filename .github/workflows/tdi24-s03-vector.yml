@@ -1,0 +1,45 @@
+name: TDI-24.0 slice 03 matched V6 vector reference
+
+on:
+  pull_request:
+    paths:
+      - 'tdi-ai/src/tdi24_vector.rs'
+      - 'tdi-ai/src/experimental.rs'
+      - 'docs/TDI-24-CAMPAIGN-50.md'
+      - 'scripts/check-tdi24-s03.sh'
+      - '.github/workflows/tdi24-s03-vector.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tdi-ai/src/tdi24_vector.rs'
+      - 'tdi-ai/src/experimental.rs'
+      - 'docs/TDI-24-CAMPAIGN-50.md'
+      - 'scripts/check-tdi24-s03.sh'
+      - '.github/workflows/tdi24-s03-vector.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tdi24-s03-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  matched-vector-reference:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact candidate head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+
+      - name: Qualify TDI-24 slice 03
+        run: bash scripts/check-tdi24-s03.sh
