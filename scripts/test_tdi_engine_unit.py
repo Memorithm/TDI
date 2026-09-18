@@ -270,6 +270,56 @@ raise SystemExit("crash hook was not reached")
             self.assertEqual("prepared", store.list()[0]["phase"])
         self.assertEqual(0, client.calls)
 
+    def test_catalogue_rejects_final_or_unversioned_campaigns_at_persistence_boundary(self):
+        development = campaign_fixture()
+        validation = campaign_fixture()
+        validation["domain"] = "Validation"
+        validation["graph"]["name"] = "validation-graph"
+
+        with EngineStore(self.root / "catalogue.sqlite") as store:
+            self.assertIsInstance(store.create(development, "http://127.0.0.1:8477"), str)
+            self.assertIsInstance(store.create(validation, "http://127.0.0.1:8477"), str)
+
+            for mutate in (
+                lambda spec: spec.__setitem__("domain", "Final"),
+                lambda spec: spec.__setitem__("domain", "Protected"),
+                lambda spec: spec.__setitem__("purpose", "confirmatory"),
+                lambda spec: spec.__setitem__("schema", 2),
+            ):
+                candidate = campaign_fixture()
+                mutate(candidate)
+                with self.assertRaisesRegex(durable.ContractError, "non-final|Development or Validation"):
+                    store.create(candidate, "http://127.0.0.1:8477")
+
+            injected = campaign_fixture()
+            injected["domain"] = "Final"
+            with store.db:
+                store.db.execute(
+                    "UPDATE campaigns SET spec=? WHERE id=(SELECT id FROM campaigns ORDER BY created_ns LIMIT 1)",
+                    (durable.canonical(injected),),
+                )
+            with self.assertRaisesRegex(durable.ContractError, "Development or Validation"):
+                store.access_audit()
+            with self.assertRaisesRegex(durable.ContractError, "Development or Validation"):
+                store.backup(self.root / "must-not-backup-final.sqlite")
+            self.assertFalse((self.root / "must-not-backup-final.sqlite").exists())
+
+    def test_restore_rejects_final_campaign_before_any_catalogue_write(self):
+        record = {
+            "id": "0" * 64,
+            "spec": dict(campaign_fixture(), domain="Final"),
+            "workflow": None,
+            "admission": None,
+            "snapshot": None,
+            "created_ns": 1,
+            "endpoint": "https://source.example",
+            "phase": "completed",
+        }
+        with EngineStore(self.root / "catalogue.sqlite") as store:
+            with self.assertRaisesRegex(durable.ContractError, "Development or Validation"):
+                store.restore(record, [], {}, "https://hub.example")
+            self.assertEqual([], store.list())
+
     def test_access_audit_preserves_existing_search_parser_budget(self):
         large_response = {"values": [0] * 100_001}
         with EngineStore(self.root / "catalogue.sqlite") as store:

@@ -23,6 +23,23 @@ import tdi_experiment_supervisor as durable
 SCHEMA = 4
 MAX_PAGE = 200
 MAX_ACCESS_SCAN_NODES = 1_000_000
+NON_FINAL_DOMAINS = frozenset(("Development", "Validation"))
+
+
+def require_non_final_campaign_spec(spec, context):
+    """Enforce the catalogue as a dedicated non-final scientific store.
+
+    This is a persistence-boundary invariant independent of upstream CLI/plan
+    validation. Final/protected domains require a physically separate store
+    and are never accepted here, including during portable restore.
+    """
+    if not isinstance(spec, dict):
+        raise durable.ContractError(f"{context} campaign specification must be an object")
+    if spec.get("schema") != 1 or spec.get("purpose") != "development-software":
+        raise durable.ContractError(f"{context} requires a versioned non-final software campaign")
+    if spec.get("domain") not in NON_FINAL_DOMAINS:
+        raise durable.ContractError(f"{context} requires Development or Validation domain")
+
 
 
 def reject_restricted_reference_metadata(value, context):
@@ -415,7 +432,8 @@ class EngineStore:
             self.lock.close()
 
     def create(self, spec, endpoint):
-        """Persist an immutable campaign before submission; exact replays return its ID."""
+        """Persist an immutable non-final campaign before submission."""
+        require_non_final_campaign_spec(spec, "catalogue create")
         reject_restricted_reference_metadata(spec, "campaign specification")
         campaign = identity("tdi-operational-campaign/v1", spec)
         raw = durable.canonical(spec)
@@ -614,6 +632,8 @@ class EngineStore:
                         )
                     else:
                         value = durable.strict_json(raw)
+                    if table == "campaigns" and name == "spec":
+                        require_non_final_campaign_spec(value, "catalogue audit")
                     reject_restricted_reference_metadata(value, f"{table}.{name}")
                     checked += 1
         return {
@@ -662,6 +682,9 @@ class EngineStore:
         live in separate transfer receipts; imported campaigns cannot execute.
         The caller must first validate the complete portable archive.
         """
+        if not isinstance(record, dict) or "spec" not in record:
+            raise durable.ContractError("invalid imported campaign record")
+        require_non_final_campaign_spec(record["spec"], "catalogue restore")
         reject_restricted_reference_metadata({"record": record, "results": results, "locations": locations}, "bundle restore")
         campaign = record["id"]
         if identity("tdi-operational-campaign/v1", record["spec"]) != campaign:

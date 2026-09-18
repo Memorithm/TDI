@@ -78,8 +78,13 @@ Run `python3 scripts/tdi_engine.py --catalogue <path> access-audit` to traverse
 all structured catalogue metadata and reject an existing tagged record. The audit
 is label-based only: it does not classify unlabelled payload content. Hub
 authorization remains deployment-wide, not a per-artifact scientific clearance
-system. Keep protected/final stores separate. Do not point the viewer, search
-process, export endpoints or ordinary agents at a mixed store.
+system. The operational catalogue itself now enforces a dedicated non-final
+profile: campaign creation, portable restore and access audit accept only the
+versioned `development-software` contract in `Development` or `Validation`. A
+legacy or manually modified catalogue containing another campaign domain fails
+`access-audit` and cannot be backed up through the qualified CLI path. Keep
+protected/final material in physically separate stores; this is domain
+segregation, not payload classification or a multi-tenant ACL.
 
 Timing outputs use disabled cache policies. Exact deterministic-data cache reuse
 requires explicit consent and complete dependency/domain agreement. It retains
