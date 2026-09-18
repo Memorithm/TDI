@@ -97,7 +97,7 @@ TDI-23.0 has merged a bounded real finite-dimensional dagger scaffold and coordi
 
 TDI-23 keeps a hard semantic boundary: complete softmax attention is not treated as a morphism of `FdHilb`; Boolean, `F2`, ANF/Zhegalkin and max-plus operations retain their own laws. Multi-head concatenation is represented as a direct-sum construction unless a true tensor-product interaction is explicitly intended.
 
-**TDI-23.2 remains planned and blocked on a stable TDI-23.1 grammar.** Development candidates must not be interpreted as a freeze, confirmatory result or FLAT-ATTENTION integration.
+**TDI-23.2 bounded rewrite-calculus code is merged on `main` through PR #384, but the scientific stage remains blocked on an explicit compatible TDI-23.1 freeze.** The merged slice is preparatory infrastructure only: it does not promote/freeze TDI-23.2, authorize rewrite search, confirmatory/final execution, FLAT-ATTENTION integration, or a performance claim.
 
 ## What the completed programme has taught us
 

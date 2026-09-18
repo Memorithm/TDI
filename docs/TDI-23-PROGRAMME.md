@@ -92,7 +92,7 @@ A null, negative, equivalent, or harmful result is publishable under the origina
 | --- | --- | --- |
 | **TDI-23.0** | Stage-0 bootstrap: formal boundary, real finite-dimensional dagger scaffold, coordinate global-reduction model, exact structural laws, explicit composition-defect audit, freeze template and fail-closed gates | bootstrap merged; scientific freeze unresolved |
 | **TDI-23.1** | Typed Categorical Attention IR grammar, object-reduction annotations, explicit nonlinear boundaries, and deterministic legality/equivalence/defect fixtures | active development; scaffold implemented; not frozen |
-| **TDI-23.2** | Rewrite calculus: composition, dagger, tensor/direct-sum distinctions, identity elimination and legality checks | planned; blocked on stable 23.1 grammar |
+| **TDI-23.2** | Rewrite calculus: composition, dagger, tensor/direct-sum distinctions, identity elimination and legality checks | bounded preparatory calculus merged in PR #384; scientific promotion/freeze still blocked on stable 23.1 grammar |
 | **TDI-23.3** | Attention-score mapping and batched `QK^T` equivalence fixtures, including reduction-induced score error | planned |
 | **TDI-23.4** | Lower one abstract graph to multiple CPU reference execution plans and reduced plans | conditional |
 | **TDI-23.5** | Explicit interfaces to Boolean / `F2` / ANF / max-plus domains | conditional |

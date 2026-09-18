@@ -1,12 +1,12 @@
 # TDI-23.2 — Bounded Local Rewrite Calculus
 
-Status: **CANDIDATE PREPARATION / DRAFT PR / BLOCKED ON TDI-23.1 FREEZE / NOT FROZEN / NO REWRITE SEARCH / NO CONFIRMATORY EXECUTION**
+Status: **BOUNDED PREPARATORY CALCULUS MERGED / BLOCKED ON TDI-23.1 FREEZE / NOT PROMOTED OR FROZEN / NO REWRITE SEARCH / NO CONFIRMATORY EXECUTION**
 
 ## Purpose
 
-This branch prepares a deliberately tiny candidate local rewrite calculus over the TDI-23.1 typed IR. It does **not** promote TDI-23.2 to the active stage: the canonical TDI-23 programme still blocks TDI-23.2 on a stable TDI-23.1 grammar. The purpose of this candidate is to establish that explicit local rewrite rules can be represented, pattern-matched, independently validated, and verified against the existing exact semantic oracle before any broader rewrite engine exists.
+This document describes the deliberately tiny bounded local rewrite calculus over the TDI-23.1 typed IR merged through PR #384. The merge does **not** promote TDI-23.2 to the active scientific stage: the canonical TDI-23 programme still blocks scientific promotion on a stable TDI-23.1 grammar. The purpose of this preparatory slice is to establish that explicit local rewrite rules can be represented, pattern-matched, independently validated, and verified against the existing exact semantic oracle before any broader rewrite engine exists.
 
-Versioned candidate contract:
+Versioned preparatory contract:
 
 `tdi23.2-local-rewrite-calculus-v1`
 
@@ -16,7 +16,7 @@ Implementation:
 
 ## Admitted rules
 
-Exactly four rules are admitted in this first candidate slice:
+Exactly four rules are admitted in this first bounded preparatory slice:
 
 1. left identity: `id_B o f -> f`;
 2. right identity: `f o id_A -> f`;
@@ -55,7 +55,7 @@ The function does not mutate the graph.
 
 ## Explicitly excluded rewrites
 
-This candidate does **not** authorize:
+This merged preparatory slice does **not** authorize:
 
 - associativity or reassociation of composition under floating-point arithmetic;
 - commutation or reordering of arbitrary maps;
