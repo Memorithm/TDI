@@ -190,7 +190,7 @@ class SearchIntegrationTests(unittest.TestCase):
 
 
 class SearchMigrationTests(unittest.TestCase):
-    def test_v2_migration_rollback_and_backup_preserve_legacy_bytes(self):
+    def test_v2_migration_rollback_preserves_legacy_bytes_and_backup_rejects_legacy_domain(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "v2.sqlite"
             with sqlite3.connect(path) as db:
@@ -208,13 +208,17 @@ class SearchMigrationTests(unittest.TestCase):
             with sqlite3.connect(path) as db:
                 self.assertEqual(2, db.execute("PRAGMA user_version").fetchone()[0])
                 self.assertIsNone(db.execute("SELECT name FROM sqlite_master WHERE name='searches'").fetchone())
+            backup_path = Path(directory) / "backup.sqlite"
             with EngineStore(path) as current:
                 self.assertEqual(4, current.db.execute("PRAGMA user_version").fetchone()[0])
+                self.assertEqual('{}', current.db.execute("SELECT spec FROM campaigns").fetchone()[0])
                 self.assertEqual('{ "original": true }', current.db.execute("SELECT receipt FROM exports").fetchone()[0])
-                current.backup(Path(directory) / "backup.sqlite")
-            with EngineStore(Path(directory) / "backup.sqlite", readonly=True) as backup:
-                self.assertEqual([], backup.list_searches())
-                self.assertEqual('{ "original": true }', backup.db.execute("SELECT receipt FROM exports").fetchone()[0])
+                with self.assertRaisesRegex(durable.ContractError, "requires a versioned non-final software campaign"):
+                    current.backup(backup_path)
+            self.assertFalse(backup_path.exists())
+            with sqlite3.connect(path) as db:
+                self.assertEqual('{}', db.execute("SELECT spec FROM campaigns").fetchone()[0])
+                self.assertEqual('{ "original": true }', db.execute("SELECT receipt FROM exports").fetchone()[0])
 
 
 if __name__ == "__main__":
