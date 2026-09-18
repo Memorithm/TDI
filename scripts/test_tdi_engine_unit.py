@@ -190,6 +190,16 @@ raise SystemExit("crash hook was not reached")
                 self.assertEqual(1, len(candidates))
                 with sqlite3.connect(candidates[0]) as backup:
                     self.assertEqual(("ok",), backup.execute("PRAGMA integrity_check").fetchone())
+                    self.assertEqual((4,), backup.execute("PRAGMA user_version").fetchone())
+                    tables = {
+                        row[0]
+                        for row in backup.execute(
+                            "SELECT name FROM sqlite_master WHERE type='table'"
+                        )
+                    }
+                    self.assertTrue(
+                        {"campaigns", "events", "results", "cache", "exports"} <= tables
+                    )
 
     def test_backup_storage_failures_never_publish_named_partial_catalogue(self):
         destination = self.root / "backup.sqlite"
