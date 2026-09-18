@@ -1,6 +1,6 @@
 # TDI-22.x — Torsor Attention Research Programme
 
-Status: **TDI-22.0 and TDI-22.1 frozen; bounded non-final TDI-22.2 implementation active; no confirmatory/final execution authorised**.
+Status: **active Stage-0 bootstrap; not frozen; no confirmatory execution authorised**.
 
 ## Research question
 
@@ -62,7 +62,7 @@ This creates a six-component bilinear form without requiring one cross product p
 
 ## Candidate/control ladder
 
-The frozen non-final ladder deliberately separates representation effects from extra dimensionality:
+The planned ladder deliberately separates representation effects from extra dimensionality:
 
 - **T0 — Vector reference.** Conventional bounded vector attention reference used only as a scientific control.
 - **T1 — Torsor value only.** Conventional score, torsor-valued aggregation.
@@ -76,17 +76,15 @@ The critical comparison for a torsor-specific effect is T3 versus T4, not only T
 
 | Stage | Purpose | Status |
 | --- | --- | --- |
-| **TDI-22.0** | Mathematical convention, exact transport/factorization scaffolding, Stage-0 boundaries | **frozen on `main` by PR #255** |
-| **TDI-22.1** | Deterministic tasks, T0–T4 controls, matched budgets, metrics, geometry families, splits and rejection rules | **preregistered and frozen on `main` by PRs #258/#259** |
-| **TDI-22.2** | Bounded non-final evaluator/generator foundation for the frozen P1–P5 design | **implementation active; deterministic evaluator foundation and P1–P5 episode generator merged in PRs #262/#266; no result payload or final/confirmatory run authorised** |
-| **TDI-22.3** | T2 hybrid-score evaluation | planned / gated by prior evidence |
-| **TDI-22.4** | T3 full-torsor score versus T0 and T4 matched six-component control | planned / gated by prior evidence |
+| **TDI-22.0** | Freeze mathematical convention, exact transport/factorization scaffolding, Stage-0 boundaries | active bootstrap; not frozen |
+| **TDI-22.1** | Freeze deterministic tasks, matched budgets, metrics, geometry families, splits and rejection rules | blocked until 22.0 freeze |
+| **TDI-22.2** | T1 torsor-value evaluation versus T0 | planned |
+| **TDI-22.3** | T2 hybrid-score evaluation | planned |
+| **TDI-22.4** | T3 full-torsor score versus T0 and T4 matched six-component control | planned |
 | **TDI-22.5** | Position/geometry ablations | conditional |
 | **TDI-22.6** | Paged/hierarchical torsor-memory experiments | conditional |
 | **TDI-22.7** | Boolean-routing × torsor cooperation | conditional |
 | **TDI-22.8** | FLAT-ATTENTION graduation decision | evidence-gated |
-
-The merged TDI-22.2 implementation is infrastructure for the frozen non-final design. It is not itself an experimental outcome: PR #262 explicitly lands deterministic evaluator primitives without a full P1–P5 campaign, and PR #266 lands deterministic P1–P5 generation without campaign execution or a committed result payload.
 
 ## Stage-0 exact properties
 
@@ -104,7 +102,14 @@ These are algebra/implementation checks only.
 
 ## Geometry is an experimental variable
 
-For ordinary language tokens there is no automatically privileged physical `R^3` position. TDI-22 therefore treats token geometry as an explicit arm rather than an assumed fact. The frozen TDI-22.1 contract owns the currently admitted deterministic geometry registry; any new geometry family requires a separately reviewed protocol change rather than silent promotion.
+For ordinary language tokens there is no automatically privileged physical `R^3` position. TDI-22 must therefore treat token geometry as an explicit arm, not as an assumed fact. Candidate families for later preregistration may include:
+
+- linear embedding of token index, e.g. `(i, 0, 0)`;
+- deterministic helical or periodic embeddings;
+- learned three-dimensional latent positions;
+- externally supplied physical coordinates for tasks that genuinely have spatial geometry.
+
+No geometry family is promoted before TDI-22.1 freezes the relevant comparison.
 
 ## Separation from existing TDI programmes
 
@@ -115,11 +120,11 @@ TDI-22 is distinct from:
 - TDI-21.x, whose Boolean candidate arms explicitly forbid attention scoring;
 - FLAT-ATTENTION, which owns execution semantics and optimized kernels.
 
-TDI-22 may use existing deterministic TDI task infrastructure only through an explicit protocol that prevents final-evaluation leakage and matched-budget ambiguity.
+TDI-22 may use existing deterministic TDI task infrastructure only through an explicit later protocol that prevents final-evaluation leakage and matched-budget ambiguity.
 
 ## FLAT-ATTENTION boundary
 
-The current TDI-22 stages do not modify FLAT-ATTENTION and make no kernel or hardware claim.
+TDI-22.0 does not modify FLAT-ATTENTION and makes no kernel or hardware claim.
 
 A later FLAT integration is permitted only if the TDI series produces reproducible evidence for a precisely specified candidate. FLAT must then independently qualify:
 
