@@ -269,6 +269,33 @@ raise SystemExit("crash hook was not reached")
             self.assertEqual("prepared", store.list()[0]["phase"])
         self.assertEqual(0, client.calls)
 
+    def test_restricted_metadata_cannot_persist_in_events_cache_exports_or_candidates(self):
+        tagged = {"nested": {"access_class": "restricted-reference", "opaque": "reference-only"}}
+        with EngineStore(self.root / "catalogue.sqlite") as store:
+            campaign = store.create(campaign_fixture(), "http://127.0.0.1:8477")
+            for label, operation in (
+                ("event", lambda: store.event(campaign, "diagnostic", tagged)),
+                ("result", lambda: store.put_result(campaign, "prepare", "result", tagged)),
+                ("cache", lambda: store.cache_put(tagged, {}, campaign, "prepare", "result", authorized=True)),
+                ("export", lambda: store.prepare_export(campaign, "otlp", "https://collector.example", tagged)),
+                ("candidate", lambda: store.create_search(tagged, {}, {})),
+            ):
+                with self.subTest(boundary=label), self.assertRaisesRegex(durable.ContractError, "restricted-reference"):
+                    operation()
+            clean = store.access_audit()
+            self.assertEqual("clear", clean["status"])
+            self.assertEqual(0, clean["restricted_reference_records"])
+            with store.db:
+                store.db.execute(
+                    "INSERT INTO events(campaign,kind,payload,recorded_ns) VALUES (?,?,?,?)",
+                    (campaign, "legacy-injected", durable.canonical(tagged), 1),
+                )
+            with self.assertRaisesRegex(durable.ContractError, "events.payload.*restricted-reference"):
+                store.access_audit()
+            with self.assertRaisesRegex(durable.ContractError, "events.payload.*restricted-reference"):
+                store.backup(self.root / "must-not-exist.sqlite")
+            self.assertFalse((self.root / "must-not-exist.sqlite").exists())
+
     def test_restricted_roots_rejected_before_download_or_submission(self):
         spec = campaign_fixture()
         roots = root_artifact_bindings()
