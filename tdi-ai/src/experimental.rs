@@ -74,6 +74,8 @@ pub mod tdi23_reduction;
 pub mod tdi23_rewrite;
 #[path = "tdi24_chiral.rs"]
 pub mod tdi24_chiral;
+#[path = "tdi24_vector.rs"]
+pub mod tdi24_vector;
 #[path = "tdi25_torsor_chiral.rs"]
 pub mod tdi25_torsor_chiral;
 #[path = "tdi2_intuition.rs"]
