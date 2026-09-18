@@ -10,8 +10,8 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 | ---: | --- | --- |
 | 01 | Stage-0 programme + shared `M/J` algebra scaffold | **landed** in #406; exact tests for `M²=I`, `J²=-I`, `MJM=-J`, parity sign; experimental API only |
 | 02 | Arithmetic hardening | **landed** in #471; finite-input checks, product/accumulator/weighted overflow rejection, deterministic algebra property fixtures |
-| 03 | Matched V6 vector reference | **current slice**; distinct finite 6D vector carrier, direct score only, matched width/arithmetic, no mirror/chiral API or hidden extra state |
-| 04 | Channel decomposition contract | expose `s`, `m`, `chi` separately with provenance/version tags |
+| 03 | Matched V6 vector reference | **landed** in #487; distinct finite 6D vector carrier, direct score only, matched width/arithmetic, no mirror/chiral API or hidden extra state |
+| 04 | Channel decomposition contract | **current slice**; expose `s`, `m`, `chi` separately with stable IDs, reflection parity and provenance/version tags |
 | 05 | R/L enantiomorphic score pair | reflection must swap R/L scores within declared tolerance |
 | 06 | Even/odd attention recombination contract | prove/test parity transformation of mean and contrast channels |
 | 07 | Deterministic normalizer reference | stable masked normalization shared by V6/C6; no production claim |
@@ -93,4 +93,4 @@ The campaign pauses rather than forcing a later PR when:
 
 ## Progress accounting
 
-**2/50 merged** (#406, #471). Slice 03 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**3/50 merged** (#406, #471, #487). Slice 04 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
