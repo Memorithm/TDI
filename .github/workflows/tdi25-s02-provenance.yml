@@ -1,0 +1,45 @@
+name: TDI-25.0 slice 02 source-contract provenance pin
+
+on:
+  pull_request:
+    paths:
+      - 'tdi-ai/src/tdi25_torsor_chiral.rs'
+      - 'docs/TDI-25-CAMPAIGN-50.md'
+      - 'docs/TDI-25-SOURCE-CONTRACTS.md'
+      - 'scripts/check-tdi25-s02.sh'
+      - '.github/workflows/tdi25-s02-provenance.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tdi-ai/src/tdi25_torsor_chiral.rs'
+      - 'docs/TDI-25-CAMPAIGN-50.md'
+      - 'docs/TDI-25-SOURCE-CONTRACTS.md'
+      - 'scripts/check-tdi25-s02.sh'
+      - '.github/workflows/tdi25-s02-provenance.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tdi25-s02-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-contract-provenance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact candidate head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+
+      - name: Qualify TDI-25 slice 02
+        run: bash scripts/check-tdi25-s02.sh
