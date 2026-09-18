@@ -522,21 +522,49 @@ class EngineStore:
         return {"entry": entry, "campaign": row["campaign"], "step": row["step"], "output": row["output"]}
 
     def backup(self, destination):
-        """Create a coherent SQLite backup and refuse an existing target."""
+        """Publish a coherent SQLite backup atomically and refuse an existing target.
+
+        The externally named destination is linked only after SQLite backup,
+        integrity validation and file ``fsync`` have completed. A process crash
+        or storage failure before that point can therefore leave at most a hidden
+        temporary file, never a successful-looking partial export. Directory
+        ``fsync`` failure removes the just-linked destination best-effort before
+        surfacing the persistence error.
+        """
+        import tempfile
+
         destination = Path(destination)
-        fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        if destination.exists() or destination.is_symlink():
+            raise FileExistsError(destination)
+        fd, temporary = tempfile.mkstemp(prefix=".tdi-backup-", dir=destination.parent)
         os.close(fd)
+        temporary = Path(temporary)
         try:
-            with contextlib.closing(sqlite3.connect(destination)) as target:
+            with contextlib.closing(sqlite3.connect(temporary)) as target:
                 self.db.backup(target)
                 if target.execute("PRAGMA integrity_check").fetchone() != ("ok",):
                     raise durable.StorageError("backup integrity failure")
-            with destination.open("rb") as stream:
+            with temporary.open("rb") as stream:
                 os.fsync(stream.fileno())
-            durable._fsync_directory(destination.parent)
-        except BaseException:
-            destination.unlink()
-            raise
+            os.link(temporary, destination, follow_symlinks=False)
+            try:
+                durable._fsync_directory(destination.parent)
+            except BaseException:
+                # The final name was created by this call only after the backup
+                # was complete. Remove it on a directory persistence failure,
+                # but never unlink a path another writer may have replaced.
+                try:
+                    temporary_stat = temporary.stat()
+                    destination_stat = destination.stat()
+                    temporary_identity = (temporary_stat.st_dev, temporary_stat.st_ino)
+                    destination_identity = (destination_stat.st_dev, destination_stat.st_ino)
+                    if temporary_identity == destination_identity:
+                        destination.unlink()
+                except FileNotFoundError:
+                    pass
+                raise
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def restore(self, record, results, locations, endpoint):
         """Commit an imported evidence catalogue after all payloads were verified.
