@@ -267,6 +267,9 @@ stage = sys.argv[2]
 marker = Path(sys.argv[3])
 
 def pause_for_parent_signal():
+    signal.signal(signal.SIGHUP, signal.SIG_DFL)
+    if hasattr(signal, "pthread_sigmask"):
+        signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGHUP})
     with marker.open("xb") as stream:
         stream.write(b"ready")
         stream.flush()
@@ -326,6 +329,9 @@ stage = sys.argv[3]
 marker = Path(sys.argv[4])
 
 def pause_for_parent_signal():
+    signal.signal(signal.SIGHUP, signal.SIG_DFL)
+    if hasattr(signal, "pthread_sigmask"):
+        signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGHUP})
     with marker.open("xb") as stream:
         stream.write(b"ready")
         stream.flush()
