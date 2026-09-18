@@ -345,6 +345,68 @@ def summarize(records):
                   "max": max(m[key] for m in metrics), "repetitions": len(metrics)} for key in sorted(keys)}
 
 
+def validate_q04_evidence(report):
+    """Validate Q04's no-history-reread invariant and recorded timing observations.
+
+    This deliberately does not infer an asymptotic latency class from a bounded
+    timing sample. Q04's software claim is narrower: journal append must not
+    rescan/re-hash prior history, and a measured multi-size benchmark must exist
+    as separately scoped evidence.
+    """
+    if (not isinstance(report, dict) or report.get('kind') != 'tdi-engine-benchmark'
+            or report.get('status') != 'measured'
+            or report.get('identity') != identity('tdi-engine-benchmark/v1', {k: v for k, v in report.items() if k != 'identity'})):
+        raise durable.ContractError('Q04 requires a complete identity-bound measured benchmark report')
+    summary = report.get('summary')
+    records = report.get('records')
+    if not isinstance(summary, list) or not isinstance(records, list):
+        raise durable.ContractError('Q04 benchmark report lacks summary or raw records')
+
+    payloads = {}
+    for row in summary:
+        case = row.get('case') if isinstance(row, dict) else None
+        if not isinstance(case, dict) or case.get('kind') != 'journal':
+            continue
+        count, payload = case.get('count'), case.get('payload_bytes')
+        metric = row.get('metrics', {}).get('/write/wall_ns')
+        if (type(count) is not int or count <= 0 or type(payload) is not int or payload <= 0
+                or not isinstance(metric, dict) or type(metric.get('median')) not in (int, float)
+                or not math.isfinite(metric['median']) or metric['median'] <= 0):
+            raise durable.ContractError('Q04 journal summary contains invalid workload or timing evidence')
+        counts = payloads.setdefault(payload, {})
+        if count in counts:
+            raise durable.ContractError('Q04 journal summary contains a duplicate workload')
+        counts[count] = metric
+
+    if not payloads or any(len(counts) < 3 for counts in payloads.values()):
+        raise durable.ContractError('Q04 requires at least three measured journal sizes per payload profile')
+
+    measured = [row for row in records if row.get('phase') == 'measured'
+                and isinstance(row.get('case'), dict) and row['case'].get('kind') == 'journal']
+    for payload, metrics_by_count in payloads.items():
+        for count, reported_metric in metrics_by_count.items():
+            matching = [row for row in measured if row['case'].get('payload_bytes') == payload and row['case'].get('count') == count]
+            if len(matching) < 2:
+                raise durable.ContractError('Q04 requires repeated measured records for every journal workload')
+            recomputed_metric = summarize(matching).get('/write/wall_ns')
+            if recomputed_metric != reported_metric:
+                raise durable.ContractError('Q04 journal summary does not match its raw timing repetitions')
+            for row in matching:
+                work = row.get('measurements', {}).get('append_work')
+                if (not isinstance(work, dict) or work.get('full_scans') != 0
+                        or work.get('hash_calls') != 2 * count
+                        or type(work.get('hash_input_bytes')) is not int or work['hash_input_bytes'] <= 0):
+                    raise durable.ContractError('Q04 append rescanned history or changed its exact per-trial hashing contract')
+
+    profiles = [{"payload_bytes": payload, "counts": sorted(metrics_by_count),
+                 "observed_write_wall_ns_medians":
+                     [metrics_by_count[count]['median'] for count in sorted(metrics_by_count)]}
+                for payload, metrics_by_count in sorted(payloads.items())]
+    return {"schema": 1, "qualification": "no-history-reread-with-measured-scaling-observations",
+            "report_identity": report['identity'], "profiles": profiles,
+            "limitations": "bounded observed timings only; no asymptotic latency class, SLO, significance, or hardware-generalization claim"}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path)
