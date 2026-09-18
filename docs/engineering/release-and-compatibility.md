@@ -3,16 +3,17 @@
 ## Candidate profile
 
 This integration is not a released industrial qualification. Its source pins
-are explicit, including still-open upstream candidates. Local software passes,
-merged code, binary hashes and caller-declared source SHAs are separate facts.
+are explicit and bind the qualified upstream merge commits used by the aggregate
+profile. Local software passes, merged code, binary hashes and caller-declared
+source SHAs remain separate facts.
 The [dated record](integration-delivery-2026-09-16.md) records their current status.
 
 | Component | Revision consumed by the integration |
 | --- | --- |
 | TDI | Exact PR head in CI; exact `github.sha` for a main push. |
 | scirust-hub | `ccdcb99a4573dbefb944af0df713101b100b5f78`, merged #55. |
-| SciRust | `06c9eaef248c0f40b7d363c16a7b4c1c1c54a5a0`, candidate primitive source; #1452 final qualification pending. |
-| Forge | `0d48a91a5eed6a9ae09a5eacd7c4f18df8bdd333`, candidate #39. |
+| SciRust | `be7fcca3b31cedf722d71a2a56db8f6d088037cf`, qualified merge of #1452. |
+| Forge | `28067ab0aa1d52a2260d9bb2bf35a346547a292a`, qualified merge of #39. |
 | ElasticXxx | `f8e10b1a1d05d6c22c0f56fed87252bc65d4e66a`, final source head of merged #95; current full qualification must be collected separately. |
 | FLAT-ATTENTION | `1d5ac64cc87c5dd526e04527c3bb4b78ba0add33`, public CPU reference. |
 | NNIS | `5436736002834dd6dd7d5ace8c1c044b47aed18f`, optional CUDA adapter and exact upstream validator. |
@@ -104,15 +105,16 @@ exercising the SDK outside the library crate.
 
 ## Promotion procedure
 
-1. Resolve every material review on the exact upstream candidates. Collect all
-   applicable checks, including absent/queued/cancelled/skipped states and full
-   pagination; do not infer success from a non-red summary.
-2. Qualify and merge SciRust #1452 and Forge #39 in their own repositories. Record
-   exact final head and merge SHA. Diagnose the SciRust hardware failure on its
-   owning runner; a software stats pass cannot waive it.
-3. Correct **all** TDI consumers/workflows/runner declarations to the resulting
-   upstream merge SHAs. Rebuild and run the affected numerical/reference and
-   integrated suites. Candidate-only pins cannot be relabelled final.
+1. Preserve the already-qualified upstream merge identities: SciRust #1452
+   `be7fcca3b31cedf722d71a2a56db8f6d088037cf` and Forge #39
+   `28067ab0aa1d52a2260d9bb2bf35a346547a292a`. Any later upstream change requires
+   a new exact-head qualification; do not infer success from a non-red summary.
+2. Keep **all** live TDI consumers/workflows/runner declarations on those qualified
+   merge SHAs for this profile. Rebuild and run the affected numerical/reference
+   and integrated suites. Historical candidate-only evidence remains historical
+   and must not be relabelled final.
+3. Treat unrelated SciRust hardware qualification separately from the statistics
+   merge used here; software statistics evidence cannot waive a hardware gate.
 4. Review the consolidated TDI tree, including overlapping CLI dispatch and the
    schema-4/report/sensitivity paths. The component PRs #385/#387/#388/#389/#409/
    #411 are review partitions; choose one integration route and do not replay
