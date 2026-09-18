@@ -42,16 +42,28 @@ grep -Fq 'bash scripts/check-tdi23.2-rewrite.sh' "$WORKFLOW" \
 # Reject affirmative authorization claims only. Required statements such as
 # "No FLAT-ATTENTION integration is authorized" must remain valid evidence of
 # the fail-closed boundary rather than triggering this guard themselves.
-FORBIDDEN_AFFIRMATIVE='^[[:space:]]*([-*][[:space:]]*)?(rewrite search|recursive rewriting|reassociation|tensor(-product)? rewrites?|direct[- ]sum rewrites?|approximate equivalence|FLAT-ATTENTION integration|confirmatory execution|final execution|confirmatory or final execution)[[:space:]]+(is|are)[[:space:]]+authorized([[:space:][:punct:]]|$)'
+FORBIDDEN_AFFIRMATIVE='^[[:space:]]*([-*][[:space:]]*)?(rewrite search|recursive rewriting|reassociation|(tensor(-product)?|direct[- ]sum|tensor(-product)?/direct[- ]sum)([[:space:]]+algebraic)?[[:space:]]+rewrites?|approximate equivalence|FLAT-ATTENTION integration|confirmatory execution|final execution|confirmatory or final execution)[[:space:]]+(is|are)[[:space:]]+authorized([[:space:][:punct:]]|$)'
 
-# Mutation fixtures keep the guard itself fail-closed: the natural combined
-# affirmative form must be rejected, while the required negative form must not
+# Mutation fixtures keep the guard itself fail-closed: natural combined
+# affirmative forms must be rejected, while required negative forms must not
 # be misclassified as authorization.
 printf '%s\n' '- Confirmatory or final execution is authorized.' \
     | grep -Eiq "$FORBIDDEN_AFFIRMATIVE" \
     || fail "authorization guard missed combined confirmatory/final execution claim"
 if printf '%s\n' '- No confirmatory or final execution is authorized.' | grep -Eiq "$FORBIDDEN_AFFIRMATIVE"; then
     fail "authorization guard rejected required negative confirmatory/final statement"
+fi
+printf '%s\n' '- Tensor/direct-sum algebraic rewrites are authorized.' \
+    | grep -Eiq "$FORBIDDEN_AFFIRMATIVE" \
+    || fail "authorization guard missed combined tensor/direct-sum algebraic rewrite claim"
+if printf '%s\n' '- No tensor/direct-sum algebraic rewrites are authorized.' | grep -Eiq "$FORBIDDEN_AFFIRMATIVE"; then
+    fail "authorization guard rejected required negative tensor/direct-sum statement"
+fi
+printf '%s\n' '- Tensor-product/direct-sum algebraic rewrites are authorized.' \
+    | grep -Eiq "$FORBIDDEN_AFFIRMATIVE" \
+    || fail "authorization guard missed combined tensor-product/direct-sum algebraic rewrite claim"
+if printf '%s\n' '- No tensor-product/direct-sum algebraic rewrites are authorized.' | grep -Eiq "$FORBIDDEN_AFFIRMATIVE"; then
+    fail "authorization guard rejected required negative tensor-product/direct-sum statement"
 fi
 if printf '%s\n' '- No FLAT-ATTENTION integration is authorized.' | grep -Eiq "$FORBIDDEN_AFFIRMATIVE"; then
     fail "authorization guard rejected required negative FLAT statement"
