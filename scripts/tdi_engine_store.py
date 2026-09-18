@@ -35,9 +35,12 @@ def require_non_final_campaign_spec(spec, context):
     """
     if not isinstance(spec, dict):
         raise durable.ContractError(f"{context} campaign specification must be an object")
-    if spec.get("schema") != 1 or spec.get("purpose") != "development-software":
+    schema = spec.get("schema")
+    purpose = spec.get("purpose")
+    domain = spec.get("domain")
+    if type(schema) is not int or schema != 1 or type(purpose) is not str or purpose != "development-software":
         raise durable.ContractError(f"{context} requires a versioned non-final software campaign")
-    if spec.get("domain") not in NON_FINAL_DOMAINS:
+    if type(domain) is not str or domain not in NON_FINAL_DOMAINS:
         raise durable.ContractError(f"{context} requires Development or Validation domain")
 
 
@@ -334,6 +337,7 @@ class EngineStore:
 
     def bind_search_stage(self, key, attempt, spec, roots, endpoint):
         """Bind a prepared Hub campaign before dispatch, atomically with cancellation."""
+        require_non_final_campaign_spec(spec, "search stage")
         reject_restricted_reference_metadata({"spec": spec, "roots": roots}, "search stage")
         campaign = identity("tdi-operational-campaign/v1", spec)
         self.db.execute("BEGIN IMMEDIATE")

@@ -285,6 +285,8 @@ raise SystemExit("crash hook was not reached")
                 lambda spec: spec.__setitem__("domain", "Protected"),
                 lambda spec: spec.__setitem__("purpose", "confirmatory"),
                 lambda spec: spec.__setitem__("schema", 2),
+                lambda spec: spec.__setitem__("schema", True),
+                lambda spec: spec.__setitem__("schema", 1.0),
             ):
                 candidate = campaign_fixture()
                 mutate(candidate)
@@ -303,6 +305,23 @@ raise SystemExit("crash hook was not reached")
             with self.assertRaisesRegex(durable.ContractError, "Development or Validation"):
                 store.backup(self.root / "must-not-backup-final.sqlite")
             self.assertFalse((self.root / "must-not-backup-final.sqlite").exists())
+
+    def test_search_stage_rejects_final_campaign_before_transaction(self):
+        with EngineStore(self.root / "catalogue.sqlite") as store:
+            search = store.create_search({"kind": "boundary-test"}, {"binding": "test"}, {})
+            running = store.update_search(search["id"], 0, "running", {}, {"started": True})
+            self.assertEqual("running", running["phase"])
+
+            final = campaign_fixture()
+            final["domain"] = "Final"
+            with self.assertRaisesRegex(durable.ContractError, "Development or Validation"):
+                store.bind_search_stage(
+                    search["id"], "attempt-1", final, {}, "http://127.0.0.1:8477"
+                )
+
+            self.assertEqual(0, store.db.execute("SELECT COUNT(*) FROM campaigns").fetchone()[0])
+            self.assertEqual(0, store.db.execute("SELECT COUNT(*) FROM search_stages").fetchone()[0])
+            self.assertEqual("running", store.get_search(search["id"])["phase"])
 
     def test_restore_rejects_final_campaign_before_any_catalogue_write(self):
         record = {
