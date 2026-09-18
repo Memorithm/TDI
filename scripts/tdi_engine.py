@@ -75,6 +75,7 @@ def main(argv=None):
         p = sub.add_parser(verb); p.add_argument("campaign")
     p = sub.add_parser("attach"); p.add_argument("campaign"); p.add_argument("workflow"); p.add_argument("--roots", type=Path)
     p = sub.add_parser("status"); p.add_argument("--after", type=int, default=0); p.add_argument("--limit", type=int, default=100); p.add_argument("--phase")
+    sub.add_parser("access-audit")
     p = sub.add_parser("events"); p.add_argument("campaign"); p.add_argument("--after", type=int, default=0)
     p = sub.add_parser("compare"); p.add_argument("left"); p.add_argument("right")
     p = sub.add_parser("export"); p.add_argument("campaign"); p.add_argument("output", type=Path)
@@ -229,7 +230,7 @@ def dispatch(args):
         from tdi_engine_viewer import serve
         serve(args.catalogue, args.port, reports=args.report, figures=args.figures)
         return {"status": "stopped"}
-    readonly = op in ("status", "inspect", "compare", "events", "backup", "export", "cache-request", "cache-get", "exports", "inspect-export", "searches", "search-inspect")
+    readonly = op in ("status", "inspect", "compare", "events", "backup", "export", "cache-request", "cache-get", "exports", "inspect-export", "searches", "search-inspect", "access-audit")
     if op in ("fixture-plan", "library-fixture-plan", "attention-fixture-plan", "submit", "run-local-admitted", "run", "resume", "cancel", "attach", "export", "restore", "cache-get", "search-fixture", "search-run", "search-resume", "search-cancel"):
         client = HubClient(args.hub, token=os.environ.get("TDI_HUB_TOKEN"),
                            allow_loopback_http=args.allow_loopback_http, timeout=args.timeout)
@@ -287,6 +288,8 @@ def dispatch(args):
         if op == "cache-get":
             from tdi_engine_cache import lookup
             return lookup(client, store, read_json(args.request), authorized=args.allow_exact_reuse)
+        if op == "access-audit":
+            return store.access_audit()
         if op == "status":
             return store.list(after=args.after, limit=args.limit, phase=args.phase)
         if op == "inspect":

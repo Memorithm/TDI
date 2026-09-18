@@ -14,7 +14,7 @@ import tdi_execution_graph as graphs
 import tdi_experiment_supervisor as durable
 import tdi_hub_admission_contract as admission
 import tdi_engine_runtime as runtime
-from tdi_engine_store import identity, atomic_json
+from tdi_engine_store import identity, atomic_json, reject_restricted_reference_metadata
 
 MAX_ARCHIVE_BYTES = 16 * 1024 * 1024
 MAX_MEMBERS = 4096
@@ -185,6 +185,9 @@ def restore_bundle(client, store, bundle, *, expected_identity=None):
     remain unreferenced in Hub. Import never starts scientific execution.
     """
     payloads = verify_bundle(bundle, expected_identity=expected_identity)
+    # Reject tagged restricted metadata before the first external Hub mutation.
+    # Store-level rejection remains a second line of defence for direct callers.
+    reject_restricted_reference_metadata(bundle["campaign"], "bundle restore")
     locations, results = {}, []
     for member in bundle["members"]:
         evidence = member["evidence"]
