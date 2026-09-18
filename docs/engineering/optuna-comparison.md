@@ -139,3 +139,11 @@ References consulted 2026-09-18: Optuna's official [ask/tell interface](https://
 and [sampling/pruning overview](https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/003_efficient_optimization_algorithms.html).
 The installed package lock, rather than a moving documentation alias, identifies
 the implementation actually executed.
+
+## First observed development run
+
+The [2026-09-18 evidence record](benchmarks/2026-09-18-optuna-development.md)
+contains the actual 7,680-evaluation result on source
+`2c185982f1d62cd73b5dcf59c5c0f487b0165c3b`, its full raw report and median
+incumbent curves. It is exploratory evidence under the exact finite categorical
+protocol above; it does not establish a general optimizer ranking.
