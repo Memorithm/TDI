@@ -25,7 +25,7 @@ MAX_PAGE = 200
 MAX_ACCESS_SCAN_NODES = 1_000_000
 
 
-def _reject_restricted_reference(value, context):
+def reject_restricted_reference_metadata(value, context):
     """Reject tagged restricted-reference metadata before local persistence.
 
     This is a defence-in-depth metadata invariant, not a content classifier or
@@ -250,7 +250,7 @@ class EngineStore:
 
     def create_search(self, spec, binding, response):
         """Persist an immutable search and its initial Forge checkpoint, without execution."""
-        _reject_restricted_reference({"spec": spec, "binding": binding, "response": response}, "search")
+        reject_restricted_reference_metadata({"spec": spec, "binding": binding, "response": response}, "search")
         key = identity("tdi-scientific-search/v1", {"spec": spec, "binding": binding})
         with self.db:
             row = self.db.execute("SELECT id FROM searches WHERE id=?", (key,)).fetchone()
@@ -279,7 +279,7 @@ class EngineStore:
         return record
 
     def _search_event(self, key, kind, payload):
-        _reject_restricted_reference(payload, "search event")
+        reject_restricted_reference_metadata(payload, "search event")
         self.db.execute("INSERT INTO search_events(search,kind,payload,recorded_ns) VALUES (?,?,?,?)",
                         (key, kind, durable.canonical(payload), time.time_ns()))
 
@@ -290,7 +290,7 @@ class EngineStore:
 
     def update_search(self, key, sequence, phase, response, event):
         """CAS checkpoint and audit event in one FULL-synchronous transaction."""
-        _reject_restricted_reference({"response": response, "event": event}, "search transition")
+        reject_restricted_reference_metadata({"response": response, "event": event}, "search transition")
         origins = {"prepared": ("prepared",), "running": ("prepared", "running", "paused"),
                    "paused": ("running",), "completed": ("running", "completed"),
                    "cancel-requested": ("prepared", "running", "paused", "cancel-requested"),
@@ -317,7 +317,7 @@ class EngineStore:
 
     def bind_search_stage(self, key, attempt, spec, roots, endpoint):
         """Bind a prepared Hub campaign before dispatch, atomically with cancellation."""
-        _reject_restricted_reference({"spec": spec, "roots": roots}, "search stage")
+        reject_restricted_reference_metadata({"spec": spec, "roots": roots}, "search stage")
         campaign = identity("tdi-operational-campaign/v1", spec)
         self.db.execute("BEGIN IMMEDIATE")
         with self.db:
@@ -366,7 +366,7 @@ class EngineStore:
         At most 32 unfinished exports may be queued. Existing identical plans
         return their durable state and are never implicitly redispatched.
         """
-        _reject_restricted_reference(plan, "external export plan")
+        reject_restricted_reference_metadata(plan, "external export plan")
         key = identity("tdi-external-export/v1", {"campaign": campaign, "kind": kind, "endpoint": endpoint, "plan": plan})
         raw = durable.canonical(plan)
         if kind not in ("mlflow", "otlp") or len(raw.encode()) > 1024 * 1024:
@@ -395,7 +395,7 @@ class EngineStore:
 
     def export_transition(self, key, expected, state, receipt):
         """Compare-and-set delivery state; export failure cannot overwrite results."""
-        _reject_restricted_reference(receipt, "external export receipt")
+        reject_restricted_reference_metadata(receipt, "external export receipt")
         allowed = {"prepared": {"sending"}, "sending": {"sending", "sent", "failed"}, "failed": {"sending"}}
         if state not in allowed.get(expected, set()):
             raise durable.ContractError("invalid export transition")
@@ -416,7 +416,7 @@ class EngineStore:
 
     def create(self, spec, endpoint):
         """Persist an immutable campaign before submission; exact replays return its ID."""
-        _reject_restricted_reference(spec, "campaign specification")
+        reject_restricted_reference_metadata(spec, "campaign specification")
         campaign = identity("tdi-operational-campaign/v1", spec)
         raw = durable.canonical(spec)
         with self.db:
@@ -431,7 +431,7 @@ class EngineStore:
         return campaign
 
     def _event(self, campaign, kind, payload):
-        _reject_restricted_reference(payload, "campaign event")
+        reject_restricted_reference_metadata(payload, "campaign event")
         self.db.execute("INSERT INTO events(campaign,kind,payload,recorded_ns) VALUES (?,?,?,?)",
                         (campaign, kind, durable.canonical(payload), time.time_ns()))
 
@@ -466,7 +466,7 @@ class EngineStore:
         }
         if phase not in allowed.get(expected, set()):
             raise durable.ContractError("invalid campaign transition")
-        _reject_restricted_reference({"admission": admission, "snapshot": snapshot}, "campaign transition")
+        reject_restricted_reference_metadata({"admission": admission, "snapshot": snapshot}, "campaign transition")
         with self.db:
             cursor = self.db.execute(
                 "UPDATE campaigns SET phase=?,workflow=COALESCE(?,workflow),admission=COALESCE(?,admission),snapshot=COALESCE(?,snapshot) WHERE id=? AND phase=? "
@@ -480,7 +480,7 @@ class EngineStore:
 
     def put_result(self, campaign, step, output, evidence):
         """Store verified evidence once; changed authoritative results are rejected."""
-        _reject_restricted_reference(evidence, "result evidence")
+        reject_restricted_reference_metadata(evidence, "result evidence")
         raw = durable.canonical(evidence)
         with self.db:
             row = self.db.execute("SELECT evidence FROM results WHERE campaign=? AND step=? AND output=?",
@@ -548,7 +548,7 @@ class EngineStore:
         The caller's policy must authorize reuse. Errors/rejections and timing
         observations are ineligible; the client verifies bytes again on a hit.
         """
-        _reject_restricted_reference({"entry": entry, "request": request}, "cache publication")
+        reject_restricted_reference_metadata({"entry": entry, "request": request}, "cache publication")
         artifacts.validate_cache_reuse(entry, request, cache_authorized=authorized)
         row = self.db.execute("SELECT evidence FROM results WHERE campaign=? AND step=? AND output=?",
                               (campaign, step, output)).fetchone()
@@ -608,8 +608,13 @@ class EngineStore:
                 for name, raw in zip(names, row):
                     if raw is None:
                         continue
-                    value = durable.strict_json(raw)
-                    _reject_restricted_reference(value, f"{table}.{name}")
+                    if table == "searches":
+                        value = durable.strict_json(
+                            raw, max_bytes=8 * 1024 * 1024, max_items=1_000_000
+                        )
+                    else:
+                        value = durable.strict_json(raw)
+                    reject_restricted_reference_metadata(value, f"{table}.{name}")
                     checked += 1
         return {
             "schema": 1,
@@ -657,7 +662,7 @@ class EngineStore:
         live in separate transfer receipts; imported campaigns cannot execute.
         The caller must first validate the complete portable archive.
         """
-        _reject_restricted_reference({"record": record, "results": results, "locations": locations}, "bundle restore")
+        reject_restricted_reference_metadata({"record": record, "results": results, "locations": locations}, "bundle restore")
         campaign = record["id"]
         if identity("tdi-operational-campaign/v1", record["spec"]) != campaign:
             raise durable.ContractError("imported campaign identity mismatch")

@@ -13,6 +13,7 @@ import threading
 import unittest
 from unittest.mock import patch
 
+import tdi_engine_archive as archive
 import tdi_engine_runtime as runtime
 from tdi_engine_store import EngineStore, atomic_json
 from tdi_engine_viewer import render_catalogue
@@ -268,6 +269,42 @@ raise SystemExit("crash hook was not reached")
                     runtime.submit(client, store, spec, {})
             self.assertEqual("prepared", store.list()[0]["phase"])
         self.assertEqual(0, client.calls)
+
+    def test_access_audit_preserves_existing_search_parser_budget(self):
+        large_response = {"values": [0] * 100_001}
+        with EngineStore(self.root / "catalogue.sqlite") as store:
+            store.create_search({"kind": "large-search"}, {"binding": "test"}, large_response)
+            audit = store.access_audit()
+            self.assertEqual("clear", audit["status"])
+            self.assertGreater(audit["structured_values_checked"], 0)
+
+    def test_restricted_bundle_is_rejected_before_first_upload(self):
+        class NoUploadClient:
+            endpoint = "https://hub.example"
+
+            def upload(self, *_args, **_kwargs):
+                raise AssertionError("restricted bundle must be rejected before upload")
+
+        class NoRestoreStore:
+            def restore(self, *_args, **_kwargs):
+                raise AssertionError("restricted bundle must be rejected before catalogue restore")
+
+        bundle = {
+            "campaign": {
+                "admission": {
+                    "root_artifact_bindings": [
+                        {"descriptor": {"access_class": "restricted-reference"}}
+                    ]
+                }
+            },
+            "members": [{"step": "step", "output": "out", "evidence": {
+                "artifact_identity": "a" * 64,
+                "descriptor": {"access_class": "development"},
+            }}],
+        }
+        with patch.object(archive, "verify_bundle", return_value={("step", "out"): b"bytes"}):
+            with self.assertRaisesRegex(durable.ContractError, "restricted-reference"):
+                archive.restore_bundle(NoUploadClient(), NoRestoreStore(), bundle)
 
     def test_restricted_metadata_cannot_persist_in_events_cache_exports_or_candidates(self):
         tagged = {"nested": {"access_class": "restricted-reference", "opaque": "reference-only"}}
