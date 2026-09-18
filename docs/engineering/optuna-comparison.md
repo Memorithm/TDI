@@ -147,3 +147,78 @@ contains the actual 7,680-evaluation result on source
 `2c185982f1d62cd73b5dcf59c5c0f487b0165c3b`, its full raw report and median
 incumbent curves. It is exploratory evidence under the exact finite categorical
 protocol above; it does not establish a general optimizer ranking.
+
+
+## Adaptive extension (separate public Development profile)
+
+`adaptive-smoke` uses two seeds and sixteen evaluations per arm, so the adaptive
+phase is exercised. `adaptive-development` uses twenty seeds (0..19), thirty-two
+evaluations per arm and six arms: Forge random, native categorical TPE, SciRust GP
+with Forge categorical acquisition, Optuna random, independent TPE and multivariate
+TPE. The three historical tasks remain; shifted absolute loss, rotated valley and
+categorical interaction add different public landscapes. Six tasks × twenty seeds
+× six arms × thirty-two evaluations = **23,040 evaluations**. Both new Forge
+strategies are fixed before the first execution. Constants, source pins, tasks,
+budgets and comparators are recorded in the protocol and manifest.
+
+This is Development, not an independent test population or a protected TDI
+research series. The earlier public results were known during implementation;
+this extension cannot establish general superiority. Neither additional tasks nor
+seeds are dropped on unfavorable outcomes. No tuning of constants occurs after
+results in this version. All comparators get the same categorical domain and
+initial baseline. No ordinal geometry, oracle minima, alternative-arm results or
+cached objective values enter either Forge model. Optuna's independent TPE is
+retained for historical continuity; explicit multivariate TPE is also included,
+reflecting Optuna 5's single-objective default. Both use ten startup trials and
+24 EI candidates, with no pruning/concurrency and `constant_liar=False`.
+
+The GP reuses `scirust-gp` at `146575107005c24a47682dcaa08c4cd9464d1cc3` through a
+pinned Cargo dependency. SciRust owns Cholesky/posterior arithmetic; Forge owns the
+categorical kernel, normalization, acquisition and verification-gated feedback.
+The ANEE audit and reasons for selecting this primitive are recorded in Forge's
+`docs/SCIRUST_SEARCH_AUDIT.md`. Source declarations and binary hashes remain
+provenance, not build attestations. Legacy smoke/development protocol and retained
+reports keep their original Forge pin and are verified unchanged.
+
+### Build and run the adaptive profiles
+
+Keep the legacy checkout above at its historical pin. Build a separate adaptive
+binary from the protocol's frozen source revision:
+
+```bash
+git clone https://github.com/Memorithm/Forge.git ../forge-optuna-adaptive
+git -C ../forge-optuna-adaptive checkout --detach e23f945d4f8bcc283f09826f513f208836efc1c4
+(cd ../forge-optuna-adaptive && cargo +1.89.0 build --release --locked -p forge-bridge --example scientific_search)
+.venv-optuna/bin/python scripts/tdi_optuna_benchmark.py \
+  --forge-worker ../forge-optuna-adaptive/target/release/examples/scientific_search \
+  --profile adaptive-smoke --max-seconds 900 --output optuna-adaptive-smoke
+.venv-optuna/bin/python scripts/tdi_optuna_benchmark.py \
+  --verify-report optuna-adaptive-smoke/report.json
+.venv-optuna/bin/python scripts/tdi_optuna_benchmark.py \
+  --forge-worker ../forge-optuna-adaptive/target/release/examples/scientific_search \
+  --profile adaptive-development --max-seconds 7200 --output optuna-adaptive-development
+.venv-optuna/bin/python scripts/tdi_optuna_benchmark.py \
+  --verify-report optuna-adaptive-development/report.json
+```
+
+Each output directory must be new. The frozen adaptive source is included in
+[Forge PR #40](https://github.com/Memorithm/Forge/pull/40), merged as
+`d696da3e7e7448989503e3ca6f6c58272131af0e`. Its final qualification head
+`3abf5d10a48d5d9e656cae94d9aea8e615d964a2` additionally uses the equivalent
+`is_multiple_of(5)` spelling required by current Clippy and makes the workspace
+CI check out the exact PR head. All three source CI suites and all three
+post-merge suites passed. The benchmark keeps its original source pin so its
+execution identity is not silently rewritten by those qualification changes.
+
+
+Observed protocol limitation: the `categorical-interaction` task's mandatory
+baseline already attains its minimum (0). It is retained in the frozen profile,
+but its zero regret cannot distinguish optimizer quality. This was discovered
+during execution, not designed as an intentional control; do not count it as a
+competitive win. A future version should preflight baseline headroom before
+freezing tasks. The current run is not retuned or rerun to repair this limitation.
+
+The completed [23,040-evaluation adaptive report](benchmarks/2026-09-18-forge-adaptive-development.md)
+contains every trajectory, both quality metrics, adapter costs, source identities
+and the non-discriminating baseline limitation. Earlier observations remain in
+[the original report](benchmarks/2026-09-18-optuna-development.md).
