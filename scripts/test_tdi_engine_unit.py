@@ -3,8 +3,11 @@ import copy
 import errno
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
+import os
 from pathlib import Path
 import sqlite3
+import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -78,6 +81,125 @@ class StoreAndPolicyTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             atomic_json(target, {"value": "replacement"})
         self.assertEqual({"value": "original"}, json.loads(target.read_text()))
+
+    def _run_crash_child(self, code, *args, expected_returncode):
+        env = os.environ.copy()
+        scripts = str(Path(__file__).resolve().parent)
+        env["PYTHONPATH"] = scripts + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+        completed = subprocess.run(
+            [sys.executable, "-c", code, *map(str, args)],
+            cwd=Path(__file__).resolve().parents[1],
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        self.assertEqual(
+            expected_returncode,
+            completed.returncode,
+            msg=f"child stderr={completed.stderr!r}; stdout={completed.stdout!r}",
+        )
+
+    def test_atomic_json_process_crash_never_exposes_partial_named_payload(self):
+        child = r'''\
+import os
+from pathlib import Path
+import sys
+import tdi_engine_store as store
+
+target = Path(sys.argv[1])
+stage = sys.argv[2]
+if stage == "before-link":
+    store._publish_completed_temp = lambda *_args: os._exit(91)
+elif stage == "after-link-before-directory-fsync":
+    store.durable._fsync_directory = lambda *_args: os._exit(92)
+elif stage == "after-directory-fsync":
+    original = store._publish_completed_temp
+    def publish_then_crash(temporary, destination):
+        original(temporary, destination)
+        os._exit(93)
+    store._publish_completed_temp = publish_then_crash
+else:
+    raise SystemExit("unknown stage")
+store.atomic_json(target, {"value": "complete"})
+raise SystemExit("crash hook was not reached")
+'''
+        expected = (durable.canonical({"value": "complete"}) + "\n").encode()
+        cases = (
+            ("before-link", 91, False),
+            ("after-link-before-directory-fsync", 92, True),
+            ("after-directory-fsync", 93, True),
+        )
+        for stage, returncode, published in cases:
+            with self.subTest(stage=stage):
+                root = self.root / f"json-{stage}"
+                root.mkdir()
+                target = root / "artifact.json"
+                self._run_crash_child(child, target, stage, expected_returncode=returncode)
+                self.assertEqual(published, target.exists())
+                if published:
+                    self.assertEqual(expected, target.read_bytes())
+                else:
+                    temporaries = list(root.glob(".tdi-*"))
+                    self.assertEqual(1, len(temporaries))
+                    self.assertEqual(expected, temporaries[0].read_bytes())
+
+    def test_backup_process_crash_never_exposes_partial_named_catalogue(self):
+        child = r'''\
+import os
+from pathlib import Path
+import sys
+import tdi_engine_store as store
+
+source = Path(sys.argv[1])
+destination = Path(sys.argv[2])
+stage = sys.argv[3]
+with store.EngineStore(source) as catalogue:
+    if stage == "before-link":
+        store._publish_completed_temp = lambda *_args: os._exit(94)
+    elif stage == "after-link-before-directory-fsync":
+        store.durable._fsync_directory = lambda *_args: os._exit(95)
+    elif stage == "after-directory-fsync":
+        original = store._publish_completed_temp
+        def publish_then_crash(temporary, target):
+            original(temporary, target)
+            os._exit(96)
+        store._publish_completed_temp = publish_then_crash
+    else:
+        raise SystemExit("unknown stage")
+    catalogue.backup(destination)
+raise SystemExit("crash hook was not reached")
+'''
+        cases = (
+            ("before-link", 94, False),
+            ("after-link-before-directory-fsync", 95, True),
+            ("after-directory-fsync", 96, True),
+        )
+        for stage, returncode, published in cases:
+            with self.subTest(stage=stage):
+                root = self.root / f"backup-{stage}"
+                root.mkdir()
+                source = root / "catalogue.sqlite"
+                destination = root / "backup.sqlite"
+                self._run_crash_child(
+                    child, source, destination, stage, expected_returncode=returncode
+                )
+                self.assertEqual(published, destination.exists())
+                candidates = [destination] if published else list(root.glob(".tdi-backup-*"))
+                self.assertEqual(1, len(candidates))
+                with sqlite3.connect(candidates[0]) as backup:
+                    self.assertEqual(("ok",), backup.execute("PRAGMA integrity_check").fetchone())
+                    self.assertEqual((4,), backup.execute("PRAGMA user_version").fetchone())
+                    tables = {
+                        row[0]
+                        for row in backup.execute(
+                            "SELECT name FROM sqlite_master WHERE type='table'"
+                        )
+                    }
+                    self.assertTrue(
+                        {"campaigns", "events", "results", "cache", "exports"} <= tables
+                    )
 
     def test_backup_storage_failures_never_publish_named_partial_catalogue(self):
         destination = self.root / "backup.sqlite"

@@ -179,3 +179,46 @@ The ANEE audit and reasons for selecting this primitive are recorded in Forge's
 `docs/SCIRUST_SEARCH_AUDIT.md`. Source declarations and binary hashes remain
 provenance, not build attestations. Legacy smoke/development protocol and retained
 reports keep their original Forge pin and are verified unchanged.
+
+### Build and run the adaptive profiles
+
+Keep the legacy checkout above at its historical pin. Build a separate adaptive
+binary from the protocol's frozen source revision:
+
+```bash
+git clone https://github.com/Memorithm/Forge.git ../forge-optuna-adaptive
+git -C ../forge-optuna-adaptive checkout --detach e23f945d4f8bcc283f09826f513f208836efc1c4
+(cd ../forge-optuna-adaptive && cargo +1.89.0 build --release --locked -p forge-bridge --example scientific_search)
+.venv-optuna/bin/python scripts/tdi_optuna_benchmark.py \
+  --forge-worker ../forge-optuna-adaptive/target/release/examples/scientific_search \
+  --profile adaptive-smoke --max-seconds 900 --output optuna-adaptive-smoke
+.venv-optuna/bin/python scripts/tdi_optuna_benchmark.py \
+  --verify-report optuna-adaptive-smoke/report.json
+.venv-optuna/bin/python scripts/tdi_optuna_benchmark.py \
+  --forge-worker ../forge-optuna-adaptive/target/release/examples/scientific_search \
+  --profile adaptive-development --max-seconds 7200 --output optuna-adaptive-development
+.venv-optuna/bin/python scripts/tdi_optuna_benchmark.py \
+  --verify-report optuna-adaptive-development/report.json
+```
+
+Each output directory must be new. The frozen adaptive source is included in
+[Forge PR #40](https://github.com/Memorithm/Forge/pull/40), merged as
+`d696da3e7e7448989503e3ca6f6c58272131af0e`. Its final qualification head
+`3abf5d10a48d5d9e656cae94d9aea8e615d964a2` additionally uses the equivalent
+`is_multiple_of(5)` spelling required by current Clippy and makes the workspace
+CI check out the exact PR head. All three source CI suites and all three
+post-merge suites passed. The benchmark keeps its original source pin so its
+execution identity is not silently rewritten by those qualification changes.
+
+
+Observed protocol limitation: the `categorical-interaction` task's mandatory
+baseline already attains its minimum (0). It is retained in the frozen profile,
+but its zero regret cannot distinguish optimizer quality. This was discovered
+during execution, not designed as an intentional control; do not count it as a
+competitive win. A future version should preflight baseline headroom before
+freezing tasks. The current run is not retuned or rerun to repair this limitation.
+
+The completed [23,040-evaluation adaptive report](benchmarks/2026-09-18-forge-adaptive-development.md)
+contains every trajectory, both quality metrics, adapter costs, source identities
+and the non-discriminating baseline limitation. Earlier observations remain in
+[the original report](benchmarks/2026-09-18-optuna-development.md).
