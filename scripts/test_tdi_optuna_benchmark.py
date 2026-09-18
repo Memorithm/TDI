@@ -30,7 +30,7 @@ class ComparisonTests(unittest.TestCase):
         return manifest, runs
 
     def test_exact_objective_oracles_over_entire_domain(self):
-        for task in bench.TASKS:
+        for task in bench.ADAPTIVE_TASKS:
             for x in bench.VALUES:
                 for y in bench.VALUES:
                     self.assertEqual(bench.objective(task, x, y), bench.oracle(task, x, y))
@@ -88,6 +88,19 @@ class ComparisonTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 bench.verify_report(path)
 
+    def test_adaptive_profile_keeps_historical_protocol_and_stronger_reference(self):
+        old = bench.protocol("development")
+        new = bench.protocol("adaptive-development")
+        self.assertEqual(old["forge_source_commit"], "28067ab0aa1d52a2260d9bb2bf35a346547a292a")
+        self.assertEqual(old["arms"], list(bench.ARMS))
+        self.assertEqual(old["tasks"], list(bench.TASKS))
+        self.assertEqual(new["evaluations_per_arm"], old["evaluations_per_arm"])
+        self.assertEqual(new["seeds"], old["seeds"])
+        self.assertTrue(new["multivariate_tpe"]["multivariate"])
+        self.assertIn("forge-tpe", new["arms"])
+        self.assertGreater(bench.protocol("adaptive-smoke")["evaluations_per_arm"], 10)
+        self.assertFalse(new["confirmatory"])
+
     def test_trial_crossing_deadline_is_not_accepted(self):
         clock = {"now": 0.0}
 
@@ -127,7 +140,7 @@ class ComparisonTests(unittest.TestCase):
 
     def test_real_optuna_seed_replay_and_common_first_observation(self):
         bench.check_packages()
-        for name in ("optuna-random", "optuna-tpe"):
+        for name in ("optuna-random", "optuna-tpe", "optuna-tpe-multivariate"):
             trajectories = []
             for _ in range(2):
                 arm = bench.OptunaArm(name, 7, bench.protocol("smoke")["tpe"])

@@ -23,11 +23,15 @@ from tdi_engine_store import atomic_json, identity
 from tdi_forge_search import ForgeClient
 
 FORGE_COMMIT = "28067ab0aa1d52a2260d9bb2bf35a346547a292a"
+ADAPTIVE_FORGE_COMMIT = "e23f945d4f8bcc283f09826f513f208836efc1c4"
 OPTUNA_VERSION = "5.0.0"
 VALUES = tuple(range(-8, 8))
 TASKS = ("shifted-bowl", "coupled-ridge", "double-well")
 ARMS = ("forge-grid", "forge-random", "optuna-random", "optuna-tpe")
-PROFILES = {"smoke": (2, 8), "development": (20, 32)}
+ADAPTIVE_TASKS = TASKS + ("shifted-absolute", "rotated-valley", "categorical-interaction")
+ADAPTIVE_ARMS = ("forge-random", "forge-tpe", "forge-gp", "optuna-random", "optuna-tpe", "optuna-tpe-multivariate")
+PROFILES = {"smoke": (2, 8), "development": (20, 32),
+            "adaptive-smoke": (2, 16), "adaptive-development": (20, 32)}
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -39,6 +43,12 @@ def objective(task, x, y):
         return (x + y - 1) ** 2 + (x - 2 * y + 4) ** 2
     if task == "double-well":
         return (x * x - 9) ** 2 + (y * y - 4) ** 2 + (x - y) ** 2
+    if task == "shifted-absolute":
+        return 3 * abs(x + 5) + abs(y - 4)
+    if task == "rotated-valley":
+        return (3*x + 2*y - 5)**2 + (x - y + 1)**2
+    if task == "categorical-interaction":
+        return (7*(x+8) + 11*(y+8)) % 17 + 3*((x-y) % 5)
     raise ValueError("unknown public task")
 
 
@@ -50,6 +60,13 @@ def oracle(task, x, y):
         return 2*x*x - 2*x*y + 5*y*y + 6*x - 18*y + 17
     if task == "double-well":
         return x**4 + y**4 - 17*x*x - 7*y*y - 2*x*y + 97
+    if task == "shifted-absolute":
+        return (3*x + 15 if x >= -5 else -3*x - 15) + (y - 4 if y >= 4 else 4 - y)
+    if task == "rotated-valley":
+        return 10*x*x + 10*x*y + 5*y*y - 28*x - 22*y + 26
+    if task == "categorical-interaction":
+        a, b = 7*x + 11*y + 144, x-y
+        return a - 17*(a//17) + 3*(b - 5*(b//5))
     raise ValueError("unknown public task")
 
 
@@ -74,6 +91,30 @@ def protocol(profile):
     if profile not in PROFILES:
         raise ValueError("unknown profile")
     seeds, budget = PROFILES[profile]
+    if profile.startswith("adaptive-"):
+        p = protocol("smoke")
+        p.update({"kind": "tdi-optuna-adaptive-comparison/v1", "profile": profile,
+                  "tasks": list(ADAPTIVE_TASKS), "arms": list(ADAPTIVE_ARMS),
+                  "seeds": list(range(seeds)), "evaluations_per_arm": budget,
+                  "forge_source_commit": ADAPTIVE_FORGE_COMMIT,
+                  "forge_tpe": {"generator_version": "forge-finite-tpe/v1",
+                                "startup_successes": 10, "elite_fraction": "1/5",
+                                "uniform_kernel_mass": "1/5", "joint_mixture_weight": "1/2",
+                                "uniform_pseudo_observations": 1, "explore_every": 5,
+                                "acquisition": "enumerate-all-admissible-untried"},
+                  "forge_gp": {"generator_version": "forge-finite-gp/v1",
+                               "scirust_commit": "146575107005c24a47682dcaa08c4cd9464d1cc3",
+                               "startup_successes": 10, "kernel": "half-additive-half-exp-hamming-2",
+                               "acquisition": "mean-minus-two-stddev", "noise_variance": "1e-6",
+                               "normalization": "maxabs-then-center-and-standardize",
+                               "explore_every": 5},
+                  "multivariate_tpe": dict(p["tpe"], multivariate=True),
+                  "interpretation": "public-development-extension-frozen-before-first-run-not-independent-confirmation"})
+        p["sampling"].pop("forge-grid")
+        p["sampling"].update({"forge-gp": "scirust-categorical-gp-lcb-without-replacement",
+                                "forge-tpe": "adaptive-categorical-tpe-without-replacement",
+                                "optuna-tpe-multivariate": "multivariate-categorical-tpe-with-replacement"})
+        return p
     return {"schema": 1, "kind": "tdi-optuna-finite-comparison/v1",
             "domain": "Development", "confirmatory": False, "profile": profile,
             "tasks": list(TASKS), "arms": list(ARMS), "values": list(VALUES),
@@ -175,6 +216,12 @@ class ForgeArm:
                      "budget": {"max_proposals": budget, "max_stage_attempts": budget * 3,
                                 "max_attempts_per_stage": 1, "stage_timeout_ms": 1000,
                                 "max_reserved_ms": budget * 3000}}
+        if name == "forge-tpe":
+            self.spec.update(strategy="adaptive-tpe", generator_version="forge-finite-tpe/v1")
+        elif name == "forge-gp":
+            self.spec.update(strategy="adaptive-gp", generator_version="forge-finite-gp/v1")
+        elif name not in ("forge-grid", "forge-random"):
+            raise ValueError("unknown Forge arm")
         self.task = task
         # Actual protocol validation, included in setup and bounded by the
         # remaining whole-run wall-clock budget.
@@ -240,6 +287,10 @@ class ForgeArm:
 class OptunaArm:
     def __init__(self, name, seed, settings):
         import optuna
+        if name not in ("optuna-random", "optuna-tpe", "optuna-tpe-multivariate"):
+            raise ValueError("unknown Optuna arm")
+        if name == "optuna-tpe-multivariate":
+            settings = dict(settings, multivariate=True)
         sampler = (optuna.samplers.RandomSampler(seed=seed) if name == "optuna-random"
                    else optuna.samplers.TPESampler(seed=seed, **settings))
         self.study = optuna.create_study(direction="minimize", sampler=sampler,
@@ -321,7 +372,7 @@ def summarize(manifest, runs):
     p = manifest["protocol"]
     if p != protocol(p["profile"]):
         raise ValueError("protocol differs from the declared comparison profile")
-    if manifest["task_bounds"] != {task: task_bounds(task) for task in TASKS}:
+    if manifest["task_bounds"] != {task: task_bounds(task) for task in p["tasks"]}:
         raise ValueError("incorrect objective reference bounds")
     expected = set(itertools.product(p["tasks"], p["seeds"], p["arms"]))
     keys = [(r["task"], r["seed"], r["arm"]) for r in runs]
@@ -342,6 +393,7 @@ def summarize(manifest, runs):
             if (type(row["loss"]) is not int or type(row["best_loss"]) is not int
                     or row["trial"] != index or row["loss"] != loss or row["best_loss"] != best
                     or row["duplicate"] != (key in seen)
+                    or (run["arm"].startswith("forge-") and key in seen)
                     or (index == 0 and point != p["baseline"])):
                 raise ValueError("invalid raw trajectory or baseline")
             seen.add(key)
@@ -382,7 +434,7 @@ def run(output, forge_binary, profile, max_seconds=1800):
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     p = protocol(profile)
     binary = Path(forge_binary).resolve(strict=True)
-    client = ForgeClient(binary, file_hash(binary), FORGE_COMMIT)
+    client = ForgeClient(binary, file_hash(binary), p["forge_source_commit"])
     source_hashes = sources()
     environment = {"python": platform.python_version(), "platform": platform.platform(),
                    "machine": platform.machine(), "cpu_count": os.cpu_count(),
@@ -390,7 +442,7 @@ def run(output, forge_binary, profile, max_seconds=1800):
     manifest = {"protocol": p, "tdi_source_commit": git_revision(), "source_sha256": source_hashes,
                 "requirements_sha256": requirements_sha256,
                 "forge": client.binding, "environment": environment,
-                "task_bounds": {task: task_bounds(task) for task in TASKS},
+                "task_bounds": {task: task_bounds(task) for task in p["tasks"]},
                 "max_seconds": max_seconds,
                 "limits": ["finite categorical public polynomials, not an ML or continuous-space benchmark",
                            "same numeric seeds do not mean identical random draws",
@@ -407,10 +459,10 @@ def run(output, forge_binary, profile, max_seconds=1800):
     runs = []
     try:
         with (output / "events.jsonl").open("x", encoding="utf-8") as stream:
-            for task_index, task in enumerate(TASKS):
+            for task_index, task in enumerate(p["tasks"]):
                 for seed in p["seeds"]:
-                    offset = (task_index + seed) % len(ARMS)
-                    for name in ARMS[offset:] + ARMS[:offset]:
+                    offset = (task_index + seed) % len(p["arms"])
+                    for name in p["arms"][offset:] + p["arms"][:offset]:
                         directory = output / task / str(seed) / name
                         directory.mkdir(parents=True, exist_ok=False)
                         start = time.perf_counter_ns()

@@ -147,3 +147,35 @@ contains the actual 7,680-evaluation result on source
 `2c185982f1d62cd73b5dcf59c5c0f487b0165c3b`, its full raw report and median
 incumbent curves. It is exploratory evidence under the exact finite categorical
 protocol above; it does not establish a general optimizer ranking.
+
+
+## Adaptive extension (separate public Development profile)
+
+`adaptive-smoke` uses two seeds and sixteen evaluations per arm, so the adaptive
+phase is exercised. `adaptive-development` uses twenty seeds (0..19), thirty-two
+evaluations per arm and six arms: Forge random, native categorical TPE, SciRust GP
+with Forge categorical acquisition, Optuna random, independent TPE and multivariate
+TPE. The three historical tasks remain; shifted absolute loss, rotated valley and
+categorical interaction add different public landscapes. Six tasks × twenty seeds
+× six arms × thirty-two evaluations = **23,040 evaluations**. Both new Forge
+strategies are fixed before the first execution. Constants, source pins, tasks,
+budgets and comparators are recorded in the protocol and manifest.
+
+This is Development, not an independent test population or a protected TDI
+research series. The earlier public results were known during implementation;
+this extension cannot establish general superiority. Neither additional tasks nor
+seeds are dropped on unfavorable outcomes. No tuning of constants occurs after
+results in this version. All comparators get the same categorical domain and
+initial baseline. No ordinal geometry, oracle minima, alternative-arm results or
+cached objective values enter either Forge model. Optuna's independent TPE is
+retained for historical continuity; explicit multivariate TPE is also included,
+reflecting Optuna 5's single-objective default. Both use ten startup trials and
+24 EI candidates, with no pruning/concurrency and `constant_liar=False`.
+
+The GP reuses `scirust-gp` at `146575107005c24a47682dcaa08c4cd9464d1cc3` through a
+pinned Cargo dependency. SciRust owns Cholesky/posterior arithmetic; Forge owns the
+categorical kernel, normalization, acquisition and verification-gated feedback.
+The ANEE audit and reasons for selecting this primitive are recorded in Forge's
+`docs/SCIRUST_SEARCH_AUDIT.md`. Source declarations and binary hashes remain
+provenance, not build attestations. Legacy smoke/development protocol and retained
+reports keep their original Forge pin and are verified unchanged.
