@@ -29,11 +29,36 @@ def identity(kind, value):
     return hashlib.sha256(kind.encode() + b"\0" + durable.canonical(value).encode()).hexdigest()
 
 
+def _unlink_if_same_file(path, reference):
+    """Remove ``path`` only while it still names the completed reference file."""
+    try:
+        reference_stat = Path(reference).lstat()
+        path_stat = Path(path).lstat()
+        if (reference_stat.st_dev, reference_stat.st_ino) == (path_stat.st_dev, path_stat.st_ino):
+            Path(path).unlink()
+    except FileNotFoundError:
+        pass
+
+
+def _publish_completed_temp(temporary, destination):
+    """Publish one complete temporary file without deleting a competing writer."""
+    temporary = Path(temporary)
+    destination = Path(destination)
+    os.link(temporary, destination, follow_symlinks=False)
+    try:
+        durable._fsync_directory(destination.parent)
+    except BaseException:
+        _unlink_if_same_file(destination, temporary)
+        raise
+
+
 def atomic_json(path, value):
     """Publish a new JSON file atomically, refusing an existing destination.
 
     Example: ``atomic_json(Path('export.json'), {'schema': 1})``. The parent
-    directory must exist. Failure leaves no successful-looking partial file.
+    directory must exist. A failed publication removes only the name created by
+    this call and never deletes a destination concurrently replaced by another
+    writer. Broader crash/power-loss durability remains a separate qualification.
     """
     path = Path(path)
     raw = (durable.canonical(value) + "\n").encode()
@@ -44,8 +69,7 @@ def atomic_json(path, value):
             stream.write(raw)
             stream.flush()
             os.fsync(stream.fileno())
-        os.link(temp, path, follow_symlinks=False)
-        durable._fsync_directory(path.parent)
+        _publish_completed_temp(temp, path)
     finally:
         os.unlink(temp)
 
@@ -546,23 +570,7 @@ class EngineStore:
                     raise durable.StorageError("backup integrity failure")
             with temporary.open("rb") as stream:
                 os.fsync(stream.fileno())
-            os.link(temporary, destination, follow_symlinks=False)
-            try:
-                durable._fsync_directory(destination.parent)
-            except BaseException:
-                # The final name was created by this call only after the backup
-                # was complete. Remove it on a directory persistence failure,
-                # but never unlink a path another writer may have replaced.
-                try:
-                    temporary_stat = temporary.stat()
-                    destination_stat = destination.stat()
-                    temporary_identity = (temporary_stat.st_dev, temporary_stat.st_ino)
-                    destination_identity = (destination_stat.st_dev, destination_stat.st_ino)
-                    if temporary_identity == destination_identity:
-                        destination.unlink()
-                except FileNotFoundError:
-                    pass
-                raise
+            _publish_completed_temp(temporary, destination)
         finally:
             temporary.unlink(missing_ok=True)
 
