@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 import tdi_optuna_benchmark as bench
 
@@ -86,6 +87,43 @@ class ComparisonTests(unittest.TestCase):
             path.write_text(json.dumps(report))
             with self.assertRaises(ValueError):
                 bench.verify_report(path)
+
+    def test_trial_crossing_deadline_is_not_accepted(self):
+        clock = {"now": 0.0}
+
+        class CrossingArm:
+            def ask(self):
+                return {"x": -8, "y": -8}
+
+            def begin(self, stage):
+                pass
+
+            def finish(self, stage, evidence, elapsed_ns):
+                if stage == "measure":
+                    clock["now"] = 2.0
+
+            def close(self):
+                raise AssertionError("expired arm must not be closed as complete")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            arm_dir = root / "arm"
+            arm_dir.mkdir()
+            event_path = root / "events.jsonl"
+            with event_path.open("x", encoding="utf-8") as stream, mock.patch.object(
+                    bench.time, "monotonic", side_effect=lambda: clock["now"]):
+                with self.assertRaises(TimeoutError):
+                    bench.run_arm(
+                        CrossingArm(), "shifted-bowl", 0, 1, arm_dir, stream, deadline=1.0)
+            self.assertEqual("", event_path.read_text())
+            self.assertTrue((arm_dir / "trial-000-measure.json").exists())
+
+    def test_forge_timeout_never_exceeds_remaining_whole_run_budget(self):
+        with mock.patch.object(bench.time, "monotonic", return_value=10.0):
+            self.assertEqual(3.5, bench.forge_timeout(13.5))
+            self.assertEqual(30.0, bench.forge_timeout(100.0))
+            with self.assertRaises(TimeoutError):
+                bench.forge_timeout(10.0)
 
     def test_real_optuna_seed_replay_and_common_first_observation(self):
         bench.check_packages()
