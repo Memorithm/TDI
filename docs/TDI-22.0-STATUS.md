@@ -1,26 +1,36 @@
 # TDI-22.0 — Status
 
-Status: **active Stage-0 bootstrap; not frozen; no confirmatory execution authorised**.
+Status: **frozen Stage-0 contract; no final or confirmatory execution authorised**.
 
-## Implemented on the current development branch
+The historical fail-closed bootstrap guard remains `no confirmatory execution authorised`; the current frozen status additionally forbids final execution as stated above.
 
-- `docs/TDI-22-PROGRAMME.md` defines the research question, exact sign convention, candidate/control ladder and FLAT boundary.
-- `docs/TDI-22.0-SCOPE.md` limits Stage 0 to deterministic algebraic scaffolding.
-- `tdi-ai/src/tdi22_torsor.rs` implements the finite 3D torsor/twist contract behind the existing `experimental` feature.
-- Unit tests cover reduction-point transport, declared invariants, factorized-key independence, direct/factorized pairing equivalence, global-origin translation consistency and non-finite rejection.
-- `scripts/check-tdi22-bootstrap.sh` is the local bootstrap gate.
+## Qualified Stage-0 freeze
 
-## Not implemented / not authorised
+TDI-22.0 was frozen by PR #255 after the Stage-0 bootstrap from PR #248. The content-addressed payload and interpretation boundary are recorded in `docs/TDI-22.0-FREEZE.md`. That freeze covers the torsor algebra/software contract only; it is not evidence of task quality, efficiency, novelty, or hardware performance.
 
-- no T0/T1/T2/T3/T4 attention evaluator;
-- no learned geometry;
-- no model-quality experiment;
-- no final or confirmatory population;
-- no paged/hierarchical torsor memory;
-- no Boolean × torsor experiment;
-- no FLAT-ATTENTION integration;
-- no hardware-performance claim.
+The frozen TDI-22.0 payload remains the source of truth for the Stage-0 mathematical/software convention. This status file is deliberately not part of that pinned payload so it can report later qualified progress without mutating the frozen scientific artefact.
 
-## Next gate
+## Qualified downstream progress
 
-The immediate acceptance target is green CI for the Stage-0 algebra and bootstrap integrity. A later reviewed change must explicitly freeze TDI-22.0 before TDI-22.1 can preregister the first matched attention experiment.
+After the TDI-22.0 freeze:
+
+- PR #258 preregistered the bounded non-final TDI-22.1 matched T0–T4 comparison contract;
+- PR #259 froze the bounded non-final TDI-22.1 evaluator contract;
+- PR #262 added the deterministic TDI-22.2 evaluator foundation authorised by that frozen contract;
+- PR #266 added deterministic P1–P5 episode generation for the same non-final Development/Validation surface;
+- PR #269 froze the companion T1 value-reconstruction evidence schema without altering the frozen base record.
+
+These later increments do not rewrite the TDI-22.0 freeze and do not convert non-final infrastructure into a scientific result.
+
+## Still not implemented / not authorised
+
+- no committed bounded campaign result is established by this status update;
+- no final or confirmatory population is authorised;
+- no learned-geometry claim is established;
+- no FLAT-ATTENTION runtime integration is authorised by the TDI-22 freeze chain;
+- no hardware-performance, latency, throughput, bandwidth, memory, energy, or model-quality claim is established;
+- no novelty claim is established.
+
+## Current gate
+
+Treat `docs/TDI-22.0-FREEZE.md` as the immutable Stage-0 freeze record, the frozen TDI-22.1 preregistration/freeze artefacts as the authority for the bounded non-final evaluator contract, and current TDI-22.2 code/status surfaces as development/validation infrastructure only. Any new scientific promotion requires its own explicit reviewed contract and exact-head qualification; final/confirmatory execution remains fail-closed.
