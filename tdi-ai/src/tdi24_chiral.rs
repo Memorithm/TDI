@@ -27,6 +27,9 @@ pub const CHIRAL_CONTRACT: &str = "tdi24-mirror-coupled-chiral-v1";
 /// the TDI-22 torsor representation.
 pub const CHIRAL_WIDTH: usize = 6;
 
+/// Versioned contract for the unaggregated `s/m/chi` channel surface.
+pub const CHANNEL_DECOMPOSITION_CONTRACT: &str = "tdi24-channel-decomposition-v1";
+
 /// Finite six-component parity carrier `(x+, x-)`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Chiral6 {
@@ -185,6 +188,59 @@ pub struct ChiralObservables {
     pub chiral: f64,
 }
 
+/// Stable mathematical identity of one primitive TDI-24 channel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChiralChannelId {
+    /// `s(q,k) = q^T k`.
+    S,
+    /// `m(q,k) = q^T M k`.
+    M,
+    /// `chi(q,k) = q^T J k`.
+    Chi,
+}
+
+/// Transformation parity under simultaneous reflection `(q,k) -> (Mq,Mk)`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReflectionParity {
+    /// Channel value is invariant under simultaneous reflection.
+    Even,
+    /// Channel value changes sign under simultaneous reflection.
+    Odd,
+}
+
+/// Provenance attached to an unaggregated primitive channel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChannelProvenance {
+    /// Stable mathematical channel identity.
+    pub channel: ChiralChannelId,
+    /// Declared simultaneous-reflection parity.
+    pub reflection_parity: ReflectionParity,
+    /// Algebra contract that defines `M`, `J` and the carrier.
+    pub algebra_contract: &'static str,
+    /// Contract that defines this tagged decomposition surface.
+    pub decomposition_contract: &'static str,
+}
+
+/// One primitive value together with immutable semantic provenance.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TaggedChannel {
+    /// Computed scalar value.
+    pub value: f64,
+    /// Stable semantic provenance.
+    pub provenance: ChannelProvenance,
+}
+
+/// Explicit unaggregated `s/m/chi` decomposition.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ChannelDecomposition {
+    /// Conventional direct channel `s=q^T k`.
+    pub s: TaggedChannel,
+    /// Mirror-even channel `m=q^T M k`.
+    pub m: TaggedChannel,
+    /// Parity-odd channel `chi=q^T J k`.
+    pub chi: TaggedChannel,
+}
+
 /// Evaluate the three primitive observables without collapsing them into one
 /// scalar. Keeping them separate is required for later matched ablations.
 pub fn observables(query: Chiral6, key: Chiral6) -> Result<ChiralObservables, ChiralError> {
@@ -192,6 +248,32 @@ pub fn observables(query: Chiral6, key: Chiral6) -> Result<ChiralObservables, Ch
         direct: query.dot(key)?,
         mirrored: query.mirror_pairing(key)?,
         chiral: query.chiral_pairing(key)?,
+    })
+}
+
+/// Evaluate and tag the primitive `s/m/chi` channels.
+///
+/// This function adds provenance only: it performs no weighting, normalization,
+/// masking, aggregation or winner selection.
+pub fn decomposed_observables(
+    query: Chiral6,
+    key: Chiral6,
+) -> Result<ChannelDecomposition, ChiralError> {
+    let raw = observables(query, key)?;
+    let tagged = |channel, reflection_parity, value| TaggedChannel {
+        value,
+        provenance: ChannelProvenance {
+            channel,
+            reflection_parity,
+            algebra_contract: CHIRAL_CONTRACT,
+            decomposition_contract: CHANNEL_DECOMPOSITION_CONTRACT,
+        },
+    };
+
+    Ok(ChannelDecomposition {
+        s: tagged(ChiralChannelId::S, ReflectionParity::Even, raw.direct),
+        m: tagged(ChiralChannelId::M, ReflectionParity::Even, raw.mirrored),
+        chi: tagged(ChiralChannelId::Chi, ReflectionParity::Odd, raw.chiral),
     })
 }
 
@@ -350,6 +432,49 @@ mod tests {
         assert_eq!(qk, f64::MAX);
         assert_eq!(kq, -f64::MAX);
         assert_eq!(qk, -kq);
+    }
+
+    #[test]
+    fn decomposed_channels_preserve_unaggregated_observable_values() {
+        let q = c([1.0, 2.0, -3.0], [0.5, -1.5, 2.5]);
+        let k = c([-4.0, 1.0, 2.0], [3.0, 0.25, -0.75]);
+        let raw = observables(q, k).unwrap();
+        let channels = decomposed_observables(q, k).unwrap();
+        assert_eq!(channels.s.value, raw.direct);
+        assert_eq!(channels.m.value, raw.mirrored);
+        assert_eq!(channels.chi.value, raw.chiral);
+    }
+
+    #[test]
+    fn decomposed_channels_have_stable_ids_parity_and_provenance() {
+        let q = c([1.0, 2.0, -3.0], [0.5, -1.5, 2.5]);
+        let k = c([-4.0, 1.0, 2.0], [3.0, 0.25, -0.75]);
+        let channels = decomposed_observables(q, k).unwrap();
+        let expected = [
+            (channels.s, ChiralChannelId::S, ReflectionParity::Even),
+            (channels.m, ChiralChannelId::M, ReflectionParity::Even),
+            (channels.chi, ChiralChannelId::Chi, ReflectionParity::Odd),
+        ];
+        for (channel, id, parity) in expected {
+            assert_eq!(channel.provenance.channel, id);
+            assert_eq!(channel.provenance.reflection_parity, parity);
+            assert_eq!(channel.provenance.algebra_contract, CHIRAL_CONTRACT);
+            assert_eq!(
+                channel.provenance.decomposition_contract,
+                CHANNEL_DECOMPOSITION_CONTRACT
+            );
+        }
+    }
+
+    #[test]
+    fn decomposed_channel_parity_matches_actual_reflection_transform() {
+        let q = c([1.0, 2.0, -3.0], [0.5, -1.5, 2.5]);
+        let k = c([-4.0, 1.0, 2.0], [3.0, 0.25, -0.75]);
+        let base = decomposed_observables(q, k).unwrap();
+        let reflected = decomposed_observables(q.mirror(), k.mirror()).unwrap();
+        close(reflected.s.value, base.s.value);
+        close(reflected.m.value, base.m.value);
+        close(reflected.chi.value, -base.chi.value);
     }
 
     #[test]
