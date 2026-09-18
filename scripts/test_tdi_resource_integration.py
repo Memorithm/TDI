@@ -56,6 +56,8 @@ class ResourceIntegrationTests(unittest.TestCase):
             events = store.events(completed["id"])
             self.assertTrue(any(e["kind"] == "resource-width-verified" for e in events))
             admission = next(e["payload"] for e in events if e["kind"] == "resource-admission")
+            self.assertEqual(self.source, admission["elastic"]["source_commit"])
+            self.assertEqual(durable.file_digest(self.elastic), admission["elastic"]["binary_sha256"])
             self.assertTrue(admission["elastic"]["report"]["committed"])
             self.assertEqual("Pass", admission["elastic"]["report"]["verification"])
             original_events = store.events(original_id)
