@@ -55,6 +55,25 @@ class StoreAndPolicyTests(unittest.TestCase):
                     atomic_json(target, {"value": "complete"})
             self.assertFalse(target.exists())
             self.assertEqual([], list(self.root.iterdir()))
+
+        with patch("tdi_engine_store.durable._fsync_directory",
+                   side_effect=OSError(errno.EIO, "synthetic directory fsync failure")):
+            with self.assertRaises(OSError):
+                atomic_json(target, {"value": "complete"})
+        self.assertFalse(target.exists())
+        self.assertEqual([], list(self.root.iterdir()))
+
+        def competing_replacement(_directory):
+            target.unlink()
+            target.write_text(json.dumps({"value": "external-writer"}))
+            raise OSError(errno.EIO, "synthetic directory fsync failure")
+
+        with patch("tdi_engine_store.durable._fsync_directory", side_effect=competing_replacement):
+            with self.assertRaises(OSError):
+                atomic_json(target, {"value": "complete"})
+        self.assertEqual({"value": "external-writer"}, json.loads(target.read_text()))
+        target.unlink()
+
         atomic_json(target, {"value": "original"})
         with self.assertRaises(FileExistsError):
             atomic_json(target, {"value": "replacement"})
