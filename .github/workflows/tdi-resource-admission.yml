@@ -33,7 +33,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           repository: Memorithm/ElasticXxx
-          ref: f8e10b1a1d05d6c22c0f56fed87252bc65d4e66a
+          ref: f5af4f3129100f4bb52d47d1adfc202347d0b098
           persist-credentials: false
           path: integration-elastic
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -58,5 +58,5 @@ jobs:
           TDI_HUBD_BIN: ${{ github.workspace }}/integration-hub/target/debug/scirust-hubd
           TDI_DURABLE_WORKER: ${{ github.workspace }}/integration-tdi/target/debug/examples/durable_worker
           TDI_ELASTIC_BIN: ${{ github.workspace }}/integration-elastic/target/debug/elastic-cli
-          TDI_ELASTIC_SOURCE_COMMIT: f8e10b1a1d05d6c22c0f56fed87252bc65d4e66a
+          TDI_ELASTIC_SOURCE_COMMIT: f5af4f3129100f4bb52d47d1adfc202347d0b098
         run: python3 -m unittest -v scripts/test_tdi_resource_integration.py
