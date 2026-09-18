@@ -19,6 +19,18 @@ use super::tdi24_chiral::{
 /// Versioned Stage-0 TDI-25 comparison contract.
 pub const TDI25_CONTRACT: &str = "tdi25-torsor-vs-chiral-v1";
 
+/// Version of the TDI-25 source-contract provenance pin.
+pub const SOURCE_CONTRACT_PIN_VERSION: &str = "tdi25-source-contract-pin-v1";
+
+/// Exact upstream semantic contract identities accepted by this TDI-25 tranche.
+///
+/// A later upstream contract revision must update this pin explicitly before
+/// TDI-25 comparison machinery can consume it.
+pub const PINNED_SOURCE_CONTRACTS: SourceContracts = SourceContracts {
+    torsor: "tdi22-torsor-dual-pairing-v1",
+    chiral: "tdi24-mirror-coupled-chiral-v1",
+};
+
 /// The torsor/twist representation consumed by TDI-25 has six scalar
 /// components: three linear/resultant and three angular/moment components.
 pub const TORSOR_WIDTH: usize = 6;
@@ -39,6 +51,35 @@ pub const fn source_contracts() -> SourceContracts {
         torsor: TORSOR_CONTRACT,
         chiral: CHIRAL_CONTRACT,
     }
+}
+
+/// Verify that the source contracts compiled into this build are exactly the
+/// versions pinned by TDI-25 Slice 02.
+///
+/// This turns upstream contract drift into a typed failure instead of silently
+/// changing the comparison semantics.
+pub fn validate_source_contracts() -> Result<SourceContracts, Tdi25Error> {
+    validate_source_contracts_against(source_contracts())
+}
+
+fn validate_source_contracts_against(
+    actual: SourceContracts,
+) -> Result<SourceContracts, Tdi25Error> {
+    if actual.torsor != PINNED_SOURCE_CONTRACTS.torsor {
+        return Err(Tdi25Error::SourceContractMismatch {
+            source: "TDI-22 torsor",
+            expected: PINNED_SOURCE_CONTRACTS.torsor,
+            actual: actual.torsor,
+        });
+    }
+    if actual.chiral != PINNED_SOURCE_CONTRACTS.chiral {
+        return Err(Tdi25Error::SourceContractMismatch {
+            source: "TDI-24 chiral",
+            expected: PINNED_SOURCE_CONTRACTS.chiral,
+            actual: actual.chiral,
+        });
+    }
+    Ok(actual)
 }
 
 /// Generic finite six-component control with no torsor or chiral semantics.
@@ -148,6 +189,15 @@ fn finite_scalar(value: f64, field: &'static str) -> Result<f64, Tdi25Error> {
 /// Stage-0 binding/control failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tdi25Error {
+    /// One upstream semantic contract no longer matches the frozen TDI-25 pin.
+    SourceContractMismatch {
+        /// Human-readable upstream source identifier.
+        source: &'static str,
+        /// Contract identity required by this tranche.
+        expected: &'static str,
+        /// Contract identity actually compiled into the build.
+        actual: &'static str,
+    },
     /// Upstream TDI-22 torsor contract rejected the fixture/arithmetic.
     Torsor(TorsorError),
     /// Upstream TDI-24 chiral contract rejected the fixture/arithmetic.
@@ -164,6 +214,14 @@ pub enum Tdi25Error {
 impl fmt::Display for Tdi25Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::SourceContractMismatch {
+                source,
+                expected,
+                actual,
+            } => write!(
+                formatter,
+                "{source} contract mismatch: expected {expected}, compiled {actual}"
+            ),
             Self::Torsor(error) => write!(formatter, "torsor arm rejected fixture: {error}"),
             Self::Chiral(error) => write!(formatter, "chiral arm rejected fixture: {error}"),
             Self::NonFiniteGeneric => {
@@ -210,6 +268,48 @@ mod tests {
         assert_eq!(contracts.torsor, TORSOR_CONTRACT);
         assert_eq!(contracts.chiral, CHIRAL_CONTRACT);
         assert_ne!(contracts.torsor, contracts.chiral);
+    }
+
+    #[test]
+    fn source_contract_pin_accepts_only_the_declared_upstream_versions() {
+        assert_eq!(SOURCE_CONTRACT_PIN_VERSION, "tdi25-source-contract-pin-v1");
+        assert_eq!(
+            PINNED_SOURCE_CONTRACTS,
+            SourceContracts {
+                torsor: "tdi22-torsor-dual-pairing-v1",
+                chiral: "tdi24-mirror-coupled-chiral-v1",
+            }
+        );
+        assert_eq!(validate_source_contracts().unwrap(), source_contracts());
+    }
+
+    #[test]
+    fn source_contract_pin_fails_closed_on_simulated_drift() {
+        let wrong_torsor = SourceContracts {
+            torsor: "tdi22-torsor-dual-pairing-v2",
+            chiral: PINNED_SOURCE_CONTRACTS.chiral,
+        };
+        assert_eq!(
+            validate_source_contracts_against(wrong_torsor),
+            Err(Tdi25Error::SourceContractMismatch {
+                source: "TDI-22 torsor",
+                expected: "tdi22-torsor-dual-pairing-v1",
+                actual: "tdi22-torsor-dual-pairing-v2",
+            })
+        );
+
+        let wrong_chiral = SourceContracts {
+            torsor: PINNED_SOURCE_CONTRACTS.torsor,
+            chiral: "tdi24-mirror-coupled-chiral-v2",
+        };
+        assert_eq!(
+            validate_source_contracts_against(wrong_chiral),
+            Err(Tdi25Error::SourceContractMismatch {
+                source: "TDI-24 chiral",
+                expected: "tdi24-mirror-coupled-chiral-v1",
+                actual: "tdi24-mirror-coupled-chiral-v2",
+            })
+        );
     }
 
     #[test]
