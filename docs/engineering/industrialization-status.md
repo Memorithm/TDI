@@ -8,6 +8,8 @@ This is the durable engineering handoff for the industrialization programme. It 
 
 **Q19 Elastic resource-control qualification (2026-09-18):** TDI PR #480 is **qualified** for its declared local-Hub ElasticXxx resource-admission scope on final head `9dc5531eaf589e1c49954255df6086136147d323`, after all 56 pull-request-triggered workflow runs returned `success` on that exact head and the only material P2 review thread was resolved. It merged as `563eba7ea4d883db5fcdce295b70d072e9184bd4`. The qualified boundary pins ElasticXxx #135 merge `f5af4f3129100f4bb52d47d1adfc202347d0b098`, preserves Hub ownership of execution/orchestration and ElasticXxx ownership of resource control/transactional validation, and grants no scientific-stage, performance, energy, GPU, model-quality, physical-RAM-reservation, or remote-placement claim.
 
+**Q04 measured-scaling qualification (2026-09-18):** TDI PR #483 is **qualified for its declared bounded software-evidence scope** on final head `9333ce71845bf998fe45356d87213adc4923758e`, after every returned pull-request workflow completed successfully on that exact head and the material P1 review finding was corrected and resolved. It merged as `93c15f03b349d649faa7bc870c4e864cf5539454`. The validator recomputes `/write/wall_ns` summaries from repeated raw measured records, binds report identity, requires zero append-time full scans and the declared exact hashing contract, and retains recorded medians only as bounded observations. This qualification does **not** infer an asymptotic latency class, SLO, statistical significance, hardware-general performance, or scientific result.
+
 ## Baseline
 
 - Historical audit: `2b9cf772d3c0711349f9a70ba7cd7f1bfef90aca`.
@@ -75,7 +77,7 @@ Contract qualification alone does not establish an operational research product.
 | Q01 | Failed worker has correct journal and CLI exit | Qualified #250; real Hub failure/restart scenario additionally passes locally. |
 | Q02 | Malformed/duplicate/overflow/nonfinite/deep JSON rejected | Qualified #250; real HTTP parser failure boundaries pass locally. |
 | Q03 | Impossible journal transitions and corruption detected | Qualified #250. |
-| Q04 | No quadratic append reread; documented benchmark | Hash-growth property qualified #250; measured scaling benchmark remains. |
+| Q04 | No quadratic append reread; documented benchmark | Qualified for the bounded software-evidence scope by PR #483, final head `9333ce71845bf998fe45356d87213adc4923758e`, merge `93c15f03b349d649faa7bc870c4e864cf5539454`: identity-bound raw repeated records are re-summarized, append `full_scans == 0`, and the exact hash-work contract is checked for every measured journal workload. The recorded timing medians remain observations only; no asymptotic latency class, SLO, significance, or hardware-general performance claim follows. |
 | Q05 | Crash before/after commit and consistent resume | Trial-boundary qualification #250/#252; real Hub restart without new attempts passes locally. |
 | Q06 | Interrupted creation, disk-full and persistence failures | Partial; new atomic export/fsync/disk-full and pre-dispatch persistence fault tests pass locally. |
 | Q07 | No abandoned descendant in qualified containment profile | Qualified cgroup-v2 profile #252; the Hub process path does not inherit that quota/sandbox qualification. |
