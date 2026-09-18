@@ -10,9 +10,9 @@ import tdi_optuna_benchmark as bench
 
 
 class ComparisonTests(unittest.TestCase):
-    def fixture(self):
-        p = bench.protocol("smoke")
-        manifest = {"protocol": p, "task_bounds": {t: bench.task_bounds(t) for t in bench.TASKS}}
+    def fixture(self, profile="smoke"):
+        p = bench.protocol(profile)
+        manifest = {"protocol": p, "task_bounds": {t: bench.task_bounds(t) for t in p["tasks"]}}
         runs = []
         # Synthetic records for adversarial report validation, never benchmark evidence.
         for task in p["tasks"]:
@@ -30,12 +30,31 @@ class ComparisonTests(unittest.TestCase):
         return manifest, runs
 
     def test_exact_objective_oracles_over_entire_domain(self):
-        for task in bench.ADAPTIVE_TASKS:
+        for task in bench.SESSION_TASKS:
             for x in bench.VALUES:
                 for y in bench.VALUES:
                     self.assertEqual(bench.objective(task, x, y), bench.oracle(task, x, y))
         self.assertEqual(bench.task_bounds("shifted-bowl")["minimum"], 0)
         self.assertEqual(bench.task_bounds("coupled-ridge")["minimum"], 1)
+
+    def test_new_session_tasks_have_baseline_headroom(self):
+        p = bench.protocol("session-development")
+        for task in p["tasks"]:
+            if task not in p["nondiscriminating_tasks"]:
+                self.assertGreater(bench.objective(task, **p["baseline"]), bench.task_bounds(task)["minimum"])
+        self.assertEqual(p["nondiscriminating_tasks"], ["categorical-interaction"])
+        self.assertEqual(bench.protocol("adaptive-development")["forge_source_commit"], bench.ADAPTIVE_FORGE_COMMIT)
+
+    def test_transport_verifier_rejects_valid_but_different_trajectory(self):
+        manifest, runs = self.fixture("transport-smoke")
+        self.assertTrue(bench.summarize(manifest, runs)["all_paired_trajectories_equal"])
+        run = next(r for r in runs if r["arm"] == "forge-tpe-session")
+        row = run["trials"][-1]
+        row["parameters"] = {"x": 7, "y": 7}
+        row["loss"] = bench.oracle(run["task"], **row["parameters"])
+        row["best_loss"] = min(run["trials"][-2]["best_loss"], row["loss"])
+        with self.assertRaisesRegex(ValueError, "changed optimizer trajectory"):
+            bench.summarize(manifest, runs)
 
     def test_closed_profile_budget_and_baseline(self):
         manifest, runs = self.fixture()
@@ -148,7 +167,7 @@ class ComparisonTests(unittest.TestCase):
 
     def test_real_optuna_seed_replay_and_common_first_observation(self):
         bench.check_packages()
-        for name in ("optuna-random", "optuna-tpe", "optuna-tpe-multivariate"):
+        for name in ("optuna-random", "optuna-tpe", "optuna-tpe-multivariate", "optuna-tpe-multivariate-early"):
             trajectories = []
             for _ in range(2):
                 arm = bench.OptunaArm(name, 7, bench.protocol("smoke")["tpe"])

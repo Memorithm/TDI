@@ -21,17 +21,26 @@ import time
 import tdi_experiment_supervisor as durable
 from tdi_engine_store import atomic_json, identity
 from tdi_forge_search import ForgeClient
+from tdi_forge_session import ForgeSession
 
 FORGE_COMMIT = "28067ab0aa1d52a2260d9bb2bf35a346547a292a"
 ADAPTIVE_FORGE_COMMIT = "e23f945d4f8bcc283f09826f513f208836efc1c4"
+SESSION_FORGE_COMMIT = "83c8c572a692016fb786e661c47a249112b6cadd"
 OPTUNA_VERSION = "5.0.0"
 VALUES = tuple(range(-8, 8))
 TASKS = ("shifted-bowl", "coupled-ridge", "double-well")
 ARMS = ("forge-grid", "forge-random", "optuna-random", "optuna-tpe")
 ADAPTIVE_TASKS = TASKS + ("shifted-absolute", "rotated-valley", "categorical-interaction")
 ADAPTIVE_ARMS = ("forge-random", "forge-tpe", "forge-gp", "optuna-random", "optuna-tpe", "optuna-tpe-multivariate")
+SESSION_TASKS = ADAPTIVE_TASKS + ("checkerboard-bowl", "plateau-gate", "permuted-bowl")
+SESSION_ARMS = ("forge-random-session", "forge-tpe-session", "forge-gp-session",
+                "forge-tpe-early-session", "optuna-random", "optuna-tpe", "optuna-tpe-multivariate",
+                "optuna-tpe-multivariate-early")
 PROFILES = {"smoke": (2, 8), "development": (20, 32),
-            "adaptive-smoke": (2, 16), "adaptive-development": (20, 32)}
+            "adaptive-smoke": (2, 16), "adaptive-development": (20, 32),
+            "session-smoke": (2, 16), "session-development": (20, 32),
+            "session-budget64": (20, 64), "transport-smoke": (2, 16),
+            "transport-development": (10, 32)}
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -49,6 +58,13 @@ def objective(task, x, y):
         return (3*x + 2*y - 5)**2 + (x - y + 1)**2
     if task == "categorical-interaction":
         return (7*(x+8) + 11*(y+8)) % 17 + 3*((x-y) % 5)
+    if task == "checkerboard-bowl":
+        return (x+2)**2 + (y-5)**2 + 12*((x+y) % 2)
+    if task == "plateau-gate":
+        return 40 + abs(x-y) if x < 1 or y < -2 else (x-4)**2 + 3*(y-1)**2
+    if task == "permuted-bowl":
+        u, v = (5*(x+8)+3) % 16 - 8, (7*(y+8)+11) % 16 - 8
+        return (u+1)**2 + 2*(v-3)**2
     raise ValueError("unknown public task")
 
 
@@ -67,6 +83,16 @@ def oracle(task, x, y):
     if task == "categorical-interaction":
         a, b = 7*x + 11*y + 144, x-y
         return a - 17*(a//17) + 3*(b - 5*(b//5))
+    if task == "checkerboard-bowl":
+        return x*x + y*y + 4*x - 10*y + 29 + (0 if x % 2 == y % 2 else 12)
+    if task == "plateau-gate":
+        if x >= 1 and y >= -2:
+            return x*x + 3*y*y - 8*x - 6*y + 19
+        return 40 + (x-y if x >= y else y-x)
+    if task == "permuted-bowl":
+        u = (-5, 0, 5, -6, -1, 4, -7, -2, 3, -8, -3, 2, 7, -4, 1, 6)[x+8]
+        v = (3, -6, 1, -8, -1, 6, -3, 4, -5, 2, -7, 0, 7, -2, 5, -4)[y+8]
+        return u*u + 2*v*v + 2*u - 12*v + 19
     raise ValueError("unknown public task")
 
 
@@ -91,6 +117,27 @@ def protocol(profile):
     if profile not in PROFILES:
         raise ValueError("unknown profile")
     seeds, budget = PROFILES[profile]
+    if profile.startswith(("session-", "transport-")):
+        p = protocol("adaptive-smoke")
+        transport = profile.startswith("transport-")
+        p.update(kind="tdi-optuna-session-comparison/v1", profile=profile,
+                 tasks=list(TASKS if transport else SESSION_TASKS),
+                 arms=(["forge-tpe", "forge-tpe-session", "forge-gp", "forge-gp-session"]
+                       if transport else list(SESSION_ARMS)),
+                 seeds=list(range(seeds)), evaluations_per_arm=budget,
+                 forge_source_commit=SESSION_FORGE_COMMIT,
+                 transport="explicit-per-arm-replay-or-persistent-session",
+                 session_protocol="forge-scientific-session/v1",
+                 session_persistence="immutable-command-and-receipt-before-permit-action",
+                 forge_tpe_early={"generator_version": "forge-finite-tpe-early/v1",
+                                  "startup_successes": "max(4,min(10,2*dimensions))",
+                                  "other_constants": "identical-to-forge-finite-tpe/v1"},
+                 optuna_tpe_early=dict(p["tpe"], multivariate=True, n_startup_trials=4),
+                 nondiscriminating_tasks=[] if transport else ["categorical-interaction"],
+                 interpretation="public-development-no-post-run-tuning-no-independent-confirmation")
+        p["sampling"] = {arm: ("categorical-without-replacement" if arm.startswith("forge-")
+                                else "categorical-with-replacement") for arm in p["arms"]}
+        return p
     if profile.startswith("adaptive-"):
         p = protocol("smoke")
         p.update({"kind": "tdi-optuna-adaptive-comparison/v1", "profile": profile,
@@ -208,6 +255,7 @@ class ForgeArm:
         self.checkpoint = None
         self.snapshot = None
         self.sequence = 0
+        name = name.removesuffix("-session")
         external = {
             "schema_version": 1, "domain_id": "tdi/public-optuna-comparison",
             "upstream": {"repository": "Memorithm/TDI", "commit_id": source_commit,
@@ -234,11 +282,16 @@ class ForgeArm:
             self.spec.update(strategy="adaptive-tpe", generator_version="forge-finite-tpe/v1")
         elif name == "forge-gp":
             self.spec.update(strategy="adaptive-gp", generator_version="forge-finite-gp/v1")
+        elif name == "forge-tpe-early":
+            self.spec.update(strategy="adaptive-tpe-early", generator_version="forge-finite-tpe-early/v1")
         elif name not in ("forge-grid", "forge-random"):
             raise ValueError("unknown Forge arm")
         self.task = task
         # Actual protocol validation, included in setup and bounded by the
         # remaining whole-run wall-clock budget.
+        self.initialize()
+
+    def initialize(self):
         self.client.call(self.spec, timeout=forge_timeout(self.deadline))
 
     def command(self, operation):
@@ -298,13 +351,61 @@ class ForgeArm:
                     "checkpoint": self.checkpoint, "snapshot": self.snapshot})
 
 
+class SessionForgeArm(ForgeArm):
+    """Incremental Forge transitions, each durably recorded before stage action."""
+    def initialize(self):
+        self.session = ForgeSession(self.client.binary["path"], self.client.binary["sha256"],
+                                    self.client.source_commit, self.spec,
+                                    timeout=forge_timeout(self.deadline))
+        try:
+            self.checkpoint = self.session.checkpoint
+            self.snapshot = self.session.initial["snapshot"]
+            self.journal = self.directory / "session-commands"
+            self.journal.mkdir()
+            self.previous = identity("tdi-forge-session-open/v1", self.session.initial)
+            atomic_json(self.directory / "session-open.json",
+                        {"spec": self.spec, "response": self.session.initial,
+                         "binding": self.session.binding, "identity": self.previous})
+        except BaseException:
+            self.session.abort()
+            raise
+
+    def command(self, operation):
+        command = {"request_id": str(self.sequence), "operation": operation}
+        receipt = self.session.submit(command, timeout=forge_timeout(self.deadline))
+        delta = {"sequence": self.sequence + 1, "previous": self.previous,
+                 "spec_sha256": self.checkpoint["spec_sha256"],
+                 "command": command, "receipt": receipt}
+        delta["identity"] = identity("tdi-forge-session-command/v1", delta)
+        # Unique immutable record: no full-history rewrite and no volatile permit.
+        atomic_json(self.journal / f"{self.sequence:04d}.json", delta)
+        self.previous = delta["identity"]
+        self.sequence += 1
+        if receipt["status"] in ("rejected", "duplicate"):
+            raise ValueError("Forge refused transition: " + durable.canonical(receipt))
+        return receipt
+
+    def close(self):
+        response = self.session.inspect(timeout=forge_timeout(self.deadline))
+        self.snapshot = response["snapshot"]
+        super().close()
+        self.session.close(timeout=forge_timeout(self.deadline))
+        self.control_costs = {"process_launches": 1, "frames": self.session.frames,
+                              "request_bytes": self.session.input_bytes,
+                              "response_bytes": self.session.output_bytes,
+                              "observed_exchange_ns": str(self.session.control_ns),
+                              "scope": "exchange-wall-time; excludes startup, persistence and final close"}
+
+
 class OptunaArm:
     def __init__(self, name, seed, settings):
         import optuna
-        if name not in ("optuna-random", "optuna-tpe", "optuna-tpe-multivariate"):
+        if name not in ("optuna-random", "optuna-tpe", "optuna-tpe-multivariate", "optuna-tpe-multivariate-early"):
             raise ValueError("unknown Optuna arm")
-        if name == "optuna-tpe-multivariate":
+        if name.startswith("optuna-tpe-multivariate"):
             settings = dict(settings, multivariate=True)
+        if name == "optuna-tpe-multivariate-early":
+            settings = dict(settings, n_startup_trials=4)
         sampler = (optuna.samplers.RandomSampler(seed=seed) if name == "optuna-random"
                    else optuna.samplers.TPESampler(seed=seed, **settings))
         self.study = optuna.create_study(direction="minimize", sampler=sampler,
@@ -423,14 +524,33 @@ def summarize(manifest, runs):
                            "median_final_regret": statistics.median(x["final_regret"] for x in selected),
                            "median_normalized_auc": statistics.median(x["normalized_auc"] for x in selected),
                            "median_unique_points": statistics.median(x["unique_points"] for x in selected)})
-    return {"runs": summaries, "aggregates": aggregates,
-            "inference": "descriptive-public-development-only; no significance or superiority claim"}
+    result = {"runs": summaries, "aggregates": aggregates,
+              "inference": "descriptive-public-development-only; no significance or superiority claim"}
+    if p["profile"].startswith("transport-"):
+        lookup = {(r["task"], r["seed"], r["arm"]): r for r in runs}
+        pairs = []
+        for task, seed, name in itertools.product(p["tasks"], p["seeds"], ("forge-tpe", "forge-gp")):
+            replay = lookup[(task, seed, name)]
+            session = lookup[(task, seed, name + "-session")]
+            trajectory = lambda r: [(row["parameters"], row["loss"], row["best_loss"])
+                                    for row in r["trials"]]
+            if trajectory(replay) != trajectory(session):
+                raise ValueError("persistent transport changed optimizer trajectory")
+            replay_ns, session_ns = int(replay["observed_adapter_ns"]), int(session["observed_adapter_ns"])
+            if replay_ns <= 0 or session_ns <= 0:
+                raise ValueError("invalid observed adapter time")
+            pairs.append({"task": task, "seed": seed, "strategy": name,
+                          "replay_over_session": replay_ns / session_ns})
+        result["transport_pairs"] = pairs
+        result["all_paired_trajectories_equal"] = True
+    return result
 
 
 def verify_report(path):
     """Verify identity and recompute all quality summaries; hashes are not signatures."""
-    report = durable.strict_json(Path(path).read_bytes(), max_bytes=16 * 1024 * 1024,
-                                 max_items=1000000)
+    with Path(path).open("rb") as stream:
+        report = durable.strict_json(stream.read(64 * 1024 * 1024 + 1), max_bytes=64 * 1024 * 1024,
+                                     max_items=4000000)
     content = {k: v for k, v in report.items() if k != "identity"}
     if (report["status"] != "complete"
             or report["identity"] != identity("tdi-optuna-report/v1", content)
@@ -447,6 +567,13 @@ def run(output, forge_binary, profile, max_seconds=1800):
     requirements_sha256 = check_packages()
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     p = protocol(profile)
+    if profile.startswith(("session-", "transport-")):
+        if p["forge_source_commit"] == "0" * 40:
+            raise ValueError("session Forge source must be published before execution")
+        for task in p["tasks"]:
+            if (task not in p["nondiscriminating_tasks"]
+                    and objective(task, **p["baseline"]) <= task_bounds(task)["minimum"]):
+                raise ValueError("discriminating task starts at its optimum")
     binary = Path(forge_binary).resolve(strict=True)
     client = ForgeClient(binary, file_hash(binary), p["forge_source_commit"])
     source_hashes = sources()
@@ -460,7 +587,9 @@ def run(output, forge_binary, profile, max_seconds=1800):
                 "max_seconds": max_seconds,
                 "limits": ["finite categorical public polynomials, not an ML or continuous-space benchmark",
                            "same numeric seeds do not mean identical random draws",
-                           "Forge uses subprocess replay; Optuna uses in-process memory storage",
+                           ("Forge transport is explicit per arm; Optuna uses in-process memory storage"
+                            if profile.startswith(("session-", "transport-")) else
+                            "Forge uses subprocess replay; Optuna uses in-process memory storage"),
                            "adapter timings include this asymmetry and are not optimizer-only speed",
                            "all arms retain durable evidence; storage policies differ",
                            "no Hub, GPU, hostile-code, recovery, pruning or multi-objective qualification"]}
@@ -481,14 +610,21 @@ def run(output, forge_binary, profile, max_seconds=1800):
                         directory.mkdir(parents=True, exist_ok=False)
                         start = time.perf_counter_ns()
                         record(stream, {"kind": "start", "task": task, "seed": seed, "arm": name})
-                        arm = (ForgeArm(name, seed, p["evaluations_per_arm"], task, client,
+                        forge_class = SessionForgeArm if name.endswith("-session") else ForgeArm
+                        arm = (forge_class(name, seed, p["evaluations_per_arm"], task, client,
                                         manifest_id, env_id, manifest["tdi_source_commit"], directory,
                                         deadline)
                                if name.startswith("forge-") else OptunaArm(name, seed, p["tpe"]))
-                        rows = run_arm(arm, task, seed, p["evaluations_per_arm"], directory, stream, deadline)
+                        try:
+                            rows = run_arm(arm, task, seed, p["evaluations_per_arm"], directory, stream, deadline)
+                        finally:
+                            if isinstance(arm, SessionForgeArm):
+                                arm.session.abort()
                         require_before_deadline(deadline, "before accepting completed arm")
                         result = {"task": task, "seed": seed, "arm": name, "trials": rows,
                                   "observed_adapter_ns": str(time.perf_counter_ns() - start)}
+                        if isinstance(arm, SessionForgeArm):
+                            result["control_costs"] = arm.control_costs
                         atomic_json(directory / "run.json", result)
                         runs.append(result)
                     print(f"completed {task} seed {seed}", flush=True)
