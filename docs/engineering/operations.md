@@ -71,9 +71,15 @@ Hub, use Hub's authoritative attempt state and the deployed worker's guarantees.
 ## Access and retention
 
 The operational profile rejects restricted-reference roots before reading or
-uploading them. Its Hub authorization is deployment-wide, not a per-artifact
-scientific clearance system. Keep protected/final stores separate. Do not point
-the viewer, search process, export endpoints or ordinary agents at a mixed store.
+uploading them. Catalogue persistence boundaries also fail closed when structured
+metadata declares `access_class: restricted-reference`, covering campaign/search
+events, result evidence, cache publication, export plans/receipts and restores.
+Run `python3 scripts/tdi_engine.py --catalogue <path> access-audit` to traverse
+all structured catalogue metadata and reject an existing tagged record. The audit
+is label-based only: it does not classify unlabelled payload content. Hub
+authorization remains deployment-wide, not a per-artifact scientific clearance
+system. Keep protected/final stores separate. Do not point the viewer, search
+process, export endpoints or ordinary agents at a mixed store.
 
 Timing outputs use disabled cache policies. Exact deterministic-data cache reuse
 requires explicit consent and complete dependency/domain agreement. It retains

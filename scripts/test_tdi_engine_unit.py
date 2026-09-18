@@ -13,6 +13,7 @@ import threading
 import unittest
 from unittest.mock import patch
 
+import tdi_engine_archive as archive
 import tdi_engine_runtime as runtime
 from tdi_engine_store import EngineStore, atomic_json
 from tdi_engine_viewer import render_catalogue
@@ -268,6 +269,69 @@ raise SystemExit("crash hook was not reached")
                     runtime.submit(client, store, spec, {})
             self.assertEqual("prepared", store.list()[0]["phase"])
         self.assertEqual(0, client.calls)
+
+    def test_access_audit_preserves_existing_search_parser_budget(self):
+        large_response = {"values": [0] * 100_001}
+        with EngineStore(self.root / "catalogue.sqlite") as store:
+            store.create_search({"kind": "large-search"}, {"binding": "test"}, large_response)
+            audit = store.access_audit()
+            self.assertEqual("clear", audit["status"])
+            self.assertGreater(audit["structured_values_checked"], 0)
+
+    def test_restricted_bundle_is_rejected_before_first_upload(self):
+        class NoUploadClient:
+            endpoint = "https://hub.example"
+
+            def upload(self, *_args, **_kwargs):
+                raise AssertionError("restricted bundle must be rejected before upload")
+
+        class NoRestoreStore:
+            def restore(self, *_args, **_kwargs):
+                raise AssertionError("restricted bundle must be rejected before catalogue restore")
+
+        bundle = {
+            "campaign": {
+                "admission": {
+                    "root_artifact_bindings": [
+                        {"descriptor": {"access_class": "restricted-reference"}}
+                    ]
+                }
+            },
+            "members": [{"step": "step", "output": "out", "evidence": {
+                "artifact_identity": "a" * 64,
+                "descriptor": {"access_class": "development"},
+            }}],
+        }
+        with patch.object(archive, "verify_bundle", return_value={("step", "out"): b"bytes"}):
+            with self.assertRaisesRegex(durable.ContractError, "restricted-reference"):
+                archive.restore_bundle(NoUploadClient(), NoRestoreStore(), bundle)
+
+    def test_restricted_metadata_cannot_persist_in_events_cache_exports_or_candidates(self):
+        tagged = {"nested": {"access_class": "restricted-reference", "opaque": "reference-only"}}
+        with EngineStore(self.root / "catalogue.sqlite") as store:
+            campaign = store.create(campaign_fixture(), "http://127.0.0.1:8477")
+            for label, operation in (
+                ("event", lambda: store.event(campaign, "diagnostic", tagged)),
+                ("result", lambda: store.put_result(campaign, "prepare", "result", tagged)),
+                ("cache", lambda: store.cache_put(tagged, {}, campaign, "prepare", "result", authorized=True)),
+                ("export", lambda: store.prepare_export(campaign, "otlp", "https://collector.example", tagged)),
+                ("candidate", lambda: store.create_search(tagged, {}, {})),
+            ):
+                with self.subTest(boundary=label), self.assertRaisesRegex(durable.ContractError, "restricted-reference"):
+                    operation()
+            clean = store.access_audit()
+            self.assertEqual("clear", clean["status"])
+            self.assertEqual(0, clean["restricted_reference_records"])
+            with store.db:
+                store.db.execute(
+                    "INSERT INTO events(campaign,kind,payload,recorded_ns) VALUES (?,?,?,?)",
+                    (campaign, "legacy-injected", durable.canonical(tagged), 1),
+                )
+            with self.assertRaisesRegex(durable.ContractError, "events.payload.*restricted-reference"):
+                store.access_audit()
+            with self.assertRaisesRegex(durable.ContractError, "events.payload.*restricted-reference"):
+                store.backup(self.root / "must-not-exist.sqlite")
+            self.assertFalse((self.root / "must-not-exist.sqlite").exists())
 
     def test_restricted_roots_rejected_before_download_or_submission(self):
         spec = campaign_fixture()
