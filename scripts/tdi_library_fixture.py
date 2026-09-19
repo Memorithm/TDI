@@ -136,7 +136,7 @@ def check_result(result, p, seed, start, stop):
     for row, oracle in zip(rows, expected):
         if (not isinstance(row, list) or len(row) != len(oracle)
                 or any(type(x) not in (float, int) or not math.isfinite(x)
-                       or not math.isclose(x, y, rel_tol=0, abs_tol=0 if p["adapter"] == "finite" else 2e-15)
+                       or not math.isclose(x, y, rel_tol=0, abs_tol=0 if p["adapter"] in ("finite", "branch-rng") else 2e-15)
                        for x, y in zip(row, oracle))):
             raise durable.ContractError("independent library oracle rejected observation")
     encoded = result["checkpoint"]

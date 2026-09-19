@@ -69,6 +69,11 @@ class LibraryIntegrationTests(unittest.TestCase):
                 p, seed = parameters(json.dumps({"schema": 1, "purpose": "development-software", "domain": "Development",
                                                 "index": 3, "plan_id": "a" * 64, "adapter": adapter}))
                 check_result(full, p, seed, 0, 4)
+                if adapter == "branch-rng":
+                    inexact = copy.deepcopy(full)
+                    inexact["observations"][0][0] += 1e-15
+                    with self.assertRaises(durable.ContractError):
+                        check_result(inexact, p, seed, 0, 4)
                 for field, value in (("seed", "4"), ("completed_depth", True), ("checkpoint", prefix["checkpoint"]),
                                      ("observations", [[True]] * 4), ("observations", [[float("nan")]] * 4)):
                     changed = copy.deepcopy(full); changed[field] = value
