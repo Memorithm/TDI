@@ -12,6 +12,9 @@ use core::fmt;
 use super::tdi22_torsor::{
     TORSOR_CONTRACT, Torsor3, TorsorError, Twist3, Vec3, factorized_pairing,
 };
+use super::tdi24_attention::{
+    MASKING_CONTRACT, MaskPolicy, NORMALIZER_CONTRACT, NormalizerError, normalize_with_policy,
+};
 use super::tdi24_chiral::{
     CHIRAL_CONTRACT, Chiral6, ChiralError, ChiralObservables, ChiralScoreWeights, chiral_score,
     observables,
@@ -53,6 +56,9 @@ pub const TORSOR_INVARIANT_BRIDGE_CONTRACT: &str = "tdi25-torsor-invariant-bridg
 
 /// Versioned TDI-24 chiral-invariant bridge contract.
 pub const CHIRAL_INVARIANT_BRIDGE_CONTRACT: &str = "tdi25-chiral-invariant-bridge-v1";
+
+/// Versioned shared masking/normalization bridge contract.
+pub const MASK_NORMALIZER_BRIDGE_CONTRACT: &str = "tdi25-shared-mask-normalizer-v1";
 
 const _GENERIC_MATCH_TORSOR: [(); TORSOR_WIDTH] = [(); GENERIC6_WIDTH];
 const _GENERIC_MATCH_CHIRAL: [(); super::tdi24_chiral::CHIRAL_WIDTH] = [(); GENERIC6_WIDTH];
@@ -354,6 +360,40 @@ impl ScoreScale {
     }
 }
 
+/// One normalized score row with immutable arm and upstream-contract provenance.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NormalizedArmRow {
+    /// Arm whose logits were normalized.
+    pub arm: ComparisonArm,
+    /// Shared normalized probabilities.
+    pub probabilities: Vec<f64>,
+    /// Upstream TDI-24 mask contract consumed unchanged.
+    pub masking_contract: &'static str,
+    /// Upstream TDI-24 normalizer contract consumed unchanged.
+    pub normalizer_contract: &'static str,
+    /// TDI-25 bridge contract proving all arms share the same path.
+    pub bridge_contract: &'static str,
+}
+
+/// Normalize one arm's already-computed logits through the exact shared TDI-24
+/// mask/normalizer implementation. No arm-specific branch is permitted here.
+pub fn normalize_arm_row(
+    arm: ComparisonArm,
+    logits: &[f64],
+    policy: MaskPolicy,
+    query_index: usize,
+) -> Result<NormalizedArmRow, Tdi25Error> {
+    let probabilities =
+        normalize_with_policy(logits, policy, query_index).map_err(Tdi25Error::Normalizer)?;
+    Ok(NormalizedArmRow {
+        arm,
+        probabilities,
+        masking_contract: MASKING_CONTRACT,
+        normalizer_contract: NORMALIZER_CONTRACT,
+        bridge_contract: MASK_NORMALIZER_BRIDGE_CONTRACT,
+    })
+}
+
 /// Stage-0 score bundle. Values are kept separate; this type deliberately does
 /// not compute a winner, rank, aggregate metric or statistical conclusion.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -418,6 +458,8 @@ fn finite_scalar(value: f64, field: &'static str) -> Result<f64, Tdi25Error> {
 /// Stage-0 binding/control failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tdi25Error {
+    /// Shared TDI-24 mask/normalizer rejected the row.
+    Normalizer(NormalizerError),
     /// A required TDI-24 mirror/parity identity failed through the bridge.
     ChiralInvariantViolation {
         /// Identity or parity channel that failed.
@@ -450,6 +492,9 @@ pub enum Tdi25Error {
 impl fmt::Display for Tdi25Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Normalizer(error) => {
+                write!(formatter, "shared normalizer rejected row: {error:?}")
+            }
             Self::ChiralInvariantViolation { field } => {
                 write!(formatter, "chiral bridge invariant failed: {field}")
             }
@@ -496,6 +541,38 @@ mod tests {
             (lhs - rhs).abs() <= 64.0 * f64::EPSILON * scale,
             "lhs={lhs:?}, rhs={rhs:?}"
         );
+    }
+
+    #[test]
+    fn all_arms_share_identical_mask_and_normalization_path() {
+        let logits = [1.0, 2.0, 30.0, 40.0];
+        let mut rows = Vec::new();
+        for arm in [ComparisonArm::T6, ComparisonArm::C6, ComparisonArm::G6] {
+            rows.push(normalize_arm_row(arm, &logits, MaskPolicy::Causal, 1).unwrap());
+        }
+        assert_eq!(rows[0].probabilities, rows[1].probabilities);
+        assert_eq!(rows[1].probabilities, rows[2].probabilities);
+        for row in rows {
+            assert_eq!(row.probabilities[2], 0.0);
+            assert_eq!(row.probabilities[3], 0.0);
+            assert_eq!(row.masking_contract, MASKING_CONTRACT);
+            assert_eq!(row.normalizer_contract, NORMALIZER_CONTRACT);
+            assert_eq!(row.bridge_contract, MASK_NORMALIZER_BRIDGE_CONTRACT);
+        }
+    }
+
+    #[test]
+    fn invalid_normalization_rows_fail_identically_for_every_arm() {
+        for arm in [ComparisonArm::T6, ComparisonArm::C6, ComparisonArm::G6] {
+            assert_eq!(
+                normalize_arm_row(arm, &[], MaskPolicy::Full, 0),
+                Err(Tdi25Error::Normalizer(NormalizerError::EmptyInput))
+            );
+            assert_eq!(
+                normalize_arm_row(arm, &[f64::NAN], MaskPolicy::Full, 0),
+                Err(Tdi25Error::Normalizer(NormalizerError::NonFiniteLogit))
+            );
+        }
     }
 
     #[test]

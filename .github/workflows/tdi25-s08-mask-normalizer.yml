@@ -1,0 +1,23 @@
+name: TDI-25.0 slice 08 shared mask normalizer
+on:
+  pull_request:
+    paths:
+      - 'tdi-ai/src/tdi25_torsor_chiral.rs'
+      - 'docs/TDI-25-CAMPAIGN-50.md'
+      - 'scripts/check-tdi25-s08.sh'
+      - '.github/workflows/tdi25-s08-mask-normalizer.yml'
+permissions:
+  contents: read
+jobs:
+  shared-mask-normalizer:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+      - run: bash scripts/check-tdi25-s08.sh
