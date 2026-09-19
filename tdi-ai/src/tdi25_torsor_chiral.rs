@@ -35,6 +35,15 @@ pub const PINNED_SOURCE_CONTRACTS: SourceContracts = SourceContracts {
 /// components: three linear/resultant and three angular/moment components.
 pub const TORSOR_WIDTH: usize = 6;
 
+/// Versioned generic six-component attribution-control contract.
+pub const GENERIC6_CONTRACT: &str = "tdi25-generic6-control-v1";
+
+/// Fixed generic control width.
+pub const GENERIC6_WIDTH: usize = 6;
+
+const _GENERIC_MATCH_TORSOR: [(); TORSOR_WIDTH] = [(); GENERIC6_WIDTH];
+const _GENERIC_MATCH_CHIRAL: [(); super::tdi24_chiral::CHIRAL_WIDTH] = [(); GENERIC6_WIDTH];
+
 /// Source contracts consumed by this comparison scaffold.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SourceContracts {
@@ -85,12 +94,12 @@ fn validate_source_contracts_against(
 /// Generic finite six-component control with no torsor or chiral semantics.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Generic6 {
-    data: [f64; 6],
+    data: [f64; GENERIC6_WIDTH],
 }
 
 impl Generic6 {
     /// Construct a finite generic six-component carrier.
-    pub fn new(data: [f64; 6]) -> Result<Self, Tdi25Error> {
+    pub fn new(data: [f64; GENERIC6_WIDTH]) -> Result<Self, Tdi25Error> {
         if data.iter().all(|value| value.is_finite()) {
             Ok(Self { data })
         } else {
@@ -100,19 +109,18 @@ impl Generic6 {
 
     /// Expose the raw matched-capacity carrier.
     #[must_use]
-    pub const fn as_array(self) -> [f64; 6] {
+    pub const fn as_array(self) -> [f64; GENERIC6_WIDTH] {
         self.data
     }
 
     /// Generic dot-product attribution score with fail-closed overflow handling.
     pub fn dot(self, rhs: Self) -> Result<f64, Tdi25Error> {
-        let score = self
-            .data
-            .iter()
-            .zip(rhs.data.iter())
-            .map(|(lhs, rhs)| lhs * rhs)
-            .sum::<f64>();
-        finite_scalar(score, "generic_score")
+        let mut accumulator = 0.0;
+        for (lhs, rhs) in self.data.iter().zip(rhs.data.iter()) {
+            let product = finite_mul(*lhs, *rhs, "generic_product")?;
+            accumulator = finite_add(accumulator, product, "generic_accumulator")?;
+        }
+        Ok(accumulator)
     }
 }
 
@@ -176,6 +184,14 @@ pub fn score_fixture(
         chiral: chiral_arm_score(chiral_query, chiral_key, chiral_weights)?,
         generic: generic_arm_score(generic_query, generic_key)?,
     })
+}
+
+fn finite_mul(lhs: f64, rhs: f64, field: &'static str) -> Result<f64, Tdi25Error> {
+    finite_scalar(lhs * rhs, field)
+}
+
+fn finite_add(lhs: f64, rhs: f64, field: &'static str) -> Result<f64, Tdi25Error> {
+    finite_scalar(lhs + rhs, field)
 }
 
 fn finite_scalar(value: f64, field: &'static str) -> Result<f64, Tdi25Error> {
@@ -259,6 +275,7 @@ mod tests {
     #[test]
     fn both_primary_carriers_have_six_components() {
         assert_eq!(TORSOR_WIDTH, CHIRAL_WIDTH);
+        assert_eq!(GENERIC6_WIDTH, CHIRAL_WIDTH);
         assert_eq!(TORSOR_WIDTH, 6);
     }
 
@@ -333,6 +350,13 @@ mod tests {
     }
 
     #[test]
+    fn generic_control_contract_is_explicit_and_width_matched() {
+        assert_eq!(GENERIC6_CONTRACT, "tdi25-generic6-control-v1");
+        assert_eq!(GENERIC6_WIDTH, TORSOR_WIDTH);
+        assert_eq!(GENERIC6_WIDTH, CHIRAL_WIDTH);
+    }
+
+    #[test]
     fn generic_control_is_plain_six_dimensional_dot_product() {
         let q = Generic6::new([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
         let k = Generic6::new([-1.0, 0.5, 2.0, -3.0, 4.0, 1.5]).unwrap();
@@ -352,7 +376,16 @@ mod tests {
         assert_eq!(
             huge.dot(huge),
             Err(Tdi25Error::NonFiniteScalar {
-                field: "generic_score"
+                field: "generic_product"
+            })
+        );
+
+        let accumulator = Generic6::new([f64::MAX, f64::MAX, 0.0, 0.0, 0.0, 0.0]).unwrap();
+        let ones = Generic6::new([1.0, 1.0, 0.0, 0.0, 0.0, 0.0]).unwrap();
+        assert_eq!(
+            accumulator.dot(ones),
+            Err(Tdi25Error::NonFiniteScalar {
+                field: "generic_accumulator"
             })
         );
     }
