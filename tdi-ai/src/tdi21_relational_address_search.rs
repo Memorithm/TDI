@@ -431,4 +431,3 @@ pub fn evaluate_cross_namespace_aliases(
     }
     Ok(evidence)
 }
-
