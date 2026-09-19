@@ -78,6 +78,7 @@ pub struct AddressValidationEvidence {
     pub samples: u64,
     pub address_mismatches: u64,
     pub bit_mismatches: u64,
+    pub rule_evaluations: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -312,6 +313,10 @@ pub fn evaluate_address_validation(
     let mut evidence = AddressValidationEvidence::default();
     for sample in &validation.0.samples {
         checked_add(&mut evidence.samples, 1)?;
+        checked_add(
+            &mut evidence.rule_evaluations,
+            u64::from(RELATIONAL_ADDRESS_BITS),
+        )?;
         let predicted = result.predict(sample.input);
         if predicted != sample.expected {
             checked_add(&mut evidence.address_mismatches, 1)?;
