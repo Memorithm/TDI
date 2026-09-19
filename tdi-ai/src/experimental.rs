@@ -50,6 +50,8 @@ pub mod tdi21_predicate_identifiability;
 pub mod tdi21_provenance;
 #[path = "tdi21_relational_address_search.rs"]
 pub mod tdi21_relational_address_search;
+#[path = "tdi21_relational_attention.rs"]
+pub mod tdi21_relational_attention;
 #[path = "tdi21_relational_binding.rs"]
 pub mod tdi21_relational_binding;
 #[path = "tdi21_relational_learned.rs"]
