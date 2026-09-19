@@ -55,6 +55,7 @@ fn sparse_task_development_fits_but_fails_on_renamed_validation_bits() {
     assert_eq!(evidence.samples, 5);
     assert_eq!(evidence.address_mismatches, 5);
     assert_eq!(evidence.bit_mismatches, 10);
+    assert_eq!(evidence.prediction_aliases, 0);
     assert_eq!(evidence.rule_evaluations, 5 * 8);
 }
 
@@ -96,7 +97,29 @@ fn basis_coverage_recovers_exact_identity_and_transfers_to_full_domain() {
     assert_eq!(evidence.samples, 256);
     assert_eq!(evidence.address_mismatches, 0);
     assert_eq!(evidence.bit_mismatches, 0);
+    assert_eq!(evidence.prediction_aliases, 0);
     assert_eq!(evidence.rule_evaluations, 256 * 8);
+}
+
+#[test]
+fn combined_namespaces_expose_five_encoder_aliases_under_sparse_fit() {
+    let development =
+        development_from_relational_tasks(&DevelopmentRelationalSet::v1()).unwrap();
+    let selected = fit_relational_address(&development).unwrap();
+
+    let combined = [17u8, 21, 34, 51, 68, 153, 157, 170, 187, 204]
+        .into_iter()
+        .map(|value| AddressSample {
+            input: value,
+            expected: value,
+        })
+        .collect::<Vec<_>>();
+    let validation = ValidationAddressSet::new(&combined).unwrap();
+    let evidence = evaluate_address_validation(&selected, &validation).unwrap();
+
+    assert_eq!(evidence.samples, 10);
+    assert_eq!(evidence.prediction_aliases, 5);
+    assert_eq!(evidence.address_mismatches, 5);
 }
 
 #[test]
