@@ -109,6 +109,28 @@ fn basis_covered_identity_encoder_keeps_namespaces_distinct() {
 }
 
 #[test]
+fn unseen_multi_relation_same_subject_structure_exposes_sparse_alias() {
+    let sparse = sparse_selected();
+    let mut sparse_binder = LearnedRelationalBinder::new(config(), sparse).unwrap();
+    sparse_binder.bind(9, 9, 10).unwrap();
+    sparse_binder.bind(10, 9, 11).unwrap();
+
+    // Development never disambiguated relation low bits from subject low bits.
+    // Both writes therefore map to the same learned key and the second replaces
+    // the first logical fact without a B3 replacement event.
+    assert_eq!(sparse_binder.recall(9, 9).unwrap(), RelationalRead::Hit(11));
+    assert_eq!(sparse_binder.recall(10, 9).unwrap(), RelationalRead::Hit(11));
+    assert_eq!(sparse_binder.counters().work.memory_replacements, 0);
+
+    let identity = basis_selected();
+    let mut identity_binder = LearnedRelationalBinder::new(config(), identity).unwrap();
+    identity_binder.bind(9, 9, 10).unwrap();
+    identity_binder.bind(10, 9, 11).unwrap();
+    assert_eq!(identity_binder.recall(9, 9).unwrap(), RelationalRead::Hit(10));
+    assert_eq!(identity_binder.recall(10, 9).unwrap(), RelationalRead::Hit(11));
+}
+
+#[test]
 fn learned_encoder_is_selected_only_from_development_task_addresses() {
     let development =
         development_from_relational_tasks(&DevelopmentRelationalSet::v1()).unwrap();
