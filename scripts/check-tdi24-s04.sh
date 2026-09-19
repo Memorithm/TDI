@@ -12,4 +12,3 @@ grep -Fq '`m(q,k) = q^T M k`' docs/TDI-24-CHANNEL-DECOMPOSITION.md
 grep -Fq '`chi(q,k) = q^T J k`' docs/TDI-24-CHANNEL-DECOMPOSITION.md
 grep -Fq '| 03 | Matched V6 vector reference | **landed** in #487;' docs/TDI-24-CAMPAIGN-50.md
 grep -Fq '| 04 | Channel decomposition contract | **landed** in #492;' docs/TDI-24-CAMPAIGN-50.md
-grep -Fq '**4/50 merged** (#406, #471, #487, #492).' docs/TDI-24-CAMPAIGN-50.md
