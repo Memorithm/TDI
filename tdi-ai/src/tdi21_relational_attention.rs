@@ -14,8 +14,7 @@ use super::tdi21_relational_binding::{MAX_COMPOSITION_HOPS, RelationalRead};
 use super::tdi21_relational_tasks::RelationalEpisode;
 use super::tdi21_stream::{Event, StepOutput};
 
-pub const RELATIONAL_ATTENTION_SEMANTICS: &str =
-    "tdi21-relational-attention-controls-v1";
+pub const RELATIONAL_ATTENTION_SEMANTICS: &str = "tdi21-relational-attention-controls-v1";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RelationalAttentionConfig {
@@ -214,7 +213,10 @@ impl RelationalAttentionReference {
         Ok(RelationalRead::Hit(current))
     }
 
-    fn validate_episode(&self, episode: &RelationalEpisode) -> Result<(), RelationalAttentionError> {
+    fn validate_episode(
+        &self,
+        episode: &RelationalEpisode,
+    ) -> Result<(), RelationalAttentionError> {
         self.validate_path(&episode.query.relations, episode.query.subject)?;
         for fact in &episode.facts {
             if fact.subject >= self.entity_limit() || fact.object >= self.entity_limit() {
