@@ -10,7 +10,7 @@ use super::tdi24_chiral::CHIRAL_WIDTH;
 use super::tdi24_vector::VECTOR6_WIDTH;
 
 /// Versioned accounting surface for TDI-24 reference implementations.
-pub const REFERENCE_ACCOUNTING_CONTRACT: &str = "tdi24-reference-accounting-v2";
+pub const REFERENCE_ACCOUNTING_CONTRACT: &str = "tdi24-reference-accounting-v3";
 
 const _MATCHED_WIDTHS: [(); VECTOR6_WIDTH] = [(); CHIRAL_WIDTH];
 
@@ -32,6 +32,8 @@ pub struct PairScoreAccounting {
     pub multiplications: usize,
     /// Scalar additions/subtractions in the bounded reference path.
     pub additions: usize,
+    /// Fail-closed finiteness predicates in the score path.
+    pub validity_predicates: usize,
     /// Query scalar components.
     pub query_scalars: usize,
     /// Key scalar components.
@@ -45,18 +47,22 @@ pub struct PairScoreAccounting {
 /// Return the exact source-level pair-score accounting for the current reference.
 #[must_use]
 pub const fn pair_score_accounting(arm: ScoreArm) -> PairScoreAccounting {
-    let (multiplications, additions) = match arm {
-        // Six products and six checked accumulator additions.
-        ScoreArm::V6 => (6, 6),
+    let (multiplications, additions, validity_predicates) = match arm {
+        // Six products and six checked accumulator additions; every derived
+        // product and accumulator is checked for finiteness.
+        ScoreArm::V6 => (6, 6, 12),
         // s: 6M+6A, m: 6M+6A, chi: 6M+6A,
         // mirror/chiral pairings: 6 sign negations, three channel
-        // weights: 3M, final channel combination: 2A.
-        ScoreArm::C6 => (21, 26),
+        // weights: 3M, final channel combination: 2A. The three primitive
+        // pairings perform 36 finiteness checks; weighted channels and final
+        // sums add five more.
+        ScoreArm::C6 => (21, 26, 41),
     };
     PairScoreAccounting {
         arm,
         multiplications,
         additions,
+        validity_predicates,
         query_scalars: 6,
         key_scalars: 6,
         carrier_bytes: 12 * core::mem::size_of::<f64>(),
@@ -83,6 +89,8 @@ pub struct RowAccounting {
     pub additions: usize,
     /// Final divisions performed by the current reference implementation.
     pub divisions: usize,
+    /// Fail-closed finiteness/validity predicates in the normalizer path.
+    pub validity_predicates: usize,
     /// Logical bytes of the explicit boolean mask.
     pub mask_bytes: usize,
     /// Logical bytes of the normalizer's f64 exponential/probability buffer.
@@ -106,6 +114,15 @@ pub fn row_accounting(
     let mask_tests = key_count
         .checked_mul(2)
         .ok_or(AccountingError::SizeOverflow)?;
+    let validity_predicates = key_count
+        .checked_mul(2)
+        .and_then(|count| {
+            active_count
+                .checked_mul(3)
+                .and_then(|active| count.checked_add(active))
+        })
+        .and_then(|count| count.checked_add(2))
+        .ok_or(AccountingError::SizeOverflow)?;
     let mask_bytes = key_count
         .checked_mul(core::mem::size_of::<bool>())
         .ok_or(AccountingError::SizeOverflow)?;
@@ -122,6 +139,7 @@ pub fn row_accounting(
         exponentials: active_count,
         additions: active_count,
         divisions: key_count,
+        validity_predicates,
         mask_bytes,
         normalizer_scratch_bytes,
         accounting_contract: REFERENCE_ACCOUNTING_CONTRACT,
@@ -167,7 +185,9 @@ mod tests {
         let v6 = pair_score_accounting(ScoreArm::V6);
         let c6 = pair_score_accounting(ScoreArm::C6);
         assert_eq!((v6.multiplications, v6.additions), (6, 6));
+        assert_eq!(v6.validity_predicates, 12);
         assert_eq!((c6.multiplications, c6.additions), (21, 26));
+        assert_eq!(c6.validity_predicates, 41);
         assert_eq!(v6.accounting_contract, REFERENCE_ACCOUNTING_CONTRACT);
         assert_eq!(c6.accounting_contract, REFERENCE_ACCOUNTING_CONTRACT);
     }
@@ -181,6 +201,7 @@ mod tests {
         assert_eq!(row.exponentials, 5);
         assert_eq!(row.additions, 5);
         assert_eq!(row.divisions, 8);
+        assert_eq!(row.validity_predicates, 2 * 8 + 3 * 5 + 2);
         assert_eq!(row.mask_bytes, 8 * core::mem::size_of::<bool>());
         assert_eq!(
             row.normalizer_scratch_bytes,
