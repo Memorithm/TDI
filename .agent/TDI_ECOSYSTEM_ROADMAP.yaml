@@ -786,3 +786,38 @@ session_json_profile_2026_09_19:
   evidence_PR_531_observed_head: 6b86986b47e8e7ed1a97a58b222317ac1b650058
   evidence_PR_531_observed_status: 62_success_two_queued_all_review_threads_resolved
   authority: no_protected_stage_default_backend_or_universal_superiority_promotion
+
+elastic_hub_benchmark_2026_09_19:
+  status: implemented_real_execution_verified_PR_CI_pending
+  pull_request: https://github.com/Memorithm/TDI/pull/537
+  candidate: 65aa49f6e1cfa89ef7328fd2513db486230b10b9
+  executed_measurement_code: f6ff031451095b11c3017e98ee3651360a779c47
+  condition_declaration: 11f37b77c7989c63acb945875f4addf8eb3d45d4
+  evidence_path: docs/engineering/elastic-admission-benchmark.md
+  products: [TDI_Rust_counter_worker, scirust_hub, ElasticXxx_capacity_admission]
+  dependencies:
+    elastic: f5af4f3129100f4bb52d47d1adfc202347d0b098
+    hub: ccdcb99a4573dbefb944af0df713101b100b5f78
+  corrected_release_evidence:
+    graph_executions: 64
+    trials: 512
+    independent_verification_steps: 512
+    clean_restart_checks: 64
+    requested_widths: [1, 2, 4, 8]
+    inherited_affinity_admitted_widths: [1, 2, 4, 8]
+    two_cpu_admitted_widths: [1, 2, 2, 2]
+    bundle_and_cross_arm_payload_checks: passed
+    preliminary_debug_matrix: retained_separately_not_pooled
+  tests: fifteen_methodology_tests_and_five_actual_resource_integration_tests_pass
+  limits:
+    - tiny_public_counter_workload_one_graph_at_a_time
+    - no_cross_campaign_capacity_ledger_or_running_graph_resizing
+    - four_repetitions_shared_host_no_reliable_speedup_claim
+    - clean_restart_not_crash_or_power_loss
+    - concurrent_total_RAM_not_measured
+    - source_declarations_not_build_attestations
+  next:
+    - exact_head_CI_and_material_review_before_merge
+    - qualify_shared_capacity_accounting_before_simultaneous_campaign_admission
+    - use_representative_CPU_and_IO_workloads_before_resource_policy_tuning
+  authority: no_Go_no_optimizer_policy_change_no_protected_stage_or_scientific_promotion
