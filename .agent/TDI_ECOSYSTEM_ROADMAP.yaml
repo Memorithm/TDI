@@ -727,3 +727,37 @@ persistent_search_2026_09_18:
     - 11_TDI_methodology_tests_and_real_session_replay_historical_binary_crash_corruption_bounds_and_pidfd_poll_checks_pass
   pending: [complete_comparison, exact_final_head_CI, material_reviews, merge]
   authority: no_universal_superiority_model_GPU_confirmatory_production_or_maturity_promotion
+
+persistent_search_results_2026_09_19:
+  status: engine_merged_completed_comparison_evidence_PR_pending_CI
+  forge_pull_request: https://github.com/Memorithm/Forge/pull/41
+  forge_merge: da68e9703d7a523f5d3703ebedd3de85b39cb153
+  tdi_pull_request: https://github.com/Memorithm/TDI/pull/503
+  tdi_merge: 566d98bd6af58530b61b4a6a5876e1a5b796f7fe
+  tdi_qualified_final_head: 79bd50d486e575e6531b777dbf0058b3e108c777
+  final_head_checks: 67_success
+  executed_tdi_source: a4d74690f605acfe3733e163446adf85001ab494
+  source_relationship: executed_and_final_PR_head_have_no_tree_difference
+  evidence_pull_request: https://github.com/Memorithm/TDI/pull/531
+  evidence_head: f3fd50d89d5de600ed676fba39194086f21d8dde
+  evidence_path: docs/engineering/benchmarks/2026-09-18-forge-session-results.md
+  completed: {runs: 3000, evaluations: 142080, paired_transport_trajectories: 60}
+  equivalence: {cross_budget_prefixes: 1440, prequalification_vs_corrected_32: 1440}
+  median_paired_replay_over_session: {tpe: 18.146614427895365, gp: 20.638720206416416}
+  quality:
+    - budget_32_early_TPE_vs_Optuna_multivariate_final_regret_task_medians_lower_equal_higher_5_2_1
+    - budget_64_each_adaptive_Forge_arm_vs_Optuna_multivariate_final_regret_task_medians_1_7_0
+    - early_TPE_anytime_AUC_wins_only_four_of_eight_discriminating_tasks_at_both_budgets
+    - early_TPE_regresses_plateau_gate_at_budget_32_and_is_not_promoted_to_default
+    - measured_Forge_adapter_cost_remains_higher_than_inprocess_Optuna
+  evidence_preservation:
+    - all_seven_completed_qualified_and_preliminary_reports_published_with_hashes
+    - interrupted_preliminary_64_budget_events_and_manifest_retained_as_incomplete
+    - complete_preliminary_trace_archive_preserved_separately_before_workspace_maintenance
+    - new_readonly_CI_recomputes_scores_and_checks_complete_budgets_hashes_and_trajectory_equivalence
+  next_engine_work:
+    - profile_persistence_initialization_verification_and_closing_separately_before_optimizing
+    - residual_outside_exchange_is_not_automatically_attributable_to_fsync_or_Rust_optimizer
+    - freeze_new_broader_Development_comparison_before_search_policy_changes
+  pending: [evidence_PR_exact_head_CI, evidence_PR_review_and_merge]
+  authority: no_default_backend_protected_stage_confirmation_GPU_or_universal_superiority_promotion
