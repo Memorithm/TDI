@@ -99,7 +99,7 @@ def verify_report(root):
     return report["identity"]
 
 
-def run_case(root, *, arm, width, trials, hubd, worker, elastic, source, policy):
+def run_case(root, *, arm, width, trials, hubd, worker, elastic, elastic_sha256, source, policy):
     root.mkdir()
     record = {"arm": arm, "requested_width": width, "trials": trials, "status": "incomplete"}
     hub = LocalHub(root, str(hubd))
@@ -115,7 +115,7 @@ def run_case(root, *, arm, width, trials, hubd, worker, elastic, source, policy)
             def execute():
                 if arm == "elastic":
                     return execute_local_admitted(client, store, spec, {}, elastic,
-                                                  durable.file_digest(elastic), source, dict(policy, max_concurrency=width))
+                                                  elastic_sha256, source, dict(policy, max_concurrency=width))
                 campaign = runtime.submit(client, store, spec, {})
                 return runtime.execute(client, store, campaign)
             result, record["submit_execute_collect"] = measure(execute)
@@ -185,7 +185,7 @@ def run(args):
         case_root = args.output / f"case-{index:03d}"
         try:
             record = run_case(case_root, arm=arm, width=width, trials=args.trials, **binaries,
-                              source=args.elastic_source, policy=policy)
+                              elastic_sha256=hashes["elastic"], source=args.elastic_source, policy=policy)
         except Exception as error:
             # Keep attempted-case failure and all prior artifacts; never fabricate a timing.
             record = {"arm": arm, "requested_width": width, "trials": args.trials,
