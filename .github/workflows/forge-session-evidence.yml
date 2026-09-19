@@ -4,12 +4,14 @@ on:
     paths:
       - 'docs/engineering/benchmarks/2026-09-18-forge-session-*'
       - 'scripts/render-forge-session-results.py'
+      - 'scripts/tdi_*.py'
       - '.github/workflows/forge-session-evidence.yml'
   push:
     branches: [main]
     paths:
       - 'docs/engineering/benchmarks/2026-09-18-forge-session-*'
       - 'scripts/render-forge-session-results.py'
+      - 'scripts/tdi_*.py'
       - '.github/workflows/forge-session-evidence.yml'
 permissions:
   contents: read

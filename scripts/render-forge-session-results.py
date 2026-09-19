@@ -12,12 +12,15 @@ import hashlib
 import json
 from pathlib import Path
 import statistics
+import struct
 import tempfile
+import zlib
 
 from tdi_optuna_benchmark import verify_report
 
 PREFIX = "2026-09-18-forge-session"
 SOURCE = "a4d74690f605acfe3733e163446adf85001ab494"
+PNG_PIXEL_SHA256 = "5401011779ee509c29c50feda6e909fe7c3e88fc37e6f40c5e4f3ff2eebf86c1"
 FILES = {
     "transport": PREFIX + "-transport.json.gz",
     "quality32": PREFIX + "-quality32.json.gz",
@@ -44,6 +47,48 @@ def read_report(path):
         temp.write(payload)
         temp.flush()
         return verify_report(temp.name)
+
+
+def png_pixel_digest(path):
+    """Hash the lossless PNG image payload while ignoring ancillary metadata."""
+    payload = Path(path).read_bytes()
+    if not payload.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("published curve is not a PNG")
+    offset = 8
+    ihdr = None
+    idat = []
+    saw_iend = False
+    while offset < len(payload):
+        if offset + 12 > len(payload):
+            raise ValueError("truncated PNG chunk")
+        size = struct.unpack(">I", payload[offset:offset + 4])[0]
+        kind = payload[offset + 4:offset + 8]
+        end = offset + 12 + size
+        if end > len(payload):
+            raise ValueError("truncated PNG payload")
+        data = payload[offset + 8:offset + 8 + size]
+        expected_crc = struct.unpack(">I", payload[offset + 8 + size:end])[0]
+        if zlib.crc32(kind + data) & 0xFFFFFFFF != expected_crc:
+            raise ValueError("published curve has invalid PNG CRC")
+        if kind == b"IHDR":
+            if ihdr is not None or size != 13:
+                raise ValueError("invalid PNG IHDR")
+            ihdr = data
+        elif kind == b"IDAT":
+            idat.append(data)
+        elif kind == b"IEND":
+            saw_iend = True
+            if end != len(payload):
+                raise ValueError("trailing bytes after PNG IEND")
+            break
+        offset = end
+    if ihdr is None or not idat or not saw_iend:
+        raise ValueError("incomplete PNG structure")
+    try:
+        pixels = zlib.decompress(b"".join(idat))
+    except zlib.error as error:
+        raise ValueError("invalid PNG image stream") from error
+    return hashlib.sha256(ihdr + pixels).hexdigest()
 
 
 def verify_inventory(directory, reports):
@@ -119,13 +164,7 @@ def main():
         raise ValueError("cross-budget first-32 trajectories differ")
     if trajectories(reports["quality32"]) != trajectories(reports["preliminary32"]):
         raise ValueError("qualification corrections changed search trajectories")
-    if args.verify_only:
-        count = verify_inventory(output, reports)
-        print(json.dumps({"verified_reports": count, "qualified_runs": 3000,
-                          "qualified_evaluations": 142080, "transport_pairs_equal": 60,
-                          "cross_budget_prefixes_equal": 1440, "prequalification_trajectories_equal": 1440,
-                          "incomplete_campaign_promoted": False}))
-        return
+    verified_count = verify_inventory(output, reports) if args.verify_only else None
 
     transport = reports["transport"]
     transport_rows = []
@@ -274,6 +313,26 @@ def main():
         "durability, ML quality, scaling, GPU performance or universal superiority. No protected "
         "TDI series, confirmation boundary or default backend is changed.", ""]
 
+    artifact_payload = {
+        "schema": 1, "qualified_runs": 3000, "qualified_evaluations": 142080,
+        "transport_pairs_equal": 60, "cross_budget_prefixes_equal": 1440,
+        "prequalification_trajectories_equal": 1440, "files": provenance,
+    }
+    expected_markdown = "\n".join(text)
+    if args.verify_only:
+        if (output / f"{PREFIX}-results.md").read_text(encoding="utf-8") != expected_markdown:
+            raise ValueError("published Markdown differs from verified reports")
+        published_artifacts = json.loads((output / f"{PREFIX}-artifacts.json").read_text(encoding="utf-8"))
+        if published_artifacts != artifact_payload:
+            raise ValueError("published artifact summary differs from verified reports")
+        if png_pixel_digest(output / f"{PREFIX}-curves64.png") != PNG_PIXEL_SHA256:
+            raise ValueError("published curve pixels differ from qualified rendering")
+        print(json.dumps({"verified_reports": verified_count, "qualified_runs": 3000,
+                          "qualified_evaluations": 142080, "transport_pairs_equal": 60,
+                          "cross_budget_prefixes_equal": 1440, "prequalification_trajectories_equal": 1440,
+                          "published_outputs_verified": True, "incomplete_campaign_promoted": False}))
+        return
+
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -307,12 +366,8 @@ def main():
     fig.tight_layout(rect=(0, 0.065, 1, 0.96))
     fig.savefig(output / f"{PREFIX}-curves64.png", dpi=150)
     plt.close(fig)
-    (output / f"{PREFIX}-results.md").write_text("\n".join(text), encoding="utf-8")
-    (output / f"{PREFIX}-artifacts.json").write_text(json.dumps({
-        "schema": 1, "qualified_runs": 3000, "qualified_evaluations": 142080,
-        "transport_pairs_equal": 60, "cross_budget_prefixes_equal": 1440,
-        "prequalification_trajectories_equal": 1440, "files": provenance,
-    }, indent=2) + "\n", encoding="utf-8")
+    (output / f"{PREFIX}-results.md").write_text(expected_markdown, encoding="utf-8")
+    (output / f"{PREFIX}-artifacts.json").write_text(json.dumps(artifact_payload, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"verified_reports": len(reports), "qualified_runs": 3000,
                       "qualified_evaluations": 142080, "transport_pairs_equal": 60,
                       "cross_budget_prefixes_equal": 1440, "prequalification_trajectories_equal": 1440}))
