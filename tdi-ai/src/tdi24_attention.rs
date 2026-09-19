@@ -3,6 +3,18 @@
 /// Versioned deterministic normalizer contract shared by V6 and C6.
 pub const NORMALIZER_CONTRACT: &str = "tdi24-masked-softmax-reference-v1";
 
+/// Versioned causal/non-causal mask contract.
+pub const MASKING_CONTRACT: &str = "tdi24-attention-mask-reference-v1";
+
+/// Reference masking policy shared by V6 and C6.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MaskPolicy {
+    /// Every key in the row is visible.
+    Full,
+    /// Key index k is visible iff k <= query_index.
+    Causal,
+}
+
 /// Errors produced by the bounded reference normalizer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NormalizerError {
@@ -16,6 +28,33 @@ pub enum NormalizerError {
     AllMasked,
     /// A derived exponential, sum or probability became invalid.
     NonFiniteDerived,
+}
+
+/// Build the deterministic mask for one attention row.
+pub fn attention_mask(
+    policy: MaskPolicy,
+    query_index: usize,
+    key_count: usize,
+) -> Result<Vec<bool>, NormalizerError> {
+    if key_count == 0 {
+        return Err(NormalizerError::EmptyInput);
+    }
+    Ok((0..key_count)
+        .map(|key_index| match policy {
+            MaskPolicy::Full => true,
+            MaskPolicy::Causal => key_index <= query_index,
+        })
+        .collect())
+}
+
+/// Apply the shared mask contract and deterministic normalizer in one call.
+pub fn normalize_with_policy(
+    logits: &[f64],
+    policy: MaskPolicy,
+    query_index: usize,
+) -> Result<Vec<f64>, NormalizerError> {
+    let mask = attention_mask(policy, query_index, logits.len())?;
+    masked_softmax(logits, &mask)
 }
 
 /// Stable f64 masked softmax reference.
@@ -125,6 +164,38 @@ mod tests {
         assert_eq!(
             masked_softmax(&[-f64::MAX, f64::MAX], &[true, true]),
             Err(NormalizerError::NonFiniteDerived)
+        );
+    }
+    #[test]
+    fn full_and_causal_masks_are_deterministic_and_shared() {
+        assert_eq!(
+            attention_mask(MaskPolicy::Full, 1, 4).unwrap(),
+            vec![true; 4]
+        );
+        assert_eq!(
+            attention_mask(MaskPolicy::Causal, 1, 4).unwrap(),
+            vec![true, true, false, false]
+        );
+        assert_eq!(
+            attention_mask(MaskPolicy::Causal, 99, 4).unwrap(),
+            vec![true, true, true, true]
+        );
+    }
+
+    #[test]
+    fn causal_normalization_never_assigns_mass_to_future_keys() {
+        let probabilities =
+            normalize_with_policy(&[1.0, 2.0, 30.0, 40.0], MaskPolicy::Causal, 1).unwrap();
+        assert_eq!(probabilities[2], 0.0);
+        assert_eq!(probabilities[3], 0.0);
+        close(probabilities.iter().sum(), 1.0);
+    }
+
+    #[test]
+    fn empty_mask_construction_fails_closed() {
+        assert_eq!(
+            attention_mask(MaskPolicy::Full, 0, 0),
+            Err(NormalizerError::EmptyInput)
         );
     }
 }
