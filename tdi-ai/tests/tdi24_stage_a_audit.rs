@@ -1,3 +1,5 @@
+#![cfg(feature = "experimental")]
+
 //! Cross-contract adversarial audit for the TDI-24 Stage-A reference surface.
 //!
 //! These tests qualify software semantics only. They do not train or evaluate a
@@ -8,17 +10,15 @@ use tdi_ai::experimental::tdi24_accounting::{
     REFERENCE_ACCOUNTING_CONTRACT, ScoreArm, pair_score_accounting, row_accounting,
 };
 use tdi_ai::experimental::tdi24_attention::{
-    MASKING_CONTRACT, NORMALIZER_CONTRACT, MaskPolicy, NormalizerError, masked_softmax,
+    MASKING_CONTRACT, MaskPolicy, NORMALIZER_CONTRACT, NormalizerError, masked_softmax,
     normalize_with_policy,
 };
 use tdi_ai::experimental::tdi24_chiral::{
-    CHANNEL_DECOMPOSITION_CONTRACT, CHIRAL_CONTRACT, CHIRAL_WIDTH,
-    ENANTIOMORPHIC_SCORE_CONTRACT, PARITY_RECOMBINATION_CONTRACT, Chiral6,
-    ChiralScoreWeights, chiral_score, tagged_enantiomorphic_scores,
+    CHANNEL_DECOMPOSITION_CONTRACT, CHIRAL_CONTRACT, CHIRAL_WIDTH, Chiral6, ChiralScoreWeights,
+    ENANTIOMORPHIC_SCORE_CONTRACT, PARITY_RECOMBINATION_CONTRACT, chiral_score,
+    tagged_enantiomorphic_scores,
 };
-use tdi_ai::experimental::tdi24_vector::{
-    VECTOR6_CONTRACT, VECTOR6_WIDTH, Vector6, vector6_score,
-};
+use tdi_ai::experimental::tdi24_vector::{VECTOR6_CONTRACT, VECTOR6_WIDTH, Vector6, vector6_score};
 
 fn vector(data: [f64; 6]) -> Vector6 {
     Vector6::new(data).expect("finite V6 fixture")
@@ -70,16 +70,12 @@ fn reflection_swaps_enantiomorphic_branches_with_unchanged_contracts() {
     let key = chiral([-4.0, 1.0, 2.0, 3.0, 0.25, -0.75]);
     let weights = ChiralScoreWeights::new(0.7, -0.2, 1.3).unwrap();
     let base = tagged_enantiomorphic_scores(query, key, weights).unwrap();
-    let reflected =
-        tagged_enantiomorphic_scores(query.mirror(), key.mirror(), weights).unwrap();
+    let reflected = tagged_enantiomorphic_scores(query.mirror(), key.mirror(), weights).unwrap();
 
     close(reflected.right, base.left);
     close(reflected.left, base.right);
     assert_eq!(base.algebra_contract, CHIRAL_CONTRACT);
-    assert_eq!(
-        base.decomposition_contract,
-        CHANNEL_DECOMPOSITION_CONTRACT
-    );
+    assert_eq!(base.decomposition_contract, CHANNEL_DECOMPOSITION_CONTRACT);
     assert_eq!(base.pair_contract, ENANTIOMORPHIC_SCORE_CONTRACT);
 }
 
@@ -131,12 +127,14 @@ fn malformed_or_hidden_nonfinite_values_fail_closed_across_both_arms() {
 
     let huge = [f64::MAX, 0.0, 0.0, 0.0, 0.0, 0.0];
     assert!(vector6_score(vector(huge), vector(huge)).is_err());
-    assert!(chiral_score(
-        chiral(huge),
-        chiral(huge),
-        ChiralScoreWeights::new(1.0, 0.0, 0.0).unwrap(),
-    )
-    .is_err());
+    assert!(
+        chiral_score(
+            chiral(huge),
+            chiral(huge),
+            ChiralScoreWeights::new(1.0, 0.0, 0.0).unwrap(),
+        )
+        .is_err()
+    );
 
     assert_eq!(
         masked_softmax(&[1.0, f64::NAN], &[true, false]),
