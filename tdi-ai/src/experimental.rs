@@ -148,3 +148,5 @@ pub mod tdi2_intuition_transfer_eval;
 pub mod tdi2_intuition_transfer_tasks;
 #[path = "tdi2_intuition_weight.rs"]
 pub mod tdi2_intuition_weight;
+#[path = "tdi2_template_induction.rs"]
+pub mod tdi2_template_induction;
