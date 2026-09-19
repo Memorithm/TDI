@@ -89,6 +89,41 @@ fn dense_attention_component_ceiling_is_reported_without_total_budget_claim() {
     assert_eq!(identity.unallocated_component_bits, 4);
 }
 
+
+#[test]
+fn four_fact_episode_ceiling_uses_only_needed_attention_history_capacity() {
+    let binary = AttentionConfig {
+        mode: AttentionMode::BinaryQk,
+        history_capacity: 4,
+        payload_bits: 4,
+        max_events: 128,
+    };
+    let dense = AttentionConfig {
+        mode: AttentionMode::DenseQk,
+        ..binary
+    };
+
+    let binary_sparse = build_declared_component_envelope(binary, 456).unwrap();
+    let binary_identity = build_declared_component_envelope(binary, 584).unwrap();
+    assert_eq!(binary_sparse.attention_declared_component_bits, 16_960);
+    assert_eq!(binary_sparse.boolean_slots, 126);
+    assert_eq!(binary_sparse.boolean_declared_component_bits, 16_773);
+    assert_eq!(binary_sparse.unallocated_component_bits, 187);
+    assert_eq!(binary_identity.boolean_slots, 126);
+    assert_eq!(binary_identity.boolean_declared_component_bits, 16_901);
+    assert_eq!(binary_identity.unallocated_component_bits, 59);
+
+    let dense_sparse = build_declared_component_envelope(dense, 456).unwrap();
+    let dense_identity = build_declared_component_envelope(dense, 584).unwrap();
+    assert_eq!(dense_sparse.attention_declared_component_bits, 33_088);
+    assert_eq!(dense_sparse.boolean_slots, 250);
+    assert_eq!(dense_sparse.boolean_declared_component_bits, 32_831);
+    assert_eq!(dense_sparse.unallocated_component_bits, 257);
+    assert_eq!(dense_identity.boolean_slots, 250);
+    assert_eq!(dense_identity.boolean_declared_component_bits, 32_959);
+    assert_eq!(dense_identity.unallocated_component_bits, 129);
+}
+
 #[test]
 fn oversized_address_program_fails_before_fabricating_a_match() {
     let ceiling = 67_648;
