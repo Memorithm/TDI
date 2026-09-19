@@ -26,9 +26,14 @@ fn config() -> RelationalConfig {
 fn run_episode(
     mut binder: RelationalBinder,
     episode: &RelationalEpisode,
-) -> (tdi_ai::experimental::tdi21_relational_binding::RelationalRead, RelationalBinder) {
+) -> (
+    tdi_ai::experimental::tdi21_relational_binding::RelationalRead,
+    RelationalBinder,
+) {
     for fact in &episode.facts {
-        binder.bind(fact.relation, fact.subject, fact.object).unwrap();
+        binder
+            .bind(fact.relation, fact.subject, fact.object)
+            .unwrap();
     }
     let answer = binder
         .compose_path(&episode.query.relations, episode.query.subject)
