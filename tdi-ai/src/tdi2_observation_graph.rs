@@ -4,6 +4,7 @@
 //! template roles and must not be reused as privileged cross-episode features.
 
 use super::tdi2_intuition::BooleanState;
+use super::tdi2_template_induction::EpisodeId;
 
 /// Concrete entity identifier local to one observation graph.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -113,6 +114,7 @@ impl ObservedRelation {
 /// Canonical concrete relational observation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ObservationGraph {
+    episode: EpisodeId,
     entities: Vec<ObservedEntity>,
     relations: Vec<ObservedRelation>,
 }
@@ -131,6 +133,7 @@ pub enum ObservationGraphError {
 impl ObservationGraph {
     /// Validate and canonicalize one concrete relational observation.
     pub fn new(
+        episode: EpisodeId,
         mut entities: Vec<ObservedEntity>,
         mut relations: Vec<ObservedRelation>,
     ) -> Result<Self, ObservationGraphError> {
@@ -159,9 +162,16 @@ impl ObservationGraph {
             return Err(ObservationGraphError::DuplicateRelation);
         }
         Ok(Self {
+            episode,
             entities,
             relations,
         })
+    }
+
+    /// Episode whose frame observations this graph describes.
+    #[must_use]
+    pub const fn episode(&self) -> EpisodeId {
+        self.episode
     }
 
     /// Canonically ordered entities.
@@ -202,6 +212,7 @@ mod tests {
         ObservedRelation, ObservedRelationId,
     };
     use crate::experimental::tdi2_intuition::{BooleanState, PredicateId};
+    use crate::experimental::tdi2_template_induction::EpisodeId;
 
     fn entity(id: u32, predicate: u32) -> ObservedEntity {
         ObservedEntity::new(
@@ -213,6 +224,7 @@ mod tests {
     #[test]
     fn graph_canonicalizes_entities_and_relations_without_role_labels() {
         let graph = ObservationGraph::new(
+            EpisodeId::new(7),
             vec![entity(20, 2), entity(10, 1)],
             vec![ObservedRelation::new(
                 ObservedEntityId::new(10),
@@ -221,6 +233,7 @@ mod tests {
             )],
         )
         .expect("graph");
+        assert_eq!(graph.episode(), EpisodeId::new(7));
         assert_eq!(graph.entities()[0].id(), ObservedEntityId::new(10));
         assert_eq!(graph.relations()[0].relation(), ObservedRelationId::new(7));
     }
@@ -228,6 +241,7 @@ mod tests {
     #[test]
     fn graph_rejects_unknown_relation_endpoint() {
         let result = ObservationGraph::new(
+            EpisodeId::new(1),
             vec![entity(1, 10)],
             vec![ObservedRelation::new(
                 ObservedEntityId::new(1),

@@ -78,6 +78,10 @@ pub mod tdi24_chiral;
 pub mod tdi24_vector;
 #[path = "tdi25_torsor_chiral.rs"]
 pub mod tdi25_torsor_chiral;
+#[path = "tdi2_induction_input.rs"]
+pub mod tdi2_induction_input;
+#[path = "tdi2_induction_split.rs"]
+pub mod tdi2_induction_split;
 #[path = "tdi2_intuition.rs"]
 pub mod tdi2_intuition;
 #[path = "tdi2_intuition_ablations.rs"]
@@ -150,5 +154,7 @@ pub mod tdi2_intuition_transfer_tasks;
 pub mod tdi2_intuition_weight;
 #[path = "tdi2_observation_graph.rs"]
 pub mod tdi2_observation_graph;
+#[path = "tdi2_predicate_candidates.rs"]
+pub mod tdi2_predicate_candidates;
 #[path = "tdi2_template_induction.rs"]
 pub mod tdi2_template_induction;
