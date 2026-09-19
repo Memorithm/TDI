@@ -566,6 +566,100 @@ class OperationalIntegrationTests(unittest.TestCase):
         self.assertEqual(1, sum(event["kind"] == "completed" for event in events))
         self.assertEqual(len(results), sum(event["kind"] == "result-verified" for event in events))
 
+    def test_concurrent_different_terminal_snapshots_reject_loser(self):
+        spec = prepare_fixture(self.client, self.worker, trials=1)
+        client = self.client
+        with EngineStore(self.catalogue) as store:
+            campaign = runtime.submit(client, store, spec, {})
+            workflow = store.get(campaign)["workflow"]
+            store.transition(campaign, "admitted", "executing")
+        client.request("POST", f"/api/v1/workflows/{workflow}/executions")
+
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            snapshot = client.request("GET", f"/api/v1/workflows/{workflow}")
+            if snapshot["state"] in ("succeeded", "failed", "cancelled"):
+                break
+            time.sleep(0.02)
+        self.assertEqual("succeeded", snapshot["state"])
+
+        workflow_barrier = threading.Barrier(2)
+        publication_barrier = threading.Barrier(2)
+
+        class ConcurrentTerminalReads:
+            endpoint = client.endpoint
+
+            def __init__(self, drift):
+                self.drift = drift
+                self.publication_waited = False
+
+            def request(self, method, path, **kwargs):
+                response = client.request(method, path, **kwargs)
+                if method == "GET" and path == f"/api/v1/workflows/{workflow}":
+                    response = copy.deepcopy(response)
+                    if self.drift:
+                        extra = copy.deepcopy(response["steps"][0]["attempts"][0])
+                        extra["id"] = "synthetic-failed-attempt"
+                        extra["state"] = "failed"
+                        response["steps"][0]["attempts"].append(extra)
+                    workflow_barrier.wait(timeout=10)
+                elif (method == "GET" and path.endswith("/publication")
+                      and not self.publication_waited):
+                    self.publication_waited = True
+                    # Both refreshes have passed the pre-collection terminal
+                    # recheck before either can reach the terminal CAS loop.
+                    publication_barrier.wait(timeout=10)
+                return response
+
+            def download(self, *args, **kwargs):
+                return client.download(*args, **kwargs)
+
+        outcomes, failures = [], []
+        open_barrier = threading.Barrier(2)
+
+        def reconcile(drift):
+            worker_store = None
+            try:
+                deadline = time.monotonic() + 5
+                while worker_store is None:
+                    try:
+                        worker_store = EngineStore(self.catalogue)
+                    except BlockingIOError:
+                        if time.monotonic() >= deadline:
+                            raise
+                        time.sleep(0.01)
+                with worker_store:
+                    open_barrier.wait(timeout=10)
+                    outcomes.append(runtime.refresh(
+                        ConcurrentTerminalReads(drift), worker_store, campaign
+                    ))
+            except BaseException as error:
+                failures.append(error)
+
+        threads = [
+            threading.Thread(target=reconcile, args=(False,), daemon=True),
+            threading.Thread(target=reconcile, args=(True,), daemon=True),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=20)
+            self.assertFalse(thread.is_alive(), "concurrent drift refresh did not finish")
+
+        self.assertEqual(1, len(outcomes))
+        self.assertEqual("completed", outcomes[0]["phase"])
+        self.assertEqual(1, len(failures))
+        self.assertIsInstance(failures[0], durable.ContractError)
+        self.assertIn(
+            "terminal workflow snapshot changed after authoritative commit",
+            str(failures[0]),
+        )
+        with EngineStore(self.catalogue) as store:
+            committed = store.get(campaign)
+            events = store.events(campaign, limit=200)
+        self.assertEqual("completed", committed["phase"])
+        self.assertEqual(1, sum(event["kind"] == "completed" for event in events))
+
     def test_lost_execution_response_reconciles_without_redispatch(self):
         spec = prepare_fixture(self.client, self.worker, trials=1)
         client = self.client
