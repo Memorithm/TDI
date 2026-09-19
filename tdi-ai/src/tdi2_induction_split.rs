@@ -71,6 +71,18 @@ impl EpisodePopulation {
         self.count
     }
 
+    /// Whether an episode belongs to this exact frozen non-final population.
+    #[must_use]
+    pub fn contains(self, episode: EpisodeId) -> bool {
+        let Ok(count) = u64::try_from(self.count) else {
+            return false;
+        };
+        let Some(end_exclusive) = self.start.checked_add(count) else {
+            return false;
+        };
+        episode.raw() >= self.start && episode.raw() < end_exclusive
+    }
+
     /// Materialize deterministic episode ids without hidden RNG state.
     pub fn episode_ids(self) -> Result<Vec<EpisodeId>, PopulationError> {
         let count = u64::try_from(self.count).map_err(|_| PopulationError::CountOverflow)?;
@@ -100,6 +112,7 @@ mod tests {
     use super::{
         DEVELOPMENT_START, DOMAIN_EPISODES, InductionDomain, VALIDATION_START, frozen_population,
     };
+    use crate::experimental::tdi2_template_induction::EpisodeId;
 
     #[test]
     fn frozen_populations_are_disjoint_and_equal_sized() {
@@ -112,6 +125,11 @@ mod tests {
         assert_eq!(development.count(), DOMAIN_EPISODES);
         assert_eq!(validation.count(), DOMAIN_EPISODES);
         assert!(development.start() + development.count() as u64 <= validation.start());
+        assert!(development.contains(EpisodeId::new(DEVELOPMENT_START)));
+        assert!(development.contains(EpisodeId::new(
+            DEVELOPMENT_START + DOMAIN_EPISODES as u64 - 1
+        )));
+        assert!(!development.contains(EpisodeId::new(VALIDATION_START)));
     }
 
     #[test]

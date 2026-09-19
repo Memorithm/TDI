@@ -4,12 +4,14 @@
 //! cases. The batch contains observed episodes and graphs only; expected labels,
 //! expected template identities and expected role mappings have no field here.
 
+use super::tdi2_induction_split::{InductionDomain, frozen_population};
 use super::tdi2_observation_graph::ObservationGraph;
 use super::tdi2_template_induction::{EpisodeId, ExperienceEpisode};
 
 /// Observation-only batch passed into template induction.
 #[derive(Clone, Debug, PartialEq)]
 pub struct InductionBatch {
+    domain: InductionDomain,
     episodes: Vec<ExperienceEpisode>,
     graphs: Vec<ObservationGraph>,
 }
@@ -23,11 +25,22 @@ pub enum InductionInputError {
     MismatchedCardinality,
     /// Repeating one episode would silently overweight it.
     DuplicateEpisode { episode: EpisodeId },
+    /// An episode falls outside the selected frozen non-final population.
+    EpisodeOutsidePopulation {
+        domain: InductionDomain,
+        episode: EpisodeId,
+    },
+    /// A relational graph is bound to a different episode than its paired frames.
+    GraphEpisodeMismatch {
+        episode: EpisodeId,
+        graph_episode: EpisodeId,
+    },
 }
 
 impl InductionBatch {
     /// Construct a validated observation-only induction batch.
     pub fn new(
+        domain: InductionDomain,
         mut episodes: Vec<ExperienceEpisode>,
         graphs: Vec<ObservationGraph>,
     ) -> Result<Self, InductionInputError> {
@@ -36,6 +49,23 @@ impl InductionBatch {
         }
         if episodes.len() != graphs.len() {
             return Err(InductionInputError::MismatchedCardinality);
+        }
+        let population = frozen_population(domain);
+        for episode in &episodes {
+            if !population.contains(episode.id()) {
+                return Err(InductionInputError::EpisodeOutsidePopulation {
+                    domain,
+                    episode: episode.id(),
+                });
+            }
+        }
+        for (episode, graph) in episodes.iter().zip(&graphs) {
+            if graph.episode() != episode.id() {
+                return Err(InductionInputError::GraphEpisodeMismatch {
+                    episode: episode.id(),
+                    graph_episode: graph.episode(),
+                });
+            }
         }
         let mut ids = episodes
             .iter()
@@ -48,10 +78,18 @@ impl InductionBatch {
         {
             return Err(InductionInputError::DuplicateEpisode { episode });
         }
-        // Preserve caller-declared episode/graph pairing while making clear that
-        // the batch itself owns the observable material passed to inductors.
         episodes.shrink_to_fit();
-        Ok(Self { episodes, graphs })
+        Ok(Self {
+            domain,
+            episodes,
+            graphs,
+        })
+    }
+
+    /// Frozen non-final population represented by this batch.
+    #[must_use]
+    pub const fn domain(&self) -> InductionDomain {
+        self.domain
     }
 
     /// Observed episodes. There is no target-label accessor.
@@ -102,6 +140,20 @@ impl core::fmt::Display for InductionInputError {
                     episode.raw()
                 )
             }
+            Self::EpisodeOutsidePopulation { domain, episode } => write!(
+                formatter,
+                "episode {} is outside the frozen {domain:?} population",
+                episode.raw()
+            ),
+            Self::GraphEpisodeMismatch {
+                episode,
+                graph_episode,
+            } => write!(
+                formatter,
+                "episode {} is paired with graph for episode {}",
+                episode.raw(),
+                graph_episode.raw()
+            ),
         }
     }
 }
@@ -111,6 +163,9 @@ impl std::error::Error for InductionInputError {}
 #[cfg(test)]
 mod tests {
     use super::{InductionBatch, InductionInputError};
+    use crate::experimental::tdi2_induction_split::{
+        DEVELOPMENT_START, InductionDomain, VALIDATION_START,
+    };
     use crate::experimental::tdi2_intuition::{BooleanState, NumericState};
     use crate::experimental::tdi2_observation_graph::ObservationGraph;
     use crate::experimental::tdi2_template_induction::{
@@ -129,25 +184,71 @@ mod tests {
         .expect("episode")
     }
 
-    fn graph() -> ObservationGraph {
-        ObservationGraph::new(Vec::new(), Vec::new()).expect("empty graph is observable")
+    fn graph(episode: u64) -> ObservationGraph {
+        ObservationGraph::new(EpisodeId::new(episode), Vec::new(), Vec::new())
+            .expect("empty graph is observable")
     }
 
     #[test]
-    fn batch_surface_contains_only_observations() {
-        let batch = InductionBatch::new(vec![episode(1), episode(2)], vec![graph(), graph()])
-            .expect("batch");
+    fn batch_surface_contains_only_bound_observations() {
+        let first = DEVELOPMENT_START;
+        let second = DEVELOPMENT_START + 1;
+        let batch = InductionBatch::new(
+            InductionDomain::Development,
+            vec![episode(first), episode(second)],
+            vec![graph(first), graph(second)],
+        )
+        .expect("batch");
+        assert_eq!(batch.domain(), InductionDomain::Development);
         assert_eq!(batch.len(), 2);
-        assert_eq!(batch.episodes()[0].id(), EpisodeId::new(1));
+        assert_eq!(batch.episodes()[0].id(), EpisodeId::new(first));
+        assert_eq!(batch.graphs()[0].episode(), EpisodeId::new(first));
         assert!(batch.graphs()[0].relations().is_empty());
     }
 
     #[test]
-    fn duplicate_episode_cannot_gain_hidden_weight() {
+    fn swapped_graphs_are_rejected() {
+        let first = DEVELOPMENT_START;
+        let second = DEVELOPMENT_START + 1;
         assert_eq!(
-            InductionBatch::new(vec![episode(3), episode(3)], vec![graph(), graph()]),
+            InductionBatch::new(
+                InductionDomain::Development,
+                vec![episode(first), episode(second)],
+                vec![graph(second), graph(first)],
+            ),
+            Err(InductionInputError::GraphEpisodeMismatch {
+                episode: EpisodeId::new(first),
+                graph_episode: EpisodeId::new(second),
+            })
+        );
+    }
+
+    #[test]
+    fn mixed_population_batch_is_rejected() {
+        assert_eq!(
+            InductionBatch::new(
+                InductionDomain::Development,
+                vec![episode(DEVELOPMENT_START), episode(VALIDATION_START)],
+                vec![graph(DEVELOPMENT_START), graph(VALIDATION_START)],
+            ),
+            Err(InductionInputError::EpisodeOutsidePopulation {
+                domain: InductionDomain::Development,
+                episode: EpisodeId::new(VALIDATION_START),
+            })
+        );
+    }
+
+    #[test]
+    fn duplicate_episode_cannot_gain_hidden_weight() {
+        let id = DEVELOPMENT_START;
+        assert_eq!(
+            InductionBatch::new(
+                InductionDomain::Development,
+                vec![episode(id), episode(id)],
+                vec![graph(id), graph(id)],
+            ),
             Err(InductionInputError::DuplicateEpisode {
-                episode: EpisodeId::new(3)
+                episode: EpisodeId::new(id)
             })
         );
     }
