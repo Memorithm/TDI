@@ -14,8 +14,8 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | 04 | Carrier/accounting equivalence | **landed** in #553; explicit score-carrier accounting plus stored T6 reference and query-position geometry |
 | 05 | Score-scale contract | **landed** in #554; one finite positive divisor applied identically to T6/C6/G6 |
 | 06 | Torsor invariant bridge tests | **landed** in #555; observe upstream invariants before/after transport and verify TDI-25 score invariance |
-| 07 | Chiral invariant bridge tests | **current slice**; fail-closed M²/J²/MJM and s/m/chi reflection identities through the TDI-25 adapter |
-| 08 | Shared masking/normalization reference | identical mask/invalid-row rules across arms |
+| 07 | Chiral invariant bridge tests | **landed** in #557; fail-closed M²/J²/MJM and s/m/chi reflection identities through the TDI-25 adapter |
+| 08 | Shared masking/normalization reference | **current slice**; identical mask/invalid-row rules across arms |
 | 09 | Typed comparison record | family, arm, seed, budget, contract and failure provenance |
 | 10 | Stage-A audit/freeze | adversarial review; no unresolved material semantic defect |
 
@@ -94,4 +94,4 @@ Pause the campaign when any of the following occurs:
 
 ## Progress accounting
 
-**6/50 merged** (#408, #489, #552, #553, #554, #555). Slice 07 (#557) is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**7/50 merged** (#408, #489, #552, #553, #554, #555, #557). Slice 08 is current. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
