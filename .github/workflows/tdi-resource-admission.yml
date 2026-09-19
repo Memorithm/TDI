@@ -59,4 +59,19 @@ jobs:
           TDI_DURABLE_WORKER: ${{ github.workspace }}/integration-tdi/target/debug/examples/durable_worker
           TDI_ELASTIC_BIN: ${{ github.workspace }}/integration-elastic/target/debug/elastic-cli
           TDI_ELASTIC_SOURCE_COMMIT: f5af4f3129100f4bb52d47d1adfc202347d0b098
-        run: python3 -m unittest -v scripts/test_tdi_resource_integration.py
+        run: python3 -m unittest -v scripts/test_tdi_resource_integration.py scripts/test_tdi_elastic_benchmark.py
+      - name: Compare fixed and actual Elastic admission with restart verification
+        run: |
+          python3 scripts/tdi_elastic_benchmark.py \
+            --hubd ../integration-hub/target/debug/scirust-hubd \
+            --worker target/debug/examples/durable_worker \
+            --elastic ../integration-elastic/target/debug/elastic-cli \
+            --hub-source ccdcb99a4573dbefb944af0df713101b100b5f78 \
+            --elastic-source f5af4f3129100f4bb52d47d1adfc202347d0b098 \
+            --widths 1 2 --trials 2 --repeats 2 --output elastic-admission-benchmark
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: elastic-admission-benchmark
+          path: integration-tdi/elastic-admission-benchmark
+          if-no-files-found: warn
