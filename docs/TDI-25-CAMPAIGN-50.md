@@ -12,8 +12,8 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | 02 | Contract/version provenance pin | **landed** in #489; exact TDI-22/TDI-24 semantic contract IDs recorded, validated and rejected on mismatch |
 | 03 | G6 generic six-component control | **landed** in #552; versioned finite 6D Euclidean control with matched width and fail-closed arithmetic |
 | 04 | Carrier/accounting equivalence | **landed** in #553; explicit score-carrier accounting plus stored T6 reference and query-position geometry |
-| 05 | Score-scale contract | **current slice**; one finite positive divisor applied identically to T6/C6/G6; matched default is sqrt(6) |
-| 06 | Torsor invariant bridge tests | transport/factorization invariants remain valid in TDI-25 adapter |
+| 05 | Score-scale contract | **landed** in #554; one finite positive divisor applied identically to T6/C6/G6 |
+| 06 | Torsor invariant bridge tests | **current slice**; observe upstream invariants before/after transport and verify TDI-25 score invariance |
 | 07 | Chiral invariant bridge tests | mirror/parity identities remain valid in TDI-25 adapter |
 | 08 | Shared masking/normalization reference | identical mask/invalid-row rules across arms |
 | 09 | Typed comparison record | family, arm, seed, budget, contract and failure provenance |
@@ -94,4 +94,4 @@ Pause the campaign when any of the following occurs:
 
 ## Progress accounting
 
-**4/50 merged** (#408, #489, #552, #553). Slice 05 (#554) is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**5/50 merged** (#408, #489, #552, #553, #554). Slice 06 (#555) is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
