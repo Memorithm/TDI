@@ -21,6 +21,7 @@ from tdi_optuna_benchmark import verify_report
 
 PREFIX = "2026-09-18-forge-session"
 SOURCE = "a4d74690f605acfe3733e163446adf85001ab494"
+PREQUAL_SOURCE = "d7c0714267e4428f386f2661f31ab825fbe51552"
 PNG_PIXEL_SHA256 = "5401011779ee509c29c50feda6e909fe7c3e88fc37e6f40c5e4f3ff2eebf86c1"
 INCOMPLETE_EVENTS_SHA256 = "c388a2a9e2c6e36a3dc14ae5c3590f7e179f47a3b3ec77a15e7321c3338edeb2"
 INCOMPLETE_MANIFEST_SHA256 = "e54a43e6b641f0059b0a7b22bad9da0bbd3f360a189c7e9a09af233be7bdf1cb"
@@ -133,6 +134,8 @@ def verify_incomplete_evidence(directory, preliminary):
     manifest = {key: value for key, value in manifest_record.items() if key != "identity"}
     if manifest_id != INCOMPLETE_MANIFEST_ID or manifest_id != identity("tdi-optuna-manifest/v1", manifest):
         raise ValueError("incomplete manifest identity mismatch")
+    if manifest.get("tdi_source_commit") != PREQUAL_SOURCE:
+        raise ValueError("incomplete manifest has incorrect prequalification source")
     protocol = manifest.get("protocol")
     if not isinstance(protocol, dict):
         raise ValueError("incomplete manifest protocol missing")
@@ -215,6 +218,8 @@ def verify_inventory(directory, reports):
     """Check stored bytes and all completed reports; partial logs stay partial."""
     inventory = json.loads((directory / f"{PREFIX}-artifacts.json").read_text())
     preliminary = json.loads((directory / f"{PREFIX}-prequalification.json").read_text())
+    if preliminary.get("source") != PREQUAL_SOURCE:
+        raise ValueError("prequalification inventory has incorrect source")
     known = {FILES[name]: report for name, report in reports.items()}
     records = [(row, "gzip_bytes", "gzip_sha256") for row in inventory["files"]]
     records += [(row, "bytes", "sha256") for row in preliminary["completed_reports"]]
@@ -233,6 +238,9 @@ def verify_inventory(directory, reports):
                 raise ValueError("inventory report identity mismatch")
     if set(row["file"] for row in inventory["files"]) != set(FILES.values()):
         raise ValueError("incomplete primary inventory")
+    for row in preliminary["completed_reports"]:
+        if known[row["file"]]["manifest"].get("tdi_source_commit") != PREQUAL_SOURCE:
+            raise ValueError("prequalification report has incorrect source: " + row["file"])
     if len(known) != 7:
         raise ValueError("incorrect completed-report inventory")
     incomplete_summary = verify_incomplete_evidence(directory, preliminary)
