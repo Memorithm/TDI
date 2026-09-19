@@ -17,13 +17,13 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 | 07 | Deterministic normalizer reference | **landed** in #550; stable f64 masked softmax shared by V6/C6, fail-closed invalid rows |
 | 08 | Causal/non-causal masking reference | **landed** in #551; shared full/causal mask builder and identical normalization path across arms |
 | 09 | Operation + storage accounting | **landed** in #556; source-level V6/C6 arithmetic and fail-closed validity-predicate counts plus carrier and mask/normalizer logical storage accounting |
-| 10 | Stage-A audit/freeze | **current candidate**; cross-contract differential/adversarial audit, fail-closed manifest and no unresolved P0/P1 semantic defects |
+| 10 | Stage-A audit/freeze | **stacked predecessor** #559; cross-contract differential/adversarial audit and fail-closed manifest |
 
 ## Phase B — task populations and leakage discipline (PR 11–20)
 
 | Slice | Deliverable | Gate / definition of done |
 | ---: | --- | --- |
-| 11 | Reflection-discriminative generator | deterministic paired handedness tasks |
+| 11 | Reflection-discriminative generator | **current stacked slice**; deterministic exact mirrored pairs, disjoint member ids and opposite handedness oracle labels |
 | 12 | Reflection-nuisance generator | mirrored pairs with invariant target |
 | 13 | Direction/reversal generator | ordered-relational tasks without target leakage |
 | 14 | Non-chiral negative-control generator | parity carries no target information |
