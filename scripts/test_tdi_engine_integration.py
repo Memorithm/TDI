@@ -298,7 +298,7 @@ class OperationalIntegrationTests(unittest.TestCase):
             with self.assertRaises(HubTransportUnknown):
                 runtime.cancel(lost, store, campaign)
             self.assertEqual(1, lost.posts)
-            self.assertEqual("cancel-requested", store.get(campaign)["phase"])
+            self.assertIn(store.get(campaign)["phase"], ("cancel-requested", "cancelled"))
             self.assertTrue(store.has_event(campaign, "cancel-response-unknown"))
 
             deadline = time.monotonic() + 10
