@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "qualified_runs": 3000,
+  "qualified_evaluations": 142080,
+  "transport_pairs_equal": 60,
+  "cross_budget_prefixes_equal": 1440,
+  "prequalification_trajectories_equal": 1440,
+  "files": [
+    {
+      "role": "transport",
+      "file": "2026-09-18-forge-session-transport.json.gz",
+      "gzip_sha256": "cb30c89cca403027223bcd176b1677c606d111c7ae4d9a7b8720b9dbc1aa3492",
+      "gzip_bytes": 92987,
+      "report_identity": "29c0841b1b506dadf4dbe31fb27ee2daf9cf69cfcd1edf639ac697aec670c36d",
+      "source": "a4d74690f605acfe3733e163446adf85001ab494",
+      "runs": 120,
+      "evaluations": 3840
+    },
+    {
+      "role": "quality32",
+      "file": "2026-09-18-forge-session-quality32.json.gz",
+      "gzip_sha256": "4b88d51ccf902f44bddd894fe4df751c8967e07bc155e79f99a3585f3f96d9dd",
+      "gzip_bytes": 979867,
+      "report_identity": "6b1e0bcd1ba06226720a213674570ffd7f6f758ea0998155138e454fa960bcfc",
+      "source": "a4d74690f605acfe3733e163446adf85001ab494",
+      "runs": 1440,
+      "evaluations": 46080
+    },
+    {
+      "role": "quality64",
+      "file": "2026-09-18-forge-session-quality64.json.gz",
+      "gzip_sha256": "830f8cf0803599594832efe01141136ee8704043ff2f5210b2c25f9f442b11a3",
+      "gzip_bytes": 1941709,
+      "report_identity": "702ba24b464a50d199d59b22438e6a9b9a0cf20e7456010107c9d8ccfd9c6f6f",
+      "source": "a4d74690f605acfe3733e163446adf85001ab494",
+      "runs": 1440,
+      "evaluations": 92160
+    },
+    {
+      "role": "preliminary32",
+      "file": "2026-09-18-forge-session-prequalification32.json.gz",
+      "gzip_sha256": "9a9415ee4b3dba1856396f5a929326aecb70e1f4da565e00bde636987c3acb1c",
+      "gzip_bytes": 976106,
+      "report_identity": "b66ba279db3995214ae35bf3f1407b69e07d089505536cb03927e552d49f7744",
+      "source": "d7c0714267e4428f386f2661f31ab825fbe51552",
+      "runs": 1440,
+      "evaluations": 46080
+    }
+  ]
+}
