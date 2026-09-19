@@ -416,6 +416,119 @@ class OperationalIntegrationTests(unittest.TestCase):
             self.assertEqual("admitted", runtime.attach(client, store, campaign, lost.created["id"], {})["phase"])
             self.assertEqual("completed", runtime.execute(client, store, campaign)["phase"])
 
+    def test_duplicate_terminal_refresh_is_read_only(self):
+        spec = prepare_fixture(self.client, self.worker, trials=1)
+        client = self.client
+
+        class CountingReads:
+            endpoint = client.endpoint
+            publication_gets = 0
+            downloads = 0
+
+            def request(self, method, path, **kwargs):
+                if method == "GET" and path.endswith("/publication"):
+                    self.publication_gets += 1
+                return client.request(method, path, **kwargs)
+
+            def download(self, *args, **kwargs):
+                self.downloads += 1
+                return client.download(*args, **kwargs)
+
+        counting = CountingReads()
+        with EngineStore(self.catalogue) as store:
+            campaign = runtime.submit(client, store, spec, {})
+            completed = runtime.execute(counting, store, campaign)
+            self.assertEqual("completed", completed["phase"])
+            before_events = store.events(campaign, limit=200)
+            before_results = store.results(campaign)
+            before_publication_gets = counting.publication_gets
+            before_downloads = counting.downloads
+            cache_rows = store.db.execute("SELECT key FROM cache ORDER BY key").fetchall()
+            self.assertGreater(len(cache_rows), 0)
+            with store.db:
+                store.db.execute("DELETE FROM cache WHERE key=?", (cache_rows[0][0],))
+            missing_cache_count = store.db.execute("SELECT COUNT(*) FROM cache").fetchone()[0]
+
+            first = runtime.refresh(counting, store, campaign)
+            second = runtime.refresh(counting, store, campaign)
+
+            self.assertEqual(completed, first)
+            self.assertEqual(first, second)
+            self.assertEqual(before_events, store.events(campaign, limit=200))
+            self.assertEqual(before_results, store.results(campaign))
+            self.assertEqual(before_publication_gets, counting.publication_gets)
+            self.assertEqual(before_downloads, counting.downloads)
+            self.assertEqual(missing_cache_count + 1, store.db.execute("SELECT COUNT(*) FROM cache").fetchone()[0])
+            self.assertEqual(1, sum(event["kind"] == "completed" for event in before_events))
+
+    def test_concurrent_duplicate_terminal_refresh_commits_once(self):
+        spec = prepare_fixture(self.client, self.worker, trials=1)
+        client = self.client
+        with EngineStore(self.catalogue) as store:
+            campaign = runtime.submit(client, store, spec, {})
+            workflow = store.get(campaign)["workflow"]
+            store.transition(campaign, "admitted", "executing")
+        client.request("POST", f"/api/v1/workflows/{workflow}/executions")
+
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            snapshot = client.request("GET", f"/api/v1/workflows/{workflow}")
+            if snapshot["state"] in ("succeeded", "failed", "cancelled"):
+                break
+            time.sleep(0.02)
+        self.assertEqual("succeeded", snapshot["state"])
+
+        barrier = threading.Barrier(2)
+
+        class ConcurrentTerminalReads:
+            endpoint = client.endpoint
+
+            def request(self, method, path, **kwargs):
+                response = client.request(method, path, **kwargs)
+                if method == "GET" and path == f"/api/v1/workflows/{workflow}":
+                    barrier.wait(timeout=10)
+                return response
+
+            def download(self, *args, **kwargs):
+                return client.download(*args, **kwargs)
+
+        gated = ConcurrentTerminalReads()
+        outcomes, failures = [], []
+
+        open_barrier = threading.Barrier(2)
+
+        def reconcile():
+            worker_store = None
+            try:
+                deadline = time.monotonic() + 5
+                while worker_store is None:
+                    try:
+                        worker_store = EngineStore(self.catalogue)
+                    except BlockingIOError:
+                        if time.monotonic() >= deadline:
+                            raise
+                        time.sleep(0.01)
+                with worker_store:
+                    open_barrier.wait(timeout=10)
+                    outcomes.append(runtime.refresh(gated, worker_store, campaign))
+            except BaseException as error:
+                failures.append(error)
+
+        threads = [threading.Thread(target=reconcile, daemon=True) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=20)
+            self.assertFalse(thread.is_alive(), "concurrent refresh did not finish")
+
+        self.assertEqual([], failures)
+        self.assertEqual(["completed", "completed"], sorted(row["phase"] for row in outcomes))
+        with EngineStore(self.catalogue) as store:
+            events = store.events(campaign, limit=200)
+            results = store.results(campaign)
+        self.assertEqual(1, sum(event["kind"] == "completed" for event in events))
+        self.assertEqual(len(results), sum(event["kind"] == "result-verified" for event in events))
+
     def test_lost_execution_response_reconciles_without_redispatch(self):
         spec = prepare_fixture(self.client, self.worker, trials=1)
         client = self.client
