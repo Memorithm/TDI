@@ -126,7 +126,9 @@ fn build_set(samples: &[AddressSample]) -> Result<AddressSet, AddressSearchError
         .map_err(|_| AddressSearchError::AllocationFailed)?;
     for sample in samples.iter().copied() {
         if u16::from(sample.input) >= limit {
-            return Err(AddressSearchError::InputOutOfRange { input: sample.input });
+            return Err(AddressSearchError::InputOutOfRange {
+                input: sample.input,
+            });
         }
         if u16::from(sample.expected) >= limit {
             return Err(AddressSearchError::ExpectedOutOfRange {
@@ -134,7 +136,9 @@ fn build_set(samples: &[AddressSample]) -> Result<AddressSet, AddressSearchError
             });
         }
         if seen.insert(sample.input, ()).is_some() {
-            return Err(AddressSearchError::DuplicateInput { input: sample.input });
+            return Err(AddressSearchError::DuplicateInput {
+                input: sample.input,
+            });
         }
         owned.push(sample);
     }
@@ -247,9 +251,7 @@ fn checked_add(target: &mut u64, amount: u64) -> Result<(), AddressSearchError> 
 fn bit_mismatches(rule: UnaryAddressRule, bit: u8, samples: &[AddressSample]) -> u64 {
     samples
         .iter()
-        .filter(|sample| {
-            rule.evaluate(sample.input) != (((sample.expected >> bit) & 1) != 0)
-        })
+        .filter(|sample| rule.evaluate(sample.input) != (((sample.expected >> bit) & 1) != 0))
         .count() as u64
 }
 
@@ -362,11 +364,13 @@ impl AddressSearchResult {
     /// Semantic bits of the canonical ANF output programs only. This excludes
     /// search traces, allocator/process memory and the B3 memory substrate.
     pub fn anf_program_semantic_bits(&self) -> Result<usize, AddressSearchError> {
-        self.to_anf_programs()?.iter().try_fold(0usize, |total, program| {
-            total
-                .checked_add(program.semantic_bits())
-                .ok_or(AddressSearchError::CounterOverflow)
-        })
+        self.to_anf_programs()?
+            .iter()
+            .try_fold(0usize, |total, program| {
+                total
+                    .checked_add(program.semantic_bits())
+                    .ok_or(AddressSearchError::CounterOverflow)
+            })
     }
 }
 
@@ -427,3 +431,5 @@ pub fn evaluate_cross_namespace_aliases(
     }
     Ok(evidence)
 }
+
+[executed on device: tarek (fa986a59-0105-42b8-b1db-7cddadcd871f)]
