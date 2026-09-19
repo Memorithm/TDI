@@ -9,5 +9,4 @@ grep -Fq 'pub const VECTOR6_CONTRACT: &str = "tdi24-matched-vector6-v1";' tdi-ai
 grep -Fq 'pub const VECTOR6_WIDTH: usize = 6;' tdi-ai/src/tdi24_vector.rs
 grep -Fq 'pub mod tdi24_vector;' tdi-ai/src/experimental.rs
 grep -Fq '| 02 | Arithmetic hardening | **landed** in #471;' docs/TDI-24-CAMPAIGN-50.md
-grep -Fq '| 03 | Matched V6 vector reference | **current slice**;' docs/TDI-24-CAMPAIGN-50.md
-grep -Fq '**2/50 merged** (#406, #471).' docs/TDI-24-CAMPAIGN-50.md
+grep -Fq '| 03 | Matched V6 vector reference | **landed** in #487;' docs/TDI-24-CAMPAIGN-50.md
