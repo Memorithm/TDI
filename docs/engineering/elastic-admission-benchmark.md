@@ -71,3 +71,20 @@ admission safety or performance under sustained competing campaigns.
 CI runs a smaller 1/2-width, two-trial, two-repetition matrix using the same
 real binaries. It asserts correctness and restart behavior, never a noisy
 speed threshold. Artifacts are retained even when the job fails.
+
+## Development measurements, 2026-09-19
+
+The initial 32-case debug execution at `559fe421a7f8522e2da6830307ce16d7b1c8b0c5`
+is preliminary: it included an extra caller-side executable hash inside the
+timed admission window. `f6ff031451095b11c3017e98ee3651360a779c47` moves this
+setup outside timing; the consumer's before/after identity checks are unchanged.
+Do not pool preliminary and corrected timing samples.
+
+Before executing corrected measurements, the planned conditions are: all three
+Rust executables built with `cargo +1.89.0 build --release --locked`; the full
+default matrix first with inherited CPU affinity, then restricted to the first
+two allowed CPUs using `taskset`. Child Hub and worker processes inherit the
+same affinity. This restricts allowed CPUs but does not isolate them from other
+host activity. Both modes run sequentially, not simultaneously. All cases and
+both conditions must be retained regardless of performance. The two-CPU case
+tests real width reduction rather than a forged capacity observation.
