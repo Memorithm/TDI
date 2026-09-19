@@ -46,6 +46,33 @@ def read_report(path):
         return verify_report(temp.name)
 
 
+def verify_inventory(directory, reports):
+    """Check stored bytes and all completed reports; partial logs stay partial."""
+    inventory = json.loads((directory / f"{PREFIX}-artifacts.json").read_text())
+    preliminary = json.loads((directory / f"{PREFIX}-prequalification.json").read_text())
+    known = {FILES[name]: report for name, report in reports.items()}
+    records = [(row, "gzip_bytes", "gzip_sha256") for row in inventory["files"]]
+    records += [(row, "bytes", "sha256") for row in preliminary["completed_reports"]]
+    records += [(row, "bytes", "sha256") for row in preliminary["incomplete_budget64"]["retained_files"]]
+    for row, size_key, hash_key in records:
+        name = row["file"]
+        if Path(name).name != name or not name.startswith(PREFIX + "-"):
+            raise ValueError("invalid inventory path")
+        raw = (directory / name).read_bytes()
+        if len(raw) != row[size_key] or hashlib.sha256(raw).hexdigest() != row[hash_key]:
+            raise ValueError("artifact bytes differ from inventory: " + name)
+        if "report_identity" in row:
+            if name not in known:
+                known[name] = read_report(directory / name)
+            if known[name]["identity"] != row["report_identity"]:
+                raise ValueError("inventory report identity mismatch")
+    if set(row["file"] for row in inventory["files"]) != set(FILES.values()):
+        raise ValueError("incomplete primary inventory")
+    if len(known) != 7 or preliminary["incomplete_budget64"]["status"] != "incomplete-no-report":
+        raise ValueError("incorrect preliminary evidence classification")
+    return len(known)
+
+
 def trajectories(report, limit=None):
     return {(run["task"], run["seed"], run["arm"]): [
         (trial["parameters"], trial["loss"], trial["best_loss"])
@@ -75,9 +102,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--directory", type=Path,
                         default=Path(__file__).resolve().parents[1] / "docs/engineering/benchmarks")
+    parser.add_argument("--verify-only", action="store_true",
+                        help="verify published evidence without rendering or writing files")
     args = parser.parse_args()
     output = args.directory
     reports = {name: read_report(output / filename) for name, filename in FILES.items()}
+    expected_profiles = {"transport": "transport-development", "quality32": "session-development",
+                         "quality64": "session-budget64", "preliminary32": "session-development"}
+    for name, profile in expected_profiles.items():
+        if reports[name]["manifest"]["protocol"]["profile"] != profile:
+            raise ValueError("report has incorrect profile: " + name)
     for name in ("transport", "quality32", "quality64"):
         if reports[name]["manifest"]["tdi_source_commit"] != SOURCE:
             raise ValueError("incorrect executed qualification source")
@@ -85,6 +119,13 @@ def main():
         raise ValueError("cross-budget first-32 trajectories differ")
     if trajectories(reports["quality32"]) != trajectories(reports["preliminary32"]):
         raise ValueError("qualification corrections changed search trajectories")
+    if args.verify_only:
+        count = verify_inventory(output, reports)
+        print(json.dumps({"verified_reports": count, "qualified_runs": 3000,
+                          "qualified_evaluations": 142080, "transport_pairs_equal": 60,
+                          "cross_budget_prefixes_equal": 1440, "prequalification_trajectories_equal": 1440,
+                          "incomplete_campaign_promoted": False}))
+        return
 
     transport = reports["transport"]
     transport_rows = []
@@ -209,6 +250,10 @@ def main():
         "To verify identities, independently recompute raw objective scores and summaries, check "
         "the 60 transport pairs and both 1,440-trajectory equivalences, and regenerate this "
         "document and figure:", "", "```bash", "python3 scripts/render-forge-session-results.py", "```", "",
+        "For read-only verification without matplotlib or output writes, use "
+        "`python3 scripts/render-forge-session-results.py --verify-only`. This also verifies "
+        "the compressed-file inventories, all seven completed reports and preservation of the "
+        "incomplete campaign as incomplete. A dedicated CI job runs this check.", "",
         "Python with matplotlib is needed only for rendering. Running this command does not "
         "run a new optimization campaign. The protocol document gives the separately pinned "
         "commands for actual execution.", "",

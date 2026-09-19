@@ -158,6 +158,8 @@ To verify identities, independently recompute raw objective scores and summaries
 python3 scripts/render-forge-session-results.py
 ```
 
+For read-only verification without matplotlib or output writes, use `python3 scripts/render-forge-session-results.py --verify-only`. This also verifies the compressed-file inventories, all seven completed reports and preservation of the incomplete campaign as incomplete. A dedicated CI job runs this check.
+
 Python with matplotlib is needed only for rendering. Running this command does not run a new optimization campaign. The protocol document gives the separately pinned commands for actual execution.
 
 ## Scope and remaining performance work
