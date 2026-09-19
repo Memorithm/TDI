@@ -1,0 +1,32 @@
+name: Forge session published evidence
+on:
+  pull_request:
+    paths:
+      - 'docs/engineering/benchmarks/2026-09-18-forge-session-*'
+      - 'scripts/render-forge-session-results.py'
+      - 'scripts/tdi_*.py'
+      - '.github/workflows/forge-session-evidence.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'docs/engineering/benchmarks/2026-09-18-forge-session-*'
+      - 'scripts/render-forge-session-results.py'
+      - 'scripts/tdi_*.py'
+      - '.github/workflows/forge-session-evidence.yml'
+permissions:
+  contents: read
+jobs:
+  published-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify raw scores, complete budgets, identities and trajectory equivalence
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 scripts/render-forge-session-results.py --verify-only
