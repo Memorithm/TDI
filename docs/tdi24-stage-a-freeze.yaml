@@ -1,0 +1,20 @@
+schema_version: 1
+programme: TDI-24
+stage: A
+status: candidate_pending_exact_head_qualification_and_merge
+contract_versions:
+  algebra: tdi24-mirror-coupled-chiral-v1
+  vector_control: tdi24-matched-vector6-v1
+  channel_decomposition: tdi24-channel-decomposition-v1
+  enantiomorphic_pair: tdi24-enantiomorphic-score-pair-v1
+  parity_recombination: tdi24-parity-recombination-v1
+  normalizer: tdi24-masked-softmax-reference-v1
+  masking: tdi24-attention-mask-reference-v1
+  accounting: tdi24-reference-accounting-v3
+authorizations:
+  training: false
+  development_evaluation: false
+  validation_evaluation: false
+  protected_or_final_access: false
+  scientific_claim: false
+  performance_claim: false
