@@ -172,6 +172,8 @@ pub mod tdi2_observation_graph;
 pub mod tdi2_pairwise_relations;
 #[path = "tdi2_predicate_candidates.rs"]
 pub mod tdi2_predicate_candidates;
+#[path = "tdi2_predicate_discovery_controls.rs"]
+pub mod tdi2_predicate_discovery_controls;
 #[path = "tdi2_template_induction.rs"]
 pub mod tdi2_template_induction;
 #[path = "tdi2_temporal_delta.rs"]
