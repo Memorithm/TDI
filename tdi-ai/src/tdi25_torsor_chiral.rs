@@ -13,7 +13,8 @@ use super::tdi22_torsor::{
     TORSOR_CONTRACT, Torsor3, TorsorError, Twist3, Vec3, factorized_pairing,
 };
 use super::tdi24_chiral::{
-    CHIRAL_CONTRACT, Chiral6, ChiralError, ChiralScoreWeights, chiral_score,
+    CHIRAL_CONTRACT, Chiral6, ChiralError, ChiralObservables, ChiralScoreWeights, chiral_score,
+    observables,
 };
 
 /// Versioned Stage-0 TDI-25 comparison contract.
@@ -49,6 +50,9 @@ pub const SCORE_SCALE_CONTRACT: &str = "tdi25-common-score-scale-v1";
 
 /// Versioned TDI-22 torsor-invariant bridge contract.
 pub const TORSOR_INVARIANT_BRIDGE_CONTRACT: &str = "tdi25-torsor-invariant-bridge-v1";
+
+/// Versioned TDI-24 chiral-invariant bridge contract.
+pub const CHIRAL_INVARIANT_BRIDGE_CONTRACT: &str = "tdi25-chiral-invariant-bridge-v1";
 
 const _GENERIC_MATCH_TORSOR: [(); TORSOR_WIDTH] = [(); GENERIC6_WIDTH];
 const _GENERIC_MATCH_CHIRAL: [(); super::tdi24_chiral::CHIRAL_WIDTH] = [(); GENERIC6_WIDTH];
@@ -223,6 +227,72 @@ pub fn transported_torsor_invariants(
     Ok((before, after))
 }
 
+/// Chiral observables before and after simultaneous mirror reflection.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ChiralInvariantSnapshot {
+    /// Original `s/m/chi` observables.
+    pub base: ChiralObservables,
+    /// Observables after `(q,k) -> (Mq,Mk)`.
+    pub reflected: ChiralObservables,
+    /// Upstream chiral algebra contract.
+    pub chiral_contract: &'static str,
+    /// TDI-25 bridge contract.
+    pub bridge_contract: &'static str,
+}
+
+/// Validate TDI-24 carrier and parity identities through the TDI-25 adapter.
+///
+/// This consumes the upstream operations directly. It does not reimplement the
+/// mirror or complex structure. Any contract drift or identity failure is a
+/// typed error and blocks later comparison slices.
+pub fn validate_chiral_invariants(
+    query: Chiral6,
+    key: Chiral6,
+) -> Result<ChiralInvariantSnapshot, Tdi25Error> {
+    validate_source_contracts()?;
+
+    if query.mirror().mirror() != query || key.mirror().mirror() != key {
+        return Err(Tdi25Error::ChiralInvariantViolation {
+            field: "mirror_squared",
+        });
+    }
+    if query.complex_structure().complex_structure() != query.negate()
+        || key.complex_structure().complex_structure() != key.negate()
+    {
+        return Err(Tdi25Error::ChiralInvariantViolation { field: "j_squared" });
+    }
+    if query.mirror().complex_structure().mirror() != query.complex_structure().negate()
+        || key.mirror().complex_structure().mirror() != key.complex_structure().negate()
+    {
+        return Err(Tdi25Error::ChiralInvariantViolation { field: "mjm" });
+    }
+
+    let base = observables(query, key).map_err(Tdi25Error::Chiral)?;
+    let reflected = observables(query.mirror(), key.mirror()).map_err(Tdi25Error::Chiral)?;
+    if reflected.direct != base.direct {
+        return Err(Tdi25Error::ChiralInvariantViolation {
+            field: "direct_even",
+        });
+    }
+    if reflected.mirrored != base.mirrored {
+        return Err(Tdi25Error::ChiralInvariantViolation {
+            field: "mirror_even",
+        });
+    }
+    if reflected.chiral != -base.chiral {
+        return Err(Tdi25Error::ChiralInvariantViolation {
+            field: "chiral_odd",
+        });
+    }
+
+    Ok(ChiralInvariantSnapshot {
+        base,
+        reflected,
+        chiral_contract: CHIRAL_CONTRACT,
+        bridge_contract: CHIRAL_INVARIANT_BRIDGE_CONTRACT,
+    })
+}
+
 /// Score the TDI-22 torsor arm through the upstream factorized pairing.
 ///
 /// The wrapper exists so later comparison machinery can depend on a TDI-25
@@ -348,6 +418,11 @@ fn finite_scalar(value: f64, field: &'static str) -> Result<f64, Tdi25Error> {
 /// Stage-0 binding/control failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tdi25Error {
+    /// A required TDI-24 mirror/parity identity failed through the bridge.
+    ChiralInvariantViolation {
+        /// Identity or parity channel that failed.
+        field: &'static str,
+    },
     /// Score normalization divisor must be finite and strictly positive.
     InvalidScoreScale,
     /// One upstream semantic contract no longer matches the frozen TDI-25 pin.
@@ -375,6 +450,9 @@ pub enum Tdi25Error {
 impl fmt::Display for Tdi25Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::ChiralInvariantViolation { field } => {
+                write!(formatter, "chiral bridge invariant failed: {field}")
+            }
             Self::InvalidScoreScale => {
                 formatter.write_str("score scale must be finite and positive")
             }
@@ -529,6 +607,18 @@ mod tests {
                 actual: "tdi24-mirror-coupled-chiral-v2",
             })
         );
+    }
+
+    #[test]
+    fn chiral_bridge_validates_upstream_carrier_and_reflection_identities() {
+        let query = c([1.0, 2.0, -3.0], [0.5, -1.5, 2.5]);
+        let key = c([-4.0, 1.0, 2.0], [3.0, 0.25, -0.75]);
+        let snapshot = validate_chiral_invariants(query, key).unwrap();
+        assert_eq!(snapshot.chiral_contract, CHIRAL_CONTRACT);
+        assert_eq!(snapshot.bridge_contract, CHIRAL_INVARIANT_BRIDGE_CONTRACT);
+        close(snapshot.reflected.direct, snapshot.base.direct);
+        close(snapshot.reflected.mirrored, snapshot.base.mirrored);
+        close(snapshot.reflected.chiral, -snapshot.base.chiral);
     }
 
     #[test]
