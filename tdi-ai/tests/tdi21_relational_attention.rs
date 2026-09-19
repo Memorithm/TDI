@@ -1,8 +1,6 @@
 #![cfg(feature = "experimental")]
 
-use tdi_ai::experimental::tdi21_attention::{
-    AttentionConfig, AttentionMode,
-};
+use tdi_ai::experimental::tdi21_attention::{AttentionConfig, AttentionMode};
 use tdi_ai::experimental::tdi21_relational_attention::{
     RelationalAttentionConfig, RelationalAttentionError, RelationalAttentionReference,
     evaluate_relational_attention_episode,
@@ -26,7 +24,10 @@ fn config(mode: AttentionMode, history_capacity: usize) -> RelationalAttentionCo
     }
 }
 
-fn assert_episode(mode: AttentionMode, episode: &tdi_ai::experimental::tdi21_relational_tasks::RelationalEpisode) {
+fn assert_episode(
+    mode: AttentionMode,
+    episode: &tdi_ai::experimental::tdi21_relational_tasks::RelationalEpisode,
+) {
     let outcome = evaluate_relational_attention_episode(config(mode, 16), episode).unwrap();
     assert!(outcome.correct, "mode={mode:?};case={}", episode.case_id);
     assert_eq!(outcome.observed, episode.expected());
@@ -75,7 +76,10 @@ fn distractors_increase_attention_scan_work_even_when_the_answer_is_unchanged() 
     let clean = &development.episodes()[1];
     let distracted = &development.episodes()[3];
 
-    assert_eq!(clean.query.relations.len(), distracted.query.relations.len());
+    assert_eq!(
+        clean.query.relations.len(),
+        distracted.query.relations.len()
+    );
     assert_eq!(clean.expected(), distracted.expected());
     assert!(distracted.facts.len() > clean.facts.len());
 
@@ -147,7 +151,10 @@ fn attention_footprints_are_explicit_and_not_claimed_matched_to_boolean_memory()
     let dense_fp = dense.footprint();
     let binary_fp = binary.footprint();
     assert!(dense_fp.history_component_bits > binary_fp.history_component_bits);
-    assert_eq!(dense_fp.score_component_bits, binary_fp.score_component_bits);
+    assert_eq!(
+        dense_fp.score_component_bits,
+        binary_fp.score_component_bits
+    );
     assert!(dense_fp.history_component_bits > 0);
     assert!(binary_fp.history_component_bits > 0);
 }
