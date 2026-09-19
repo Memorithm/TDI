@@ -37,7 +37,9 @@ sha256sum Cargo.lock Cargo.toml tdi-ai/Cargo.toml \
   tdi-ai/src/tdi21_relational_address_search.rs \
   tdi-ai/src/tdi21_relational_learned.rs \
   tdi-ai/tests/tdi21_relational_address_search.rs \
-  tdi-ai/tests/tdi21_relational_learned.rs
+  tdi-ai/tests/tdi21_relational_learned.rs \
+  tdi-ai/src/tdi21_relational_attention.rs \
+  tdi-ai/tests/tdi21_relational_attention.rs
 cargo test --locked -p tdi-ai --features experimental --test tdi21_audit_regressions
 cargo test --locked -p tdi-ai --features experimental --test tdi21_stream_contract
 cargo test --locked -p tdi-ai --features experimental --test tdi21_memory_tradeoffs -- --nocapture
@@ -56,6 +58,7 @@ cargo test --locked -p tdi-ai --features experimental --test tdi21_relational_an
 cargo test --locked -p tdi-ai --features experimental --test tdi21_relational_anf_tasks
 cargo test --locked -p tdi-ai --features experimental --test tdi21_relational_address_search
 cargo test --locked -p tdi-ai --features experimental --test tdi21_relational_learned
+cargo test --locked -p tdi-ai --features experimental --test tdi21_relational_attention
 cargo test --locked -p tdi-ai --features experimental --lib experimental::tdi21_attention
 cargo test --locked --release -p tdi-ai --features experimental --test tdi21_audit_regressions
 cargo test --locked --release -p tdi-ai --features experimental --test tdi21_stream_contract
@@ -75,6 +78,7 @@ cargo test --locked --release -p tdi-ai --features experimental --test tdi21_rel
 cargo test --locked --release -p tdi-ai --features experimental --test tdi21_relational_anf_tasks
 cargo test --locked --release -p tdi-ai --features experimental --test tdi21_relational_address_search
 cargo test --locked --release -p tdi-ai --features experimental --test tdi21_relational_learned
+cargo test --locked --release -p tdi-ai --features experimental --test tdi21_relational_attention
 cargo test --locked --release -p tdi-ai --features experimental --lib experimental::tdi21_attention
 scratch="$(mktemp -d)"
 trap 'rm -rf -- "$scratch"' EXIT
