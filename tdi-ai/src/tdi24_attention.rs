@@ -50,7 +50,11 @@ pub fn masked_softmax(logits: &[f64], mask: &[bool]) -> Result<Vec<f64>, Normali
     let mut sum = 0.0;
     for (index, (&logit, &keep)) in logits.iter().zip(mask).enumerate() {
         if keep {
-            let value = (logit - maximum).exp();
+            let shifted = logit - maximum;
+            if !shifted.is_finite() {
+                return Err(NormalizerError::NonFiniteDerived);
+            }
+            let value = shifted.exp();
             if !value.is_finite() {
                 return Err(NormalizerError::NonFiniteDerived);
             }
@@ -117,6 +121,10 @@ mod tests {
         assert_eq!(
             masked_softmax(&[f64::NAN], &[true]),
             Err(NormalizerError::NonFiniteLogit)
+        );
+        assert_eq!(
+            masked_softmax(&[-f64::MAX, f64::MAX], &[true, true]),
+            Err(NormalizerError::NonFiniteDerived)
         );
     }
 }
