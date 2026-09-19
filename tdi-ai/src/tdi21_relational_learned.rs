@@ -6,6 +6,7 @@
 //! identities; that limitation is explicit and retained in controls.
 
 use super::tdi21::{BooleanState, MemoryRead};
+use super::tdi21_anf_synthesis::AnfProgram;
 use super::tdi21_relational_address_search::{
     AddressSearchResult, RELATIONAL_ADDRESS_BITS,
 };
