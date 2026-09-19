@@ -10,9 +10,7 @@ use std::collections::BTreeSet;
 use super::tdi2_anti_unification::{
     AntiUnificationError, AntiUnificationResult, anti_unify_incremental,
 };
-use super::tdi2_structural_terms::{
-    StructuralTerm, StructuralTermError, StructuralTermKind,
-};
+use super::tdi2_structural_terms::{StructuralTerm, StructuralTermError, StructuralTermKind};
 
 /// Versioned identity for the incremental multi-example baseline.
 pub const INCREMENTAL_ANTI_UNIFICATION_SCHEMA: &str = "tdi2.2-incremental-anti-unification-v3";
