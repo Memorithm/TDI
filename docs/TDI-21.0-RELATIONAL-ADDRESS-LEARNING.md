@@ -65,6 +65,16 @@ y_i = x_i, i = 0..7
 
 and must transfer with zero mismatch to all 256 possible eight-bit Validation inputs.
 
+## Functional routing control
+
+Exact-address reconstruction and task success are evaluated separately. Under the sparse Development fit, the renamed Validation addresses are all represented incorrectly relative to the literal packed-identity target. However, the learned mapping can still canonically map the renamed namespace onto the Development namespace and remain internally consistent across a multi-hop episode.
+
+The functional harness therefore executes the selected Development-only encoder inside bounded relational memory on the unchanged Validation episodes. A passing relational episode is not re-labelled as exact address recovery.
+
+A separate alias control stores one Development identity and its renamed Validation counterpart simultaneously. Under the sparse under-covered encoder they map to the same learned key, so the second write overwrites the first. This exposes the non-injectivity that split-local task success can hide.
+
+The basis-covered positive control must recover the true eight-bit identity map, eliminate this cross-namespace alias, and preserve both facts simultaneously.
+
 ## Evidence boundary
 
 These controls test rule identifiability and renamed-ID transfer for a deliberately simple address function. They do not establish semantic relation learning, natural-language binding, model quality, hardware speed, or attention replacement.
