@@ -160,7 +160,7 @@ impl RelationalBinder {
 
     #[must_use]
     pub const fn address_mode(&self) -> RelationalAddressMode {
-        match self.addressing {
+        match &self.addressing {
             Addressing::ExactPacked => RelationalAddressMode::ExactPacked,
             Addressing::AnfIdentity(_) => RelationalAddressMode::AnfIdentity,
         }
