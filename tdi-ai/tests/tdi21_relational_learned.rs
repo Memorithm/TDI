@@ -59,6 +59,7 @@ fn exact_address_mismatch_can_coexist_with_functional_renamed_id_transfer() {
 
     assert_eq!(address_evidence.address_mismatches, 5);
     assert_eq!(address_evidence.bit_mismatches, 10);
+    assert_eq!(address_evidence.rule_evaluations, 5 * 8);
 
     for episode in ValidationRelationalSet::v1().episodes() {
         let mut binder = LearnedRelationalBinder::new(config(), selected.clone()).unwrap();
@@ -98,6 +99,7 @@ fn basis_covered_identity_encoder_keeps_namespaces_distinct() {
     let evidence = evaluate_address_validation(&selected, &validation).unwrap();
     assert_eq!(evidence.address_mismatches, 0);
     assert_eq!(evidence.bit_mismatches, 0);
+    assert_eq!(evidence.rule_evaluations, 256 * 8);
 
     let mut binder = LearnedRelationalBinder::new(config(), selected).unwrap();
     binder.bind(1, 1, 2).unwrap();
