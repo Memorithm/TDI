@@ -24,12 +24,9 @@ pub const DOMAIN_EPISODES: usize = 256;
 /// Frozen checked episode-id range.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EpisodePopulation {
-    /// Development or Validation only.
-    pub domain: InductionDomain,
-    /// First episode id.
-    pub start: u64,
-    /// Number of episode ids.
-    pub count: usize,
+    domain: InductionDomain,
+    start: u64,
+    count: usize,
 }
 
 /// Population derivation failures.
@@ -56,6 +53,24 @@ pub const fn frozen_population(domain: InductionDomain) -> EpisodePopulation {
 }
 
 impl EpisodePopulation {
+    /// Frozen population domain.
+    #[must_use]
+    pub const fn domain(self) -> InductionDomain {
+        self.domain
+    }
+
+    /// First frozen episode id.
+    #[must_use]
+    pub const fn start(self) -> u64 {
+        self.start
+    }
+
+    /// Number of frozen episode ids.
+    #[must_use]
+    pub const fn count(self) -> usize {
+        self.count
+    }
+
     /// Materialize deterministic episode ids without hidden RNG state.
     pub fn episode_ids(self) -> Result<Vec<EpisodeId>, PopulationError> {
         let count = u64::try_from(self.count).map_err(|_| PopulationError::CountOverflow)?;
@@ -90,11 +105,13 @@ mod tests {
     fn frozen_populations_are_disjoint_and_equal_sized() {
         let development = frozen_population(InductionDomain::Development);
         let validation = frozen_population(InductionDomain::Validation);
-        assert_eq!(development.start, DEVELOPMENT_START);
-        assert_eq!(validation.start, VALIDATION_START);
-        assert_eq!(development.count, DOMAIN_EPISODES);
-        assert_eq!(validation.count, DOMAIN_EPISODES);
-        assert!(development.start + development.count as u64 <= validation.start);
+        assert_eq!(development.domain(), InductionDomain::Development);
+        assert_eq!(validation.domain(), InductionDomain::Validation);
+        assert_eq!(development.start(), DEVELOPMENT_START);
+        assert_eq!(validation.start(), VALIDATION_START);
+        assert_eq!(development.count(), DOMAIN_EPISODES);
+        assert_eq!(validation.count(), DOMAIN_EPISODES);
+        assert!(development.start() + development.count() as u64 <= validation.start());
     }
 
     #[test]
