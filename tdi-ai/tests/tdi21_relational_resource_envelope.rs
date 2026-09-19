@@ -97,3 +97,4 @@ fn oversized_address_program_fails_before_fabricating_a_match() {
         Err(ComponentEnvelopeError::NoTwoWayBooleanConfigurationFits)
     );
 }
+
