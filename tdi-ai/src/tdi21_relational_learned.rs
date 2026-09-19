@@ -23,7 +23,10 @@ pub const LEARNED_RELATIONAL_ADDRESS_SEMANTICS: &str =
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct LearnedAddressWork {
     pub predictions: u64,
+    /// Number of output Boolean functions evaluated.
     pub rule_evaluations: u64,
+    /// Canonical ANF monomials evaluated across all output programs.
+    pub anf_term_evaluations: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -35,6 +38,7 @@ pub enum LearnedRelationalError {
     TooManyCompositionHops,
     EventBudgetExhausted,
     CounterOverflow,
+    AddressProgramInvalid,
     UnexpectedQuiet,
     Stream(StreamError),
 }
@@ -50,6 +54,8 @@ pub struct LearnedRelationalBinder {
     config: RelationalConfig,
     stream: BooleanStream,
     encoder: AddressSearchResult,
+    anf_programs: Vec<AnfProgram>,
+    anf_program_semantic_bits: usize,
     work: LearnedAddressWork,
 }
 
@@ -64,10 +70,18 @@ impl LearnedRelationalBinder {
         {
             return Err(LearnedRelationalError::RequiresV1Widths);
         }
+        let anf_programs = encoder
+            .to_anf_programs()
+            .map_err(|_| LearnedRelationalError::AddressProgramInvalid)?;
+        let anf_program_semantic_bits = encoder
+            .anf_program_semantic_bits()
+            .map_err(|_| LearnedRelationalError::AddressProgramInvalid)?;
         Ok(Self {
             config,
             stream: BooleanStream::new(config.stream)?,
             encoder,
+            anf_programs,
+            anf_program_semantic_bits,
             work: LearnedAddressWork::default(),
         })
     }
@@ -85,6 +99,11 @@ impl LearnedRelationalBinder {
     #[must_use]
     pub const fn encoder(&self) -> &AddressSearchResult {
         &self.encoder
+    }
+
+    #[must_use]
+    pub const fn anf_program_semantic_bits(&self) -> usize {
+        self.anf_program_semantic_bits
     }
 
     pub fn reset(&mut self) {
@@ -119,7 +138,21 @@ impl LearnedRelationalBinder {
             .rule_evaluations
             .checked_add(u64::from(RELATIONAL_ADDRESS_BITS))
             .ok_or(LearnedRelationalError::CounterOverflow)?;
-        Ok((u64::from(self.encoder.predict(input)), staged))
+
+        let mut encoded = 0u64;
+        for (bit, program) in self.anf_programs.iter().enumerate() {
+            staged.anf_term_evaluations = staged
+                .anf_term_evaluations
+                .checked_add(program.terms().len() as u64)
+                .ok_or(LearnedRelationalError::CounterOverflow)?;
+            if program
+                .evaluate(u64::from(input))
+                .map_err(|_| LearnedRelationalError::AddressProgramInvalid)?
+            {
+                encoded |= 1u64 << bit;
+            }
+        }
+        Ok((encoded, staged))
     }
 
     fn decode(output: StepOutput) -> Result<RelationalRead, LearnedRelationalError> {
@@ -189,11 +222,27 @@ impl LearnedRelationalBinder {
         {
             return Err(LearnedRelationalError::EventBudgetExhausted);
         }
+        let terms_per_prediction = self
+            .anf_programs
+            .iter()
+            .try_fold(0u64, |total, program| {
+                total.checked_add(program.terms().len() as u64)
+            })
+            .ok_or(LearnedRelationalError::CounterOverflow)?;
         if self.work.predictions.checked_add(required).is_none()
             || self
                 .work
                 .rule_evaluations
                 .checked_add(required * u64::from(RELATIONAL_ADDRESS_BITS))
+                .is_none()
+            || self
+                .work
+                .anf_term_evaluations
+                .checked_add(
+                    required
+                        .checked_mul(terms_per_prediction)
+                        .ok_or(LearnedRelationalError::CounterOverflow)?,
+                )
                 .is_none()
         {
             return Err(LearnedRelationalError::CounterOverflow);
