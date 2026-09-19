@@ -215,12 +215,7 @@ fn deduplicate_candidates_with_limit(
     candidates: impl IntoIterator<Item = CanonicalPredicateCandidate>,
     maximum: usize,
 ) -> Result<Vec<CanonicalPredicateCandidate>, CandidateDeduplicationError> {
-    deduplicate_candidates_with_limits(
-        batch,
-        candidates,
-        maximum,
-        MAX_CANONICAL_SOURCE_REFERENCES,
-    )
+    deduplicate_candidates_with_limits(batch, candidates, maximum, MAX_CANONICAL_SOURCE_REFERENCES)
 }
 
 fn deduplicate_candidates_with_limits(
@@ -244,11 +239,9 @@ fn deduplicate_candidates_with_limits(
         raw_source_references = raw_source_references
             .checked_add(candidate.provenance.sources().len())
             .filter(|count| *count <= maximum_source_references)
-            .ok_or(
-                CandidateDeduplicationError::SourceReferenceLimitExceeded {
-                    maximum: maximum_source_references,
-                },
-            )?;
+            .ok_or(CandidateDeduplicationError::SourceReferenceLimitExceeded {
+                maximum: maximum_source_references,
+            })?;
         let entry = sources_by_identity.entry(candidate.identity).or_default();
         entry.extend_from_slice(candidate.provenance.sources());
         if sources_by_identity.len() > maximum_candidates {
@@ -587,9 +580,7 @@ mod tests {
             .expect("record");
         assert_eq!(
             deduplicate_candidates_with_limits(&batch, vec![record.clone(), record], 2, 1),
-            Err(CandidateDeduplicationError::SourceReferenceLimitExceeded {
-                maximum: 1
-            })
+            Err(CandidateDeduplicationError::SourceReferenceLimitExceeded { maximum: 1 })
         );
     }
 
