@@ -78,6 +78,8 @@ pub mod tdi24_attention;
 pub mod tdi24_chiral;
 #[path = "tdi24_vector.rs"]
 pub mod tdi24_vector;
+#[path = "tdi25_attention.rs"]
+pub mod tdi25_attention;
 #[path = "tdi25_torsor_chiral.rs"]
 pub mod tdi25_torsor_chiral;
 #[path = "tdi2_anti_unification.rs"]
