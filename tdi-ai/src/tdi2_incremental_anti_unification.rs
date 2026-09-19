@@ -13,7 +13,7 @@ use super::tdi2_anti_unification::{
 use super::tdi2_structural_terms::{StructuralTerm, StructuralTermError, StructuralTermKind};
 
 /// Versioned identity for the incremental multi-example baseline.
-pub const INCREMENTAL_ANTI_UNIFICATION_SCHEMA: &str = "tdi2.2-incremental-anti-unification-v5";
+pub const INCREMENTAL_ANTI_UNIFICATION_SCHEMA: &str = "tdi2.2-incremental-anti-unification-v6";
 /// Maximum number of examples in one incremental anti-unification batch.
 pub const MAX_INCREMENTAL_ANTI_UNIFICATION_TERMS: usize = 256;
 /// Maximum aggregate structural nodes accepted across one input batch.
@@ -470,6 +470,51 @@ mod tests {
         assert_eq!(
             result.generalization(),
             &app(3, vec![retained, reclaimed.clone(), reclaimed])
+        );
+        assert_eq!(result.steps().len(), 2);
+        assert_eq!(
+            result.reconstruct_canonical_inputs().expect("replay"),
+            terms.to_vec()
+        );
+    }
+
+    #[test]
+    fn surplus_reclaimed_id_is_available_to_another_mismatch_class() {
+        let retained = StructuralTerm::variable(StructuralVariableId::new(u32::MAX - 2));
+        let terms = [
+            app(
+                3,
+                vec![
+                    retained.clone(),
+                    app(4, vec![atom(1), atom(1)]),
+                    atom(4),
+                ],
+            ),
+            app(
+                3,
+                vec![
+                    retained.clone(),
+                    app(4, vec![atom(2), atom(3)]),
+                    atom(4),
+                ],
+            ),
+            app(
+                3,
+                vec![retained.clone(), app(5, vec![atom(5)]), atom(6)],
+            ),
+        ];
+
+        let result = incremental_anti_unify(&terms).expect("reclaimed surplus variable");
+        assert_eq!(
+            result.generalization(),
+            &app(
+                3,
+                vec![
+                    retained,
+                    StructuralTerm::variable(StructuralVariableId::new(u32::MAX - 1)),
+                    StructuralTerm::variable(StructuralVariableId::new(u32::MAX)),
+                ],
+            )
         );
         assert_eq!(result.steps().len(), 2);
         assert_eq!(

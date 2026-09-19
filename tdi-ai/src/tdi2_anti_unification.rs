@@ -129,16 +129,16 @@ pub(super) fn anti_unify_incremental(
         &reusable_right_terms,
         &mut discarded_by_mismatch,
     );
-    let reclaimable_variables = discarded_by_mismatch
+    let mut discarded_occurrences = BTreeMap::new();
+    for occurrences in discarded_by_mismatch.values() {
+        for (variable, count) in occurrences {
+            *discarded_occurrences.entry(*variable).or_default() += *count;
+        }
+    }
+    let reclaimable_variables = discarded_occurrences
         .into_iter()
-        .map(|(key, occurrences)| {
-            let variables = occurrences
-                .into_iter()
-                .filter_map(|(variable, count)| {
-                    (generated_occurrences.get(&variable) == Some(&count)).then_some(variable)
-                })
-                .collect();
-            (key, variables)
+        .filter_map(|(variable, count)| {
+            (generated_occurrences.get(&variable) == Some(&count)).then_some(variable)
         })
         .collect();
 
@@ -193,8 +193,7 @@ pub(super) fn anti_unify_incremental(
 struct AntiUnificationContext {
     variable_floor: Option<u32>,
     generated_variables: BTreeSet<StructuralVariableId>,
-    reclaimable_variables:
-        BTreeMap<(StructuralTerm, StructuralTerm), BTreeSet<StructuralVariableId>>,
+    reclaimable_variables: BTreeSet<StructuralVariableId>,
     reusable_right_terms: BTreeMap<StructuralVariableId, StructuralTerm>,
     mismatch_variables: BTreeMap<(StructuralTerm, StructuralTerm), StructuralVariableId>,
     allocated_variables: BTreeSet<StructuralVariableId>,
@@ -265,7 +264,7 @@ impl AntiUnificationContext {
         }
 
         let variable = self
-            .reclaimable_generated_variable(&key)
+            .reclaimable_generated_variable()
             .or_else(|| self.first_available_variable())
             .ok_or(AntiUnificationError::VariableIdExhausted)?;
         self.mismatch_variables.insert(key, variable);
@@ -275,12 +274,8 @@ impl AntiUnificationContext {
         Ok(variable)
     }
 
-    fn reclaimable_generated_variable(
-        &self,
-        mismatch: &(StructuralTerm, StructuralTerm),
-    ) -> Option<StructuralVariableId> {
+    fn reclaimable_generated_variable(&self) -> Option<StructuralVariableId> {
         self.reclaimable_variables
-            .get(mismatch)?
             .iter()
             .find_map(|variable| {
                 let already_claimed = self
