@@ -78,6 +78,9 @@ pub struct AddressValidationEvidence {
     pub samples: u64,
     pub address_mismatches: u64,
     pub bit_mismatches: u64,
+    /// Additional distinct inputs mapped onto an already-seen predicted key.
+    /// This is encoder aliasing, not a B3 bucket collision.
+    pub prediction_aliases: u64,
     pub rule_evaluations: u64,
 }
 
@@ -311,6 +314,7 @@ pub fn evaluate_address_validation(
     validation: &ValidationAddressSet,
 ) -> Result<AddressValidationEvidence, AddressSearchError> {
     let mut evidence = AddressValidationEvidence::default();
+    let mut predicted_inputs = BTreeMap::new();
     for sample in &validation.0.samples {
         checked_add(&mut evidence.samples, 1)?;
         checked_add(
@@ -318,6 +322,11 @@ pub fn evaluate_address_validation(
             u64::from(RELATIONAL_ADDRESS_BITS),
         )?;
         let predicted = result.predict(sample.input);
+        if let Some(previous_input) = predicted_inputs.insert(predicted, sample.input)
+            && previous_input != sample.input
+        {
+            checked_add(&mut evidence.prediction_aliases, 1)?;
+        }
         if predicted != sample.expected {
             checked_add(&mut evidence.address_mismatches, 1)?;
         }
