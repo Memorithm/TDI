@@ -16,11 +16,15 @@ import struct
 import tempfile
 import zlib
 
+from tdi_engine_store import identity
 from tdi_optuna_benchmark import verify_report
 
 PREFIX = "2026-09-18-forge-session"
 SOURCE = "a4d74690f605acfe3733e163446adf85001ab494"
 PNG_PIXEL_SHA256 = "5401011779ee509c29c50feda6e909fe7c3e88fc37e6f40c5e4f3ff2eebf86c1"
+INCOMPLETE_EVENTS_SHA256 = "c388a2a9e2c6e36a3dc14ae5c3590f7e179f47a3b3ec77a15e7321c3338edeb2"
+INCOMPLETE_MANIFEST_SHA256 = "e54a43e6b641f0059b0a7b22bad9da0bbd3f360a189c7e9a09af233be7bdf1cb"
+INCOMPLETE_MANIFEST_ID = "7df0ea2e685540bbde92714a8adff42c4af5677c64393d55803c0e709d44b227"
 FILES = {
     "transport": PREFIX + "-transport.json.gz",
     "quality32": PREFIX + "-quality32.json.gz",
@@ -91,6 +95,122 @@ def png_pixel_digest(path):
     return hashlib.sha256(ihdr + pixels).hexdigest()
 
 
+def verify_incomplete_evidence(directory, preliminary):
+    """Validate the retained interrupted budget-64 evidence as incomplete data."""
+    incomplete = preliminary.get("incomplete_budget64")
+    if not isinstance(incomplete, dict) or incomplete.get("status") != "incomplete-no-report":
+        raise ValueError("incorrect preliminary evidence classification")
+    retained = incomplete.get("retained_files")
+    if not isinstance(retained, list) or len(retained) != 2:
+        raise ValueError("incomplete evidence must retain exactly manifest and events")
+    rows = {row.get("source_name"): row for row in retained if isinstance(row, dict)}
+    expected = {
+        "events.jsonl": (PREFIX + "-incomplete64-events.jsonl.gz", INCOMPLETE_EVENTS_SHA256),
+        "manifest.json": (PREFIX + "-incomplete64-manifest.json.gz", INCOMPLETE_MANIFEST_SHA256),
+    }
+    if set(rows) != set(expected):
+        raise ValueError("unexpected incomplete evidence inventory")
+    for source_name, (filename, digest) in expected.items():
+        row = rows[source_name]
+        if row.get("file") != filename or row.get("sha256") != digest:
+            raise ValueError("incomplete evidence inventory is not pinned: " + source_name)
+        raw = (directory / filename).read_bytes()
+        if hashlib.sha256(raw).hexdigest() != digest or len(raw) != row.get("bytes"):
+            raise ValueError("incomplete evidence bytes differ from pinned artifact: " + filename)
+
+    manifest_path = directory / expected["manifest.json"][0]
+    with gzip.open(manifest_path, "rb") as source:
+        payload = source.read(1024 * 1024 + 1)
+    if len(payload) > 1024 * 1024:
+        raise ValueError("incomplete manifest exceeds verifier byte limit")
+    try:
+        manifest_record = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("invalid incomplete manifest JSON") from error
+    if not isinstance(manifest_record, dict):
+        raise ValueError("incomplete manifest must be an object")
+    manifest_id = manifest_record.get("identity")
+    manifest = {key: value for key, value in manifest_record.items() if key != "identity"}
+    if manifest_id != INCOMPLETE_MANIFEST_ID or manifest_id != identity("tdi-optuna-manifest/v1", manifest):
+        raise ValueError("incomplete manifest identity mismatch")
+    protocol = manifest.get("protocol")
+    if not isinstance(protocol, dict):
+        raise ValueError("incomplete manifest protocol missing")
+    required_protocol = {
+        "schema": 1,
+        "kind": "tdi-optuna-session-comparison/v1",
+        "profile": "session-budget64",
+        "domain": "Development",
+        "confirmatory": False,
+        "evaluations_per_arm": 64,
+        "failure_policy": "preserve-partial-records-stop-no-automatic-retry",
+        "scientific_verdict": "not-assessed",
+    }
+    if any(protocol.get(key) != value for key, value in required_protocol.items()):
+        raise ValueError("incomplete manifest is not the retained Development budget-64 protocol")
+    tasks, seeds, arms = protocol.get("tasks"), protocol.get("seeds"), protocol.get("arms")
+    if not all(isinstance(values, list) and values for values in (tasks, seeds, arms)):
+        raise ValueError("incomplete manifest has empty run dimensions")
+    if any(len(values) != len(set(values)) for values in (tasks, seeds, arms)):
+        raise ValueError("incomplete manifest has duplicate run dimensions")
+    budget = protocol["evaluations_per_arm"]
+    allowed = set((task, seed, arm) for task in tasks for seed in seeds for arm in arms)
+
+    events_path = directory / expected["events.jsonl"][0]
+    started = set()
+    current = None
+    next_trial = 0
+    event_count = 0
+    decompressed_bytes = 0
+    max_events = len(allowed) * (budget + 1)
+    try:
+        with gzip.open(events_path, "rb") as source:
+            for raw_line in source:
+                decompressed_bytes += len(raw_line)
+                event_count += 1
+                if decompressed_bytes > 64 * 1024 * 1024 or event_count > max_events:
+                    raise ValueError("incomplete event stream exceeds verifier limits")
+                try:
+                    event = json.loads(raw_line)
+                except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                    raise ValueError("invalid incomplete event JSON") from error
+                if not isinstance(event, dict):
+                    raise ValueError("incomplete event must be an object")
+                kind = event.get("kind")
+                key = (event.get("task"), event.get("seed"), event.get("arm"))
+                if key not in allowed:
+                    raise ValueError("incomplete event references undeclared run")
+                if kind == "start":
+                    if current is not None and next_trial != budget:
+                        raise ValueError("new run starts after an incomplete non-final run")
+                    if key in started:
+                        raise ValueError("duplicate start in incomplete event stream")
+                    started.add(key)
+                    current, next_trial = key, 0
+                elif kind == "trial":
+                    if current != key or type(event.get("trial")) is not int or event["trial"] != next_trial:
+                        raise ValueError("non-contiguous trial in incomplete event stream")
+                    if next_trial >= budget:
+                        raise ValueError("run exceeds declared incomplete-event budget")
+                    parameters = event.get("parameters")
+                    if not isinstance(parameters, dict) or set(parameters) != {"x", "y"}:
+                        raise ValueError("invalid parameters in incomplete trial")
+                    if parameters["x"] not in protocol.get("values", []) or parameters["y"] not in protocol.get("values", []):
+                        raise ValueError("incomplete trial uses value outside declared domain")
+                    if type(event.get("loss")) is not int or type(event.get("best_loss")) is not int:
+                        raise ValueError("incomplete trial loss fields must be integers")
+                    next_trial += 1
+                else:
+                    raise ValueError("unexpected event kind in incomplete evidence")
+    except (OSError, EOFError) as error:
+        raise ValueError("invalid incomplete gzip event stream") from error
+    if not started or current is None or not (0 < next_trial < budget):
+        raise ValueError("retained event stream does not end in a partial run")
+    if len(started) >= len(allowed):
+        raise ValueError("retained event stream is not an incomplete campaign")
+    return {"started_runs": len(started), "events": event_count, "partial_trials": next_trial}
+
+
 def verify_inventory(directory, reports):
     """Check stored bytes and all completed reports; partial logs stay partial."""
     inventory = json.loads((directory / f"{PREFIX}-artifacts.json").read_text())
@@ -113,9 +233,10 @@ def verify_inventory(directory, reports):
                 raise ValueError("inventory report identity mismatch")
     if set(row["file"] for row in inventory["files"]) != set(FILES.values()):
         raise ValueError("incomplete primary inventory")
-    if len(known) != 7 or preliminary["incomplete_budget64"]["status"] != "incomplete-no-report":
-        raise ValueError("incorrect preliminary evidence classification")
-    return len(known)
+    if len(known) != 7:
+        raise ValueError("incorrect completed-report inventory")
+    incomplete_summary = verify_incomplete_evidence(directory, preliminary)
+    return len(known), incomplete_summary
 
 
 def trajectories(report, limit=None):
@@ -164,7 +285,10 @@ def main():
         raise ValueError("cross-budget first-32 trajectories differ")
     if trajectories(reports["quality32"]) != trajectories(reports["preliminary32"]):
         raise ValueError("qualification corrections changed search trajectories")
-    verified_count = verify_inventory(output, reports) if args.verify_only else None
+    if args.verify_only:
+        verified_count, incomplete_summary = verify_inventory(output, reports)
+    else:
+        verified_count, incomplete_summary = None, None
 
     transport = reports["transport"]
     transport_rows = []
@@ -330,7 +454,8 @@ def main():
         print(json.dumps({"verified_reports": verified_count, "qualified_runs": 3000,
                           "qualified_evaluations": 142080, "transport_pairs_equal": 60,
                           "cross_budget_prefixes_equal": 1440, "prequalification_trajectories_equal": 1440,
-                          "published_outputs_verified": True, "incomplete_campaign_promoted": False}))
+                          "published_outputs_verified": True, "incomplete_evidence_verified": incomplete_summary,
+                          "incomplete_campaign_promoted": False}))
         return
 
     import matplotlib
