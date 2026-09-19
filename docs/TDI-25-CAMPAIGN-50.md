@@ -9,8 +9,8 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | Slice | Deliverable | Gate / definition of done |
 | ---: | --- | --- |
 | 01 | TDI-25 programme + comparison scaffold | **landed** in #408; reuses TDI-22 and TDI-24 contracts; no copied algebra |
-| 02 | Contract/version provenance pin | **current slice**; exact TDI-22/TDI-24 semantic contract IDs recorded, validated and rejected on mismatch |
-| 03 | G6 generic six-component control | finite 6D bilinear reference without torsor/chiral structure |
+| 02 | Contract/version provenance pin | **landed** in #489; exact TDI-22/TDI-24 semantic contract IDs recorded, validated and rejected on mismatch |
+| 03 | G6 generic six-component control | **current slice**; versioned finite 6D Euclidean control with matched width and fail-closed arithmetic, no torsor/chiral structure |
 | 04 | Carrier/accounting equivalence | explicit six-component storage/readout accounting for T6/C6/G6 |
 | 05 | Score-scale contract | common declared normalization; no arm-specific hidden scaling |
 | 06 | Torsor invariant bridge tests | transport/factorization invariants remain valid in TDI-25 adapter |
@@ -94,4 +94,4 @@ Pause the campaign when any of the following occurs:
 
 ## Progress accounting
 
-**1/50 merged** (#408). Slice 02 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**2/50 merged** (#408, #489). Slice 03 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
