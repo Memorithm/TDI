@@ -1,0 +1,243 @@
+//! Typed deterministic relational tasks for TDI-21 development.
+//!
+//! Expected answers remain evaluator-side and are derived from an independent
+//! exact dictionary, not hand-authored in task fixtures. Candidate execution
+//! receives only explicit bindings and a bounded relation path query.
+
+use std::collections::BTreeMap;
+
+use super::tdi21_relational_binding::{
+    RelationalBinder, RelationalConfig, RelationalError, RelationalRead, RelationalWork,
+};
+use super::tdi21_stream::StreamCounters;
+
+pub const RELATIONAL_TASK_SEMANTICS: &str = "tdi21-relational-task-family-v1";
+pub const RELATIONAL_EPISODES_PER_SPLIT: usize = 4;
+pub const RELATIONAL_V1_ENTITY_BITS: u8 = 4;
+pub const RELATIONAL_V1_RELATION_BITS: u8 = 4;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RelationalSplit {
+    Development,
+    Validation,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RelationalFact {
+    pub relation: u64,
+    pub subject: u64,
+    pub object: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RelationalQuery {
+    pub relations: Vec<u64>,
+    pub subject: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RelationalEpisode {
+    pub split: RelationalSplit,
+    pub case_id: u8,
+    pub facts: Vec<RelationalFact>,
+    pub query: RelationalQuery,
+    expected: RelationalRead,
+}
+
+impl RelationalEpisode {
+    #[must_use]
+    pub const fn expected(&self) -> RelationalRead {
+        self.expected
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DevelopmentRelationalSet(Vec<RelationalEpisode>);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ValidationRelationalSet(Vec<RelationalEpisode>);
+
+impl DevelopmentRelationalSet {
+    #[must_use]
+    pub fn v1() -> Self {
+        Self(build_split(RelationalSplit::Development))
+    }
+
+    #[must_use]
+    pub fn episodes(&self) -> &[RelationalEpisode] {
+        &self.0
+    }
+}
+
+impl ValidationRelationalSet {
+    #[must_use]
+    pub fn v1() -> Self {
+        Self(build_split(RelationalSplit::Validation))
+    }
+
+    #[must_use]
+    pub fn episodes(&self) -> &[RelationalEpisode] {
+        &self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RelationalEpisodeOutcome {
+    pub observed: RelationalRead,
+    pub expected: RelationalRead,
+    pub correct: bool,
+    pub counters: StreamCounters,
+    pub relational_work: RelationalWork,
+}
+
+/// Versioned 4-bit identifier namespaces. The 8-bit `(relation, subject)`
+/// candidate input fits the exact ANF synthesis ceiling while keeping the two
+/// splits disjoint. Under the v1 128-slot reference configuration these facts
+/// occupy distinct buckets, avoiding a capacity-confound in nominal episodes.
+fn namespace(split: RelationalSplit) -> ([u64; 6], [u64; 4]) {
+    match split {
+        RelationalSplit::Development => ([1, 2, 3, 6, 4, 5], [1, 2, 3, 4]),
+        RelationalSplit::Validation => ([9, 10, 11, 14, 12, 13], [9, 10, 11, 12]),
+    }
+}
+
+fn fact(relation: u64, subject: u64, object: u64) -> RelationalFact {
+    RelationalFact {
+        relation,
+        subject,
+        object,
+    }
+}
+
+fn derive_expected(facts: &[RelationalFact], query: &RelationalQuery) -> RelationalRead {
+    let mut oracle = BTreeMap::new();
+    for fact in facts {
+        oracle.insert((fact.relation, fact.subject), fact.object);
+    }
+    let mut current = query.subject;
+    for &relation in &query.relations {
+        let Some(&next) = oracle.get(&(relation, current)) else {
+            return RelationalRead::Miss;
+        };
+        current = next;
+    }
+    RelationalRead::Hit(current)
+}
+
+fn episode(
+    split: RelationalSplit,
+    case_id: u8,
+    facts: Vec<RelationalFact>,
+    relations: Vec<u64>,
+    subject: u64,
+) -> RelationalEpisode {
+    let query = RelationalQuery { relations, subject };
+    let expected = derive_expected(&facts, &query);
+    RelationalEpisode {
+        split,
+        case_id,
+        facts,
+        query,
+        expected,
+    }
+}
+
+fn build_split(split: RelationalSplit) -> Vec<RelationalEpisode> {
+    let (e, r) = namespace(split);
+    vec![
+        episode(split, 0, vec![fact(r[0], e[0], e[1])], vec![r[0]], e[0]),
+        episode(
+            split,
+            1,
+            vec![fact(r[0], e[0], e[1]), fact(r[1], e[1], e[2])],
+            vec![r[0], r[1]],
+            e[0],
+        ),
+        episode(
+            split,
+            2,
+            vec![
+                fact(r[0], e[0], e[1]),
+                fact(r[1], e[1], e[2]),
+                fact(r[2], e[2], e[3]),
+            ],
+            vec![r[0], r[1], r[2]],
+            e[0],
+        ),
+        episode(
+            split,
+            3,
+            vec![
+                fact(r[0], e[0], e[1]),
+                fact(r[1], e[1], e[2]),
+                fact(r[3], e[4], e[5]),
+                fact(r[0], e[5], e[4]),
+            ],
+            vec![r[0], r[1]],
+            e[0],
+        ),
+    ]
+}
+
+pub fn evaluate_relational_episode(
+    config: RelationalConfig,
+    episode: &RelationalEpisode,
+) -> Result<RelationalEpisodeOutcome, RelationalError> {
+    let mut binder = RelationalBinder::new(config)?;
+    for fact in &episode.facts {
+        binder.bind(fact.relation, fact.subject, fact.object)?;
+    }
+    let observed = binder.compose_path(&episode.query.relations, episode.query.subject)?;
+    Ok(RelationalEpisodeOutcome {
+        observed,
+        expected: episode.expected,
+        correct: observed == episode.expected,
+        counters: binder.counters(),
+        relational_work: binder.relational_work(),
+    })
+}
+
+/// Compare only what the candidate can observe. Split metadata, case IDs and
+/// evaluator-owned expected answers are deliberately excluded.
+fn same_candidate_input(left: &RelationalEpisode, right: &RelationalEpisode) -> bool {
+    left.facts == right.facts && left.query == right.query
+}
+
+#[must_use]
+pub fn exact_split_overlap(
+    development: &DevelopmentRelationalSet,
+    validation: &ValidationRelationalSet,
+) -> bool {
+    development.episodes().iter().any(|left| {
+        validation
+            .episodes()
+            .iter()
+            .any(|right| same_candidate_input(left, right))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn overlap_detection_ignores_all_evaluator_metadata() {
+        let development = DevelopmentRelationalSet::v1();
+        let mut copied = development.episodes()[0].clone();
+        copied.split = RelationalSplit::Validation;
+        copied.case_id = 99;
+        copied.expected = RelationalRead::Miss;
+        let validation = ValidationRelationalSet(vec![copied]);
+        assert!(exact_split_overlap(&development, &validation));
+    }
+
+    #[test]
+    fn evaluator_oracle_derives_missing_paths_without_candidate_execution() {
+        let facts = [fact(1, 2, 3)];
+        let query = RelationalQuery {
+            relations: vec![1, 2],
+            subject: 2,
+        };
+        assert_eq!(derive_expected(&facts, &query), RelationalRead::Miss);
+    }
+}
