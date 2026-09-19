@@ -14,6 +14,8 @@ use super::tdi2_predicate_candidates::{
 pub const MAX_TEMPORAL_FEATURES: usize = 128;
 /// Maximum canonical temporal candidates emitted by one batch.
 pub const MAX_TEMPORAL_CANDIDATES: usize = 4_096;
+/// Maximum raw source references retained before canonicalization.
+pub const MAX_TEMPORAL_SOURCE_REFERENCES: usize = 65_536;
 
 /// Direction of a one-feature temporal delta.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -77,6 +79,7 @@ impl TemporalDeltaCandidate {
 /// Fail-closed bounded-generation errors.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TemporalDeltaError {
+    SourceLimitExceeded { maximum: usize },
     FeatureWidthExceeded { actual: usize, maximum: usize },
     CandidateLimitExceeded { maximum: usize },
     Provenance(CandidateProvenanceError),
@@ -94,6 +97,29 @@ impl From<CandidateProvenanceError> for TemporalDeltaError {
 pub fn generate_temporal_delta_candidates(
     batch: &InductionBatch,
 ) -> Result<Vec<TemporalDeltaCandidate>, TemporalDeltaError> {
+    // Bound raw references before allocation, even when all identities repeat.
+    let mut references = 0_usize;
+    for episode in batch.episodes() {
+        for frames in episode.frames().windows(2) {
+            let actual = frames[0].numeric().len().max(frames[1].numeric().len());
+            if actual > MAX_TEMPORAL_FEATURES {
+                return Err(TemporalDeltaError::FeatureWidthExceeded {
+                    actual,
+                    maximum: MAX_TEMPORAL_FEATURES,
+                });
+            }
+            references = frames[0]
+                .numeric()
+                .len()
+                .min(frames[1].numeric().len())
+                .checked_mul(6)
+                .and_then(|count| references.checked_add(count))
+                .filter(|count| *count <= MAX_TEMPORAL_SOURCE_REFERENCES)
+                .ok_or(TemporalDeltaError::SourceLimitExceeded {
+                    maximum: MAX_TEMPORAL_SOURCE_REFERENCES,
+                })?;
+        }
+    }
     type Key = (u32, TemporalDeltaOperator);
     let mut sources: BTreeMap<Key, Vec<CandidateSource>> = BTreeMap::new();
     for episode in batch.episodes() {
@@ -154,6 +180,10 @@ pub fn generate_temporal_delta_candidates(
 impl core::fmt::Display for TemporalDeltaError {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
+            Self::SourceLimitExceeded { maximum } => write!(
+                formatter,
+                "temporal source references exceed bounded maximum {maximum}"
+            ),
             Self::FeatureWidthExceeded { actual, maximum } => write!(
                 formatter,
                 "temporal feature width {actual} exceeds bounded maximum {maximum}"
@@ -218,6 +248,24 @@ mod tests {
             candidates
                 .iter()
                 .all(|candidate| candidate.provenance().sources().len() == 2)
+        );
+    }
+
+    #[test]
+    fn repeated_identities_cannot_exhaust_provenance_storage() {
+        let id = DEVELOPMENT_START;
+        let frames: Vec<_> = (0..11_000).map(|ordinal| (ordinal, vec![1.0])).collect();
+        let batch = InductionBatch::new(
+            InductionDomain::Development,
+            vec![episode(id, &frames)],
+            vec![graph(id)],
+        )
+        .expect("batch");
+        assert_eq!(
+            generate_temporal_delta_candidates(&batch),
+            Err(TemporalDeltaError::SourceLimitExceeded {
+                maximum: super::MAX_TEMPORAL_SOURCE_REFERENCES
+            })
         );
     }
 
