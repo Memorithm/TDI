@@ -319,5 +319,48 @@ class OperationalIntegrationTests(unittest.TestCase):
                 self.assertEqual(1, len(step["attempts"]))
 
 
+    def test_lost_failed_execution_response_reconciles_without_redispatch(self):
+        spec = self.fault_plan("raise SystemExit(7)")
+        client = self.client
+
+        class LostExecutionResponse:
+            endpoint = client.endpoint
+            posts = 0
+
+            def request(self, method, path, **kwargs):
+                if method == "POST" and path.endswith("/executions"):
+                    self.posts += 1
+                    client.request(method, path, **kwargs)
+                    raise HubTransportUnknown("synthetic lost failed execution response")
+                return client.request(method, path, **kwargs)
+
+            def download(self, *args, **kwargs):
+                return client.download(*args, **kwargs)
+
+        lost = LostExecutionResponse()
+        with EngineStore(self.catalogue) as store:
+            campaign = runtime.submit(client, store, spec, {})
+            workflow = store.get(campaign)["workflow"]
+            with self.assertRaises(HubTransportUnknown):
+                runtime.execute(lost, store, campaign)
+            self.assertEqual(1, lost.posts)
+            self.assertEqual("executing", store.get(campaign)["phase"])
+
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                snapshot = client.request("GET", f"/api/v1/workflows/{workflow}")
+                if snapshot["state"] in ("succeeded", "failed", "cancelled"):
+                    break
+                time.sleep(0.02)
+            self.assertEqual("failed", snapshot["state"])
+
+            reconciled = runtime.execute(lost, store, campaign)
+            self.assertEqual("failed", reconciled["phase"])
+            self.assertEqual(1, lost.posts)
+            self.assertEqual([], store.results(campaign))
+            self.assertEqual(1, len(reconciled["snapshot"]["steps"]))
+            self.assertEqual(1, len(reconciled["snapshot"]["steps"][0]["attempts"]))
+
+
 if __name__ == "__main__":
     unittest.main()
