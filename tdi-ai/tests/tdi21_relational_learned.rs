@@ -153,4 +153,3 @@ fn learned_encoder_is_selected_only_from_development_task_addresses() {
     assert_eq!(selected, before);
 }
 
-[executed on device: tarek (fa986a59-0105-42b8-b1db-7cddadcd871f)]
