@@ -15,6 +15,12 @@ use super::tdi2_predicate_candidates::{
 pub const MAX_NUMERIC_FEATURES: usize = 128;
 /// Maximum number of emitted directional threshold candidates.
 pub const MAX_SCALAR_THRESHOLD_CANDIDATES: usize = 4096;
+/// Maximum raw candidate-source references accepted before provenance de-duplication.
+///
+/// This is an engineering memory-safety bound, independent of the unique-candidate
+/// limit: repeated observations of the same value must not grow temporary provenance
+/// vectors without bound.
+pub const MAX_SCALAR_THRESHOLD_SOURCE_REFERENCES: usize = 65_536;
 
 /// Direction of a scalar threshold predicate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -83,6 +89,7 @@ impl NumericThresholdCandidate {
 pub enum NumericThresholdError {
     FeatureWidthExceeded { actual: usize, maximum: usize },
     CandidateLimitExceeded { maximum: usize },
+    SourceReferenceLimitExceeded { maximum: usize },
     Provenance(CandidateProvenanceError),
 }
 
@@ -109,17 +116,42 @@ pub fn generate_numeric_threshold_candidates(
     batch: &InductionBatch,
 ) -> Result<Vec<NumericThresholdCandidate>, NumericThresholdError> {
     type Key = (u32, u64, ThresholdDirection);
-    let mut sources_by_candidate: BTreeMap<Key, Vec<CandidateSource>> = BTreeMap::new();
 
+    // Preflight the complete raw source-reference budget before allocating any
+    // per-candidate provenance vectors. Repeated values can otherwise keep the
+    // unique-candidate count small while growing those vectors without bound.
+    let mut source_references = 0usize;
     for episode in batch.episodes() {
         for frame in episode.frames() {
-            let values = frame.numeric().values();
-            if values.len() > MAX_NUMERIC_FEATURES {
+            let width = frame.numeric().len();
+            if width > MAX_NUMERIC_FEATURES {
                 return Err(NumericThresholdError::FeatureWidthExceeded {
-                    actual: values.len(),
+                    actual: width,
                     maximum: MAX_NUMERIC_FEATURES,
                 });
             }
+            let additional = width.checked_mul(2).ok_or(
+                NumericThresholdError::SourceReferenceLimitExceeded {
+                    maximum: MAX_SCALAR_THRESHOLD_SOURCE_REFERENCES,
+                },
+            )?;
+            source_references = source_references.checked_add(additional).ok_or(
+                NumericThresholdError::SourceReferenceLimitExceeded {
+                    maximum: MAX_SCALAR_THRESHOLD_SOURCE_REFERENCES,
+                },
+            )?;
+            if source_references > MAX_SCALAR_THRESHOLD_SOURCE_REFERENCES {
+                return Err(NumericThresholdError::SourceReferenceLimitExceeded {
+                    maximum: MAX_SCALAR_THRESHOLD_SOURCE_REFERENCES,
+                });
+            }
+        }
+    }
+
+    let mut sources_by_candidate: BTreeMap<Key, Vec<CandidateSource>> = BTreeMap::new();
+    for episode in batch.episodes() {
+        for frame in episode.frames() {
+            let values = frame.numeric().values();
             for (feature_index, &value) in values.iter().enumerate() {
                 let feature_index = u32::try_from(feature_index).map_err(|_| {
                     NumericThresholdError::FeatureWidthExceeded {
@@ -176,6 +208,10 @@ impl core::fmt::Display for NumericThresholdError {
                 formatter,
                 "numeric threshold candidate count exceeds bounded maximum {maximum}"
             ),
+            Self::SourceReferenceLimitExceeded { maximum } => write!(
+                formatter,
+                "numeric threshold source-reference count exceeds bounded maximum {maximum}"
+            ),
             Self::Provenance(error) => write!(formatter, "invalid threshold provenance: {error}"),
         }
     }
@@ -186,8 +222,8 @@ impl std::error::Error for NumericThresholdError {}
 #[cfg(test)]
 mod tests {
     use super::{
-        MAX_NUMERIC_FEATURES, NumericThresholdError, ThresholdDirection,
-        generate_numeric_threshold_candidates,
+        MAX_NUMERIC_FEATURES, MAX_SCALAR_THRESHOLD_SOURCE_REFERENCES, NumericThresholdError,
+        ThresholdDirection, generate_numeric_threshold_candidates,
     };
     use crate::experimental::tdi2_induction_input::InductionBatch;
     use crate::experimental::tdi2_induction_split::{DEVELOPMENT_START, InductionDomain};
@@ -275,6 +311,33 @@ mod tests {
             .expect("zero threshold");
         assert_eq!(le.evaluate(-1.0), Some(true));
         assert_eq!(le.evaluate(f64::NAN), None);
+    }
+
+    #[test]
+    fn repeated_observations_cannot_bypass_source_reference_bound() {
+        let id = DEVELOPMENT_START;
+        let references_per_frame = MAX_NUMERIC_FEATURES * 2;
+        let frame_count = MAX_SCALAR_THRESHOLD_SOURCE_REFERENCES / references_per_frame + 1;
+        let frames = (0..frame_count)
+            .map(|ordinal| {
+                ObservationFrame::new(
+                    u32::try_from(ordinal).expect("bounded ordinal"),
+                    NumericState::new(vec![1.0; MAX_NUMERIC_FEATURES]).expect("finite"),
+                    BooleanState::default(),
+                )
+            })
+            .collect();
+        let episode = ExperienceEpisode::new(EpisodeId::new(id), frames).expect("episode");
+        let batch =
+            InductionBatch::new(InductionDomain::Development, vec![episode], vec![graph(id)])
+                .expect("batch");
+
+        assert_eq!(
+            generate_numeric_threshold_candidates(&batch),
+            Err(NumericThresholdError::SourceReferenceLimitExceeded {
+                maximum: MAX_SCALAR_THRESHOLD_SOURCE_REFERENCES,
+            })
+        );
     }
 
     #[test]

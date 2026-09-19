@@ -14,6 +14,11 @@ use super::tdi2_predicate_candidates::{
 pub const MAX_PAIRWISE_FEATURES: usize = 64;
 /// Maximum canonical pairwise candidates emitted by one batch.
 pub const MAX_PAIRWISE_CANDIDATES: usize = 8_192;
+/// Maximum raw provenance contributions accepted before candidate accumulation.
+///
+/// This independently bounds repeated-frame growth even when the number of
+/// distinct pair/operator identities remains small.
+pub const MAX_PAIRWISE_SOURCE_REFERENCES: usize = 262_144;
 
 /// Boolean comparison represented by one pairwise candidate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -85,6 +90,7 @@ impl PairwiseRelationCandidate {
 pub enum PairwiseRelationError {
     FeatureWidthExceeded { actual: usize, maximum: usize },
     CandidateLimitExceeded { maximum: usize },
+    SourceReferenceLimitExceeded { maximum: usize },
     Provenance(CandidateProvenanceError),
 }
 
@@ -98,8 +104,12 @@ pub fn generate_pairwise_relation_candidates(
     batch: &InductionBatch,
 ) -> Result<Vec<PairwiseRelationCandidate>, PairwiseRelationError> {
     type Key = (u32, u32, PairwiseOperator);
-    let mut sources: BTreeMap<Key, Vec<CandidateSource>> = BTreeMap::new();
 
+    // Preflight the raw provenance budget before allocating per-candidate source
+    // vectors. For width n each frame contributes C(n, 2) * 3 source references.
+    // Repeated frames otherwise leave the unique-candidate count unchanged while
+    // growing memory and later sort work without bound.
+    let mut source_references = 0usize;
     for episode in batch.episodes() {
         for frame in episode.frames() {
             let width = frame.numeric().len();
@@ -109,6 +119,34 @@ pub fn generate_pairwise_relation_candidates(
                     maximum: MAX_PAIRWISE_FEATURES,
                 });
             }
+            let pairs = width
+                .checked_mul(width.saturating_sub(1))
+                .and_then(|value| value.checked_div(2))
+                .ok_or(PairwiseRelationError::SourceReferenceLimitExceeded {
+                    maximum: MAX_PAIRWISE_SOURCE_REFERENCES,
+                })?;
+            let additional = pairs.checked_mul(3).ok_or(
+                PairwiseRelationError::SourceReferenceLimitExceeded {
+                    maximum: MAX_PAIRWISE_SOURCE_REFERENCES,
+                },
+            )?;
+            source_references = source_references.checked_add(additional).ok_or(
+                PairwiseRelationError::SourceReferenceLimitExceeded {
+                    maximum: MAX_PAIRWISE_SOURCE_REFERENCES,
+                },
+            )?;
+            if source_references > MAX_PAIRWISE_SOURCE_REFERENCES {
+                return Err(PairwiseRelationError::SourceReferenceLimitExceeded {
+                    maximum: MAX_PAIRWISE_SOURCE_REFERENCES,
+                });
+            }
+        }
+    }
+
+    let mut sources: BTreeMap<Key, Vec<CandidateSource>> = BTreeMap::new();
+    for episode in batch.episodes() {
+        for frame in episode.frames() {
+            let width = frame.numeric().len();
             let source = CandidateSource::new(episode.id(), frame.ordinal());
             for left in 0..width {
                 for right in (left + 1)..width {
@@ -173,6 +211,10 @@ impl core::fmt::Display for PairwiseRelationError {
                 formatter,
                 "pairwise candidate count exceeds bounded maximum {maximum}"
             ),
+            Self::SourceReferenceLimitExceeded { maximum } => write!(
+                formatter,
+                "pairwise source-reference count exceeds bounded maximum {maximum}"
+            ),
             Self::Provenance(error) => write!(formatter, "invalid pairwise provenance: {error}"),
         }
     }
@@ -183,8 +225,8 @@ impl std::error::Error for PairwiseRelationError {}
 #[cfg(test)]
 mod tests {
     use super::{
-        MAX_PAIRWISE_FEATURES, PairwiseOperator, PairwiseRelationError,
-        generate_pairwise_relation_candidates,
+        MAX_PAIRWISE_FEATURES, MAX_PAIRWISE_SOURCE_REFERENCES, PairwiseOperator,
+        PairwiseRelationError, generate_pairwise_relation_candidates,
     };
     use crate::experimental::tdi2_induction_input::InductionBatch;
     use crate::experimental::tdi2_induction_split::{DEVELOPMENT_START, InductionDomain};
@@ -267,6 +309,33 @@ mod tests {
         assert_eq!(less.evaluate(&[1.0, 2.0]), Some(true));
         assert_eq!(less.evaluate(&[1.0]), None);
         assert_eq!(less.evaluate(&[f64::NAN, 2.0]), None);
+    }
+
+    #[test]
+    fn repeated_frames_cannot_bypass_pairwise_provenance_bound() {
+        let id = DEVELOPMENT_START;
+        let per_frame = (MAX_PAIRWISE_FEATURES * (MAX_PAIRWISE_FEATURES - 1) / 2) * 3;
+        let frame_count = MAX_PAIRWISE_SOURCE_REFERENCES / per_frame + 1;
+        let frames = (0..frame_count)
+            .map(|ordinal| {
+                ObservationFrame::new(
+                    u32::try_from(ordinal).expect("bounded ordinal"),
+                    NumericState::new(vec![1.0; MAX_PAIRWISE_FEATURES]).expect("finite"),
+                    BooleanState::default(),
+                )
+            })
+            .collect();
+        let episode = ExperienceEpisode::new(EpisodeId::new(id), frames).expect("episode");
+        let batch =
+            InductionBatch::new(InductionDomain::Development, vec![episode], vec![graph(id)])
+                .expect("batch");
+
+        assert_eq!(
+            generate_pairwise_relation_candidates(&batch),
+            Err(PairwiseRelationError::SourceReferenceLimitExceeded {
+                maximum: MAX_PAIRWISE_SOURCE_REFERENCES,
+            })
+        );
     }
 
     #[test]

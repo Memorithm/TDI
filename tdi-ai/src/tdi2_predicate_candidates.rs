@@ -167,19 +167,13 @@ impl CandidateProvenance {
         graphs: Option<&[ObservationGraph]>,
     ) -> Result<(), CandidateProvenanceError> {
         if family == PredicateCandidateFamily::ObservedRelation {
-            let graphs = graphs.ok_or(CandidateProvenanceError::RelationalEvidenceUnbound)?;
-            for source in sources {
-                let graph = graphs
-                    .iter()
-                    .find(|graph| graph.episode() == source.episode())
-                    .ok_or(CandidateProvenanceError::RelationalEvidenceUnbound)?;
-                if graph.relations().is_empty() {
-                    return Err(CandidateProvenanceError::MissingObservedRelation {
-                        episode: source.episode(),
-                    });
-                }
-            }
-            return Ok(());
+            // ObservationGraph is currently bound only to an episode, while
+            // CandidateSource names a concrete frame. An episode-level relation
+            // therefore cannot honestly prove that the relation was observed at
+            // the cited frame. Keep this family closed until the graph contract
+            // carries an explicit frame/interval binding.
+            let _ = graphs;
+            return Err(CandidateProvenanceError::RelationalEvidenceUnbound);
         }
 
         for source in sources {
@@ -296,7 +290,7 @@ impl core::fmt::Display for CandidateProvenanceError {
                 episode.raw()
             ),
             Self::RelationalEvidenceUnbound => formatter.write_str(
-                "observed-relation provenance requires an explicit observation-graph binding",
+                "observed-relation provenance requires an explicit frame-level observation-graph binding",
             ),
             Self::MissingObservedRelation { episode } => write!(
                 formatter,
@@ -465,37 +459,24 @@ mod tests {
     }
 
     #[test]
-    fn relation_candidates_require_relational_evidence_from_bound_batch() {
+    fn relation_candidates_remain_fail_closed_without_frame_level_graph_binding() {
         let id = DEVELOPMENT_START;
         let observed_episode = ExperienceEpisode::new(
             EpisodeId::new(id),
-            vec![ObservationFrame::new(
-                0,
-                NumericState::new(vec![1.0, 2.0]).expect("finite"),
-                BooleanState::default(),
-            )],
+            vec![
+                ObservationFrame::new(
+                    0,
+                    NumericState::new(vec![1.0, 2.0]).expect("finite"),
+                    BooleanState::default(),
+                ),
+                ObservationFrame::new(
+                    1,
+                    NumericState::new(vec![3.0, 4.0]).expect("finite"),
+                    BooleanState::default(),
+                ),
+            ],
         )
         .expect("episode");
-        let source = CandidateSource::new(EpisodeId::new(id), 0);
-        let empty_graph =
-            ObservationGraph::new(EpisodeId::new(id), Vec::new(), Vec::new()).expect("empty graph");
-        let empty_batch = InductionBatch::new(
-            InductionDomain::Development,
-            vec![observed_episode.clone()],
-            vec![empty_graph],
-        )
-        .expect("batch");
-        assert_eq!(
-            CandidateProvenance::new_in_batch(
-                PredicateCandidateFamily::ObservedRelation,
-                vec![source],
-                &empty_batch,
-            ),
-            Err(CandidateProvenanceError::MissingObservedRelation {
-                episode: EpisodeId::new(id)
-            })
-        );
-
         let left = ObservedEntityId::new(1);
         let right = ObservedEntityId::new(2);
         let graph = ObservationGraph::new(
@@ -517,13 +498,17 @@ mod tests {
             vec![graph],
         )
         .expect("batch");
-        let provenance = CandidateProvenance::new_in_batch(
-            PredicateCandidateFamily::ObservedRelation,
-            vec![source],
-            &batch,
-        )
-        .expect("relation evidence");
-        assert_eq!(provenance.sources(), &[source]);
+
+        for frame_ordinal in [0, 1] {
+            assert_eq!(
+                CandidateProvenance::new_in_batch(
+                    PredicateCandidateFamily::ObservedRelation,
+                    vec![CandidateSource::new(EpisodeId::new(id), frame_ordinal)],
+                    &batch,
+                ),
+                Err(CandidateProvenanceError::RelationalEvidenceUnbound)
+            );
+        }
     }
 
     #[test]

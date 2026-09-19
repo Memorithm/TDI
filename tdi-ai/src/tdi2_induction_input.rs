@@ -25,6 +25,8 @@ pub enum InductionInputError {
     MismatchedCardinality,
     /// Repeating one episode would silently overweight it.
     DuplicateEpisode { episode: EpisodeId },
+    /// Validation content is not yet bound to an immutable manifest/generator.
+    ValidationPopulationUnbound,
     /// An episode falls outside the selected frozen non-final population.
     EpisodeOutsidePopulation {
         domain: InductionDomain,
@@ -49,6 +51,13 @@ impl InductionBatch {
         }
         if episodes.len() != graphs.len() {
             return Err(InductionInputError::MismatchedCardinality);
+        }
+        // Merely reserving Validation IDs does not freeze Validation contents. Until
+        // this campaign binds those IDs to an immutable content manifest or a
+        // deterministic generator, accepting caller-supplied Validation episodes
+        // would permit post-observation replacement. Keep that boundary fail-closed.
+        if domain == InductionDomain::Validation {
+            return Err(InductionInputError::ValidationPopulationUnbound);
         }
         let population = frozen_population(domain);
         for episode in &episodes {
@@ -133,6 +142,9 @@ impl core::fmt::Display for InductionInputError {
             Self::MismatchedCardinality => {
                 formatter.write_str("induction episodes and graphs must have equal cardinality")
             }
+            Self::ValidationPopulationUnbound => formatter.write_str(
+                "validation population contents are not yet bound to an immutable manifest or deterministic generator",
+            ),
             Self::DuplicateEpisode { episode } => {
                 write!(
                     formatter,
@@ -224,7 +236,19 @@ mod tests {
     }
 
     #[test]
-    fn mixed_population_batch_is_rejected() {
+    fn validation_is_fail_closed_until_contents_are_immutably_frozen() {
+        assert_eq!(
+            InductionBatch::new(
+                InductionDomain::Validation,
+                vec![episode(VALIDATION_START)],
+                vec![graph(VALIDATION_START)],
+            ),
+            Err(InductionInputError::ValidationPopulationUnbound)
+        );
+    }
+
+    #[test]
+    fn development_rejects_validation_population_ids() {
         assert_eq!(
             InductionBatch::new(
                 InductionDomain::Development,

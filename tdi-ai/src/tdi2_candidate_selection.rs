@@ -318,25 +318,17 @@ mod tests {
     }
 
     #[test]
-    fn mixed_domains_fail_closed() {
-        let candidates = source_candidates();
-        let development = score_on(
-            &candidates[0],
-            InductionDomain::Development,
-            DEVELOPMENT_START + 1,
-            &[vec![0.5, 2.0]],
+    fn unbound_validation_cannot_supply_selection_evidence() {
+        use crate::experimental::tdi2_induction_input::InductionInputError;
+        let id = EpisodeId::new(VALIDATION_START);
+        assert_eq!(
+            InductionBatch::new(
+                InductionDomain::Validation,
+                vec![episode(VALIDATION_START, &[(0, vec![0.5, 2.0])])],
+                vec![ObservationGraph::new(id, Vec::new(), Vec::new()).expect("graph")],
+            ),
+            Err(InductionInputError::ValidationPopulationUnbound)
         );
-        let validation = score_on(
-            &candidates[1],
-            InductionDomain::Validation,
-            VALIDATION_START,
-            &[vec![0.5, 2.0]],
-        );
-        let error = select_candidates_v1(&[development, validation]).expect_err("mixed domains");
-        assert!(matches!(
-            error,
-            CandidateSelectionError::MixedDomains { .. }
-        ));
     }
 
     #[test]
