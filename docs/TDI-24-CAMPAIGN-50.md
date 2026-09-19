@@ -16,7 +16,7 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 | 06 | Even/odd attention recombination contract | **landed** in #549; checked mean/contrast parity decomposition and R/L reconstruction |
 | 07 | Deterministic normalizer reference | **stacked predecessor** #550; stable f64 masked softmax shared by V6/C6, fail-closed invalid rows |
 | 08 | Causal/non-causal masking reference | **stacked predecessor** #551; shared full/causal mask builder and identical normalization path across arms |
-| 09 | Operation + storage accounting | **current stacked slice**; source-level V6/C6 scalar-op counts plus carrier and mask/normalizer logical storage accounting |
+| 09 | Operation + storage accounting | **current stacked slice**; source-level V6/C6 arithmetic and fail-closed validity-predicate counts plus carrier and mask/normalizer logical storage accounting |
 | 10 | Stage-A audit/freeze | adversarial review; no unresolved P0/P1 semantic defects |
 
 ## Phase B — task populations and leakage discipline (PR 11–20)
