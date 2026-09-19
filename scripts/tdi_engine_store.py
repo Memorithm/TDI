@@ -462,6 +462,15 @@ class EngineStore:
         with self.db:
             self._event(campaign, kind, payload)
 
+    def has_event(self, campaign, kind):
+        """Return whether one exact operational event kind was durably recorded."""
+        if not isinstance(kind, str) or not kind or len(kind) > 128:
+            raise durable.ContractError("invalid campaign event kind")
+        return self.db.execute(
+            "SELECT 1 FROM events WHERE campaign=? AND kind=? LIMIT 1",
+            (campaign, kind),
+        ).fetchone() is not None
+
     def get(self, campaign):
         """Return one campaign including its immutable spec and current Hub snapshot."""
         row = self.db.execute("SELECT * FROM campaigns WHERE id=?", (campaign,)).fetchone()

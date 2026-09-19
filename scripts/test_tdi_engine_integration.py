@@ -253,6 +253,71 @@ class OperationalIntegrationTests(unittest.TestCase):
         self.assertEqual([], failures)
         self.assertEqual("cancelled", self.cli("resume", campaign, expected_code=durable.EXIT_TRIAL_FAILURE)["phase"])
 
+    def test_lost_cancel_response_reconciles_without_recancel(self):
+        spec = self.fault_plan("import time; time.sleep(60)")
+        client = self.client
+
+        class LostCancelResponse:
+            endpoint = client.endpoint
+            posts = 0
+
+            def request(self, method, path, **kwargs):
+                if method == "POST" and path.endswith("/cancel"):
+                    self.posts += 1
+                    client.request(method, path, **kwargs)
+                    raise HubTransportUnknown("synthetic lost cancel response")
+                return client.request(method, path, **kwargs)
+
+            def download(self, *args, **kwargs):
+                return client.download(*args, **kwargs)
+
+        lost = LostCancelResponse()
+        with EngineStore(self.catalogue) as store:
+            campaign = runtime.submit(client, store, spec, {})
+            workflow = store.get(campaign)["workflow"]
+
+        failures = []
+        def execute():
+            try:
+                with EngineStore(self.catalogue) as store:
+                    runtime.execute(client, store, campaign)
+            except Exception as error:
+                failures.append(error)
+
+        thread = threading.Thread(target=execute, daemon=True)
+        thread.start()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            snapshot = client.request("GET", f"/api/v1/workflows/{workflow}")
+            if snapshot["state"] == "running":
+                break
+            time.sleep(0.02)
+        self.assertEqual("running", snapshot["state"])
+
+        with EngineStore(self.catalogue) as store:
+            with self.assertRaises(HubTransportUnknown):
+                runtime.cancel(lost, store, campaign)
+            self.assertEqual(1, lost.posts)
+            self.assertEqual("cancel-requested", store.get(campaign)["phase"])
+            self.assertTrue(store.has_event(campaign, "cancel-response-unknown"))
+
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                snapshot = client.request("GET", f"/api/v1/workflows/{workflow}")
+                if snapshot["state"] in ("succeeded", "failed", "cancelled"):
+                    break
+                time.sleep(0.02)
+            self.assertEqual("cancelled", snapshot["state"])
+
+            reconciled = runtime.cancel(lost, store, campaign)
+            self.assertEqual("cancelled", reconciled["phase"])
+            self.assertEqual(1, lost.posts)
+            self.assertEqual([], store.results(campaign))
+
+        thread.join(timeout=20)
+        self.assertFalse(thread.is_alive(), "execution did not observe cancellation")
+        self.assertEqual([], failures)
+
     def test_lost_submission_response_requires_read_only_attach(self):
         spec = prepare_fixture(self.client, self.worker, trials=1)
         client = self.client
