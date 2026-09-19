@@ -13,8 +13,7 @@ use super::tdi21_stream::{
     BooleanStream, MAX_SLOTS, MemoryFootprint, MemoryMode, StreamConfig, StreamError,
 };
 
-pub const RELATIONAL_COMPONENT_ENVELOPE_SEMANTICS: &str =
-    "tdi21-relational-component-envelope-v1";
+pub const RELATIONAL_COMPONENT_ENVELOPE_SEMANTICS: &str = "tdi21-relational-component-envelope-v1";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ComponentEnvelopeError {
@@ -56,7 +55,9 @@ pub struct DeclaredComponentEnvelope {
     pub unallocated_component_bits: usize,
 }
 
-fn attention_component_bits(footprint: AttentionFootprint) -> Result<usize, ComponentEnvelopeError> {
+fn attention_component_bits(
+    footprint: AttentionFootprint,
+) -> Result<usize, ComponentEnvelopeError> {
     footprint
         .history_component_bits
         .checked_add(footprint.score_component_bits)
