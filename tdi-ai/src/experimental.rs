@@ -150,5 +150,7 @@ pub mod tdi2_intuition_transfer_tasks;
 pub mod tdi2_intuition_weight;
 #[path = "tdi2_observation_graph.rs"]
 pub mod tdi2_observation_graph;
+#[path = "tdi2_predicate_candidates.rs"]
+pub mod tdi2_predicate_candidates;
 #[path = "tdi2_template_induction.rs"]
 pub mod tdi2_template_induction;
