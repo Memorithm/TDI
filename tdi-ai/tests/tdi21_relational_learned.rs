@@ -152,4 +152,3 @@ fn learned_encoder_is_selected_only_from_development_task_addresses() {
 
     assert_eq!(selected, before);
 }
-
