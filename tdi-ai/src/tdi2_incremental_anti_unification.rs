@@ -13,7 +13,7 @@ use super::tdi2_anti_unification::{
 use super::tdi2_structural_terms::{StructuralTerm, StructuralTermError, StructuralTermKind};
 
 /// Versioned identity for the incremental multi-example baseline.
-pub const INCREMENTAL_ANTI_UNIFICATION_SCHEMA: &str = "tdi2.2-incremental-anti-unification-v3";
+pub const INCREMENTAL_ANTI_UNIFICATION_SCHEMA: &str = "tdi2.2-incremental-anti-unification-v4";
 /// Maximum number of examples in one incremental anti-unification batch.
 pub const MAX_INCREMENTAL_ANTI_UNIFICATION_TERMS: usize = 256;
 /// Maximum aggregate structural nodes accepted across one input batch.
@@ -178,7 +178,7 @@ pub fn incremental_anti_unify(
     let mut generalization = seed.clone();
     let mut steps = Vec::with_capacity(distinct_inputs.len().saturating_sub(1));
     let mut generated_variables = BTreeSet::new();
-    let mut next_variable = ordered
+    let variable_floor = ordered
         .iter()
         .filter_map(max_variable_id)
         .max()
@@ -188,7 +188,7 @@ pub fn incremental_anti_unify(
             &generalization,
             term,
             &mut generated_variables,
-            &mut next_variable,
+            variable_floor,
         )
         .map_err(IncrementalAntiUnificationError::Pairwise)?;
         generalization = step.generalization().clone();
@@ -408,6 +408,27 @@ mod tests {
                 ],
             )
         );
+        assert_eq!(
+            result.reconstruct_canonical_inputs().expect("replay"),
+            terms.to_vec()
+        );
+    }
+
+    #[test]
+    fn root_collapse_reclaims_a_generated_variable_at_namespace_limit() {
+        let retained = StructuralTerm::variable(StructuralVariableId::new(u32::MAX - 1));
+        let terms = [
+            app(3, vec![retained.clone(), atom(1)]),
+            app(3, vec![retained.clone(), atom(2)]),
+            app(4, vec![retained, atom(3)]),
+        ];
+
+        let result = incremental_anti_unify(&terms).expect("reclaimed root variable");
+        assert_eq!(
+            result.generalization(),
+            &StructuralTerm::variable(StructuralVariableId::new(u32::MAX))
+        );
+        assert_eq!(result.steps().len(), 2);
         assert_eq!(
             result.reconstruct_canonical_inputs().expect("replay"),
             terms.to_vec()
