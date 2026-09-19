@@ -161,6 +161,21 @@ def execute(client, store, campaign):
     return refresh(client, store, campaign)
 
 
+def _repair_completed_cache(store, campaign, record):
+    """Retry idempotent derived cache publication before returning completion.
+
+    The campaign terminal transition and cache rows are intentionally separate
+    durability boundaries.  A crash after the former must therefore make the
+    latter recoverable from already-verified result evidence on every completed
+    reconciliation path.  This helper never re-fetches Hub payloads.
+    """
+    if record["phase"] == "completed":
+        from tdi_engine_cache import publish_completed
+        publish_completed(store, campaign)
+        return store.get(campaign)
+    return record
+
+
 def refresh(client, store, campaign):
     """Read authoritative workflow state and verify declared successful outputs.
 
@@ -188,13 +203,13 @@ def refresh(client, store, campaign):
     phase = TERMINAL.get(state)
     # A terminal snapshot already committed before this refresh began has crossed
     # the evidence boundary: successful outputs were verified before the terminal
-    # phase was committed. Treat that duplicate as a read-only reconciliation.
+    # phase was committed. Keep terminal evidence read-only; derived cache repair is retried separately.
     # Concurrent refreshes are rechecked again below after read-side verification
     # so only one durable terminal transition can win.
     if (phase is not None and record["phase"] == phase
             and record["snapshot"] is not None
             and durable.canonical(record["snapshot"]) == durable.canonical(response)):
-        return record
+        return _repair_completed_cache(store, campaign, record)
     # Close the window between the initial catalogue read and the Hub GET before
     # performing publication/artifact reads. Another reconciler may have already
     # committed this exact terminal snapshot while this request was in flight.
@@ -202,7 +217,7 @@ def refresh(client, store, campaign):
         current = store.get(campaign)
         if (current["phase"] == phase and current["snapshot"] is not None
                 and durable.canonical(current["snapshot"]) == durable.canonical(response)):
-            return current
+            return _repair_completed_cache(store, campaign, current)
         if current["phase"] in set(TERMINAL.values()) and current["phase"] != phase:
             raise durable.ContractError("local terminal campaign state conflicts with Hub workflow")
     for key in sorted(actual_steps):
@@ -231,7 +246,7 @@ def refresh(client, store, campaign):
         # same terminal phase, keep that commit. Successful-output drift has
         # already been rejected by idempotent result verification above.
         if target_phase in terminal_phases and current_phase == target_phase:
-            return current
+            return _repair_completed_cache(store, campaign, current)
         if current_phase in terminal_phases and current_phase != target_phase:
             raise durable.ContractError("local terminal campaign state conflicts with Hub workflow")
         try:
@@ -244,10 +259,7 @@ def refresh(client, store, campaign):
         break
     else:
         raise durable.ContractError("campaign state kept changing during Hub reconciliation")
-    if phase == "completed":
-        from tdi_engine_cache import publish_completed
-        publish_completed(store, campaign)
-    return store.get(campaign)
+    return _repair_completed_cache(store, campaign, store.get(campaign))
 
 
 def validated_snapshot(spec, response):

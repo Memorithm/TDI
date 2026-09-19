@@ -443,6 +443,11 @@ class OperationalIntegrationTests(unittest.TestCase):
             before_results = store.results(campaign)
             before_publication_gets = counting.publication_gets
             before_downloads = counting.downloads
+            cache_rows = store.db.execute("SELECT key FROM cache ORDER BY key").fetchall()
+            self.assertGreater(len(cache_rows), 0)
+            with store.db:
+                store.db.execute("DELETE FROM cache WHERE key=?", (cache_rows[0][0],))
+            missing_cache_count = store.db.execute("SELECT COUNT(*) FROM cache").fetchone()[0]
 
             first = runtime.refresh(counting, store, campaign)
             second = runtime.refresh(counting, store, campaign)
@@ -453,6 +458,7 @@ class OperationalIntegrationTests(unittest.TestCase):
             self.assertEqual(before_results, store.results(campaign))
             self.assertEqual(before_publication_gets, counting.publication_gets)
             self.assertEqual(before_downloads, counting.downloads)
+            self.assertEqual(missing_cache_count + 1, store.db.execute("SELECT COUNT(*) FROM cache").fetchone()[0])
             self.assertEqual(1, sum(event["kind"] == "completed" for event in before_events))
 
     def test_concurrent_duplicate_terminal_refresh_commits_once(self):
