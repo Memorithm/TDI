@@ -761,3 +761,28 @@ persistent_search_results_2026_09_19:
     - freeze_new_broader_Development_comparison_before_search_policy_changes
   pending: [evidence_PR_exact_head_CI, evidence_PR_review_and_merge]
   authority: no_default_backend_protected_stage_confirmation_GPU_or_universal_superiority_promotion
+
+session_json_profile_2026_09_19:
+  status: implemented_local_diagnostics_passed_PR_CI_pending
+  pull_request: https://github.com/Memorithm/TDI/pull/532
+  candidate: d6448a0589a13f6c94e9e916ff23346b596b5425
+  evidence_path: docs/engineering/forge-session-profiling.md
+  changes:
+    - plain_JSON_cProfile_diagnostics_with_explicit_nested_timing_scope_and_failure_retention
+    - bounded_JSON_object_keys_checked_in_place_without_stack_tuple_allocations
+    - actual_session_microbenchmark_and_CI_retained_diagnostics
+  checks:
+    - 8320_data_limit_differential_cases_preserve_shape_acceptance_and_rejection
+    - 35_combined_tests_pass_one_existing_separate_Rust_worker_test_skipped
+    - 15_additional_execution_graph_tests_pass
+    - actual_session_recovery_corruption_bounds_and_pidfd_checks_pass
+    - both_2304_evaluation_smoke_reports_verified_all_144_trajectories_identical
+  measured_scope:
+    - initial_median_paired_shape_walk_ratio_1_3624_followup_1_3558
+    - shape_walk_only_not_full_decoder_or_end_to_end_speed
+    - profile_cumulative_times_overlap_and_include_IO_wait
+    - persistence_receipts_fsync_and_optimizer_policies_unchanged
+  pending: [exact_head_CI, material_review, merge]
+  evidence_PR_531_observed_head: 6b86986b47e8e7ed1a97a58b222317ac1b650058
+  evidence_PR_531_observed_status: 62_success_two_queued_all_review_threads_resolved
+  authority: no_protected_stage_default_backend_or_universal_superiority_promotion
