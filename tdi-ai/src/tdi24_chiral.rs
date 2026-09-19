@@ -364,6 +364,12 @@ pub struct ParityRecombinedScores {
     pub even: f64,
     /// Reflection-odd contrast branch `(R-L)/2`.
     pub odd: f64,
+    /// Algebra contract inherited from the source R/L pair.
+    pub algebra_contract: &'static str,
+    /// Channel-decomposition contract inherited from the source R/L pair.
+    pub decomposition_contract: &'static str,
+    /// Enantiomorphic-pair contract inherited from the source R/L pair.
+    pub pair_contract: &'static str,
     /// Contract defining this recombination.
     pub recombination_contract: &'static str,
 }
@@ -372,11 +378,29 @@ pub struct ParityRecombinedScores {
 pub fn parity_recombine(
     pair: EnantiomorphicScorePair,
 ) -> Result<ParityRecombinedScores, ChiralError> {
+    if pair.algebra_contract != CHIRAL_CONTRACT {
+        return Err(ChiralError::ContractMismatch {
+            field: "algebra_contract",
+        });
+    }
+    if pair.decomposition_contract != CHANNEL_DECOMPOSITION_CONTRACT {
+        return Err(ChiralError::ContractMismatch {
+            field: "decomposition_contract",
+        });
+    }
+    if pair.pair_contract != ENANTIOMORPHIC_SCORE_CONTRACT {
+        return Err(ChiralError::ContractMismatch {
+            field: "pair_contract",
+        });
+    }
     let sum = finite_add(pair.right, pair.left, "parity_even_sum")?;
     let difference = finite_add(pair.right, -pair.left, "parity_odd_difference")?;
     Ok(ParityRecombinedScores {
         even: finite_mul(0.5, sum, "parity_even_half")?,
         odd: finite_mul(0.5, difference, "parity_odd_half")?,
+        algebra_contract: pair.algebra_contract,
+        decomposition_contract: pair.decomposition_contract,
+        pair_contract: pair.pair_contract,
         recombination_contract: PARITY_RECOMBINATION_CONTRACT,
     })
 }
@@ -413,6 +437,11 @@ pub enum ChiralError {
     NonFiniteVector,
     /// One or more score coefficients are non-finite.
     NonFiniteWeights,
+    /// A versioned input contract does not match the declared consumer.
+    ContractMismatch {
+        /// Provenance field whose contract was rejected.
+        field: &'static str,
+    },
     /// A derived scalar overflowed or became non-finite.
     NonFiniteScalar {
         /// Name of the rejected derived quantity.
@@ -425,6 +454,12 @@ impl fmt::Display for ChiralError {
         match self {
             Self::NonFiniteVector => formatter.write_str("chiral carrier must be finite"),
             Self::NonFiniteWeights => formatter.write_str("chiral score weights must be finite"),
+            Self::ContractMismatch { field } => {
+                write!(
+                    formatter,
+                    "{field} is incompatible with parity recombination"
+                )
+            }
             Self::NonFiniteScalar { field } => write!(formatter, "{field} must be finite"),
         }
     }
@@ -586,11 +621,42 @@ mod tests {
         let base = parity_recombine(pair).unwrap();
         let reflected = parity_recombine(reflected_pair).unwrap();
 
+        assert_eq!(base.algebra_contract, CHIRAL_CONTRACT);
+        assert_eq!(base.decomposition_contract, CHANNEL_DECOMPOSITION_CONTRACT);
+        assert_eq!(base.pair_contract, ENANTIOMORPHIC_SCORE_CONTRACT);
         assert_eq!(base.recombination_contract, PARITY_RECOMBINATION_CONTRACT);
         close(reflected.even, base.even);
         close(reflected.odd, -base.odd);
         close(base.even + base.odd, pair.right);
         close(base.even - base.odd, pair.left);
+    }
+
+    #[test]
+    fn parity_recombination_rejects_incompatible_pair_provenance() {
+        let valid = EnantiomorphicScorePair {
+            right: 2.0,
+            left: 1.0,
+            algebra_contract: CHIRAL_CONTRACT,
+            decomposition_contract: CHANNEL_DECOMPOSITION_CONTRACT,
+            pair_contract: ENANTIOMORPHIC_SCORE_CONTRACT,
+        };
+        let mut invalid_algebra = valid;
+        invalid_algebra.algebra_contract = "future-algebra";
+        let mut invalid_decomposition = valid;
+        invalid_decomposition.decomposition_contract = "future-decomposition";
+        let mut invalid_pair = valid;
+        invalid_pair.pair_contract = "future-pair";
+
+        for (field, pair) in [
+            ("algebra_contract", invalid_algebra),
+            ("decomposition_contract", invalid_decomposition),
+            ("pair_contract", invalid_pair),
+        ] {
+            assert_eq!(
+                parity_recombine(pair),
+                Err(ChiralError::ContractMismatch { field })
+            );
+        }
     }
 
     #[test]

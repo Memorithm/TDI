@@ -93,4 +93,4 @@ The campaign pauses rather than forcing a later PR when:
 
 ## Progress accounting
 
-**4/50 merged** (#406, #471, #487, #492). Slice 05 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**5/50 merged** (#406, #471, #487, #492, #548). Slice 06 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
