@@ -20,7 +20,6 @@ pub const CANDIDATE_SCORE_SCHEMA: &str = "tdi2.2-candidate-description-evidence-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CandidateDescriptionEvidenceScore {
     domain: InductionDomain,
-    evaluation_batch_record: String,
     candidate_key: String,
     canonical_description_bytes: u32,
     opportunities: u64,
@@ -29,16 +28,10 @@ pub struct CandidateDescriptionEvidenceScore {
     counterexamples: u64,
     unknown: u64,
     evidence_margin: i128,
-    source_evidence_record: String,
+    source_evidence: CandidateEvidence,
 }
 
 impl CandidateDescriptionEvidenceScore {
-    /// Exact observation population shared by all scores in a matched ranking.
-    #[must_use]
-    pub fn evaluation_batch_record(&self) -> &str {
-        &self.evaluation_batch_record
-    }
-
     #[must_use]
     pub const fn domain(&self) -> InductionDomain {
         self.domain
@@ -93,10 +86,16 @@ impl CandidateDescriptionEvidenceScore {
         self.evidence_margin
     }
 
-    /// Exact canonical evidence record from which this score was derived.
+    /// Exact structured evidence from which this score was derived.
     #[must_use]
-    pub fn source_evidence_record(&self) -> &str {
-        &self.source_evidence_record
+    pub const fn source_evidence(&self) -> &CandidateEvidence {
+        &self.source_evidence
+    }
+
+    /// Serialize the exact source evidence only when requested.
+    #[must_use]
+    pub fn source_evidence_record(&self) -> String {
+        self.source_evidence.canonical_record()
     }
 
     /// Stable machine-readable score-component record.
@@ -108,8 +107,9 @@ impl CandidateDescriptionEvidenceScore {
             InductionDomain::Development => "development",
             InductionDomain::Validation => "validation",
         };
-        let mut source_hex = String::with_capacity(self.source_evidence_record.len() * 2);
-        append_hex(&mut source_hex, self.source_evidence_record.as_bytes());
+        let source_evidence_record = self.source_evidence_record();
+        let mut source_hex = String::with_capacity(source_evidence_record.len() * 2);
+        append_hex(&mut source_hex, source_evidence_record.as_bytes());
         format!(
             "{CANDIDATE_SCORE_SCHEMA};domain={domain};candidate={};description_bytes={};opportunities={};known={};support={};counterexamples={};unknown={};evidence_margin={};source_evidence_hex={source_hex}",
             self.candidate_key,
@@ -149,7 +149,6 @@ pub fn score_candidate_evidence(
 
     Ok(CandidateDescriptionEvidenceScore {
         domain: evidence.domain(),
-        evaluation_batch_record: evidence.evaluation_batch_record().to_owned(),
         candidate_key: key,
         canonical_description_bytes,
         opportunities: counts.opportunities(),
@@ -158,7 +157,10 @@ pub fn score_candidate_evidence(
         counterexamples: counts.counterexamples(),
         unknown: counts.unknown(),
         evidence_margin,
-        source_evidence_record: evidence.canonical_record(),
+        // CandidateEvidence keeps its canonical batch record in an Arc, so
+        // cloning this structured record preserves one shared batch allocation
+        // instead of materializing and hex-expanding it for every score.
+        source_evidence: evidence.clone(),
     })
 }
 
@@ -308,15 +310,61 @@ mod tests {
         let scores = score_candidate_catalogue(&evidence).expect("scores");
 
         assert_eq!(scores.len(), 2);
-        for score in &scores {
+        for (score, evidence) in scores.iter().zip(&evidence) {
             assert_eq!(
                 score.canonical_description_bytes() as usize,
                 score.candidate_key().len()
             );
+            assert!(std::ptr::eq(
+                score.source_evidence().evaluation_batch_record(),
+                evidence.evaluation_batch_record()
+            ));
         }
         assert_ne!(
             scores[0].canonical_description_bytes(),
             scores[1].canonical_description_bytes()
+        );
+    }
+
+    #[test]
+    fn equal_counts_from_distinct_batches_keep_distinct_score_evidence() {
+        let source = batch(vec![episode(DEVELOPMENT_START, &[(0, vec![1.0])])]);
+        let threshold = generate_numeric_threshold_candidates(&source)
+            .expect("thresholds")
+            .into_iter()
+            .find(|candidate| candidate.direction() == ThresholdDirection::LessEqual)
+            .expect("<= candidate");
+        let canonical = CanonicalPredicateCandidate::from_threshold(&threshold);
+        let first_batch = batch(vec![episode(
+            DEVELOPMENT_START + 1,
+            &[(0, vec![0.5]), (1, vec![2.0])],
+        )]);
+        let second_batch = batch(vec![episode(
+            DEVELOPMENT_START + 2,
+            &[(0, vec![0.5]), (1, vec![2.0])],
+        )]);
+
+        let first_evidence =
+            account_candidate_evidence(&first_batch, core::slice::from_ref(&canonical))
+                .expect("first evidence")
+                .pop()
+                .expect("one candidate");
+        let second_evidence =
+            account_candidate_evidence(&second_batch, core::slice::from_ref(&canonical))
+                .expect("second evidence")
+                .pop()
+                .expect("one candidate");
+        assert_eq!(first_evidence.counts(), second_evidence.counts());
+
+        let first_score = score_candidate_evidence(&first_evidence).expect("first score");
+        let second_score = score_candidate_evidence(&second_evidence).expect("second score");
+        assert_ne!(
+            first_score.source_evidence_record(),
+            second_score.source_evidence_record()
+        );
+        assert_ne!(
+            first_score.canonical_record(),
+            second_score.canonical_record()
         );
     }
 
