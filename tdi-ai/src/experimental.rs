@@ -86,6 +86,8 @@ pub mod tdi2_candidate_evidence;
 pub mod tdi2_candidate_identity;
 #[path = "tdi2_candidate_scoring.rs"]
 pub mod tdi2_candidate_scoring;
+#[path = "tdi2_candidate_selection.rs"]
+pub mod tdi2_candidate_selection;
 #[path = "tdi2_induction_input.rs"]
 pub mod tdi2_induction_input;
 #[path = "tdi2_induction_provenance.rs"]
