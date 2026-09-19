@@ -24,7 +24,7 @@ pub enum UnaryAddressRule {
 
 impl UnaryAddressRule {
     #[must_use]
-    pub const fn evaluate(self, input: u8) -> bool {
+    const fn evaluate(self, input: u8) -> bool {
         match self {
             Self::Constant(value) => value,
             Self::Literal { variable, inverted } => {
