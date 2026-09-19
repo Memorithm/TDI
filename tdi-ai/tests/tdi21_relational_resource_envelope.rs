@@ -2,8 +2,7 @@
 
 use tdi_ai::experimental::tdi21_attention::{AttentionConfig, AttentionMode};
 use tdi_ai::experimental::tdi21_relational_address_search::{
-    AddressSample, DevelopmentAddressSet, development_from_relational_tasks,
-    fit_relational_address,
+    AddressSample, DevelopmentAddressSet, development_from_relational_tasks, fit_relational_address,
 };
 use tdi_ai::experimental::tdi21_relational_resource_envelope::{
     ComponentEnvelopeError, build_declared_component_envelope,
@@ -20,8 +19,7 @@ fn attention(mode: AttentionMode) -> AttentionConfig {
 }
 
 fn sparse_program_bits() -> usize {
-    let development =
-        development_from_relational_tasks(&DevelopmentRelationalSet::v1()).unwrap();
+    let development = development_from_relational_tasks(&DevelopmentRelationalSet::v1()).unwrap();
     fit_relational_address(&development)
         .unwrap()
         .anf_program_semantic_bits()
@@ -76,8 +74,7 @@ fn identity_program_cost_reduces_binary_matched_slot_capacity() {
 
 #[test]
 fn dense_attention_component_ceiling_is_reported_without_total_budget_claim() {
-    let sparse =
-        build_declared_component_envelope(attention(AttentionMode::DenseQk), 456).unwrap();
+    let sparse = build_declared_component_envelope(attention(AttentionMode::DenseQk), 456).unwrap();
     let identity =
         build_declared_component_envelope(attention(AttentionMode::DenseQk), 584).unwrap();
 
@@ -96,10 +93,7 @@ fn dense_attention_component_ceiling_is_reported_without_total_budget_claim() {
 fn oversized_address_program_fails_before_fabricating_a_match() {
     let ceiling = 67_648;
     assert_eq!(
-        build_declared_component_envelope(
-            attention(AttentionMode::BinaryQk),
-            ceiling + 1,
-        ),
+        build_declared_component_envelope(attention(AttentionMode::BinaryQk), ceiling + 1,),
         Err(ComponentEnvelopeError::NoTwoWayBooleanConfigurationFits)
     );
 }
