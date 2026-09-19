@@ -109,5 +109,9 @@ exhaustion, Hub restart and verified bundle export. The `branch-rng` fixture add
 a complete post-advance RNG checkpoint checked by a separately implemented Python
 integer oracle; Jacobi independently exercises mutable cached numerical state.
 Rust tests cover zero horizon, cancellation before launch, metric/sink failure,
-failure atomicity, parallel owned branches and stochastic/cache conformance.
+failure atomicity, parallel owned branches, resumed paired execution for all three
+fixtures, and stochastic/cache conformance. The branched-RNG resumed-pair regression
+constructs same-depth checkpoints that differ only in checkpointed RNG state and
+requires the next independently replayed successors to diverge, so the executor
+cannot silently ignore restored RNG state.
 No FLAT/NNIS/GPU or protected model execution is implied by these capabilities.
