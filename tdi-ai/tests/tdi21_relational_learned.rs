@@ -1,9 +1,8 @@
 #![cfg(feature = "experimental")]
 
 use tdi_ai::experimental::tdi21_relational_address_search::{
-    AddressSample, DevelopmentAddressSet, ValidationAddressSet,
-    development_from_relational_tasks, evaluate_address_validation, fit_relational_address,
-    validation_from_relational_tasks,
+    AddressSample, DevelopmentAddressSet, ValidationAddressSet, development_from_relational_tasks,
+    evaluate_address_validation, fit_relational_address, validation_from_relational_tasks,
 };
 use tdi_ai::experimental::tdi21_relational_binding::{RelationalConfig, RelationalRead};
 use tdi_ai::experimental::tdi21_relational_learned::LearnedRelationalBinder;
@@ -28,8 +27,7 @@ fn config() -> RelationalConfig {
 }
 
 fn sparse_selected() -> tdi_ai::experimental::tdi21_relational_address_search::AddressSearchResult {
-    let development =
-        development_from_relational_tasks(&DevelopmentRelationalSet::v1()).unwrap();
+    let development = development_from_relational_tasks(&DevelopmentRelationalSet::v1()).unwrap();
     fit_relational_address(&development).unwrap()
 }
 
@@ -54,8 +52,7 @@ fn exact_address_mismatch_can_coexist_with_functional_renamed_id_transfer() {
     let selected = sparse_selected();
     let validation_addresses =
         validation_from_relational_tasks(&ValidationRelationalSet::v1()).unwrap();
-    let address_evidence =
-        evaluate_address_validation(&selected, &validation_addresses).unwrap();
+    let address_evidence = evaluate_address_validation(&selected, &validation_addresses).unwrap();
 
     assert_eq!(address_evidence.address_mismatches, 5);
     assert_eq!(address_evidence.bit_mismatches, 10);
@@ -122,21 +119,29 @@ fn unseen_multi_relation_same_subject_structure_exposes_sparse_alias() {
     // Both writes therefore map to the same learned key and the second replaces
     // the first logical fact without a B3 replacement event.
     assert_eq!(sparse_binder.recall(9, 9).unwrap(), RelationalRead::Hit(11));
-    assert_eq!(sparse_binder.recall(10, 9).unwrap(), RelationalRead::Hit(11));
+    assert_eq!(
+        sparse_binder.recall(10, 9).unwrap(),
+        RelationalRead::Hit(11)
+    );
     assert_eq!(sparse_binder.counters().work.memory_replacements, 0);
 
     let identity = basis_selected();
     let mut identity_binder = LearnedRelationalBinder::new(config(), identity).unwrap();
     identity_binder.bind(9, 9, 10).unwrap();
     identity_binder.bind(10, 9, 11).unwrap();
-    assert_eq!(identity_binder.recall(9, 9).unwrap(), RelationalRead::Hit(10));
-    assert_eq!(identity_binder.recall(10, 9).unwrap(), RelationalRead::Hit(11));
+    assert_eq!(
+        identity_binder.recall(9, 9).unwrap(),
+        RelationalRead::Hit(10)
+    );
+    assert_eq!(
+        identity_binder.recall(10, 9).unwrap(),
+        RelationalRead::Hit(11)
+    );
 }
 
 #[test]
 fn learned_encoder_is_selected_only_from_development_task_addresses() {
-    let development =
-        development_from_relational_tasks(&DevelopmentRelationalSet::v1()).unwrap();
+    let development = development_from_relational_tasks(&DevelopmentRelationalSet::v1()).unwrap();
     let selected = fit_relational_address(&development).unwrap();
     let before = selected.clone();
 
@@ -147,3 +152,5 @@ fn learned_encoder_is_selected_only_from_development_task_addresses() {
 
     assert_eq!(selected, before);
 }
+
+[executed on device: tarek (fa986a59-0105-42b8-b1db-7cddadcd871f)]
