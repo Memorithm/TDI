@@ -167,6 +167,7 @@ impl CanonicalPredicateCandidate {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CandidateDeduplicationError {
     CandidateLimitExceeded { maximum: usize },
+    IdentityEvidenceMismatch { source: CandidateSource },
     Provenance(CandidateProvenanceError),
 }
 
@@ -208,6 +209,7 @@ fn deduplicate_candidates_with_limit(
         .into_iter()
         .map(|(identity, sources)| {
             let provenance = CandidateProvenance::new_in_batch(identity.family(), sources, batch)?;
+            validate_identity_evidence(&identity, &provenance, batch)?;
             Ok(CanonicalPredicateCandidate {
                 identity,
                 provenance,
@@ -216,9 +218,76 @@ fn deduplicate_candidates_with_limit(
         .collect()
 }
 
+fn validate_identity_evidence(
+    identity: &PredicateCandidateIdentity,
+    provenance: &CandidateProvenance,
+    batch: &InductionBatch,
+) -> Result<(), CandidateDeduplicationError> {
+    for &source in provenance.sources() {
+        let episode = batch
+            .episodes()
+            .iter()
+            .find(|episode| episode.id() == source.episode())
+            .expect("provenance episode validated");
+        let index = episode
+            .frames()
+            .binary_search_by_key(&source.frame_ordinal(), |frame| frame.ordinal())
+            .expect("provenance frame validated");
+        let frame = &episode.frames()[index];
+        let valid = match *identity {
+            PredicateCandidateIdentity::ScalarThreshold {
+                feature_index,
+                threshold_bits,
+                ..
+            } => frame
+                .numeric()
+                .values()
+                .get(feature_index as usize)
+                .is_some_and(|value| {
+                    let bits = if *value == 0.0 {
+                        0.0_f64.to_bits()
+                    } else {
+                        value.to_bits()
+                    };
+                    bits == threshold_bits
+                }),
+            PredicateCandidateIdentity::PairwiseRelation {
+                left_feature,
+                right_feature,
+                ..
+            } => left_feature < right_feature && (right_feature as usize) < frame.numeric().len(),
+            PredicateCandidateIdentity::TemporalDelta { feature_index, .. } => {
+                (feature_index as usize) < frame.numeric().len()
+                    && [index.checked_sub(1), index.checked_add(1)]
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|neighbor| episode.frames().get(neighbor))
+                        .any(|neighbor| {
+                            (feature_index as usize) < neighbor.numeric().len()
+                                && provenance
+                                    .sources()
+                                    .binary_search(&CandidateSource::new(
+                                        episode.id(),
+                                        neighbor.ordinal(),
+                                    ))
+                                    .is_ok()
+                        })
+            }
+        };
+        if !valid {
+            return Err(CandidateDeduplicationError::IdentityEvidenceMismatch { source });
+        }
+    }
+    Ok(())
+}
+
 impl core::fmt::Display for CandidateDeduplicationError {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
+            Self::IdentityEvidenceMismatch { source } => write!(
+                formatter,
+                "candidate identity is unsupported by source {source:?}"
+            ),
             Self::CandidateLimitExceeded { maximum } => write!(
                 formatter,
                 "canonical predicate candidate count exceeds bounded maximum {maximum}"
@@ -432,5 +501,33 @@ mod tests {
             deduplicate_candidates_with_limit(&batch, records, 1),
             Err(CandidateDeduplicationError::CandidateLimitExceeded { maximum: 1 })
         );
+    }
+
+    #[test]
+    fn reused_source_ids_do_not_authorize_changed_identity_evidence() {
+        let id = DEVELOPMENT_START;
+        let original = batch(vec![episode(
+            id,
+            &[(0, vec![1.0, 2.0, 3.0]), (2, vec![2.0, 3.0, 4.0])],
+        )]);
+        let changed = batch(vec![episode(
+            id,
+            &[(0, vec![9.0, 8.0]), (1, vec![]), (2, vec![8.0, 9.0])],
+        )]);
+        for record in all_records(&original) {
+            let must_reject = match record.identity() {
+                PredicateCandidateIdentity::ScalarThreshold { .. }
+                | PredicateCandidateIdentity::TemporalDelta { .. } => true,
+                PredicateCandidateIdentity::PairwiseRelation { right_feature, .. } => {
+                    *right_feature == 2
+                }
+            };
+            if must_reject {
+                assert!(matches!(
+                    deduplicate_candidates(&changed, vec![record]),
+                    Err(CandidateDeduplicationError::IdentityEvidenceMismatch { .. })
+                ));
+            }
+        }
     }
 }
