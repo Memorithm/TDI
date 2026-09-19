@@ -455,7 +455,10 @@ impl fmt::Display for ChiralError {
             Self::NonFiniteVector => formatter.write_str("chiral carrier must be finite"),
             Self::NonFiniteWeights => formatter.write_str("chiral score weights must be finite"),
             Self::ContractMismatch { field } => {
-                write!(formatter, "{field} is incompatible with parity recombination")
+                write!(
+                    formatter,
+                    "{field} is incompatible with parity recombination"
+                )
             }
             Self::NonFiniteScalar { field } => write!(formatter, "{field} must be finite"),
         }
@@ -619,10 +622,7 @@ mod tests {
         let reflected = parity_recombine(reflected_pair).unwrap();
 
         assert_eq!(base.algebra_contract, CHIRAL_CONTRACT);
-        assert_eq!(
-            base.decomposition_contract,
-            CHANNEL_DECOMPOSITION_CONTRACT
-        );
+        assert_eq!(base.decomposition_contract, CHANNEL_DECOMPOSITION_CONTRACT);
         assert_eq!(base.pair_contract, ENANTIOMORPHIC_SCORE_CONTRACT);
         assert_eq!(base.recombination_contract, PARITY_RECOMBINATION_CONTRACT);
         close(reflected.even, base.even);
