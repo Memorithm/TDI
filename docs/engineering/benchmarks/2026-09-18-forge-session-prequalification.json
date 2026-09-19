@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "source": "d7c0714267e4428f386f2661f31ab825fbe51552",
+  "reason_for_new_qualification": "high-fd poll and journal provenance v2 robustness corrections; no policy/task/seed/budget tuning",
+  "completed_reports": [
+    {
+      "file": "2026-09-18-forge-session-prequalification32.json.gz",
+      "sha256": "9a9415ee4b3dba1856396f5a929326aecb70e1f4da565e00bde636987c3acb1c",
+      "bytes": 976106,
+      "report_identity": "b66ba279db3995214ae35bf3f1407b69e07d089505536cb03927e552d49f7744",
+      "status": "complete"
+    },
+    {
+      "file": "2026-09-18-forge-session-prequalification-transport.json.gz",
+      "sha256": "c4261ad88aeb1ff4d8d391d88a867fece73f3d205762433e473958808fe955b0",
+      "bytes": 92739,
+      "report_identity": "3d7de05cf0b3cbd8b7a39f2962de72ac5da8cfab620b52d154cf5c450597191f",
+      "status": "complete"
+    },
+    {
+      "file": "2026-09-18-forge-session-prequalification-smoke.json.gz",
+      "sha256": "8122cf0d41ffbbea9eabdc88327aae405d0b77ac66ce16292fa6601b5d86d89b",
+      "bytes": 57242,
+      "report_identity": "aed0f06f0ec25d9d7324c1b90f6be74e281c70bc9762c01506a0639b12647045",
+      "status": "complete"
+    },
+    {
+      "file": "2026-09-18-forge-session-prequalification-transport-smoke.json.gz",
+      "sha256": "95d04d57ceabb4f13c38aeb28a64339fd534b3af5e999d9875c6c74929d8b4e3",
+      "bytes": 14720,
+      "report_identity": "3173734a7c0f6fd0ddf9ff469c8b95b93455224d37c01b5f2e5b74b15cc31ed0",
+      "status": "complete"
+    }
+  ],
+  "incomplete_budget64": {
+    "status": "incomplete-no-report",
+    "cause": "execution-server session lost",
+    "retained_files": [
+      {
+        "file": "2026-09-18-forge-session-incomplete64-events.jsonl.gz",
+        "source_name": "events.jsonl",
+        "bytes": 1394429,
+        "sha256": "c388a2a9e2c6e36a3dc14ae5c3590f7e179f47a3b3ec77a15e7321c3338edeb2"
+      },
+      {
+        "file": "2026-09-18-forge-session-incomplete64-manifest.json.gz",
+        "source_name": "manifest.json",
+        "bytes": 4376,
+        "sha256": "e54a43e6b641f0059b0a7b22bad9da0bbd3f360a189c7e9a09af233be7bdf1cb"
+      }
+    ]
+  },
+  "full_trace_archive": {
+    "archive_sha256": "c1dff5a97860a887e600710477f82039b81505f9c13e4d620166037c6886d20f",
+    "archive_bytes": 164918128,
+    "file_counts": {
+      "session-transport-smoke": 2571,
+      "session-quality-smoke": 15267,
+      "session-transport-development": 25323,
+      "session-quality32": 302403,
+      "session-quality64": 430071
+    },
+    "scope": "prequalification source d7c0714267e4428f386f2661f31ab825fbe51552; quality64 incomplete after lost exec-server session"
+  }
+}
