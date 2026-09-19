@@ -61,6 +61,29 @@ Earlier development comparisons deliberately used different storage representati
 
 A future matched experiment must still add search/training cost, temporary memory, model parameters outside these components and physical measurements before any total-efficiency claim.
 
+## Same-episode comparison report
+
+A companion development report now executes the same relational episode through:
+
+- B0 DenseQk attention;
+- B1 BinaryQk attention;
+- the current learned B4 relational address encoder over two-way Boolean memory.
+
+For each episode, attention history capacity is set to exactly the number of declared facts rather than the historical capacity-16 control. B4 receives the maximal even slot count admitted by the same declared component ceiling after charging its ANF address-program bits.
+
+The report keeps separate:
+
+- correctness against the same evaluator-owned answer;
+- attention pairwise scores and native attention work;
+- B4 memory reads/writes and zero token-pair comparisons;
+- B4 address predictions and ANF term evaluations;
+- Development search work and fit error;
+- declared component ceiling and unused slack.
+
+Search work is reported but is not folded into the component ceiling. Consequently this remains a **matched declared-component** comparison only, never a total-budget comparison.
+
+The distractor control is particularly important: adding irrelevant retained facts increases B0/B1 pairwise-score work while the B4 path still performs one addressed read per hop. This is a semantic work property of the current references, not a wall-clock performance result.
+
 ## Fail-closed behavior
 
 If the address program alone exceeds the attention component ceiling, the envelope rejects the configuration rather than reporting zero slots or inventing a partial match.
