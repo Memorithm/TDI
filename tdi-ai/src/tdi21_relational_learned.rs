@@ -7,19 +7,14 @@
 
 use super::tdi21::{BooleanState, MemoryRead};
 use super::tdi21_anf_synthesis::AnfProgram;
-use super::tdi21_relational_address_search::{
-    AddressSearchResult, RELATIONAL_ADDRESS_BITS,
-};
+use super::tdi21_relational_address_search::{AddressSearchResult, RELATIONAL_ADDRESS_BITS};
 use super::tdi21_relational_binding::{MAX_COMPOSITION_HOPS, RelationalConfig, RelationalRead};
 use super::tdi21_relational_tasks::{
     RELATIONAL_V1_ENTITY_BITS, RELATIONAL_V1_RELATION_BITS, RelationalEpisode,
 };
-use super::tdi21_stream::{
-    BooleanStream, Event, StepOutput, StreamCounters, StreamError,
-};
+use super::tdi21_stream::{BooleanStream, Event, StepOutput, StreamCounters, StreamError};
 
-pub const LEARNED_RELATIONAL_ADDRESS_SEMANTICS: &str =
-    "tdi21-learned-relational-address-v1";
+pub const LEARNED_RELATIONAL_ADDRESS_SEMANTICS: &str = "tdi21-learned-relational-address-v1";
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct LearnedAddressWork {
@@ -269,3 +264,5 @@ impl LearnedRelationalBinder {
         self.compose_path(&episode.query.relations, episode.query.subject)
     }
 }
+
+[executed on device: tarek (fa986a59-0105-42b8-b1db-7cddadcd871f)]
