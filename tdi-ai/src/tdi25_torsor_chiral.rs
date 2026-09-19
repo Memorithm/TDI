@@ -44,6 +44,9 @@ pub const GENERIC6_WIDTH: usize = 6;
 /// Versioned carrier/accounting contract for T6/C6/G6.
 pub const CARRIER_ACCOUNTING_CONTRACT: &str = "tdi25-carrier-accounting-v1";
 
+/// Versioned common scalar score-scale contract.
+pub const SCORE_SCALE_CONTRACT: &str = "tdi25-common-score-scale-v1";
+
 const _GENERIC_MATCH_TORSOR: [(); TORSOR_WIDTH] = [(); GENERIC6_WIDTH];
 const _GENERIC_MATCH_CHIRAL: [(); super::tdi24_chiral::CHIRAL_WIDTH] = [(); GENERIC6_WIDTH];
 
@@ -208,6 +211,41 @@ pub fn generic_arm_score(query: Generic6, key: Generic6) -> Result<f64, Tdi25Err
     query.dot(key)
 }
 
+/// Common positive finite score divisor applied identically to all arms.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ScoreScale {
+    divisor: f64,
+}
+
+impl ScoreScale {
+    /// Construct a finite positive scale.
+    pub fn new(divisor: f64) -> Result<Self, Tdi25Error> {
+        if divisor.is_finite() && divisor > 0.0 {
+            Ok(Self { divisor })
+        } else {
+            Err(Tdi25Error::InvalidScoreScale)
+        }
+    }
+
+    /// Common `sqrt(6)` divisor for the matched six-component carriers.
+    pub fn matched_six_component() -> Self {
+        Self {
+            divisor: (GENERIC6_WIDTH as f64).sqrt(),
+        }
+    }
+
+    /// Expose the frozen divisor.
+    #[must_use]
+    pub const fn divisor(self) -> f64 {
+        self.divisor
+    }
+
+    /// Apply this scale to one already-valid scalar score.
+    pub fn apply(self, score: f64) -> Result<f64, Tdi25Error> {
+        finite_scalar(score / self.divisor, "scaled_score")
+    }
+}
+
 /// Stage-0 score bundle. Values are kept separate; this type deliberately does
 /// not compute a winner, rank, aggregate metric or statistical conclusion.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -218,6 +256,15 @@ pub struct ArmScores {
     pub chiral: f64,
     /// Generic six-component attribution control score.
     pub generic: f64,
+}
+
+/// Apply one identical scalar scale to all three arms.
+pub fn scaled_arm_scores(scores: ArmScores, scale: ScoreScale) -> Result<ArmScores, Tdi25Error> {
+    Ok(ArmScores {
+        torsor: scale.apply(scores.torsor)?,
+        chiral: scale.apply(scores.chiral)?,
+        generic: scale.apply(scores.generic)?,
+    })
 }
 
 /// Evaluate the three Stage-0 scalar score paths for one already-materialized
@@ -263,6 +310,8 @@ fn finite_scalar(value: f64, field: &'static str) -> Result<f64, Tdi25Error> {
 /// Stage-0 binding/control failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tdi25Error {
+    /// Score normalization divisor must be finite and strictly positive.
+    InvalidScoreScale,
     /// One upstream semantic contract no longer matches the frozen TDI-25 pin.
     SourceContractMismatch {
         /// Human-readable upstream source identifier.
@@ -288,6 +337,9 @@ pub enum Tdi25Error {
 impl fmt::Display for Tdi25Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidScoreScale => {
+                formatter.write_str("score scale must be finite and positive")
+            }
             Self::SourceContractMismatch {
                 source,
                 expected,
@@ -366,6 +418,29 @@ mod tests {
             carrier_accounting(ComparisonArm::G6).external_geometry_components,
             0
         );
+    }
+
+    #[test]
+    fn common_score_scale_is_identical_for_all_arms() {
+        let scale = ScoreScale::matched_six_component();
+        close(scale.divisor(), (6.0_f64).sqrt());
+        let scores = ArmScores {
+            torsor: 6.0,
+            chiral: 12.0,
+            generic: -3.0,
+        };
+        let scaled = scaled_arm_scores(scores, scale).unwrap();
+        close(scaled.torsor, scores.torsor / scale.divisor());
+        close(scaled.chiral, scores.chiral / scale.divisor());
+        close(scaled.generic, scores.generic / scale.divisor());
+        assert_eq!(SCORE_SCALE_CONTRACT, "tdi25-common-score-scale-v1");
+    }
+
+    #[test]
+    fn invalid_score_scales_fail_closed() {
+        for invalid in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert_eq!(ScoreScale::new(invalid), Err(Tdi25Error::InvalidScoreScale));
+        }
     }
 
     #[test]
