@@ -31,9 +31,18 @@ fn anf_identity_matches_exact_packing_for_every_v1_input_assignment() {
             let object = (relation ^ subject) & 0x0f;
             exact.bind(relation, subject, object).unwrap();
             anf.bind(relation, subject, object).unwrap();
-            assert_eq!(exact.recall(relation, subject), anf.recall(relation, subject));
-            assert_eq!(exact.recall(relation, subject).unwrap(), RelationalRead::Hit(object));
-            assert_eq!(anf.recall(relation, subject).unwrap(), RelationalRead::Hit(object));
+            assert_eq!(
+                exact.recall(relation, subject),
+                anf.recall(relation, subject)
+            );
+            assert_eq!(
+                exact.recall(relation, subject).unwrap(),
+                RelationalRead::Hit(object)
+            );
+            assert_eq!(
+                anf.recall(relation, subject).unwrap(),
+                RelationalRead::Hit(object)
+            );
 
             assert_eq!(exact.relational_work().address_derivations, 3);
             assert_eq!(anf.relational_work().address_derivations, 3);
@@ -70,10 +79,7 @@ fn rejected_identifier_does_not_commit_anf_or_address_work() {
     let before_relational = anf.relational_work();
     let before_anf = anf.anf_work();
 
-    assert_eq!(
-        anf.bind(16, 1, 2),
-        Err(RelationalError::RelationOutOfRange)
-    );
+    assert_eq!(anf.bind(16, 1, 2), Err(RelationalError::RelationOutOfRange));
     assert_eq!(anf.counters(), before_stream);
     assert_eq!(anf.relational_work(), before_relational);
     assert_eq!(anf.anf_work(), before_anf);
@@ -85,10 +91,7 @@ fn exhausted_event_budget_does_not_commit_staged_anf_work() {
     anf.bind(1, 1, 2).unwrap();
     let before_relational = anf.relational_work();
     let before_anf = anf.anf_work();
-    assert!(matches!(
-        anf.recall(1, 1),
-        Err(RelationalError::Stream(_))
-    ));
+    assert!(matches!(anf.recall(1, 1), Err(RelationalError::Stream(_))));
     assert_eq!(anf.relational_work(), before_relational);
     assert_eq!(anf.anf_work(), before_anf);
 }
