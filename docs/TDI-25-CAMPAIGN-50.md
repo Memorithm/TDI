@@ -10,8 +10,8 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | ---: | --- | --- |
 | 01 | TDI-25 programme + comparison scaffold | **landed** in #408; reuses TDI-22 and TDI-24 contracts; no copied algebra |
 | 02 | Contract/version provenance pin | **landed** in #489; exact TDI-22/TDI-24 semantic contract IDs recorded, validated and rejected on mismatch |
-| 03 | G6 generic six-component control | **current slice**; versioned finite 6D Euclidean control with matched width and fail-closed arithmetic, no torsor/chiral structure |
-| 04 | Carrier/accounting equivalence | explicit six-component storage/readout accounting for T6/C6/G6 |
+| 03 | G6 generic six-component control | **stacked predecessor** #552; versioned finite 6D Euclidean control with matched width and fail-closed arithmetic |
+| 04 | Carrier/accounting equivalence | **current stacked slice**; explicit six-component query/key/readout accounting for T6/C6/G6 plus declared T6 geometry overhead |
 | 05 | Score-scale contract | common declared normalization; no arm-specific hidden scaling |
 | 06 | Torsor invariant bridge tests | transport/factorization invariants remain valid in TDI-25 adapter |
 | 07 | Chiral invariant bridge tests | mirror/parity identities remain valid in TDI-25 adapter |
