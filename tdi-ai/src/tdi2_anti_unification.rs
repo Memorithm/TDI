@@ -8,7 +8,8 @@
 use std::collections::BTreeMap;
 
 use super::tdi2_structural_terms::{
-    MAX_STRUCTURAL_TERM_NODES, StructuralTerm, StructuralTermError, StructuralVariableId,
+    MAX_STRUCTURAL_TERM_NODES, StructuralTerm, StructuralTermError, StructuralTermKind,
+    StructuralVariableId,
 };
 
 /// Versioned identity for the exact pairwise anti-unification baseline.
@@ -141,15 +142,15 @@ impl AntiUnificationContext {
         }
 
         if let (
-            StructuralTerm::Application {
+            StructuralTermKind::Application {
                 symbol: left_symbol,
                 arguments: left_arguments,
             },
-            StructuralTerm::Application {
+            StructuralTermKind::Application {
                 symbol: right_symbol,
                 arguments: right_arguments,
             },
-        ) = (left, right)
+        ) = (left.kind(), right.kind())
         {
             if left_symbol == right_symbol && left_arguments.len() == right_arguments.len() {
                 let arguments = left_arguments
@@ -196,10 +197,10 @@ impl AntiUnificationContext {
 }
 
 fn max_variable_id(term: &StructuralTerm) -> Option<u32> {
-    match term {
-        StructuralTerm::Variable(variable) => Some(variable.raw()),
-        StructuralTerm::Atom(_) => None,
-        StructuralTerm::Application { arguments, .. } => {
+    match term.kind() {
+        StructuralTermKind::Variable(variable) => Some(variable.raw()),
+        StructuralTermKind::Atom(_) => None,
+        StructuralTermKind::Application { arguments, .. } => {
             arguments.iter().filter_map(max_variable_id).max()
         }
     }
@@ -209,12 +210,12 @@ fn apply_substitution(
     term: &StructuralTerm,
     substitution: &[(StructuralVariableId, StructuralTerm)],
 ) -> Result<StructuralTerm, AntiUnificationError> {
-    match term {
-        StructuralTerm::Variable(variable) => Ok(substitution
+    match term.kind() {
+        StructuralTermKind::Variable(variable) => Ok(substitution
             .binary_search_by_key(variable, |(candidate, _)| *candidate)
             .map_or_else(|_| term.clone(), |index| substitution[index].1.clone())),
-        StructuralTerm::Atom(_) => Ok(term.clone()),
-        StructuralTerm::Application { symbol, arguments } => {
+        StructuralTermKind::Atom(_) => Ok(term.clone()),
+        StructuralTermKind::Application { symbol, arguments } => {
             let arguments = arguments
                 .iter()
                 .map(|argument| apply_substitution(argument, substitution))
@@ -278,10 +279,10 @@ impl std::error::Error for AntiUnificationError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::experimental::tdi2_structural_terms::{StructuralSymbol, StructuralSymbolNamespace};
+    use crate::experimental::tdi2_structural_terms::StructuralSymbol;
 
     fn atom(id: u32) -> StructuralTerm {
-        StructuralTerm::atom(StructuralSymbol::new(StructuralSymbolNamespace::Entity, id))
+        StructuralTerm::atom(StructuralSymbol::constructor(10_000 + id))
     }
 
     fn app(id: u32, arguments: Vec<StructuralTerm>) -> StructuralTerm {
