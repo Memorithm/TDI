@@ -32,6 +32,12 @@ pub struct CandidateDescriptionEvidenceScore {
 }
 
 impl CandidateDescriptionEvidenceScore {
+    /// Exact observation population shared by all scores in a matched ranking.
+    #[must_use]
+    pub fn evaluation_batch_record(&self) -> &str {
+        self.source_evidence.evaluation_batch_record()
+    }
+
     #[must_use]
     pub const fn domain(&self) -> InductionDomain {
         self.domain
