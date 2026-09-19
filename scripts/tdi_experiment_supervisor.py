@@ -74,7 +74,17 @@ def _validate_json_shape(value, max_depth, max_items, max_string_bytes):
             if len(current.encode("utf-8")) > max_string_bytes:
                 raise ContractError("JSON string length exceeded")
         elif isinstance(current, dict):
-            stack.extend((key, depth + 1) for key in current)
+            # json.loads guarantees string keys. Account for them directly:
+            # no temporary (key, depth) tuples or second traversal of the stack.
+            # Values retain the bounded iterative walk, including empty objects.
+            if current and depth + 1 > max_depth:
+                raise ContractError("JSON nesting depth exceeded")
+            seen += len(current)
+            if seen > max_items:
+                raise ContractError("JSON item count exceeded")
+            for key in current:
+                if len(key.encode("utf-8")) > max_string_bytes:
+                    raise ContractError("JSON string length exceeded")
             stack.extend((item, depth + 1) for item in current.values())
         elif isinstance(current, list):
             stack.extend((item, depth + 1) for item in current)
