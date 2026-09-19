@@ -56,6 +56,8 @@ pub mod tdi21_relational_attention;
 pub mod tdi21_relational_binding;
 #[path = "tdi21_relational_learned.rs"]
 pub mod tdi21_relational_learned;
+#[path = "tdi21_relational_resource_envelope.rs"]
+pub mod tdi21_relational_resource_envelope;
 #[path = "tdi21_relational_tasks.rs"]
 pub mod tdi21_relational_tasks;
 #[path = "tdi21_sequence_materializer.rs"]
