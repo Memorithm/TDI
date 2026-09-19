@@ -16,8 +16,8 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 | 06 | Even/odd attention recombination contract | **landed** in #549; checked mean/contrast parity decomposition and R/L reconstruction |
 | 07 | Deterministic normalizer reference | **landed** in #550; stable f64 masked softmax shared by V6/C6, fail-closed invalid rows |
 | 08 | Causal/non-causal masking reference | **landed** in #551; shared full/causal mask builder and identical normalization path across arms |
-| 09 | Operation + storage accounting | **current slice**; source-level V6/C6 arithmetic and fail-closed validity-predicate counts plus carrier and mask/normalizer logical storage accounting |
-| 10 | Stage-A audit/freeze | adversarial review; no unresolved P0/P1 semantic defects |
+| 09 | Operation + storage accounting | **landed** in #556; source-level V6/C6 arithmetic and fail-closed validity-predicate counts plus carrier and mask/normalizer logical storage accounting |
+| 10 | Stage-A audit/freeze | **current candidate**; cross-contract differential/adversarial audit, fail-closed manifest and no unresolved P0/P1 semantic defects |
 
 ## Phase B — task populations and leakage discipline (PR 11–20)
 
@@ -93,4 +93,4 @@ The campaign pauses rather than forcing a later PR when:
 
 ## Progress accounting
 
-**8/50 merged** (#406, #471, #487, #492, #548, #549, #550, #551). Slice 09 (#556) is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**9/50 merged** (#406, #471, #487, #492, #548, #549, #550, #551, #556). Slice 10 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
