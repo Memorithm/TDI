@@ -264,4 +264,3 @@ impl LearnedRelationalBinder {
         self.compose_path(&episode.query.relations, episode.query.subject)
     }
 }
-
