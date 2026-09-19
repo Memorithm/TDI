@@ -5,11 +5,17 @@
 //! entire fold replayable without introducing labels, outcomes, evaluator
 //! state, latency, or protected/final information.
 
-use super::tdi2_anti_unification::{AntiUnificationError, AntiUnificationResult, anti_unify};
-use super::tdi2_structural_terms::{StructuralTerm, StructuralTermError, StructuralTermKind};
+use std::collections::BTreeSet;
+
+use super::tdi2_anti_unification::{
+    AntiUnificationError, AntiUnificationResult, anti_unify_incremental,
+};
+use super::tdi2_structural_terms::{
+    StructuralTerm, StructuralTermError, StructuralTermKind, StructuralVariableId,
+};
 
 /// Versioned identity for the incremental multi-example baseline.
-pub const INCREMENTAL_ANTI_UNIFICATION_SCHEMA: &str = "tdi2.2-incremental-anti-unification-v2";
+pub const INCREMENTAL_ANTI_UNIFICATION_SCHEMA: &str = "tdi2.2-incremental-anti-unification-v3";
 /// Maximum number of examples in one incremental anti-unification batch.
 pub const MAX_INCREMENTAL_ANTI_UNIFICATION_TERMS: usize = 256;
 /// Maximum aggregate structural nodes accepted across one input batch.
@@ -173,9 +179,20 @@ pub fn incremental_anti_unify(
 
     let mut generalization = seed.clone();
     let mut steps = Vec::with_capacity(distinct_inputs.len().saturating_sub(1));
+    let mut generated_variables = BTreeSet::new();
+    let mut next_variable = ordered
+        .iter()
+        .filter_map(max_variable_id)
+        .max()
+        .map_or(Some(0), |maximum| maximum.checked_add(1));
     for term in distinct_inputs.iter().skip(1) {
-        let step =
-            anti_unify(&generalization, term).map_err(IncrementalAntiUnificationError::Pairwise)?;
+        let step = anti_unify_incremental(
+            &generalization,
+            term,
+            &mut generated_variables,
+            &mut next_variable,
+        )
+        .map_err(IncrementalAntiUnificationError::Pairwise)?;
         generalization = step.generalization().clone();
         steps.push(step);
     }
@@ -197,6 +214,16 @@ fn node_count(term: &StructuralTerm) -> usize {
         StructuralTermKind::Variable(_) | StructuralTermKind::Atom(_) => 1,
         StructuralTermKind::Application { arguments, .. } => {
             1 + arguments.iter().map(node_count).sum::<usize>()
+        }
+    }
+}
+
+fn max_variable_id(term: &StructuralTerm) -> Option<u32> {
+    match term.kind() {
+        StructuralTermKind::Variable(variable) => Some(variable.raw()),
+        StructuralTermKind::Atom(_) => None,
+        StructuralTermKind::Application { arguments, .. } => {
+            arguments.iter().filter_map(max_variable_id).max()
         }
     }
 }
@@ -273,7 +300,7 @@ mod tests {
                 7,
                 vec![
                     atom(1),
-                    StructuralTerm::variable(StructuralVariableId::new(1)),
+                    StructuralTerm::variable(StructuralVariableId::new(0)),
                 ],
             )
         );
@@ -334,6 +361,58 @@ mod tests {
                 .expect("replay")
                 .len(),
             3
+        );
+    }
+
+    #[test]
+    fn later_distinct_terms_reuse_the_accumulated_lgg_variable() {
+        let retained = StructuralTerm::variable(StructuralVariableId::new(u32::MAX - 1));
+        let terms = [
+            app(3, vec![retained.clone(), atom(1)]),
+            app(3, vec![retained.clone(), atom(2)]),
+            app(3, vec![retained.clone(), atom(3)]),
+        ];
+
+        let result = incremental_anti_unify(&terms).expect("reusable final variable");
+        assert_eq!(
+            result.generalization(),
+            &app(
+                3,
+                vec![
+                    retained,
+                    StructuralTerm::variable(StructuralVariableId::new(u32::MAX)),
+                ],
+            )
+        );
+        assert_eq!(result.steps().len(), 2);
+        assert_eq!(
+            result.reconstruct_canonical_inputs().expect("replay"),
+            terms.to_vec()
+        );
+    }
+
+    #[test]
+    fn later_evidence_splits_only_the_broken_equality_class() {
+        let terms = [
+            app(4, vec![atom(1), atom(1)]),
+            app(4, vec![atom(2), atom(2)]),
+            app(4, vec![atom(3), atom(4)]),
+        ];
+
+        let result = incremental_anti_unify(&terms).expect("split equality class");
+        assert_eq!(
+            result.generalization(),
+            &app(
+                4,
+                vec![
+                    StructuralTerm::variable(StructuralVariableId::new(0)),
+                    StructuralTerm::variable(StructuralVariableId::new(1)),
+                ],
+            )
+        );
+        assert_eq!(
+            result.reconstruct_canonical_inputs().expect("replay"),
+            terms.to_vec()
         );
     }
 
