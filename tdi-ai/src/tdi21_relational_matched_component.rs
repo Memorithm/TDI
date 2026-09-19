@@ -4,6 +4,7 @@
 //! representation components covered by `tdi21_relational_resource_envelope`
 //! and preserves search/inference work as separate evidence.
 
+use super::tdi21_attention::{AttentionConfig, AttentionMode};
 use super::tdi21_relational_address_search::{AddressSearchResult, AddressSearchWork};
 use super::tdi21_relational_attention::{
     RelationalAttentionConfig, RelationalAttentionError, RelationalAttentionOutcome,
@@ -20,10 +21,8 @@ use super::tdi21_relational_tasks::{
     RELATIONAL_V1_ENTITY_BITS, RELATIONAL_V1_RELATION_BITS, RelationalEpisode,
 };
 use super::tdi21_stream::{MemoryMode, StreamConfig, StreamCounters};
-use super::tdi21_attention::{AttentionConfig, AttentionMode};
 
-pub const RELATIONAL_MATCHED_COMPONENT_SEMANTICS: &str =
-    "tdi21-relational-matched-component-v1";
+pub const RELATIONAL_MATCHED_COMPONENT_SEMANTICS: &str = "tdi21-relational-matched-component-v1";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MatchedComponentError {
@@ -37,13 +36,19 @@ pub enum MatchedComponentError {
 }
 
 impl From<ComponentEnvelopeError> for MatchedComponentError {
-    fn from(value: ComponentEnvelopeError) -> Self { Self::Envelope(value) }
+    fn from(value: ComponentEnvelopeError) -> Self {
+        Self::Envelope(value)
+    }
 }
 impl From<RelationalAttentionError> for MatchedComponentError {
-    fn from(value: RelationalAttentionError) -> Self { Self::Attention(value) }
+    fn from(value: RelationalAttentionError) -> Self {
+        Self::Attention(value)
+    }
 }
 impl From<LearnedRelationalError> for MatchedComponentError {
-    fn from(value: LearnedRelationalError) -> Self { Self::Boolean(value) }
+    fn from(value: LearnedRelationalError) -> Self {
+        Self::Boolean(value)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -82,8 +87,8 @@ pub fn evaluate_matched_component_episode(
         .len()
         .checked_add(episode.query.relations.len())
         .ok_or(MatchedComponentError::ArithmeticOverflow)?;
-    let max_events = u64::try_from(required_events)
-        .map_err(|_| MatchedComponentError::ArithmeticOverflow)?;
+    let max_events =
+        u64::try_from(required_events).map_err(|_| MatchedComponentError::ArithmeticOverflow)?;
 
     let attention_config = AttentionConfig {
         mode,
