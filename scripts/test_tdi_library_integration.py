@@ -31,7 +31,7 @@ class LibraryIntegrationTests(unittest.TestCase):
         return json.loads(result.stdout)
 
     def test_actual_hub_both_libraries_and_restored_catalogue(self):
-        for adapter, domain in (("finite", "Development"), ("jacobi", "Validation")):
+        for adapter, domain in (("finite", "Development"), ("branch-rng", "Validation"), ("jacobi", "Validation")):
             with self.subTest(adapter=adapter):
                 plan = self.root / (adapter + ".json")
                 self.cli("library-fixture-plan", "--worker", self.worker, "--adapter", adapter,
@@ -53,7 +53,7 @@ class LibraryIntegrationTests(unittest.TestCase):
                 self.assertEqual(8, self.cli("verify", bundle, "--expected-identity", receipt["identity"])["verified_members"])
 
     def test_real_process_codec_continuation_identity_and_budget_rejection(self):
-        for adapter in ("finite", "jacobi"):
+        for adapter in ("finite", "branch-rng", "jacobi"):
             with self.subTest(adapter=adapter):
                 prefix = self.worker_run(adapter, 2)
                 suffix = self.worker_run(adapter, 2, restore=prefix["checkpoint"])
@@ -64,11 +64,16 @@ class LibraryIntegrationTests(unittest.TestCase):
                 self.worker_run(adapter, 2, seed=4, restore=prefix["checkpoint"], expected=21)
                 self.worker_run(adapter, 63, restore=prefix["checkpoint"], expected=21)
                 self.worker_run(adapter, 2, restore=prefix["checkpoint"] + "00", expected=21)
-                wrong_backend = self.worker_run("finite" if adapter == "jacobi" else "jacobi", 2)
+                wrong_backend = self.worker_run("jacobi" if adapter != "jacobi" else "finite", 2)
                 self.worker_run(adapter, 2, restore=wrong_backend["checkpoint"], expected=21)
                 p, seed = parameters(json.dumps({"schema": 1, "purpose": "development-software", "domain": "Development",
                                                 "index": 3, "plan_id": "a" * 64, "adapter": adapter}))
                 check_result(full, p, seed, 0, 4)
+                if adapter == "branch-rng":
+                    inexact = copy.deepcopy(full)
+                    inexact["observations"][0][0] += 1e-15
+                    with self.assertRaises(durable.ContractError):
+                        check_result(inexact, p, seed, 0, 4)
                 for field, value in (("seed", "4"), ("completed_depth", True), ("checkpoint", prefix["checkpoint"]),
                                      ("observations", [[True]] * 4), ("observations", [[float("nan")]] * 4)):
                     changed = copy.deepcopy(full); changed[field] = value

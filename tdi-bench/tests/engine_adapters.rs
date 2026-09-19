@@ -2,7 +2,7 @@ use tdi_ai::adapter_sdk::{ReplayCodec, check_codec_conformance};
 use tdi_ai::experiment::{
     Collection, NoiseCoupling, ReplayAdapter, RunLimits, StepContext, run_paired,
 };
-use tdi_bench::engine_adapters::{AdapterError, FiniteCycle, JacobiSweep};
+use tdi_bench::engine_adapters::{AdapterError, FiniteBranchRng, FiniteCycle, JacobiSweep};
 
 fn contexts() -> Vec<StepContext> {
     (1..=6)
@@ -123,6 +123,35 @@ fn finite_library_codec_branches_oracle_and_intervention() {
 }
 
 #[test]
+fn branched_finite_library_checkpoints_complete_rng_state() {
+    let source = FiniteBranchRng::new(0x1234_5678_9abc_def0).unwrap();
+    check_codec_conformance(&source, &contexts()).unwrap();
+    let original = source.encode_checkpoint().unwrap();
+    let mut branch = source.fork(&source.checkpoint().unwrap()).unwrap();
+    let mut state = 0x1234_5678_9abc_def0u64 % 4;
+    let mut rng = 0x1234_5678_9abc_def0u64 ^ 0x9e37_79b9_7f4a_7c15;
+    for context in contexts() {
+        rng = rng
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        let mut successors = [(state + 1) % 4, (state + 2) % 4];
+        successors.sort_unstable();
+        state = successors[(rng & 1) as usize];
+        assert_eq!(branch.advance(context).unwrap(), state);
+        let raw = branch.encode_checkpoint().unwrap();
+        assert_eq!(&raw[..8], b"TDIBRP1\0");
+        assert_eq!(raw[8], state as u8);
+        assert_eq!(raw[9], context.depth as u8);
+        assert_eq!(u64::from_le_bytes(raw[10..18].try_into().unwrap()), rng);
+        let restored = source
+            .fork(&source.decode_checkpoint(&raw).unwrap())
+            .unwrap();
+        assert_eq!(restored.encode_checkpoint().unwrap(), raw);
+    }
+    assert_eq!(source.encode_checkpoint().unwrap(), original);
+}
+
+#[test]
 fn jacobi_library_matches_independent_two_by_two_inverse() {
     let source = JacobiSweep::new(vec![4.0, 4.0], vec![1.0], 0.0).unwrap();
     check_codec_conformance(&source, &contexts()).unwrap();
@@ -166,6 +195,14 @@ fn codecs_reject_truncation_trailing_wrong_matrix_and_corrupted_cache() {
     let mut bad = raw;
     bad.push(0);
     assert!(finite.decode_checkpoint(&bad).is_err());
+    let branch = FiniteBranchRng::new(7).unwrap();
+    let raw = branch.encode_checkpoint().unwrap();
+    for size in 0..raw.len() {
+        assert!(branch.decode_checkpoint(&raw[..size]).is_err());
+    }
+    let mut bad = raw;
+    bad.push(0);
+    assert!(branch.decode_checkpoint(&bad).is_err());
     let mut jacobi = JacobiSweep::new(vec![4.0; 2], vec![1.0], 0.0).unwrap();
     jacobi.advance(contexts()[0]).unwrap();
     let raw = jacobi.encode_checkpoint().unwrap();
