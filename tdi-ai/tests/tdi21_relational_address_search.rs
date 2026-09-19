@@ -144,4 +144,3 @@ fn duplicate_or_empty_training_inputs_fail_closed() {
     );
 }
 
-[executed on device: tarek (fa986a59-0105-42b8-b1db-7cddadcd871f)]
