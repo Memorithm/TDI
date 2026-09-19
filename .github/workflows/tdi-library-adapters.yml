@@ -52,7 +52,7 @@ jobs:
       - name: Qualify owned state, codecs, failures and actual library worker
         run: |
           cargo test --locked -p tdi-bench --test engine_adapters
-          cargo test --locked -p tdi-ai --test experiment_contract --test bounded_migration
+          cargo test --locked -p tdi-ai --test adapter_sdk_codec --test experiment_contract --test bounded_migration
           cargo test --locked -p tdi-bench --doc engine_adapters
           cargo build --locked -p tdi-bench --example engine_adapter_worker
           cargo clippy --locked -p tdi-bench --example engine_adapter_worker --test engine_adapters -- -D warnings

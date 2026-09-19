@@ -7,7 +7,7 @@
 
 use tdi_ai::adapter_sdk::ReplayCodec;
 use tdi_ai::experiment::StepContext;
-use tdi_bench::engine_adapters::{AdapterError, FiniteCycle, JacobiSweep};
+use tdi_bench::engine_adapters::{AdapterError, FiniteBranchRng, FiniteCycle, JacobiSweep};
 
 fn run<A: ReplayCodec<Error = AdapterError>>(
     mut adapter: A,
@@ -113,6 +113,14 @@ fn main_result() -> Result<(), String> {
     let (values, checkpoint, depth) = match name {
         "finite" => run(
             FiniteCycle::new(seed).map_err(|_| "finite generation failed")?,
+            steps,
+            plan,
+            seed,
+            restore,
+            |x| vec![x as f64],
+        )?,
+        "branch-rng" => run(
+            FiniteBranchRng::new(seed).map_err(|_| "branched finite generation failed")?,
             steps,
             plan,
             seed,

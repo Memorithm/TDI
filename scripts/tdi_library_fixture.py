@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded Hub recipe exercising real finite/Jacobi libraries and their codecs.
+"""Bounded Hub recipe exercising finite/branched-RNG/Jacobi adapters and codecs.
 
 Each trial runs a two-step prefix, restores it in a new process for two more
 steps, runs four uninterrupted steps, then compares both paths and an independent
@@ -24,7 +24,7 @@ from tdi_engine_store import atomic_json, identity
 
 def prepare_library_fixture(client, worker, *, adapter, domain="Development", trials=2):
     """Register pinned local trusted software and return a four-stage trial DAG."""
-    if (adapter not in ("finite", "jacobi") or domain not in ("Development", "Validation")
+    if (adapter not in ("finite", "branch-rng", "jacobi") or domain not in ("Development", "Validation")
             or type(trials) is not int or not 1 <= trials <= 8):
         raise durable.ContractError("library fixture requires a known adapter and 1..8 non-final trials")
     worker = Path(worker)
@@ -88,7 +88,7 @@ def parameters(raw):
     p = durable.strict_json(raw, max_bytes=16384)
     if (not isinstance(p, dict) or set(p) != {"schema", "purpose", "domain", "adapter", "index", "plan_id"}
             or type(p["schema"]) is not int or p["schema"] != 1 or p["purpose"] != "development-software"
-            or p["domain"] not in ("Development", "Validation") or p["adapter"] not in ("finite", "jacobi")
+            or p["domain"] not in ("Development", "Validation") or p["adapter"] not in ("finite", "branch-rng", "jacobi")
             or type(p["index"]) is not int or not 0 <= p["index"] < 8):
         raise durable.ContractError("invalid library fixture parameters")
     graphs._sha256(p["plan_id"], "library plan")
@@ -102,6 +102,19 @@ def read_result(path):
         return durable.strict_json(stream.read(65537), max_bytes=65536)
 
 
+def branch_rng_oracle(seed, stop):
+    """Independent integer oracle for the bounded branched finite fixture."""
+    state = seed % 4
+    rng_state = seed ^ 0x9E3779B97F4A7C15
+    values = []
+    for _depth in range(1, stop + 1):
+        rng_state = (rng_state * 6364136223846793005 + 1442695040888963407) & ((1 << 64) - 1)
+        successors = sorted(((state + 1) % 4, (state + 2) % 4))
+        state = successors[rng_state & 1]
+        values.append([float(state)])
+    return values, state, rng_state
+
+
 def check_result(result, p, seed, start, stop):
     """Check every observation and the complete codec bytes with a separate oracle."""
     if (not isinstance(result, dict) or set(result) != {"schema", "status", "adapter", "plan_id", "seed", "completed_depth", "observations", "checkpoint"}
@@ -109,8 +122,14 @@ def check_result(result, p, seed, start, stop):
             or result["adapter"] != p["adapter"] or result["plan_id"] != p["plan_id"] or result["seed"] != str(seed)
             or type(result["completed_depth"]) is not int or result["completed_depth"] != stop):
         raise durable.ContractError("library result identity/shape mismatch")
-    expected = [[float((seed % 4 + depth) % 4)] if p["adapter"] == "finite" else
-                [(4 + depth / 4) / ((4 + depth / 4)**2 - 1)] * 2 for depth in range(start + 1, stop + 1)]
+    if p["adapter"] == "finite":
+        expected = [[float((seed % 4 + depth) % 4)] for depth in range(start + 1, stop + 1)]
+    elif p["adapter"] == "branch-rng":
+        trace, _, _ = branch_rng_oracle(seed, stop)
+        expected = trace[start:stop]
+    else:
+        expected = [[(4 + depth / 4) / ((4 + depth / 4)**2 - 1)] * 2
+                    for depth in range(start + 1, stop + 1)]
     rows = result["observations"]
     if not isinstance(rows, list) or len(rows) != len(expected):
         raise durable.ContractError("library observation population mismatch")
@@ -129,6 +148,11 @@ def check_result(result, p, seed, start, stop):
     if p["adapter"] == "finite":
         if raw != b"TDIFCP1\0" + bytes([(seed % 4 + stop) % 4, stop]):
             raise durable.ContractError("finite checkpoint oracle mismatch")
+    elif p["adapter"] == "branch-rng":
+        _, state, rng_state = branch_rng_oracle(seed, stop)
+        expected_checkpoint = b"TDIBRP1\0" + bytes([state, stop]) + struct.pack("<Q", rng_state)
+        if raw != expected_checkpoint:
+            raise durable.ContractError("branched RNG checkpoint oracle mismatch")
     else:
         if len(raw) != 59 or raw[:11] != b"TDIJCP1\0" + bytes([2, stop, 2]):
             raise durable.ContractError("Jacobi checkpoint shape mismatch")
@@ -158,8 +182,9 @@ def main():
             if prefix["observations"] + resumed["observations"] != full["observations"] or resumed["checkpoint"] != full["checkpoint"]:
                 raise durable.ContractError("split and uninterrupted execution disagree")
             result = {"schema": 1, "status": "Verified", "plan_id": p["plan_id"], "seed": str(seed), "adapter": p["adapter"],
-                      "oracle": "finite-cycle-modular/v1" if p["adapter"] == "finite" else "two-row-inverse/v1",
-                      "absolute_tolerance": 0 if p["adapter"] == "finite" else 2e-15,
+                      "oracle": ("finite-cycle-modular/v1" if p["adapter"] == "finite" else
+                                 "finite-branch-lcg/v1" if p["adapter"] == "branch-rng" else "two-row-inverse/v1"),
+                      "absolute_tolerance": 0 if p["adapter"] in ("finite", "branch-rng") else 2e-15,
                       "split_replay_equal": True, "input_sha256": {n: durable.file_digest(getattr(args, n)) for n in ("prefix", "resume", "full")}}
         else:
             if not args.worker or args.worker.is_symlink() or durable.file_digest(args.worker) != args.worker_sha256:

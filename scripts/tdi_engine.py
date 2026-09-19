@@ -57,7 +57,7 @@ def main(argv=None):
     p.add_argument("--trials", type=int, default=3); p.add_argument("--domain", choices=("Development", "Validation"), default="Development")
     p = sub.add_parser("library-fixture-plan")
     p.add_argument("--worker", type=Path, required=True); p.add_argument("--output", type=Path, required=True)
-    p.add_argument("--adapter", choices=("finite", "jacobi"), required=True)
+    p.add_argument("--adapter", choices=("finite", "branch-rng", "jacobi"), required=True)
     p.add_argument("--trials", type=int, default=2); p.add_argument("--domain", choices=("Development", "Validation"), default="Development")
     p = sub.add_parser("attention-fixture-plan")
     p.add_argument("--worker", type=Path, required=True); p.add_argument("--output", type=Path, required=True)

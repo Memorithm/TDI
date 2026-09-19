@@ -7,12 +7,13 @@ structural limits. Generation and intervention produce owned checkpoints;
 `run_paired` still owns paired advancement, caller-supplied scoring and sinks.
 Hub still owns process execution, dependency scheduling and publication fences.
 
-The two adapters in `tdi_bench::engine_adapters` execute real libraries:
+The three adapters in `tdi_bench::engine_adapters` exercise real library state plus distinct replay surfaces:
 
-| Adapter | Library | Independent check | Declared reproduction |
+| Adapter | Library/state surface | Independent check | Declared reproduction |
 | --- | --- | --- | --- |
 | `FiniteCycle` | `tdi_core::TableSystem` | Modular arithmetic for a four-state cycle | Exact for the same build/target |
-| `JacobiSweep` | `tdi_operator::GreenBands` | Analytic inverse of a positive two-row matrix | Binary64, absolute tolerance `2e-15` in this fixture |
+| `FiniteBranchRng` | `tdi_core::TableSystem` + checkpointed deterministic LCG state | Independent integer LCG + sorted-successor oracle | Exact for the same build/target |
+| `JacobiSweep` | `tdi_operator::GreenBands` + mutable cached diagonal | Analytic inverse of a positive two-row matrix | Binary64, absolute tolerance `2e-15` in this fixture |
 
 These public fixed fixtures use no frozen research populations. The Jacobi
 adapter accepts generic 1..16 row matrices and reports positive-pivot failures;
@@ -77,8 +78,8 @@ python3 scripts/tdi_engine.py --hub http://127.0.0.1:8477 --allow-loopback-http 
 
 Start the configured local Hub service first, then pass the returned `campaign`
 to `run`, `inspect`, `resume` and `export` as described in
-[operational-engine.md](operational-engine.md). Use `--adapter finite` for the
-finite-state fixture. Registration hashes the actual trusted Rust executable,
+[operational-engine.md](operational-engine.md). Use `--adapter finite` or `--adapter branch-rng` for the
+finite-state fixtures. Registration hashes the actual trusted Rust executable,
 Python interpreter and wrapper and binds their identities into the plan. The
 operator must keep this deployment immutable; hashes do not constitute an
 attestation or a sandbox against a malicious local writer.
@@ -95,7 +96,7 @@ Run the automated qualification (mandatory binaries, no substituted output):
 
 ```sh
 cargo test --locked -p tdi-bench --test engine_adapters
-cargo test --locked -p tdi-ai --test experiment_contract --test bounded_migration
+cargo test --locked -p tdi-ai --test adapter_sdk_codec --test experiment_contract --test bounded_migration
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts \
 TDI_HUBD_BIN="$PWD/../scirust-hub/target/debug/scirust-hubd" \
 TDI_LIBRARY_WORKER="$PWD/target/debug/examples/engine_adapter_worker" \
@@ -104,7 +105,9 @@ python3 -m unittest -v scripts/test_tdi_library_integration.py
 
 This covers actual Hub dependency/artifact handling, independent formulas,
 separate-process replay, wrong plan/seed/backend, malformed checkpoints, horizon
-exhaustion, Hub restart and verified bundle export. Rust tests cover zero
-horizon, cancellation before launch, metric/sink failure, failure atomicity,
-parallel owned branches and existing stochastic/cache conformance fixtures.
+exhaustion, Hub restart and verified bundle export. The `branch-rng` fixture adds
+a complete post-advance RNG checkpoint checked by a separately implemented Python
+integer oracle; Jacobi independently exercises mutable cached numerical state.
+Rust tests cover zero horizon, cancellation before launch, metric/sink failure,
+failure atomicity, parallel owned branches and stochastic/cache conformance.
 No FLAT/NNIS/GPU or protected model execution is implied by these capabilities.

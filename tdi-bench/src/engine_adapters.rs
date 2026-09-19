@@ -153,6 +153,149 @@ impl ReplayCodec for FiniteCycle {
     }
 }
 
+/// Complete state for a bounded branched finite system with explicit RNG state.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FiniteBranchCheckpoint {
+    state: State,
+    depth: usize,
+    rng_state: u64,
+}
+
+/// Two-successor finite transition system with a checkpointed deterministic RNG.
+///
+/// The RNG is deliberately simple and is used only to qualify complete-state replay;
+/// it is not a cryptographic generator or a scientific randomness source.
+#[derive(Clone)]
+pub struct FiniteBranchRng {
+    table: TableSystem,
+    checkpoint: FiniteBranchCheckpoint,
+}
+
+impl FiniteBranchRng {
+    const RNG_MULTIPLIER: u64 = 6_364_136_223_846_793_005;
+    const RNG_INCREMENT: u64 = 1_442_695_040_888_963_407;
+    const RNG_DOMAIN: u64 = 0x9e37_79b9_7f4a_7c15;
+
+    /// Generate a public bounded fixture whose seed initializes both state and RNG.
+    pub fn new(seed: u64) -> Result<Self, AdapterError> {
+        let mut table = TableSystem::new(2).map_err(|_| AdapterError::LibraryRejected)?;
+        for bits in 0..4 {
+            table
+                .insert(
+                    State::new(bits, 2).unwrap(),
+                    Action::Noop,
+                    vec![
+                        State::new((bits + 1) % 4, 2).unwrap(),
+                        State::new((bits + 2) % 4, 2).unwrap(),
+                    ],
+                )
+                .map_err(|_| AdapterError::LibraryRejected)?;
+        }
+        Ok(Self {
+            table,
+            checkpoint: FiniteBranchCheckpoint {
+                state: State::new(seed % 4, 2).unwrap(),
+                depth: 0,
+                rng_state: seed ^ Self::RNG_DOMAIN,
+            },
+        })
+    }
+}
+
+impl ReplayAdapter for FiniteBranchRng {
+    type Checkpoint = FiniteBranchCheckpoint;
+    type Observation = u64;
+    type Error = AdapterError;
+
+    fn fork(&self, checkpoint: &FiniteBranchCheckpoint) -> Result<Self, AdapterError> {
+        if checkpoint.state.width() != 2 || checkpoint.depth > 64 {
+            return Err(AdapterError::InvalidCheckpoint);
+        }
+        Ok(Self {
+            table: self.table.clone(),
+            checkpoint: checkpoint.clone(),
+        })
+    }
+
+    fn checkpoint(&self) -> Result<FiniteBranchCheckpoint, AdapterError> {
+        Ok(self.checkpoint.clone())
+    }
+
+    fn advance(&mut self, context: StepContext) -> Result<u64, AdapterError> {
+        if context.noise_stream != 0
+            || self.checkpoint.depth >= 64
+            || context.depth != self.checkpoint.depth + 1
+        {
+            return Err(AdapterError::InvalidContext);
+        }
+        let successors = self
+            .table
+            .successors(self.checkpoint.state, Action::Noop)
+            .map_err(|_| AdapterError::LibraryRejected)?;
+        if successors.len() != 2 {
+            return Err(AdapterError::LibraryRejected);
+        }
+        let rng_state = self
+            .checkpoint
+            .rng_state
+            .wrapping_mul(Self::RNG_MULTIPLIER)
+            .wrapping_add(Self::RNG_INCREMENT);
+        let state = successors[(rng_state & 1) as usize];
+        self.checkpoint = FiniteBranchCheckpoint {
+            state,
+            depth: context.depth,
+            rng_state,
+        };
+        Ok(state.bits())
+    }
+}
+
+impl ReplayCodec for FiniteBranchRng {
+    fn progress(&self) -> usize {
+        self.checkpoint.depth
+    }
+
+    fn contract(&self) -> AdapterContract {
+        AdapterContract {
+            implementation: "tdi-finite-branch-rng/v1",
+            advancement_unit: "branched finite transition",
+            observation_unit: "state integer in [0,3]",
+            precision: "exact u64",
+            reproduction: Reproduction::ExactBuildTarget,
+            rng: "LCG64 state: x'=6364136223846793005*x+1442695040888963407; seed-domain xor 0x9e3779b97f4a7c15",
+            max_checkpoint_bytes: 18,
+            max_steps: 64,
+            max_state_scalars: 3,
+            access: "Development/Validation software fixtures only",
+            execution_limits: "two successors per step; cooperative cancellation/deadline between bounded steps; no cryptographic/scientific RNG claim",
+        }
+    }
+
+    fn encode_checkpoint(&self) -> Result<Vec<u8>, AdapterError> {
+        let mut raw = b"TDIBRP1\0".to_vec();
+        raw.push(self.checkpoint.state.bits() as u8);
+        raw.push(self.checkpoint.depth as u8);
+        raw.extend(self.checkpoint.rng_state.to_le_bytes());
+        Ok(raw)
+    }
+
+    fn decode_checkpoint(&self, bytes: &[u8]) -> Result<FiniteBranchCheckpoint, AdapterError> {
+        if bytes.len() != 18 || &bytes[..8] != b"TDIBRP1\0" || bytes[8] > 3 || bytes[9] > 64 {
+            return Err(AdapterError::InvalidCheckpoint);
+        }
+        let rng_state = u64::from_le_bytes(
+            bytes[10..18]
+                .try_into()
+                .map_err(|_| AdapterError::InvalidCheckpoint)?,
+        );
+        Ok(FiniteBranchCheckpoint {
+            state: State::new(bytes[8] as u64, 2).unwrap(),
+            depth: bytes[9] as usize,
+            rng_state,
+        })
+    }
+}
+
 /// Complete Jacobi state, including immutable matrix and mutable cached diagonal.
 #[derive(Clone, Debug, PartialEq)]
 pub struct JacobiCheckpoint {
