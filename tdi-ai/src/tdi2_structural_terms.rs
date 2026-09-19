@@ -10,6 +10,7 @@ use super::tdi2_intuition::PredicateId;
 use super::tdi2_observation_graph::{
     ObservationGraph, ObservedEntityId, ObservedRelation, ObservedRelationId,
 };
+use super::tdi2_template_induction::EpisodeId;
 
 /// Versioned syntax identity for structural terms emitted by this slice.
 pub const STRUCTURAL_TERM_SCHEMA: &str = "tdi2.2-structural-term-v1";
@@ -47,17 +48,26 @@ impl StructuralSymbolNamespace {
 pub struct StructuralSymbol {
     namespace: StructuralSymbolNamespace,
     id: u32,
+    episode: Option<EpisodeId>,
 }
 
 impl StructuralSymbol {
     #[must_use]
-    pub const fn new(namespace: StructuralSymbolNamespace, id: u32) -> Self {
-        Self { namespace, id }
+    const fn new(namespace: StructuralSymbolNamespace, id: u32) -> Self {
+        Self {
+            namespace,
+            id,
+            episode: None,
+        }
     }
 
     #[must_use]
-    pub const fn entity(id: ObservedEntityId) -> Self {
-        Self::new(StructuralSymbolNamespace::Entity, id.raw())
+    pub const fn entity(episode: EpisodeId, id: ObservedEntityId) -> Self {
+        Self {
+            namespace: StructuralSymbolNamespace::Entity,
+            id: id.raw(),
+            episode: Some(episode),
+        }
     }
 
     #[must_use]
@@ -84,6 +94,19 @@ impl StructuralSymbol {
     pub const fn id(self) -> u32 {
         self.id
     }
+
+    #[must_use]
+    pub const fn episode(self) -> Option<EpisodeId> {
+        self.episode
+    }
+
+    fn write_canonical(self, output: &mut String) {
+        use core::fmt::Write as _;
+        write!(output, "{}:{}", self.namespace.key(), self.id).expect("write to string");
+        if let Some(episode) = self.episode {
+            write!(output, "@{}", episode.raw()).expect("write to string");
+        }
+    }
 }
 
 /// Explicit variable identity used by later anti-unification.
@@ -104,12 +127,18 @@ impl StructuralVariableId {
 
 /// One bounded first-order term.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum StructuralTerm {
+pub struct StructuralTerm {
+    kind: StructuralTermKind,
+}
+
+/// Read-only shape of a validated term. Creating a shape cannot construct a term.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum StructuralTermKind {
     Variable(StructuralVariableId),
     Atom(StructuralSymbol),
     Application {
         symbol: StructuralSymbol,
-        arguments: Vec<Self>,
+        arguments: Vec<StructuralTerm>,
     },
 }
 
@@ -125,17 +154,26 @@ pub enum StructuralTermError {
 
 impl StructuralTerm {
     #[must_use]
+    pub const fn kind(&self) -> &StructuralTermKind {
+        &self.kind
+    }
+
+    #[must_use]
     pub const fn variable(id: StructuralVariableId) -> Self {
-        Self::Variable(id)
+        Self {
+            kind: StructuralTermKind::Variable(id),
+        }
     }
 
     #[must_use]
     pub const fn atom(symbol: StructuralSymbol) -> Self {
-        Self::Atom(symbol)
+        Self {
+            kind: StructuralTermKind::Atom(symbol),
+        }
     }
 
     /// Construct and validate an application. Zero-arity constants must use
-    /// [`Self::Atom`] so one semantic term has one canonical representation.
+    /// [`Self::atom`] so one semantic term has one canonical representation.
     pub fn application(
         symbol: StructuralSymbol,
         arguments: Vec<Self>,
@@ -148,7 +186,9 @@ impl StructuralTerm {
                 maximum: MAX_STRUCTURAL_TERM_ARITY,
             });
         }
-        let term = Self::Application { symbol, arguments };
+        let term = Self {
+            kind: StructuralTermKind::Application { symbol, arguments },
+        };
         term.validate()?;
         Ok(term)
     }
@@ -170,9 +210,9 @@ impl StructuralTerm {
     }
 
     fn stats(&self) -> Result<(usize, usize), StructuralTermError> {
-        match self {
-            Self::Variable(_) | Self::Atom(_) => Ok((1, 1)),
-            Self::Application { arguments, .. } => {
+        match &self.kind {
+            StructuralTermKind::Variable(_) | StructuralTermKind::Atom(_) => Ok((1, 1)),
+            StructuralTermKind::Application { arguments, .. } => {
                 if arguments.is_empty() {
                     return Err(StructuralTermError::EmptyApplication);
                 }
@@ -219,23 +259,19 @@ impl StructuralTerm {
 
     fn write_canonical(&self, output: &mut String) {
         use core::fmt::Write as _;
-        match self {
-            Self::Variable(id) => {
+        match &self.kind {
+            StructuralTermKind::Variable(id) => {
                 write!(output, "v{};", id.raw()).expect("write to string");
             }
-            Self::Atom(symbol) => {
-                write!(output, "a:{}:{};", symbol.namespace().key(), symbol.id())
-                    .expect("write to string");
+            StructuralTermKind::Atom(symbol) => {
+                output.push_str("a:");
+                symbol.write_canonical(output);
+                output.push(';');
             }
-            Self::Application { symbol, arguments } => {
-                write!(
-                    output,
-                    "f:{}:{}:{}[",
-                    symbol.namespace().key(),
-                    symbol.id(),
-                    arguments.len()
-                )
-                .expect("write to string");
+            StructuralTermKind::Application { symbol, arguments } => {
+                output.push_str("f:");
+                symbol.write_canonical(output);
+                write!(output, ":{}[", arguments.len()).expect("write to string");
                 for argument in arguments {
                     argument.write_canonical(output);
                 }
@@ -246,24 +282,30 @@ impl StructuralTerm {
 }
 
 /// Convert one concrete relation observation into a binary first-order fact.
-pub fn relation_fact(relation: ObservedRelation) -> Result<StructuralTerm, StructuralTermError> {
+pub fn relation_fact(
+    episode: EpisodeId,
+    relation: ObservedRelation,
+) -> Result<StructuralTerm, StructuralTermError> {
     StructuralTerm::application(
         StructuralSymbol::relation(relation.relation()),
         vec![
-            StructuralTerm::atom(StructuralSymbol::entity(relation.left())),
-            StructuralTerm::atom(StructuralSymbol::entity(relation.right())),
+            StructuralTerm::atom(StructuralSymbol::entity(episode, relation.left())),
+            StructuralTerm::atom(StructuralSymbol::entity(episode, relation.right())),
         ],
     )
 }
 
 /// Convert one unary predicate observation into a first-order fact.
 pub fn predicate_fact(
+    episode: EpisodeId,
     entity: ObservedEntityId,
     predicate: PredicateId,
 ) -> Result<StructuralTerm, StructuralTermError> {
     StructuralTerm::application(
         StructuralSymbol::predicate(predicate),
-        vec![StructuralTerm::atom(StructuralSymbol::entity(entity))],
+        vec![StructuralTerm::atom(StructuralSymbol::entity(
+            episode, entity,
+        ))],
     )
 }
 
@@ -297,11 +339,11 @@ pub fn structural_facts_from_graph(
     let mut facts = Vec::with_capacity(count);
     for entity in graph.entities() {
         for &predicate in entity.predicates().predicates() {
-            facts.push(predicate_fact(entity.id(), predicate)?);
+            facts.push(predicate_fact(graph.episode(), entity.id(), predicate)?);
         }
     }
     for &relation in graph.relations() {
-        facts.push(relation_fact(relation)?);
+        facts.push(relation_fact(graph.episode(), relation)?);
     }
     facts.sort_unstable();
     facts.dedup();
@@ -376,7 +418,11 @@ mod tests {
                 .iter()
                 .any(|record| record.contains("f:predicate:2:1["))
         );
-        assert!(records.iter().any(|record| record.contains("a:entity:1;")));
+        assert!(
+            records
+                .iter()
+                .any(|record| record.contains("a:entity:1@9;"))
+        );
     }
 
     #[test]
@@ -389,6 +435,43 @@ mod tests {
         assert_ne!(variable.canonical_record(), atom.canonical_record());
         assert_ne!(atom.canonical_record(), application.canonical_record());
         assert_ne!(variable.canonical_record(), application.canonical_record());
+    }
+
+    #[test]
+    fn local_entity_ids_do_not_collide_across_episodes() {
+        let first = graph();
+        let other = ObservationGraph::new(
+            EpisodeId::new(10),
+            first.entities().to_vec(),
+            first.relations().to_vec(),
+        )
+        .expect("graph");
+        let left = structural_facts_from_graph(&first).expect("facts");
+        let right = structural_facts_from_graph(&other).expect("facts");
+        assert!(left.iter().all(|term| !right.contains(term)));
+        assert_ne!(left[0].canonical_record(), right[0].canonical_record());
+        assert_eq!(
+            StructuralSymbol::entity(EpisodeId::new(9), ObservedEntityId::new(1)).episode(),
+            Some(EpisodeId::new(9))
+        );
+    }
+
+    #[test]
+    fn composing_valid_children_still_checks_total_node_budget() {
+        let child = StructuralTerm::application(
+            StructuralSymbol::constructor(1),
+            vec![StructuralTerm::atom(StructuralSymbol::constructor(0)); MAX_STRUCTURAL_TERM_ARITY],
+        )
+        .expect("bounded child");
+        assert_eq!(
+            StructuralTerm::application(
+                StructuralSymbol::constructor(2),
+                vec![child; MAX_STRUCTURAL_TERM_ARITY]
+            ),
+            Err(StructuralTermError::NodeLimitExceeded {
+                maximum: MAX_STRUCTURAL_TERM_NODES
+            })
+        );
     }
 
     #[test]
