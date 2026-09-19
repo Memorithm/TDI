@@ -72,6 +72,8 @@ pub mod tdi23_ir_provenance;
 pub mod tdi23_reduction;
 #[path = "tdi23_rewrite.rs"]
 pub mod tdi23_rewrite;
+#[path = "tdi24_attention.rs"]
+pub mod tdi24_attention;
 #[path = "tdi24_chiral.rs"]
 pub mod tdi24_chiral;
 #[path = "tdi24_vector.rs"]
