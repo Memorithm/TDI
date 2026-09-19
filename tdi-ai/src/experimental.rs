@@ -166,3 +166,5 @@ pub mod tdi2_pairwise_relations;
 pub mod tdi2_predicate_candidates;
 #[path = "tdi2_template_induction.rs"]
 pub mod tdi2_template_induction;
+#[path = "tdi2_temporal_delta.rs"]
+pub mod tdi2_temporal_delta;

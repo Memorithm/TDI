@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - "tdi-ai/src/tdi2_intuition*.rs"
+      - "tdi-ai/src/tdi2_temporal_delta.rs"
       - "tdi-ai/src/tdi2_template_induction.rs"
       - "tdi-ai/src/tdi2_numeric_thresholds.rs"
       - "tdi-ai/src/tdi2_observation_graph.rs"
@@ -23,6 +24,7 @@ on:
     branches: [main]
     paths:
       - "tdi-ai/src/tdi2_intuition*.rs"
+      - "tdi-ai/src/tdi2_temporal_delta.rs"
       - "tdi-ai/src/tdi2_template_induction.rs"
       - "tdi-ai/src/tdi2_numeric_thresholds.rs"
       - "tdi-ai/src/tdi2_observation_graph.rs"
