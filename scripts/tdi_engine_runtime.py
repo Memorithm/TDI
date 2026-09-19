@@ -185,11 +185,21 @@ def refresh(client, store, campaign):
     if binding != record["admission"]:
         raise durable.ContractError("workflow admission changed")
     state, actual_steps = validated_snapshot(spec, response)
+    phase = TERMINAL.get(state)
+    # An exact duplicate terminal snapshot has already crossed the evidence
+    # boundary: successful outputs were verified before the terminal phase was
+    # committed.  Treat the duplicate as a read-only reconciliation so repeated
+    # GETs cannot append duplicate terminal commits or re-fetch artifact bytes.
+    # A changed terminal snapshot still follows the full verification path below
+    # and therefore remains subject to authoritative-result consistency checks.
+    if (phase is not None and record["phase"] == phase
+            and record["snapshot"] is not None
+            and durable.canonical(record["snapshot"]) == durable.canonical(response)):
+        return record
     for key in sorted(actual_steps):
         step = actual_steps[key]
         if step.get("state") == "succeeded":
             _collect_step(client, store, campaign, spec, binding, step)
-    phase = TERMINAL.get(state)
     if phase is None:
         phase = "cancel-requested" if record["phase"] == "cancel-requested" else (
             "admitted" if record["phase"] == "admitted" and state in ("created", "validated") else "executing")

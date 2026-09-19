@@ -416,6 +416,45 @@ class OperationalIntegrationTests(unittest.TestCase):
             self.assertEqual("admitted", runtime.attach(client, store, campaign, lost.created["id"], {})["phase"])
             self.assertEqual("completed", runtime.execute(client, store, campaign)["phase"])
 
+    def test_duplicate_terminal_refresh_is_read_only(self):
+        spec = prepare_fixture(self.client, self.worker, trials=1)
+        client = self.client
+
+        class CountingReads:
+            endpoint = client.endpoint
+            publication_gets = 0
+            downloads = 0
+
+            def request(self, method, path, **kwargs):
+                if method == "GET" and path.endswith("/publication"):
+                    self.publication_gets += 1
+                return client.request(method, path, **kwargs)
+
+            def download(self, *args, **kwargs):
+                self.downloads += 1
+                return client.download(*args, **kwargs)
+
+        counting = CountingReads()
+        with EngineStore(self.catalogue) as store:
+            campaign = runtime.submit(client, store, spec, {})
+            completed = runtime.execute(counting, store, campaign)
+            self.assertEqual("completed", completed["phase"])
+            before_events = store.events(campaign, limit=200)
+            before_results = store.results(campaign)
+            before_publication_gets = counting.publication_gets
+            before_downloads = counting.downloads
+
+            first = runtime.refresh(counting, store, campaign)
+            second = runtime.refresh(counting, store, campaign)
+
+            self.assertEqual(completed, first)
+            self.assertEqual(first, second)
+            self.assertEqual(before_events, store.events(campaign, limit=200))
+            self.assertEqual(before_results, store.results(campaign))
+            self.assertEqual(before_publication_gets, counting.publication_gets)
+            self.assertEqual(before_downloads, counting.downloads)
+            self.assertEqual(1, sum(event["kind"] == "completed" for event in before_events))
+
     def test_lost_execution_response_reconciles_without_redispatch(self):
         spec = prepare_fixture(self.client, self.worker, trials=1)
         client = self.client
