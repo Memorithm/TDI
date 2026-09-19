@@ -84,6 +84,8 @@ pub mod tdi2_baseline_contract;
 pub mod tdi2_candidate_evidence;
 #[path = "tdi2_candidate_identity.rs"]
 pub mod tdi2_candidate_identity;
+#[path = "tdi2_candidate_scoring.rs"]
+pub mod tdi2_candidate_scoring;
 #[path = "tdi2_induction_input.rs"]
 pub mod tdi2_induction_input;
 #[path = "tdi2_induction_provenance.rs"]
