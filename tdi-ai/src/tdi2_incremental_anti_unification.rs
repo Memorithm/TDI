@@ -6,7 +6,7 @@
 //! state, latency, or protected/final information.
 
 use super::tdi2_anti_unification::{AntiUnificationError, AntiUnificationResult, anti_unify};
-use super::tdi2_structural_terms::{StructuralTerm, StructuralTermError};
+use super::tdi2_structural_terms::{StructuralTerm, StructuralTermError, StructuralTermKind};
 
 /// Versioned identity for the incremental multi-example baseline.
 pub const INCREMENTAL_ANTI_UNIFICATION_SCHEMA: &str = "tdi2.2-incremental-anti-unification-v1";
@@ -167,9 +167,9 @@ pub fn incremental_anti_unify(
 }
 
 fn node_count(term: &StructuralTerm) -> usize {
-    match term {
-        StructuralTerm::Variable(_) | StructuralTerm::Atom(_) => 1,
-        StructuralTerm::Application { arguments, .. } => {
+    match term.kind() {
+        StructuralTermKind::Variable(_) | StructuralTermKind::Atom(_) => 1,
+        StructuralTermKind::Application { arguments, .. } => {
             1 + arguments.iter().map(node_count).sum::<usize>()
         }
     }
@@ -209,12 +209,10 @@ impl std::error::Error for IncrementalAntiUnificationError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::experimental::tdi2_structural_terms::{
-        StructuralSymbol, StructuralSymbolNamespace, StructuralVariableId,
-    };
+    use crate::experimental::tdi2_structural_terms::{StructuralSymbol, StructuralVariableId};
 
     fn atom(id: u32) -> StructuralTerm {
-        StructuralTerm::atom(StructuralSymbol::new(StructuralSymbolNamespace::Entity, id))
+        StructuralTerm::atom(StructuralSymbol::constructor(10_000 + id))
     }
 
     fn app(id: u32, arguments: Vec<StructuralTerm>) -> StructuralTerm {
