@@ -33,6 +33,9 @@ pub const CHANNEL_DECOMPOSITION_CONTRACT: &str = "tdi24-channel-decomposition-v1
 /// Versioned contract for the right/left enantiomorphic score pair.
 pub const ENANTIOMORPHIC_SCORE_CONTRACT: &str = "tdi24-enantiomorphic-score-pair-v1";
 
+/// Versioned contract for parity-even/odd recombination of the R/L branches.
+pub const PARITY_RECOMBINATION_CONTRACT: &str = "tdi24-parity-recombination-v1";
+
 /// Finite six-component parity carrier `(x+, x-)`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Chiral6 {
@@ -354,6 +357,39 @@ pub fn tagged_enantiomorphic_scores(
     })
 }
 
+/// Even/odd recombination of the enantiomorphic branches.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ParityRecombinedScores {
+    /// Reflection-even mean branch `(R+L)/2`.
+    pub even: f64,
+    /// Reflection-odd contrast branch `(R-L)/2`.
+    pub odd: f64,
+    /// Contract defining this recombination.
+    pub recombination_contract: &'static str,
+}
+
+/// Recombine a finite R/L score pair into explicit even and odd sectors.
+pub fn parity_recombine(
+    pair: EnantiomorphicScorePair,
+) -> Result<ParityRecombinedScores, ChiralError> {
+    let sum = finite_add(pair.right, pair.left, "parity_even_sum")?;
+    let difference = finite_add(pair.right, -pair.left, "parity_odd_difference")?;
+    Ok(ParityRecombinedScores {
+        even: finite_mul(0.5, sum, "parity_even_half")?,
+        odd: finite_mul(0.5, difference, "parity_odd_half")?,
+        recombination_contract: PARITY_RECOMBINATION_CONTRACT,
+    })
+}
+
+/// Evaluate and recombine the R/L branches for one query-key pair.
+pub fn recombined_scores(
+    query: Chiral6,
+    key: Chiral6,
+    weights: ChiralScoreWeights,
+) -> Result<ParityRecombinedScores, ChiralError> {
+    parity_recombine(tagged_enantiomorphic_scores(query, key, weights)?)
+}
+
 fn finite_mul(lhs: f64, rhs: f64, field: &'static str) -> Result<f64, ChiralError> {
     finite_scalar(lhs * rhs, field)
 }
@@ -538,6 +574,23 @@ mod tests {
         assert_eq!(base.pair_contract, ENANTIOMORPHIC_SCORE_CONTRACT);
         close(reflected.right, base.left);
         close(reflected.left, base.right);
+    }
+
+    #[test]
+    fn parity_recombination_is_even_odd_under_reflection_and_reconstructs_rl() {
+        let q = c([1.0, 2.0, -3.0], [0.5, -1.5, 2.5]);
+        let k = c([-4.0, 1.0, 2.0], [3.0, 0.25, -0.75]);
+        let weights = ChiralScoreWeights::new(0.7, -0.2, 1.3).unwrap();
+        let pair = tagged_enantiomorphic_scores(q, k, weights).unwrap();
+        let reflected_pair = tagged_enantiomorphic_scores(q.mirror(), k.mirror(), weights).unwrap();
+        let base = parity_recombine(pair).unwrap();
+        let reflected = parity_recombine(reflected_pair).unwrap();
+
+        assert_eq!(base.recombination_contract, PARITY_RECOMBINATION_CONTRACT);
+        close(reflected.even, base.even);
+        close(reflected.odd, -base.odd);
+        close(base.even + base.odd, pair.right);
+        close(base.even - base.odd, pair.left);
     }
 
     #[test]
