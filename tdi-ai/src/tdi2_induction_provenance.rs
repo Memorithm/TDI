@@ -3,6 +3,7 @@
 use core::fmt::Write as _;
 
 use super::tdi2_induction_input::InductionBatch;
+use super::tdi2_induction_split::InductionDomain;
 
 /// Provenance construction failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,7 +25,11 @@ fn append_hex(output: &mut String, bytes: &[u8]) {
 /// Canonical, label-free representation of the exact induction input.
 #[must_use]
 pub fn canonical_batch_record(batch: &InductionBatch) -> String {
-    let mut record = String::from("tdi2.2-induction-batch-v1;");
+    let domain = match batch.domain() {
+        InductionDomain::Development => "development",
+        InductionDomain::Validation => "validation",
+    };
+    let mut record = format!("tdi2.2-induction-batch-v2;domain={domain};");
     for (episode, graph) in batch.episodes().iter().zip(batch.graphs()) {
         let _ = write!(record, "episode={}[", episode.id().raw());
         for frame in episode.frames() {
@@ -112,6 +117,7 @@ impl std::error::Error for InductionProvenanceError {}
 mod tests {
     use super::{InductionProvenance, canonical_batch_record};
     use crate::experimental::tdi2_induction_input::InductionBatch;
+    use crate::experimental::tdi2_induction_split::{DEVELOPMENT_START, InductionDomain};
     use crate::experimental::tdi2_intuition::{BooleanState, NumericState, PredicateId};
     use crate::experimental::tdi2_observation_graph::{
         ObservationGraph, ObservedEntity, ObservedEntityId,
@@ -121,8 +127,9 @@ mod tests {
     };
 
     fn batch(value: f64) -> InductionBatch {
+        let id = DEVELOPMENT_START;
         let episode = ExperienceEpisode::new(
-            EpisodeId::new(1),
+            EpisodeId::new(id),
             vec![ObservationFrame::new(
                 0,
                 NumericState::new(vec![value]).expect("finite"),
@@ -131,6 +138,7 @@ mod tests {
         )
         .expect("episode");
         let graph = ObservationGraph::new(
+            EpisodeId::new(id),
             vec![ObservedEntity::new(
                 ObservedEntityId::new(9),
                 BooleanState::new(vec![PredicateId::new(7)]),
@@ -138,7 +146,8 @@ mod tests {
             Vec::new(),
         )
         .expect("graph");
-        InductionBatch::new(vec![episode], vec![graph]).expect("batch")
+        InductionBatch::new(InductionDomain::Development, vec![episode], vec![graph])
+            .expect("batch")
     }
 
     #[test]
