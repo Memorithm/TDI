@@ -4,7 +4,7 @@ Status: **active development; not frozen; no confirmatory execution**.
 
 ## Lineage and audit
 
-Bootstrap #233, homepage #234, audit #235, causal stream #237, evaluation controls #240, isolated attention references #241, first B4 ANF substitution #243, bounded exact-function search #244, local-predicate boundary #245, identifiability audit #246, conflict-preserving objective #247, distributional ANF search #256 and causal sequence materializer #257 are merged. The [2026-09-14 audit](TDI-21.0-AUDIT-20260914.md) reviews the initial TDI-21 source at `41a71e22a6bde76870d44f952f8d0b5767541e54`, documents eight defects/limitations and supplies corrective regressions. A merge or passing software test is not scientific confirmation.
+Bootstrap #233, homepage #234, audit #235, causal stream #237, evaluation controls #240, isolated attention references #241, first B4 ANF substitution #243, bounded exact-function search #244, local-predicate boundary #245, identifiability audit #246, conflict-preserving objective #247, distributional ANF search #256, causal sequence materializer #257 and relational binding/composition #560 are merged. The [2026-09-14 audit](TDI-21.0-AUDIT-20260914.md) reviews the initial TDI-21 source at `41a71e22a6bde76870d44f952f8d0b5767541e54`, documents eight defects/limitations and supplies corrective regressions. A merge or passing software test is not scientific confirmation.
 
 Corrective engineering includes invertible versioned routing, invalid-literal rejection, declared-width clause validation, full-width address reduction, checked arithmetic, separate resource categories, evidence-dimension validation, correct absent-marker scoring, delimiter-safe evidence v2 and duplicate/blank freeze-field rejection. A recorded zero pairwise count is not execution attestation; valid SHA syntax is not proof of executed code.
 
@@ -32,9 +32,11 @@ Independent-oracle tests enumerate every length-four stream over seven events fo
 
 [The causal sequence materializer](TDI-21.0-B4-SEQUENCE-MATERIALIZER.md), merged as #257, derives those counterfactual samples by executing explicit causal episodes through the audited evaluator rather than hand-authoring labels. Future probes and branch outcomes stay evaluator-side; the candidate receives only its current causal observation.
 
-[The relational binding prototype](TDI-21.0-RELATIONAL-BINDING.md) is the next development slice in this branch. It leaves cache/admission qualification and tests a broader attention function: exact subject–relation binding, bounded one-to-four-hop composition, renamed Development/Validation identifiers, an independent dictionary oracle, explicit address-work accounting and an ANF-identity substitution control. The ANF control must match direct symbolic addressing exactly; it is not yet learned semantic addressing or a trained-model result.
+[The relational binding prototype](TDI-21.0-RELATIONAL-BINDING.md), merged as #560, leaves cache/admission qualification and tests a broader attention function: exact subject–relation binding, bounded one-to-four-hop composition, renamed Development/Validation identifiers, an independent dictionary oracle, explicit address-work accounting and an ANF-identity substitution control. The ANF control matches direct symbolic addressing exactly; this establishes the mechanics and accounting boundary, not learned semantic addressing or a trained-model result.
 
-B5 learned relational state evolution, learned relational addressing beyond the identity control, trained attention-model comparisons and matched total-resource experiments are **not implemented**. Hand-written B0/B1/B2/B3 references, the B4 admission-policy machinery, the new relational harness and successful dictionary controls do not demonstrate language modeling or attention replacement at model scale.
+[The relational address learning control](TDI-21.0-RELATIONAL-ADDRESS-LEARNING.md) is the current development slice. It fits eight output address bits from Development only using the bounded rule family `{0, 1, x_i, NOT x_i}`, canonicalizes the selected rules into Zhegalkin/ANF programs, and executes those ANF programs inside bounded relational memory. Renamed Validation is evaluated post-selection with no refit. Exact-address mismatch, cross-namespace encoder aliasing, functional task success, search work, inference rule evaluations, ANF term evaluations and ANF semantic bits are reported separately. The sparse v1 Development support is intentionally under-identifying: it can fit Development perfectly while aliasing renamed symbols and failing unseen relational structure. A basis-covered positive control must recover the true identity map over all 256 inputs.
+
+B5 learned relational state evolution, relational address learning beyond the current unary control family, trained attention-model comparisons and matched total-resource experiments are **not implemented**. Hand-written B0/B1/B2/B3 references, the B4 admission-policy machinery, the new relational harness and successful dictionary controls do not demonstrate language modeling or attention replacement at model scale.
 
 ## Validation and reproduction
 
@@ -51,8 +53,8 @@ Use exact-head CI logs for current outcomes. The development script requires a c
 
 ## Next scientific milestones
 
-1. Qualify the relational binding/composition harness on exact current-main CI, including direct-vs-ANF identity equivalence, renamed identifiers, distractors, bounded path length and failure accounting.
-2. Add a separate Development-only learned/synthesized relational address surface and evaluate it unchanged on renamed Validation identifiers; preserve negative coverage counterexamples rather than hiding them.
+1. Qualify the Development-only unary relational address learner on exact current-main CI, including renamed-ID mismatch, cross-namespace aliasing, unseen-structure failure and the basis-covered identity control.
+2. Expand relational addressing only when a new representation/search family has a falsifiable benefit over the unary control; keep search cost, ANF program bits, inference terms and alias rate explicit.
 3. Add matched B0/B1 relational controls and explicit total memory/search/inference envelopes before any comparative claim.
 4. Freeze relational Development/Validation generation, search envelopes, metrics, rejection rules and stop conditions before confirmatory evidence.
 5. Build B5 only after B4 relational learning is falsifiable and reproducible, then qualify behavior before generic SciRust promotion or an elastic FLAT-ATTENTION hybrid.
