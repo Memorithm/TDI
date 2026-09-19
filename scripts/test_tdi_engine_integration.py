@@ -461,6 +461,43 @@ class OperationalIntegrationTests(unittest.TestCase):
             self.assertEqual(missing_cache_count + 1, store.db.execute("SELECT COUNT(*) FROM cache").fetchone()[0])
             self.assertEqual(1, sum(event["kind"] == "completed" for event in before_events))
 
+    def test_changed_terminal_snapshot_after_commit_fails_closed(self):
+        spec = prepare_fixture(self.client, self.worker, trials=1)
+        client = self.client
+        with EngineStore(self.catalogue) as store:
+            campaign = runtime.submit(client, store, spec, {})
+            completed = runtime.execute(client, store, campaign)
+            self.assertEqual("completed", completed["phase"])
+            before = store.get(campaign)
+            before_results = store.results(campaign)
+            before_events = store.events(campaign, limit=200)
+
+            class DriftedTerminalSnapshot:
+                endpoint = client.endpoint
+
+                def request(self, method, path, **kwargs):
+                    response = client.request(method, path, **kwargs)
+                    if method == "GET" and path == f"/api/v1/workflows/{before['workflow']}":
+                        response = copy.deepcopy(response)
+                        response["steps"][0]["attempts"].append(
+                            copy.deepcopy(response["steps"][0]["attempts"][0])
+                        )
+                    return response
+
+                def download(self, *args, **kwargs):
+                    return client.download(*args, **kwargs)
+
+            with self.assertRaisesRegex(
+                durable.ContractError,
+                "terminal workflow snapshot changed after authoritative commit",
+            ):
+                runtime.refresh(DriftedTerminalSnapshot(), store, campaign)
+
+            after = store.get(campaign)
+            self.assertEqual(before, after)
+            self.assertEqual(before_results, store.results(campaign))
+            self.assertEqual(before_events, store.events(campaign, limit=200))
+
     def test_concurrent_duplicate_terminal_refresh_commits_once(self):
         spec = prepare_fixture(self.client, self.worker, trials=1)
         client = self.client
