@@ -155,23 +155,24 @@ pub enum CodecConformanceError<E> {
 }
 
 fn check_codec_snapshot<A>(
-    adapter: &A,
+    encoder: &A,
+    pristine_factory: &A,
     expected: &A::Checkpoint,
 ) -> Result<(), CodecConformanceError<A::Error>>
 where
     A: ReplayCodec,
     A::Checkpoint: PartialEq,
 {
-    let bytes = adapter
+    let bytes = encoder
         .encode_checkpoint()
         .map_err(CodecConformanceError::Adapter)?;
-    if bytes.len() > adapter.contract().max_checkpoint_bytes {
+    if bytes.len() > encoder.contract().max_checkpoint_bytes {
         return Err(CodecConformanceError::CodecMismatch);
     }
-    let decoded = adapter
+    let decoded = pristine_factory
         .decode_checkpoint(&bytes)
         .map_err(CodecConformanceError::Adapter)?;
-    let restored = adapter
+    let restored = pristine_factory
         .fork(&decoded)
         .map_err(CodecConformanceError::Adapter)?;
     let restored_checkpoint = restored
@@ -179,12 +180,12 @@ where
         .map_err(CodecConformanceError::Adapter)?;
     if &decoded != expected
         || &restored_checkpoint != expected
-        || restored.progress() != adapter.progress()
+        || restored.progress() != encoder.progress()
         || restored
             .encode_checkpoint()
             .map_err(CodecConformanceError::Adapter)?
             != bytes
-        || adapter
+        || encoder
             .checkpoint()
             .map_err(CodecConformanceError::Adapter)?
             != *expected
@@ -214,7 +215,7 @@ where
     let original = adapter
         .checkpoint()
         .map_err(CodecConformanceError::Adapter)?;
-    check_codec_snapshot(adapter, &original)?;
+    check_codec_snapshot(adapter, adapter, &original)?;
 
     let mut progressed = adapter
         .fork(&original)
@@ -226,7 +227,7 @@ where
         let checkpoint = progressed
             .checkpoint()
             .map_err(CodecConformanceError::Adapter)?;
-        check_codec_snapshot(&progressed, &checkpoint)?;
+        check_codec_snapshot(&progressed, adapter, &checkpoint)?;
     }
 
     if adapter

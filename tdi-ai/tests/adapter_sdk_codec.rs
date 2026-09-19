@@ -115,7 +115,10 @@ impl ReplayCodec for StatefulCodec {
         let (rng_state, cached_mix, depth_offset) = if self.complete_codec {
             (word(16), word(24), 32)
         } else {
-            (0, 0, 16)
+            // Deliberately broken: omitted runtime state is reconstructed from
+            // the decoder instance. Decoding through a progressed instance can
+            // therefore mask the missing bytes; a pristine factory must reject it.
+            (self.checkpoint.rng_state, self.checkpoint.cached_mix, 16)
         };
         let depth = usize::try_from(word(depth_offset)).map_err(|_| "depth overflow")?;
         if depth > 16 {
@@ -149,7 +152,8 @@ fn stepwise_codec_conformance_accepts_complete_rng_and_cache_state() {
 #[test]
 fn stepwise_codec_conformance_rejects_codec_that_drops_runtime_state() {
     // The incomplete codec round-trips the fresh source because both mutable
-    // fields start at zero. It becomes invalid only after the first advance.
+    // fields start at zero. A progressed decoder could reconstruct the omitted
+    // fields from itself, so qualification must decode through the pristine factory.
     assert_eq!(
         check_codec_conformance(&StatefulCodec::new(false), &contexts()),
         Err(CodecConformanceError::CodecMismatch)
