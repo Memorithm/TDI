@@ -7,6 +7,8 @@
 //! `counterexample` is an observed `false`; missing/inapplicable numeric inputs
 //! remain explicit `unknown`. None of these counts is an expected task label.
 
+use std::sync::Arc;
+
 use super::tdi2_candidate_identity::{
     CanonicalPredicateCandidate, MAX_CANONICAL_CANDIDATES, PredicateCandidateIdentity,
 };
@@ -116,7 +118,7 @@ impl CandidateEvidenceCounts {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CandidateEvidence {
     domain: InductionDomain,
-    evaluation_batch_record: String,
+    evaluation_batch_record: Arc<str>,
     candidate: CanonicalPredicateCandidate,
     counts: CandidateEvidenceCounts,
 }
@@ -130,7 +132,7 @@ impl CandidateEvidence {
     /// Exact canonical observation-only batch on which these counts were computed.
     #[must_use]
     pub fn evaluation_batch_record(&self) -> &str {
-        &self.evaluation_batch_record
+        self.evaluation_batch_record.as_ref()
     }
 
     #[must_use]
@@ -205,7 +207,10 @@ pub fn account_candidate_evidence(
             maximum: MAX_CANONICAL_CANDIDATES,
         });
     }
-    let evaluation_batch_record = canonical_batch_record(batch);
+    // Every evidence entry binds to the same immutable batch. Share the
+    // canonical serialization instead of cloning the complete record once per
+    // candidate; cloning an Arc is bounded and preserves exact content binding.
+    let evaluation_batch_record: Arc<str> = canonical_batch_record(batch).into();
     let mut ordered = candidates.iter().collect::<Vec<_>>();
     ordered.sort_unstable_by_key(|candidate| candidate.identity());
     if let Some(candidate) = ordered
@@ -387,6 +392,8 @@ impl std::error::Error for CandidateEvidenceError {}
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::{CandidateEvidenceError, account_candidate_evidence};
     use crate::experimental::tdi2_candidate_identity::{
         CanonicalPredicateCandidate, MAX_CANONICAL_CANDIDATES, deduplicate_candidates,
@@ -486,6 +493,26 @@ mod tests {
             .expect("other accounting")[0]
             .canonical_record();
         assert_ne!(record, other);
+    }
+
+    #[test]
+    fn evidence_entries_share_one_immutable_batch_record() {
+        let source = batch(vec![episode(DEVELOPMENT_START, &[(0, vec![1.0])])]);
+        let candidates: Vec<_> = generate_numeric_threshold_candidates(&source)
+            .expect("thresholds")
+            .iter()
+            .map(CanonicalPredicateCandidate::from_threshold)
+            .collect();
+        let evidence = account_candidate_evidence(&source, &candidates).expect("accounting");
+        assert!(evidence.len() >= 2);
+        assert!(Arc::ptr_eq(
+            &evidence[0].evaluation_batch_record,
+            &evidence[1].evaluation_batch_record
+        ));
+        assert_eq!(
+            evidence[0].evaluation_batch_record(),
+            canonical_batch_record(&source)
+        );
     }
 
     #[test]

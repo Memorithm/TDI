@@ -9,12 +9,18 @@
 use std::collections::BTreeMap;
 
 use super::tdi2_induction_input::InductionBatch;
-use super::tdi2_numeric_thresholds::{NumericThresholdCandidate, ThresholdDirection};
-use super::tdi2_pairwise_relations::{PairwiseOperator, PairwiseRelationCandidate};
+use super::tdi2_numeric_thresholds::{
+    MAX_SCALAR_THRESHOLD_SOURCE_REFERENCES, NumericThresholdCandidate, ThresholdDirection,
+};
+use super::tdi2_pairwise_relations::{
+    MAX_PAIRWISE_SOURCE_REFERENCES, PairwiseOperator, PairwiseRelationCandidate,
+};
 use super::tdi2_predicate_candidates::{
     CandidateProvenance, CandidateProvenanceError, CandidateSource, PredicateCandidateFamily,
 };
-use super::tdi2_temporal_delta::{TemporalDeltaCandidate, TemporalDeltaOperator};
+use super::tdi2_temporal_delta::{
+    MAX_TEMPORAL_SOURCE_REFERENCES, TemporalDeltaCandidate, TemporalDeltaOperator,
+};
 
 /// Versioned schema label for stable candidate identities emitted by this slice.
 pub const CANDIDATE_IDENTITY_SCHEMA: &str = "tdi2.2-predicate-candidate-id-v1";
@@ -22,6 +28,15 @@ pub const CANDIDATE_IDENTITY_SCHEMA: &str = "tdi2.2-predicate-candidate-id-v1";
 /// The bounded aggregate maximum of the three Stage-B generators available at
 /// this point in TDI-2.2.
 pub const MAX_CANONICAL_CANDIDATES: usize = 16_384;
+
+/// Aggregate raw provenance-reference budget accepted by de-duplication.
+///
+/// This is the sum of the bounded source budgets of the three Stage-B
+/// generators. It also protects the public `Clone` surface from multiplying a
+/// valid candidate's provenance without increasing the identity-map size.
+pub const MAX_CANONICAL_SOURCE_REFERENCES: usize = MAX_SCALAR_THRESHOLD_SOURCE_REFERENCES
+    + MAX_PAIRWISE_SOURCE_REFERENCES
+    + MAX_TEMPORAL_SOURCE_REFERENCES;
 
 /// Exact, provenance-independent identity of one predicate candidate.
 ///
@@ -167,6 +182,7 @@ impl CanonicalPredicateCandidate {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CandidateDeduplicationError {
     CandidateLimitExceeded { maximum: usize },
+    SourceReferenceLimitExceeded { maximum: usize },
     IdentityEvidenceMismatch { source: CandidateSource },
     Provenance(CandidateProvenanceError),
 }
@@ -186,7 +202,12 @@ pub fn deduplicate_candidates(
     batch: &InductionBatch,
     candidates: impl IntoIterator<Item = CanonicalPredicateCandidate>,
 ) -> Result<Vec<CanonicalPredicateCandidate>, CandidateDeduplicationError> {
-    deduplicate_candidates_with_limit(batch, candidates, MAX_CANONICAL_CANDIDATES)
+    deduplicate_candidates_with_limits(
+        batch,
+        candidates,
+        MAX_CANONICAL_CANDIDATES,
+        MAX_CANONICAL_SOURCE_REFERENCES,
+    )
 }
 
 fn deduplicate_candidates_with_limit(
@@ -194,14 +215,46 @@ fn deduplicate_candidates_with_limit(
     candidates: impl IntoIterator<Item = CanonicalPredicateCandidate>,
     maximum: usize,
 ) -> Result<Vec<CanonicalPredicateCandidate>, CandidateDeduplicationError> {
+    deduplicate_candidates_with_limits(
+        batch,
+        candidates,
+        maximum,
+        MAX_CANONICAL_SOURCE_REFERENCES,
+    )
+}
+
+fn deduplicate_candidates_with_limits(
+    batch: &InductionBatch,
+    candidates: impl IntoIterator<Item = CanonicalPredicateCandidate>,
+    maximum_candidates: usize,
+    maximum_source_references: usize,
+) -> Result<Vec<CanonicalPredicateCandidate>, CandidateDeduplicationError> {
     let mut sources_by_identity: BTreeMap<PredicateCandidateIdentity, Vec<CandidateSource>> =
         BTreeMap::new();
+    let mut raw_candidates = 0_usize;
+    let mut raw_source_references = 0_usize;
 
     for candidate in candidates {
+        raw_candidates = raw_candidates
+            .checked_add(1)
+            .filter(|count| *count <= maximum_candidates)
+            .ok_or(CandidateDeduplicationError::CandidateLimitExceeded {
+                maximum: maximum_candidates,
+            })?;
+        raw_source_references = raw_source_references
+            .checked_add(candidate.provenance.sources().len())
+            .filter(|count| *count <= maximum_source_references)
+            .ok_or(
+                CandidateDeduplicationError::SourceReferenceLimitExceeded {
+                    maximum: maximum_source_references,
+                },
+            )?;
         let entry = sources_by_identity.entry(candidate.identity).or_default();
         entry.extend_from_slice(candidate.provenance.sources());
-        if sources_by_identity.len() > maximum {
-            return Err(CandidateDeduplicationError::CandidateLimitExceeded { maximum });
+        if sources_by_identity.len() > maximum_candidates {
+            return Err(CandidateDeduplicationError::CandidateLimitExceeded {
+                maximum: maximum_candidates,
+            });
         }
     }
 
@@ -292,6 +345,10 @@ impl core::fmt::Display for CandidateDeduplicationError {
                 formatter,
                 "canonical predicate candidate count exceeds bounded maximum {maximum}"
             ),
+            Self::SourceReferenceLimitExceeded { maximum } => write!(
+                formatter,
+                "candidate provenance source references exceed bounded maximum {maximum}"
+            ),
             Self::Provenance(error) => {
                 write!(
                     formatter,
@@ -309,6 +366,7 @@ mod tests {
     use super::{
         CandidateDeduplicationError, CanonicalPredicateCandidate, PredicateCandidateIdentity,
         deduplicate_candidates, deduplicate_candidates_with_limit,
+        deduplicate_candidates_with_limits,
     };
     use crate::experimental::tdi2_induction_input::InductionBatch;
     use crate::experimental::tdi2_induction_split::{DEVELOPMENT_START, InductionDomain};
@@ -500,6 +558,38 @@ mod tests {
         assert_eq!(
             deduplicate_candidates_with_limit(&batch, records, 1),
             Err(CandidateDeduplicationError::CandidateLimitExceeded { maximum: 1 })
+        );
+    }
+
+    #[test]
+    fn duplicate_inputs_cannot_bypass_the_raw_candidate_bound() {
+        let id = DEVELOPMENT_START;
+        let batch = batch(vec![episode(id, &[(0, vec![1.0])])]);
+        let record = generate_numeric_threshold_candidates(&batch)
+            .expect("thresholds")
+            .first()
+            .map(CanonicalPredicateCandidate::from_threshold)
+            .expect("record");
+        assert_eq!(
+            deduplicate_candidates_with_limit(&batch, vec![record.clone(), record], 1),
+            Err(CandidateDeduplicationError::CandidateLimitExceeded { maximum: 1 })
+        );
+    }
+
+    #[test]
+    fn duplicate_provenance_is_bounded_before_map_extension() {
+        let id = DEVELOPMENT_START;
+        let batch = batch(vec![episode(id, &[(0, vec![1.0])])]);
+        let record = generate_numeric_threshold_candidates(&batch)
+            .expect("thresholds")
+            .first()
+            .map(CanonicalPredicateCandidate::from_threshold)
+            .expect("record");
+        assert_eq!(
+            deduplicate_candidates_with_limits(&batch, vec![record.clone(), record], 2, 1),
+            Err(CandidateDeduplicationError::SourceReferenceLimitExceeded {
+                maximum: 1
+            })
         );
     }
 
