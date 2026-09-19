@@ -141,11 +141,26 @@ impl DevelopmentAddressSet {
     pub fn len(&self) -> usize {
         self.0.samples.len()
     }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.0.samples.is_empty()
+    }
 }
 
 impl ValidationAddressSet {
     pub fn new(samples: &[AddressSample]) -> Result<Self, AddressSearchError> {
         build_set(samples).map(Self)
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.0.samples.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.0.samples.is_empty()
     }
 }
 
