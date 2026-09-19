@@ -1,0 +1,6 @@
+bcee3e5a8ee89a50cbeb10644f2049ea2ebf490355f85b461b600106d784545c  docs/TDI-24-PROGRAMME.md
+a4f68cafc95111d545c11a65976b63a4ae2c3819cd352ca0b0eee2697fffa442  tdi-ai/src/tdi24_chiral.rs
+2cf6e189e9be4a1410fd6f1fbb85e7665e1694af6d515edc05b26d5543bba41e  tdi-ai/src/tdi24_vector.rs
+2f450676cd9de8312d06adea6e81cd93ba04bd84fd092f4a3a91b274319374ea  tdi-ai/src/tdi24_attention.rs
+ce0338e44dd4f70aa85b82dc82ab99747456634c20c9526a302a430d496d3e91  tdi-ai/src/tdi24_accounting.rs
+4099b284fe6a4f3e625ecfe48761fdeb26458f576c680a9634613abd320a2180  tdi-ai/src/tdi24_stage_a.rs
