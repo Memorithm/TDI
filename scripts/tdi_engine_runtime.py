@@ -295,7 +295,15 @@ def cancel(client, store, campaign):
         store.transition(campaign, "prepared", "cancelled")
         return store.get(campaign)
     workflow = entity_id(record["workflow"])
+    if record["phase"] == "cancel-requested" and store.has_event(campaign, "cancel-response-unknown"):
+        return refresh(client, store, campaign)
     if record["phase"] != "cancel-requested":
         store.transition(campaign, record["phase"], "cancel-requested")
-    client.request("POST", f"/api/v1/workflows/{workflow}/cancel")
+    try:
+        client.request("POST", f"/api/v1/workflows/{workflow}/cancel")
+    except HubTransportUnknown:
+        store.event(campaign, "cancel-response-unknown", {
+            "action": "inspect existing workflow; never re-cancel after ambiguous response",
+        })
+        raise
     return refresh(client, store, campaign)
