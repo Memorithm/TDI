@@ -143,4 +143,3 @@ fn duplicate_or_empty_training_inputs_fail_closed() {
         Err(AddressSearchError::DuplicateInput { input: 7 })
     );
 }
-
