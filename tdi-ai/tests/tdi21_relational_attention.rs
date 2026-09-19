@@ -98,7 +98,8 @@ fn distractors_increase_attention_scan_work_even_when_the_answer_is_unchanged() 
 
 #[test]
 fn episode_capacity_failure_is_rejected_before_any_write_or_lookup() {
-    let episode = &DevelopmentRelationalSet::v1().episodes()[2];
+    let development = DevelopmentRelationalSet::v1();
+    let episode = &development.episodes()[2];
     assert!(episode.facts.len() > 2);
 
     for mode in [AttentionMode::DenseQk, AttentionMode::BinaryQk] {
