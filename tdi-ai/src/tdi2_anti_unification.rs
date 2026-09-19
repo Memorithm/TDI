@@ -121,11 +121,31 @@ pub(super) fn anti_unify_incremental(
         .collect();
     let mut generated_occurrences = BTreeMap::new();
     collect_generated_occurrences(left, generated_variables, &mut generated_occurrences);
+    let mut discarded_by_mismatch = BTreeMap::new();
+    collect_discarded_generated_occurrences(
+        left,
+        right,
+        generated_variables,
+        &reusable_right_terms,
+        &mut discarded_by_mismatch,
+    );
+    let reclaimable_variables = discarded_by_mismatch
+        .into_iter()
+        .map(|(key, occurrences)| {
+            let variables = occurrences
+                .into_iter()
+                .filter_map(|(variable, count)| {
+                    (generated_occurrences.get(&variable) == Some(&count)).then_some(variable)
+                })
+                .collect();
+            (key, variables)
+        })
+        .collect();
 
     let mut context = AntiUnificationContext {
         variable_floor,
         generated_variables: generated_variables.clone(),
-        generated_occurrences,
+        reclaimable_variables,
         reusable_right_terms,
         mismatch_variables: BTreeMap::new(),
         allocated_variables: BTreeSet::new(),
@@ -173,7 +193,8 @@ pub(super) fn anti_unify_incremental(
 struct AntiUnificationContext {
     variable_floor: Option<u32>,
     generated_variables: BTreeSet<StructuralVariableId>,
-    generated_occurrences: BTreeMap<StructuralVariableId, usize>,
+    reclaimable_variables:
+        BTreeMap<(StructuralTerm, StructuralTerm), BTreeSet<StructuralVariableId>>,
     reusable_right_terms: BTreeMap<StructuralVariableId, StructuralTerm>,
     mismatch_variables: BTreeMap<(StructuralTerm, StructuralTerm), StructuralVariableId>,
     allocated_variables: BTreeSet<StructuralVariableId>,
@@ -244,7 +265,7 @@ impl AntiUnificationContext {
         }
 
         let variable = self
-            .reclaimable_generated_variable(left)
+            .reclaimable_generated_variable(&key)
             .or_else(|| self.first_available_variable())
             .ok_or(AntiUnificationError::VariableIdExhausted)?;
         self.mismatch_variables.insert(key, variable);
@@ -256,23 +277,19 @@ impl AntiUnificationContext {
 
     fn reclaimable_generated_variable(
         &self,
-        discarded_left_subtree: &StructuralTerm,
+        mismatch: &(StructuralTerm, StructuralTerm),
     ) -> Option<StructuralVariableId> {
-        let mut subtree_occurrences = BTreeMap::new();
-        collect_generated_occurrences(
-            discarded_left_subtree,
-            &self.generated_variables,
-            &mut subtree_occurrences,
-        );
-        subtree_occurrences.into_iter().find_map(|(variable, count)| {
-            let fully_discarded = self.generated_occurrences.get(&variable) == Some(&count);
-            let already_claimed = self
-                .mismatch_variables
-                .values()
-                .any(|claimed| *claimed == variable)
-                || self.allocated_variables.contains(&variable);
-            (fully_discarded && !already_claimed).then_some(variable)
-        })
+        self.reclaimable_variables
+            .get(mismatch)?
+            .iter()
+            .find_map(|variable| {
+                let already_claimed = self
+                    .mismatch_variables
+                    .values()
+                    .any(|claimed| claimed == variable)
+                    || self.allocated_variables.contains(variable);
+                (!already_claimed).then_some(*variable)
+            })
     }
 
     fn first_available_variable(&self) -> Option<StructuralVariableId> {
@@ -287,6 +304,57 @@ impl AntiUnificationContext {
             raw = raw.checked_add(1)?;
         }
     }
+}
+
+fn collect_discarded_generated_occurrences(
+    left: &StructuralTerm,
+    right: &StructuralTerm,
+    generated_variables: &BTreeSet<StructuralVariableId>,
+    reusable_right_terms: &BTreeMap<StructuralVariableId, StructuralTerm>,
+    discarded_by_mismatch: &mut BTreeMap<
+        (StructuralTerm, StructuralTerm),
+        BTreeMap<StructuralVariableId, usize>,
+    >,
+) {
+    if left == right {
+        return;
+    }
+    if let StructuralTermKind::Variable(variable) = left.kind() {
+        if generated_variables.contains(variable)
+            && reusable_right_terms.get(variable) == Some(right)
+        {
+            return;
+        }
+    }
+    if let (
+        StructuralTermKind::Application {
+            symbol: left_symbol,
+            arguments: left_arguments,
+        },
+        StructuralTermKind::Application {
+            symbol: right_symbol,
+            arguments: right_arguments,
+        },
+    ) = (left.kind(), right.kind())
+    {
+        if left_symbol == right_symbol && left_arguments.len() == right_arguments.len() {
+            for (left_argument, right_argument) in left_arguments.iter().zip(right_arguments) {
+                collect_discarded_generated_occurrences(
+                    left_argument,
+                    right_argument,
+                    generated_variables,
+                    reusable_right_terms,
+                    discarded_by_mismatch,
+                );
+            }
+            return;
+        }
+    }
+
+    let occurrences = discarded_by_mismatch
+        .entry((left.clone(), right.clone()))
+        .or_default();
+    collect_generated_occurrences(left, generated_variables, occurrences);
 }
 
 fn collect_generated_occurrences(

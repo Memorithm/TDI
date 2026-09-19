@@ -13,7 +13,7 @@ use super::tdi2_anti_unification::{
 use super::tdi2_structural_terms::{StructuralTerm, StructuralTermError, StructuralTermKind};
 
 /// Versioned identity for the incremental multi-example baseline.
-pub const INCREMENTAL_ANTI_UNIFICATION_SCHEMA: &str = "tdi2.2-incremental-anti-unification-v4";
+pub const INCREMENTAL_ANTI_UNIFICATION_SCHEMA: &str = "tdi2.2-incremental-anti-unification-v5";
 /// Maximum number of examples in one incremental anti-unification batch.
 pub const MAX_INCREMENTAL_ANTI_UNIFICATION_TERMS: usize = 256;
 /// Maximum aggregate structural nodes accepted across one input batch.
@@ -427,6 +427,49 @@ mod tests {
         assert_eq!(
             result.generalization(),
             &StructuralTerm::variable(StructuralVariableId::new(u32::MAX))
+        );
+        assert_eq!(result.steps().len(), 2);
+        assert_eq!(
+            result.reconstruct_canonical_inputs().expect("replay"),
+            terms.to_vec()
+        );
+    }
+
+    #[test]
+    fn repeated_mismatch_class_reclaims_all_discarded_occurrences() {
+        let retained = StructuralTerm::variable(StructuralVariableId::new(u32::MAX - 1));
+        let terms = [
+            app(
+                3,
+                vec![
+                    retained.clone(),
+                    app(4, vec![atom(1)]),
+                    app(4, vec![atom(1)]),
+                ],
+            ),
+            app(
+                3,
+                vec![
+                    retained.clone(),
+                    app(4, vec![atom(2)]),
+                    app(4, vec![atom(2)]),
+                ],
+            ),
+            app(
+                3,
+                vec![
+                    retained.clone(),
+                    app(5, vec![atom(3)]),
+                    app(5, vec![atom(3)]),
+                ],
+            ),
+        ];
+
+        let result = incremental_anti_unify(&terms).expect("reclaimed repeated mismatch");
+        let reclaimed = StructuralTerm::variable(StructuralVariableId::new(u32::MAX));
+        assert_eq!(
+            result.generalization(),
+            &app(3, vec![retained, reclaimed.clone(), reclaimed])
         );
         assert_eq!(result.steps().len(), 2);
         assert_eq!(
