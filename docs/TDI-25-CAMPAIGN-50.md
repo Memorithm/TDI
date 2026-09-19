@@ -94,4 +94,4 @@ Pause the campaign when any of the following occurs:
 
 ## Progress accounting
 
-**3/50 merged** (#408, #489, #552). Slice 05 is stacked on #553; only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**3/50 merged** (#408, #489, #552). Slice 05 (#554) is the current stacked candidate; slice 04 (#553) remains an unmerged predecessor. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
