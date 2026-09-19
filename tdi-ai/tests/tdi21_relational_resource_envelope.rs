@@ -89,7 +89,6 @@ fn dense_attention_component_ceiling_is_reported_without_total_budget_claim() {
     assert_eq!(identity.unallocated_component_bits, 4);
 }
 
-
 #[test]
 fn four_fact_episode_ceiling_uses_only_needed_attention_history_capacity() {
     let binary = AttentionConfig {
@@ -132,4 +131,3 @@ fn oversized_address_program_fails_before_fabricating_a_match() {
         Err(ComponentEnvelopeError::NoTwoWayBooleanConfigurationFits)
     );
 }
-
