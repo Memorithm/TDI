@@ -25,8 +25,8 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 | ---: | --- | --- |
 | 11 | Reflection-discriminative generator | **landed** in #562; deterministic exact mirrored pairs with opposite handedness labels |
 | 12 | Reflection-nuisance generator | **landed** in #565; family-namespaced exact mirrored pairs with one invariant even-sector target |
-| 13 | Direction/reversal generator | **current stacked slice**; deterministic query/key order reversal with opposite direction oracle and antisymmetric chi |
-| 14 | Non-chiral negative-control generator | parity carries no target information |
+| 13 | Direction/reversal generator | **stacked predecessor** #567; deterministic query/key order reversal with opposite direction oracle and antisymmetric chi |
+| 14 | Non-chiral negative-control generator | **current stacked slice**; opposite targets share identical odd sectors within nuisance strata |
 | 15 | Difficulty strata | deterministic bounded levels independent of model output |
 | 16 | Split manifest | Development/Validation identities embedded in every case |
 | 17 | Protected-label API | inference callback cannot access expected target |

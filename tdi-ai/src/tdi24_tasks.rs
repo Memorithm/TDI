@@ -16,6 +16,9 @@ pub const REFLECTION_NUISANCE_CONTRACT: &str = "tdi24-reflection-nuisance-genera
 /// Versioned Slice-13 ordered direction/reversal generator contract.
 pub const DIRECTION_REVERSAL_CONTRACT: &str = "tdi24-direction-reversal-generator-v1";
 
+/// Versioned Slice-14 non-chiral negative-control generator contract.
+pub const NON_CHIRAL_CONTROL_CONTRACT: &str = "tdi24-non-chiral-control-generator-v1";
+
 const NUISANCE_CASE_ID_PREFIX: u64 = 1_u64 << 63;
 
 /// Handedness oracle for one member of a mirrored pair.
@@ -236,6 +239,59 @@ pub fn direction_reversal_pair(pair_id: u64) -> Result<DirectionReversalPair, Td
     })
 }
 
+/// Target defined exclusively from parity-even construction.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NonChiralTarget {
+    ClassA,
+    ClassB,
+}
+
+/// Negative-control case whose odd sectors are nuisance-only.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NonChiralControlCase {
+    pub case_id: u64,
+    pub nuisance_id: u64,
+    pub query: Chiral6,
+    pub key: Chiral6,
+    pub target: NonChiralTarget,
+    pub generator_contract: &'static str,
+}
+
+/// Deterministically materialize one negative-control case.
+///
+/// Consecutive cases 2*n and 2*n+1 have opposite targets but exactly identical
+/// query/key odd sectors. Only parity-even coordinates depend on the target.
+pub fn non_chiral_control_case(case_id: u64) -> Result<NonChiralControlCase, Tdi24TaskError> {
+    let nuisance_id = case_id / 2;
+    let target = if case_id % 2 == 0 {
+        NonChiralTarget::ClassA
+    } else {
+        NonChiralTarget::ClassB
+    };
+    let sign = match target {
+        NonChiralTarget::ClassA => 1.0,
+        NonChiralTarget::ClassB => -1.0,
+    };
+    let nuisance = ((nuisance_id % 43) as f64 + 1.0) / 112.0;
+
+    let query_odd = [0.375 + nuisance, -0.875, 1.25 - nuisance];
+    let key_odd = [-1.125, 0.625 + nuisance, 0.5];
+
+    let query = Chiral6::new([sign * (1.0 + nuisance), 0.5, -0.75], query_odd)
+        .map_err(Tdi24TaskError::Chiral)?;
+    let key = Chiral6::new([1.0, sign * (0.625 + nuisance), 0.25], key_odd)
+        .map_err(Tdi24TaskError::Chiral)?;
+
+    Ok(NonChiralControlCase {
+        case_id,
+        nuisance_id,
+        query,
+        key,
+        target,
+        generator_contract: NON_CHIRAL_CONTROL_CONTRACT,
+    })
+}
+
 /// Task-generation failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tdi24TaskError {
@@ -378,5 +434,42 @@ mod tests {
                 .generator_contract,
             DIRECTION_REVERSAL_CONTRACT
         );
+    }
+    #[test]
+    fn non_chiral_control_pairs_opposite_targets_with_identical_odd_sectors() {
+        for nuisance_id in 0..64 {
+            let a = non_chiral_control_case(2 * nuisance_id).unwrap();
+            let b = non_chiral_control_case(2 * nuisance_id + 1).unwrap();
+            assert_eq!(a.nuisance_id, b.nuisance_id);
+            assert_eq!(a.query.odd(), b.query.odd());
+            assert_eq!(a.key.odd(), b.key.odd());
+            assert_ne!(a.target, b.target);
+            assert_ne!(a.query.even(), b.query.even());
+            assert_eq!(a.generator_contract, NON_CHIRAL_CONTROL_CONTRACT);
+            assert_eq!(b.generator_contract, NON_CHIRAL_CONTROL_CONTRACT);
+        }
+    }
+
+    #[test]
+    fn non_chiral_target_is_reflection_invariant_by_construction() {
+        for case_id in 0..128 {
+            let case = non_chiral_control_case(case_id).unwrap();
+            assert_eq!(case.query.mirror().even(), case.query.even());
+            assert_eq!(case.key.mirror().even(), case.key.even());
+            assert_eq!(
+                case.target,
+                non_chiral_control_case(case_id).unwrap().target
+            );
+        }
+    }
+
+    #[test]
+    fn odd_sector_carries_no_target_bit_within_paired_nuisance_strata() {
+        for nuisance_id in 0..128 {
+            let class_a = non_chiral_control_case(2 * nuisance_id).unwrap();
+            let class_b = non_chiral_control_case(2 * nuisance_id + 1).unwrap();
+            assert_eq!(class_a.query.odd(), class_b.query.odd());
+            assert_eq!(class_a.key.odd(), class_b.key.odd());
+        }
     }
 }
