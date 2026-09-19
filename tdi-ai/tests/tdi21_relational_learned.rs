@@ -69,6 +69,8 @@ fn exact_address_mismatch_can_coexist_with_functional_renamed_id_transfer() {
         let expected_predictions = (episode.facts.len() + episode.query.relations.len()) as u64;
         assert_eq!(binder.work().predictions, expected_predictions);
         assert_eq!(binder.work().rule_evaluations, expected_predictions * 8);
+        assert_eq!(binder.work().anf_term_evaluations, expected_predictions * 6);
+        assert_eq!(binder.anf_program_semantic_bits(), 456);
     }
 }
 
@@ -102,6 +104,7 @@ fn basis_covered_identity_encoder_keeps_namespaces_distinct() {
     assert_eq!(evidence.rule_evaluations, 256 * 8);
 
     let mut binder = LearnedRelationalBinder::new(config(), selected).unwrap();
+    assert_eq!(binder.anf_program_semantic_bits(), 584);
     binder.bind(1, 1, 2).unwrap();
     binder.bind(9, 9, 10).unwrap();
     assert_eq!(binder.recall(1, 1).unwrap(), RelationalRead::Hit(2));
