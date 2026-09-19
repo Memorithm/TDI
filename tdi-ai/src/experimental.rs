@@ -80,6 +80,8 @@ pub mod tdi24_vector;
 pub mod tdi25_torsor_chiral;
 #[path = "tdi2_induction_input.rs"]
 pub mod tdi2_induction_input;
+#[path = "tdi2_induction_provenance.rs"]
+pub mod tdi2_induction_provenance;
 #[path = "tdi2_induction_split.rs"]
 pub mod tdi2_induction_split;
 #[path = "tdi2_intuition.rs"]

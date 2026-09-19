@@ -3,6 +3,8 @@
 //! Candidate provenance can name only observable episode material. There is no
 //! representation for expected labels, expected templates or expected role maps.
 
+use super::tdi2_induction_input::InductionBatch;
+use super::tdi2_observation_graph::ObservationGraph;
 use super::tdi2_template_induction::{EpisodeId, ExperienceEpisode};
 
 /// Broad family of a candidate Boolean predicate.
@@ -86,16 +88,39 @@ pub enum CandidateProvenanceError {
         episode: EpisodeId,
         frame_ordinal: u32,
     },
-    /// ExperienceEpisode does not yet bind relational graphs to frame provenance.
+    /// ExperienceEpisode does not by itself bind relational graphs to frame provenance.
     RelationalEvidenceUnbound,
+    /// A relation-family source has no observed relation in its bound episode graph.
+    MissingObservedRelation { episode: EpisodeId },
 }
 
 impl CandidateProvenance {
     /// Validate and canonicalize observable-only candidate provenance.
     pub fn new(
         family: PredicateCandidateFamily,
+        sources: Vec<CandidateSource>,
+        episodes: &[ExperienceEpisode],
+    ) -> Result<Self, CandidateProvenanceError> {
+        Self::new_with_graphs(family, sources, episodes, None)
+    }
+
+    /// Validate provenance against a fully bound induction batch.
+    ///
+    /// Relation-family candidates require this constructor because an
+    /// `ExperienceEpisode` alone has no relational observation surface.
+    pub fn new_in_batch(
+        family: PredicateCandidateFamily,
+        sources: Vec<CandidateSource>,
+        batch: &InductionBatch,
+    ) -> Result<Self, CandidateProvenanceError> {
+        Self::new_with_graphs(family, sources, batch.episodes(), Some(batch.graphs()))
+    }
+
+    fn new_with_graphs(
+        family: PredicateCandidateFamily,
         mut sources: Vec<CandidateSource>,
         episodes: &[ExperienceEpisode],
+        graphs: Option<&[ObservationGraph]>,
     ) -> Result<Self, CandidateProvenanceError> {
         if sources.is_empty() {
             return Err(CandidateProvenanceError::MissingObservableSource);
@@ -131,7 +156,7 @@ impl CandidateProvenance {
 
         sources.sort_unstable();
         sources.dedup();
-        Self::validate_family_evidence(family, &sources, episodes)?;
+        Self::validate_family_evidence(family, &sources, episodes, graphs)?;
         Ok(Self { family, sources })
     }
 
@@ -139,11 +164,15 @@ impl CandidateProvenance {
         family: PredicateCandidateFamily,
         sources: &[CandidateSource],
         episodes: &[ExperienceEpisode],
+        graphs: Option<&[ObservationGraph]>,
     ) -> Result<(), CandidateProvenanceError> {
         if family == PredicateCandidateFamily::ObservedRelation {
-            // ObservationGraph is intentionally a separate IR in this slice. Until an
-            // episode/frame binding exists, accepting frame-only provenance here would
-            // manufacture relational evidence. Fail closed.
+            // ObservationGraph is currently bound only to an episode, while
+            // CandidateSource names a concrete frame. An episode-level relation
+            // therefore cannot honestly prove that the relation was observed at
+            // the cited frame. Keep this family closed until the graph contract
+            // carries an explicit frame/interval binding.
+            let _ = graphs;
             return Err(CandidateProvenanceError::RelationalEvidenceUnbound);
         }
 
@@ -261,7 +290,12 @@ impl core::fmt::Display for CandidateProvenanceError {
                 episode.raw()
             ),
             Self::RelationalEvidenceUnbound => formatter.write_str(
-                "observed-relation provenance requires an explicit observation-graph binding",
+                "observed-relation provenance requires an explicit frame-level observation-graph binding",
+            ),
+            Self::MissingObservedRelation { episode } => write!(
+                formatter,
+                "observed-relation candidate has no relational evidence for episode {}",
+                episode.raw()
             ),
         }
     }
@@ -274,7 +308,12 @@ mod tests {
     use super::{
         CandidateProvenance, CandidateProvenanceError, CandidateSource, PredicateCandidateFamily,
     };
+    use crate::experimental::tdi2_induction_input::InductionBatch;
+    use crate::experimental::tdi2_induction_split::{DEVELOPMENT_START, InductionDomain};
     use crate::experimental::tdi2_intuition::{BooleanState, NumericState};
+    use crate::experimental::tdi2_observation_graph::{
+        ObservationGraph, ObservedEntity, ObservedEntityId, ObservedRelation, ObservedRelationId,
+    };
     use crate::experimental::tdi2_template_induction::{
         EpisodeId, ExperienceEpisode, ObservationFrame,
     };
@@ -417,6 +456,59 @@ mod tests {
             ),
             Err(CandidateProvenanceError::RelationalEvidenceUnbound)
         );
+    }
+
+    #[test]
+    fn relation_candidates_remain_fail_closed_without_frame_level_graph_binding() {
+        let id = DEVELOPMENT_START;
+        let observed_episode = ExperienceEpisode::new(
+            EpisodeId::new(id),
+            vec![
+                ObservationFrame::new(
+                    0,
+                    NumericState::new(vec![1.0, 2.0]).expect("finite"),
+                    BooleanState::default(),
+                ),
+                ObservationFrame::new(
+                    1,
+                    NumericState::new(vec![3.0, 4.0]).expect("finite"),
+                    BooleanState::default(),
+                ),
+            ],
+        )
+        .expect("episode");
+        let left = ObservedEntityId::new(1);
+        let right = ObservedEntityId::new(2);
+        let graph = ObservationGraph::new(
+            EpisodeId::new(id),
+            vec![
+                ObservedEntity::new(left, BooleanState::default()),
+                ObservedEntity::new(right, BooleanState::default()),
+            ],
+            vec![ObservedRelation::new(
+                left,
+                ObservedRelationId::new(7),
+                right,
+            )],
+        )
+        .expect("graph");
+        let batch = InductionBatch::new(
+            InductionDomain::Development,
+            vec![observed_episode],
+            vec![graph],
+        )
+        .expect("batch");
+
+        for frame_ordinal in [0, 1] {
+            assert_eq!(
+                CandidateProvenance::new_in_batch(
+                    PredicateCandidateFamily::ObservedRelation,
+                    vec![CandidateSource::new(EpisodeId::new(id), frame_ordinal)],
+                    &batch,
+                ),
+                Err(CandidateProvenanceError::RelationalEvidenceUnbound)
+            );
+        }
     }
 
     #[test]
