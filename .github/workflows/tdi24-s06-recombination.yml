@@ -1,0 +1,23 @@
+name: TDI-24.0 slice 06 parity recombination
+on:
+  pull_request:
+    paths:
+      - 'tdi-ai/src/tdi24_chiral.rs'
+      - 'docs/TDI-24-CAMPAIGN-50.md'
+      - 'scripts/check-tdi24-s06.sh'
+      - '.github/workflows/tdi24-s06-recombination.yml'
+permissions:
+  contents: read
+jobs:
+  parity-recombination:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+      - run: bash scripts/check-tdi24-s06.sh
