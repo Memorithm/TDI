@@ -11,7 +11,7 @@ use super::tdi2_anti_unification::{
     AntiUnificationError, AntiUnificationResult, anti_unify_incremental,
 };
 use super::tdi2_structural_terms::{
-    StructuralTerm, StructuralTermError, StructuralTermKind, StructuralVariableId,
+    StructuralTerm, StructuralTermError, StructuralTermKind,
 };
 
 /// Versioned identity for the incremental multi-example baseline.
