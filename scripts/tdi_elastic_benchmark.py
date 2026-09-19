@@ -161,6 +161,10 @@ def run_case(root, *, arm, width, trials, hubd, worker, elastic, elastic_sha256,
 
 
 def run(args):
+    # Hub process workspaces are nested below the benchmark root.  Keep that
+    # root absolute so output placeholders remain valid after the Hub changes
+    # each worker process cwd to its isolated run directory.
+    output_root = args.output.resolve()
     cases = schedule(args.widths, args.repeats)
     if type(args.trials) is not int or not max(args.widths) <= args.trials <= 32:
         raise durable.ContractError("trials must cover all widths and be at most 32")
@@ -179,11 +183,11 @@ def run(args):
                 "scope": "one local graph at a time; public counter fixture; no optimizer quality or multi-campaign claim",
                 "timing_scope": "submit/admission + execute + collect; setup, export, restart measured separately",
                 "peak_total_memory_bytes": None, "power_loss_durability_qualified": False}
-    args.output.mkdir(parents=True, exist_ok=False)
-    atomic_json(args.output / "manifest.json", manifest)
+    output_root.mkdir(parents=True, exist_ok=False)
+    atomic_json(output_root / "manifest.json", manifest)
     records = []
     for index, (repeat, width, arm) in enumerate(cases):
-        case_root = args.output / f"case-{index:03d}"
+        case_root = output_root / f"case-{index:03d}"
         try:
             record = run_case(case_root, arm=arm, width=width, trials=args.trials, **binaries,
                               elastic_sha256=hashes["elastic"], source=args.elastic_source, policy=policy)
@@ -191,10 +195,10 @@ def run(args):
             # Keep attempted-case failure and all prior artifacts; never fabricate a timing.
             record = {"arm": arm, "requested_width": width, "trials": args.trials,
                       "status": "failed", "error_type": type(error).__name__, "error": str(error)}
-            atomic_json(args.output / f"case-{index:03d}.json", dict(record, repeat=repeat))
+            atomic_json(output_root / f"case-{index:03d}.json", dict(record, repeat=repeat))
             raise
         record["repeat"] = repeat
-        atomic_json(args.output / f"case-{index:03d}.json", record)
+        atomic_json(output_root / f"case-{index:03d}.json", record)
         records.append(record)
         print(f"{index + 1}/{len(cases)} {arm} width={width}: {record['status']}", file=sys.stderr, flush=True)
     if hashes != {name: durable.file_digest(path) for name, path in binaries.items()}:
@@ -206,8 +210,8 @@ def run(args):
               "status": "completed" if all(r["status"] == "completed" for r in records) else "contains-rejections",
               "records": records, "summary": summarize(records)}
     report["identity"] = identity("tdi-elastic-benchmark-report/v1", report)
-    verify_report(args.output, candidate=report)
-    atomic_json(args.output / "report.json", report)
+    verify_report(output_root, candidate=report)
+    atomic_json(output_root / "report.json", report)
     return 0 if report["status"] == "completed" else durable.EXIT_TRIAL_FAILURE
 
 

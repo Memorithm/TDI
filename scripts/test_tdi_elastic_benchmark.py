@@ -60,6 +60,31 @@ class ElasticBenchmarkTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 bench.run(args)
 
+
+    def test_relative_output_is_resolved_before_hub_case_execution(self):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(__file__).resolve()
+            previous = Path.cwd()
+            try:
+                import os
+                os.chdir(directory)
+                args = SimpleNamespace(widths=[1], repeats=1, trials=1, memory_bytes_per_trial=1,
+                                       reserve_memory_bytes=0, elastic_source="a" * 40, hub_source="b" * 40,
+                                       hubd=binary, worker=binary, elastic=binary, output=Path("relative-output"))
+
+                def rejected(root, **kwargs):
+                    self.assertTrue(root.is_absolute())
+                    self.assertEqual(Path(directory) / "relative-output", root.parent)
+                    self.assertIn(root.name, {"case-000", "case-001"})
+                    return {"arm": kwargs["arm"], "requested_width": 1, "trials": 1, "status": "rejected",
+                            "submit_execute_collect": {"wall_ns": 100}}
+
+                with patch.object(bench, "run_case", side_effect=rejected):
+                    self.assertEqual(durable.EXIT_TRIAL_FAILURE, bench.run(args))
+                self.assertTrue((Path(directory) / "relative-output" / "report.json").is_file())
+            finally:
+                os.chdir(previous)
+
     def test_verifier_rejects_rehashed_misleading_summary(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
