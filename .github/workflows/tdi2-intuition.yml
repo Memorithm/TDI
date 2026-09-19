@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - "tdi-ai/src/tdi2_intuition*.rs"
+      - "tdi-ai/src/tdi2_template_induction.rs"
       - "tdi-ai/src/experimental.rs"
       - "tdi-ai/tests/tdi2_intuition*.rs"
       - "tdi-ai/examples/tdi2_intuition*.rs"
@@ -14,6 +15,7 @@ on:
     branches: [main]
     paths:
       - "tdi-ai/src/tdi2_intuition*.rs"
+      - "tdi-ai/src/tdi2_template_induction.rs"
       - "tdi-ai/src/experimental.rs"
       - "tdi-ai/tests/tdi2_intuition*.rs"
       - "tdi-ai/examples/tdi2_intuition*.rs"
