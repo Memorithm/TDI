@@ -11,10 +11,8 @@ use tdi_ai::experimental::tdi21_relational_tasks::{
 
 #[test]
 fn sparse_task_development_fits_but_fails_on_renamed_validation_bits() {
-    let development =
-        development_from_relational_tasks(&DevelopmentRelationalSet::v1()).unwrap();
-    let validation =
-        validation_from_relational_tasks(&ValidationRelationalSet::v1()).unwrap();
+    let development = development_from_relational_tasks(&DevelopmentRelationalSet::v1()).unwrap();
+    let validation = validation_from_relational_tasks(&ValidationRelationalSet::v1()).unwrap();
 
     assert_eq!(development.len(), 5);
     let selected = fit_relational_address(&development).unwrap();
@@ -103,14 +101,11 @@ fn basis_coverage_recovers_exact_identity_and_transfers_to_full_domain() {
 
 #[test]
 fn combined_namespaces_expose_five_encoder_aliases_under_sparse_fit() {
-    let development =
-        development_from_relational_tasks(&DevelopmentRelationalSet::v1()).unwrap();
-    let validation =
-        validation_from_relational_tasks(&ValidationRelationalSet::v1()).unwrap();
+    let development = development_from_relational_tasks(&DevelopmentRelationalSet::v1()).unwrap();
+    let validation = validation_from_relational_tasks(&ValidationRelationalSet::v1()).unwrap();
     let selected = fit_relational_address(&development).unwrap();
 
-    let evidence =
-        evaluate_cross_namespace_aliases(&selected, &development, &validation).unwrap();
+    let evidence = evaluate_cross_namespace_aliases(&selected, &development, &validation).unwrap();
     assert_eq!(evidence.development_samples, 5);
     assert_eq!(evidence.validation_samples, 5);
     assert_eq!(evidence.prediction_aliases, 5);
@@ -118,10 +113,8 @@ fn combined_namespaces_expose_five_encoder_aliases_under_sparse_fit() {
 
 #[test]
 fn validation_evaluation_cannot_mutate_the_selected_rules() {
-    let development =
-        development_from_relational_tasks(&DevelopmentRelationalSet::v1()).unwrap();
-    let validation =
-        validation_from_relational_tasks(&ValidationRelationalSet::v1()).unwrap();
+    let development = development_from_relational_tasks(&DevelopmentRelationalSet::v1()).unwrap();
+    let validation = validation_from_relational_tasks(&ValidationRelationalSet::v1()).unwrap();
     let selected = fit_relational_address(&development).unwrap();
     let before = selected.clone();
 
@@ -150,3 +143,5 @@ fn duplicate_or_empty_training_inputs_fail_closed() {
         Err(AddressSearchError::DuplicateInput { input: 7 })
     );
 }
+
+[executed on device: tarek (fa986a59-0105-42b8-b1db-7cddadcd871f)]
