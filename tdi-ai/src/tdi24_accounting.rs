@@ -121,7 +121,9 @@ pub fn row_accounting(
                 .checked_mul(3)
                 .and_then(|active| count.checked_add(active))
         })
-        .and_then(|count| count.checked_add(2))
+        // Length, empty-input and all-masked guards plus the two
+        // final-sum predicates are constant per successful row.
+        .and_then(|count| count.checked_add(5))
         .ok_or(AccountingError::SizeOverflow)?;
     let mask_bytes = key_count
         .checked_mul(core::mem::size_of::<bool>())
@@ -201,7 +203,7 @@ mod tests {
         assert_eq!(row.exponentials, 5);
         assert_eq!(row.additions, 5);
         assert_eq!(row.divisions, 8);
-        assert_eq!(row.validity_predicates, 2 * 8 + 3 * 5 + 2);
+        assert_eq!(row.validity_predicates, 2 * 8 + 3 * 5 + 5);
         assert_eq!(row.mask_bytes, 8 * core::mem::size_of::<bool>());
         assert_eq!(
             row.normalizer_scratch_bytes,
