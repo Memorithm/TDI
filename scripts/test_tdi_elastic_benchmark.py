@@ -79,6 +79,22 @@ class ElasticBenchmarkTests(unittest.TestCase):
             with self.assertRaisesRegex(durable.ContractError, "summary"):
                 bench.verify_report(root)
 
+    def test_report_is_not_published_when_final_verification_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(__file__).resolve()
+            args = SimpleNamespace(widths=[1], repeats=1, trials=1, memory_bytes_per_trial=1,
+                                   reserve_memory_bytes=0, elastic_source="a" * 40, hub_source="b" * 40,
+                                   hubd=binary, worker=binary, elastic=binary, output=Path(directory) / "out")
+            def rejected(root, **kwargs):
+                return {"arm": kwargs["arm"], "requested_width": 1, "trials": 1, "status": "rejected",
+                        "submit_execute_collect": {"wall_ns": 100}}
+            with patch.object(bench, "run_case", side_effect=rejected), patch.object(
+                    bench, "verify_report", side_effect=durable.ContractError("synthetic verification failure")):
+                with self.assertRaisesRegex(durable.ContractError, "verification failure"):
+                    bench.run(args)
+            self.assertTrue((args.output / "case-001.json").exists())
+            self.assertFalse((args.output / "report.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

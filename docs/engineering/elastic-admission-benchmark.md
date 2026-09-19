@@ -88,3 +88,50 @@ same affinity. This restricts allowed CPUs but does not isolate them from other
 host activity. Both modes run sequentially, not simultaneously. All cases and
 both conditions must be retained regardless of performance. The two-CPU case
 tests real width reduction rather than a forged capacity observation.
+
+### Observed results
+
+Both corrected release matrices completed: **64 graph executions, 512 Rust
+counter trials and 512 independent verification steps**. Every exported bundle
+passes verification; payload identities agree across arms within each matrix;
+all 64 clean restarts preserve snapshots and results. These are software
+qualification observations, not independent scientific tasks or ML evidence.
+
+Median submit/admission + execute + collect wall time, milliseconds (four
+repetitions per cell, no confidence interval):
+
+| Requested width | Inherited affinity, fixed | Inherited affinity, Elastic | Two CPUs, fixed | Two CPUs, Elastic |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 1255.85 | 1270.24 | 1208.69 | 1196.66 |
+| 2 | 793.72 | 841.32 | 766.86 | 789.10 |
+| 4 | 579.30 | 564.04 | 763.56 | 753.89 |
+| 8 | 456.76 | 456.99 | 776.19 | 758.17 |
+
+With inherited affinity, Elastic retained widths 1/2/4/8. With affinity limited
+to CPUs 0 and 1 (the first two allowed CPUs), Elastic admitted widths 1/2/2/2;
+the fixed arm retained 1/2/4/8. At requested width eight on two CPUs, observed
+throughput was 10.55 versus 10.30 verified trials/second in the timed windows.
+Four repetitions on a shared host do **not** establish a reliable speedup.
+They demonstrate actual width reduction and comparable observed throughput on
+this small fixture. No memory savings or generic performance benefit is inferred.
+The native controller is still only an admission decision; this does not solve
+cross-campaign accounting of capacity or adaptive resizing of a running graph.
+
+The executed measurement code is `f6ff031451095b11c3017e98ee3651360a779c47`;
+the condition declaration was published at
+`11f37b77c7989c63acb945875f4addf8eb3d45d4` before corrected execution. A subsequent
+change moves report verification before final publication and adds a fault
+regression; it does not change the measured execution path. All archives below
+are retained, including the preliminary debug run, and reverified by CI.
+
+| Archive in `benchmarks/` | SHA-256 |
+| --- | --- |
+| `2026-09-19-elastic-preliminary-debug.tar.gz` | `1c136c3b2573c1d9e8297662a34839f278c9936189765aad7d254ec8ca3f74e4` |
+| `2026-09-19-elastic-release.tar.gz` | `8e87e25f9b8f516ff90592ab5f632d22f6f31e88b049a7afa2ad4c085a91d022` |
+| `2026-09-19-elastic-release-two-cpu.tar.gz` | `2905f4dbc4c540a136418756633d8cfda4f8c0a68961650a722abdd631f9c748` |
+
+Corrected report identities: inherited affinity
+`e22fc53dc469d4e4b6bfedc49e3ed546d0b35d795459db363a3e3b13f74549c1`;
+two CPUs `160767b8a90b6cb64ea8e32ebaaa929b070e0813eb18210d8075acbc84504f6c`.
+Archives contain manifests, reports, per-case records and verified bundles;
+they intentionally omit Hub databases/logs and are not deployment backups.

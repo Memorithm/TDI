@@ -53,6 +53,19 @@ jobs:
         run: cargo build --locked -p scirust-hubd -p scirust-hub-worker
       - name: Build the TDI library worker
         run: cargo build --locked -p tdi-ai --example durable_worker
+      - name: Reverify retained admission evidence without execution
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import tarfile
+          import tempfile
+          from tdi_elastic_benchmark import verify_report
+          for archive in sorted(Path('docs/engineering/benchmarks').glob('2026-09-19-elastic-*.tar.gz')):
+              with tempfile.TemporaryDirectory(prefix='elastic-evidence-') as folder:
+                  with tarfile.open(archive) as stream:
+                      stream.extractall(folder, filter='data')
+                  print(archive.name, verify_report(Path(folder)))
+          PY
       - name: Execute real Linux sensors, Elastic permits and Hub admission
         env:
           TDI_HUBD_BIN: ${{ github.workspace }}/integration-hub/target/debug/scirust-hubd

@@ -61,7 +61,7 @@ def summarize(records):
     return summaries
 
 
-def verify_report(root):
+def verify_report(root, *, candidate=None):
     """Recheck the full matrix, artifact bytes/provenance and derived summaries.
 
     This is internal consistency, not authentication of measured wall clocks.
@@ -70,7 +70,8 @@ def verify_report(root):
         with path.open("rb") as stream:
             return durable.strict_json(stream.read(32 * 1024**2 + 1), max_bytes=32 * 1024**2,
                                        max_items=2_000_000, max_string_bytes=16 * 1024**2)
-    manifest, report = read(root / "manifest.json"), read(root / "report.json")
+    manifest = read(root / "manifest.json")
+    report = read(root / "report.json") if candidate is None else candidate
     if (report["manifest_identity"] != identity("tdi-elastic-benchmark-manifest/v1", manifest)
             or report["identity"] != identity("tdi-elastic-benchmark-report/v1", {k: v for k, v in report.items() if k != "identity"})
             or len(report["records"]) != len(manifest["schedule"])):
@@ -205,8 +206,8 @@ def run(args):
               "status": "completed" if all(r["status"] == "completed" for r in records) else "contains-rejections",
               "records": records, "summary": summarize(records)}
     report["identity"] = identity("tdi-elastic-benchmark-report/v1", report)
+    verify_report(args.output, candidate=report)
     atomic_json(args.output / "report.json", report)
-    verify_report(args.output)
     return 0 if report["status"] == "completed" else durable.EXIT_TRIAL_FAILURE
 
 
