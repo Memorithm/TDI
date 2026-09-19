@@ -55,6 +55,7 @@ fn sparse_task_development_fits_but_fails_on_renamed_validation_bits() {
     assert_eq!(evidence.samples, 5);
     assert_eq!(evidence.address_mismatches, 5);
     assert_eq!(evidence.bit_mismatches, 10);
+    assert_eq!(evidence.rule_evaluations, 5 * 8);
 }
 
 #[test]
@@ -95,6 +96,7 @@ fn basis_coverage_recovers_exact_identity_and_transfers_to_full_domain() {
     assert_eq!(evidence.samples, 256);
     assert_eq!(evidence.address_mismatches, 0);
     assert_eq!(evidence.bit_mismatches, 0);
+    assert_eq!(evidence.rule_evaluations, 256 * 8);
 }
 
 #[test]
