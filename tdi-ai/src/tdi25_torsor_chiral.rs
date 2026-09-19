@@ -41,8 +41,66 @@ pub const GENERIC6_CONTRACT: &str = "tdi25-generic6-control-v1";
 /// Fixed generic control width.
 pub const GENERIC6_WIDTH: usize = 6;
 
+/// Versioned carrier/accounting contract for T6/C6/G6.
+pub const CARRIER_ACCOUNTING_CONTRACT: &str = "tdi25-carrier-accounting-v1";
+
 const _GENERIC_MATCH_TORSOR: [(); TORSOR_WIDTH] = [(); GENERIC6_WIDTH];
 const _GENERIC_MATCH_CHIRAL: [(); super::tdi24_chiral::CHIRAL_WIDTH] = [(); GENERIC6_WIDTH];
+
+/// TDI-25 comparison arm identity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ComparisonArm {
+    /// TDI-22 torsor/twist arm.
+    T6,
+    /// TDI-24 chiral arm.
+    C6,
+    /// Generic six-component attribution control.
+    G6,
+}
+
+/// Static score-carrier accounting for one arm.
+///
+/// The six score-pairing components are matched across arms. T6 additionally
+/// accounts for its three-component stored key reference point and the
+/// three-component query position required before factorized pairing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CarrierAccounting {
+    /// Arm being described.
+    pub arm: ComparisonArm,
+    /// Scalar query components presented to the score pairing.
+    pub query_components: usize,
+    /// Scalar key components presented to the score pairing.
+    pub key_components: usize,
+    /// Scalar score outputs per query-key pair.
+    pub score_components: usize,
+    /// Explicit external geometry components required before score pairing.
+    pub external_geometry_components: usize,
+    /// f64 bytes occupied by the query score carrier.
+    pub query_bytes: usize,
+    /// f64 bytes occupied by the key score carrier.
+    pub key_bytes: usize,
+    /// Contract defining this accounting surface.
+    pub accounting_contract: &'static str,
+}
+
+/// Return the declared static carrier accounting for an arm.
+#[must_use]
+pub const fn carrier_accounting(arm: ComparisonArm) -> CarrierAccounting {
+    let (key_components, external_geometry_components) = match arm {
+        ComparisonArm::T6 => (9, 3),
+        ComparisonArm::C6 | ComparisonArm::G6 => (6, 0),
+    };
+    CarrierAccounting {
+        arm,
+        query_components: 6,
+        key_components,
+        score_components: 1,
+        external_geometry_components,
+        query_bytes: 6 * core::mem::size_of::<f64>(),
+        key_bytes: key_components * core::mem::size_of::<f64>(),
+        accounting_contract: CARRIER_ACCOUNTING_CONTRACT,
+    }
+}
 
 /// Source contracts consumed by this comparison scaffold.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -277,6 +335,37 @@ mod tests {
         assert_eq!(TORSOR_WIDTH, CHIRAL_WIDTH);
         assert_eq!(GENERIC6_WIDTH, CHIRAL_WIDTH);
         assert_eq!(TORSOR_WIDTH, 6);
+    }
+
+    #[test]
+    fn chiral_and_generic_carrier_accounting_is_six_by_six() {
+        for arm in [ComparisonArm::C6, ComparisonArm::G6] {
+            let accounting = carrier_accounting(arm);
+            assert_eq!(accounting.query_components, 6);
+            assert_eq!(accounting.key_components, 6);
+            assert_eq!(accounting.score_components, 1);
+            assert_eq!(accounting.query_bytes, 6 * core::mem::size_of::<f64>());
+            assert_eq!(accounting.key_bytes, 6 * core::mem::size_of::<f64>());
+            assert_eq!(accounting.accounting_contract, CARRIER_ACCOUNTING_CONTRACT);
+        }
+    }
+
+    #[test]
+    fn torsor_external_geometry_is_accounted_not_hidden() {
+        let torsor = carrier_accounting(ComparisonArm::T6);
+        assert_eq!(torsor.query_components, 6);
+        assert_eq!(torsor.key_components, 9);
+        assert_eq!(torsor.query_bytes, 6 * core::mem::size_of::<f64>());
+        assert_eq!(torsor.key_bytes, 9 * core::mem::size_of::<f64>());
+        assert_eq!(torsor.external_geometry_components, 3);
+        assert_eq!(
+            carrier_accounting(ComparisonArm::C6).external_geometry_components,
+            0
+        );
+        assert_eq!(
+            carrier_accounting(ComparisonArm::G6).external_geometry_components,
+            0
+        );
     }
 
     #[test]
