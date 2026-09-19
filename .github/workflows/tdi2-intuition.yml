@@ -15,6 +15,7 @@ on:
       - "tdi-ai/Cargo.toml"
       - "scripts/check-tdi2-cycle2-summary.sh"
       - "docs/research/tdi-2.1*"
+      - "docs/research/TDI-2.2*"
       - ".github/workflows/tdi2-intuition.yml"
   push:
     branches: [main]
@@ -32,6 +33,7 @@ on:
       - "tdi-ai/Cargo.toml"
       - "scripts/check-tdi2-cycle2-summary.sh"
       - "docs/research/tdi-2.1*"
+      - "docs/research/TDI-2.2*"
       - ".github/workflows/tdi2-intuition.yml"
 permissions:
   contents: read
