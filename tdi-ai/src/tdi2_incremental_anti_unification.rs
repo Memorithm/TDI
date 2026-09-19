@@ -318,14 +318,12 @@ mod tests {
 
     #[test]
     fn duplicate_after_a_distinct_term_preserves_the_lgg_and_variable_budget() {
-        let retained =
-            StructuralTerm::variable(StructuralVariableId::new(u32::MAX - 1));
+        let retained = StructuralTerm::variable(StructuralVariableId::new(u32::MAX - 1));
         let a = app(3, vec![retained.clone(), atom(1)]);
         let b = app(3, vec![retained, atom(2)]);
 
         let unique = incremental_anti_unify(&[a.clone(), b.clone()]).expect("unique");
-        let repeated =
-            incremental_anti_unify(&[a, b.clone(), b]).expect("repeated");
+        let repeated = incremental_anti_unify(&[a, b.clone(), b]).expect("repeated");
 
         assert_eq!(unique.generalization(), repeated.generalization());
         assert_eq!(unique.steps(), repeated.steps());
