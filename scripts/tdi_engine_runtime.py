@@ -207,17 +207,19 @@ def refresh(client, store, campaign):
     # Concurrent refreshes are rechecked again below after read-side verification
     # so only one durable terminal transition can win.
     if (phase is not None and record["phase"] == phase
-            and record["snapshot"] is not None
-            and durable.canonical(record["snapshot"]) == durable.canonical(response)):
-        return _repair_completed_cache(store, campaign, record)
+            and record["snapshot"] is not None):
+        if durable.canonical(record["snapshot"]) == durable.canonical(response):
+            return _repair_completed_cache(store, campaign, record)
+        raise durable.ContractError("Hub terminal workflow snapshot changed after authoritative commit")
     # Close the window between the initial catalogue read and the Hub GET before
     # performing publication/artifact reads. Another reconciler may have already
     # committed this exact terminal snapshot while this request was in flight.
     if phase is not None:
         current = store.get(campaign)
-        if (current["phase"] == phase and current["snapshot"] is not None
-                and durable.canonical(current["snapshot"]) == durable.canonical(response)):
-            return _repair_completed_cache(store, campaign, current)
+        if current["phase"] == phase and current["snapshot"] is not None:
+            if durable.canonical(current["snapshot"]) == durable.canonical(response):
+                return _repair_completed_cache(store, campaign, current)
+            raise durable.ContractError("Hub terminal workflow snapshot changed after authoritative commit")
         if current["phase"] in set(TERMINAL.values()) and current["phase"] != phase:
             raise durable.ContractError("local terminal campaign state conflicts with Hub workflow")
     for key in sorted(actual_steps):
@@ -243,9 +245,15 @@ def refresh(client, store, campaign):
             target_phase = "cancel-requested"
         # The first terminal transition is the durable authoritative campaign
         # commit. If another reconciler won while this worker was validating the
-        # same terminal phase, keep that commit. Successful-output drift has
-        # already been rejected by idempotent result verification above.
+        # same terminal phase, accept it only when it committed the exact Hub
+        # snapshot this worker observed. Result verification alone is insufficient
+        # because failed-attempt metadata is evidence too.
         if target_phase in terminal_phases and current_phase == target_phase:
+            if (current["snapshot"] is None
+                    or durable.canonical(current["snapshot"]) != durable.canonical(response)):
+                raise durable.ContractError(
+                    "Hub terminal workflow snapshot changed after authoritative commit"
+                )
             return _repair_completed_cache(store, campaign, current)
         if current_phase in terminal_phases and current_phase != target_phase:
             raise durable.ContractError("local terminal campaign state conflicts with Hub workflow")
