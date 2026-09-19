@@ -214,6 +214,9 @@ mod tests {
         assert_eq!(row_accounting(0, 0), Err(AccountingError::InvalidRowShape));
         assert_eq!(row_accounting(4, 0), Err(AccountingError::InvalidRowShape));
         assert_eq!(row_accounting(4, 5), Err(AccountingError::InvalidRowShape));
-        assert_eq!(row_accounting(usize::MAX, 1), Err(AccountingError::SizeOverflow));
+        assert_eq!(
+            row_accounting(usize::MAX, 1),
+            Err(AccountingError::SizeOverflow)
+        );
     }
 }
