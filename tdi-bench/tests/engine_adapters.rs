@@ -90,6 +90,7 @@ where
 #[test]
 fn restored_codecs_run_through_the_actual_paired_executor() {
     check_resumed_pair(FiniteCycle::new(3).unwrap());
+    check_resumed_pair(FiniteBranchRng::new(0x1234_5678_9abc_def0).unwrap());
     check_resumed_pair(JacobiSweep::new(vec![4.0, 4.0], vec![1.0], 0.0).unwrap());
 }
 
@@ -120,6 +121,46 @@ fn finite_library_codec_branches_oracle_and_intervention() {
     let before = left.encode_checkpoint().unwrap();
     assert_eq!(left.advance(bad), Err(AdapterError::InvalidContext));
     assert_eq!(left.encode_checkpoint().unwrap(), before);
+}
+
+#[test]
+fn restored_branched_rng_state_controls_the_paired_suffix() {
+    use tdi_ai::adapter_sdk::RelativeReplay;
+
+    let factory = FiniteBranchRng::new(0x1234_5678_9abc_def0).unwrap();
+    let mut advanced = factory.clone();
+    for depth in 1..=2 {
+        advanced
+            .advance(StepContext {
+                depth,
+                noise_stream: 0,
+            })
+            .unwrap();
+    }
+    let reference = advanced.checkpoint().unwrap();
+    let mut encoded = advanced.encode_checkpoint().unwrap();
+    encoded[10] ^= 1;
+    let perturbed = factory.decode_checkpoint(&encoded).unwrap();
+    let resumed = RelativeReplay::new(&factory, &reference).unwrap();
+    let mut pair = None;
+    let report = run_paired(
+        &resumed,
+        &reference,
+        &perturbed,
+        RunLimits::new(1, 1, 1, Collection::All).unwrap(),
+        NoiseCoupling::Deterministic,
+        |left, right| {
+            pair = Some((*left, *right));
+            Ok::<_, ()>(())
+        },
+        |_| false,
+        |_, _| Ok::<_, ()>(()),
+    )
+    .unwrap();
+    assert!(report.failure.is_none());
+    assert_eq!(report.completed_depth, 1);
+    let (left, right) = pair.unwrap();
+    assert_ne!(left, right);
 }
 
 #[test]
