@@ -154,9 +154,53 @@ pub enum CodecConformanceError<E> {
     Replay(ConformanceError<E>),
 }
 
-/// Exercise codec round-trip, canonical re-encoding and existing branch checks.
+fn check_codec_snapshot<A>(
+    adapter: &A,
+    expected: &A::Checkpoint,
+) -> Result<(), CodecConformanceError<A::Error>>
+where
+    A: ReplayCodec,
+    A::Checkpoint: PartialEq,
+{
+    let bytes = adapter
+        .encode_checkpoint()
+        .map_err(CodecConformanceError::Adapter)?;
+    if bytes.len() > adapter.contract().max_checkpoint_bytes {
+        return Err(CodecConformanceError::CodecMismatch);
+    }
+    let decoded = adapter
+        .decode_checkpoint(&bytes)
+        .map_err(CodecConformanceError::Adapter)?;
+    let restored = adapter
+        .fork(&decoded)
+        .map_err(CodecConformanceError::Adapter)?;
+    let restored_checkpoint = restored
+        .checkpoint()
+        .map_err(CodecConformanceError::Adapter)?;
+    if &decoded != expected
+        || &restored_checkpoint != expected
+        || restored.progress() != adapter.progress()
+        || restored
+            .encode_checkpoint()
+            .map_err(CodecConformanceError::Adapter)?
+            != bytes
+        || adapter
+            .checkpoint()
+            .map_err(CodecConformanceError::Adapter)?
+            != *expected
+    {
+        return Err(CodecConformanceError::CodecMismatch);
+    }
+    Ok(())
+}
+
+/// Exercise codec round-trip at the source and after every supplied advancement,
+/// then run the existing branch/order/replay checks.
 ///
-/// This bounded fixture check is not a universal proof of an opaque backend.
+/// Stepwise codec checks matter for adapters whose fresh checkpoint has empty
+/// caches or an unadvanced RNG: testing only the source state can otherwise miss
+/// a serializer that drops mutable execution state once advancement starts. The
+/// bounded fixture check is still not a universal proof of an opaque backend.
 /// The caller supplies valid ordered contexts and separate domain oracles.
 pub fn check_codec_conformance<A>(
     adapter: &A,
@@ -170,27 +214,25 @@ where
     let original = adapter
         .checkpoint()
         .map_err(CodecConformanceError::Adapter)?;
-    let bytes = adapter
-        .encode_checkpoint()
+    check_codec_snapshot(adapter, &original)?;
+
+    let mut progressed = adapter
+        .fork(&original)
         .map_err(CodecConformanceError::Adapter)?;
-    if bytes.len() > adapter.contract().max_checkpoint_bytes {
-        return Err(CodecConformanceError::CodecMismatch);
-    }
-    let decoded = adapter
-        .decode_checkpoint(&bytes)
-        .map_err(CodecConformanceError::Adapter)?;
-    let restored = adapter
-        .fork(&decoded)
-        .map_err(CodecConformanceError::Adapter)?;
-    if decoded != original
-        || restored
-            .encode_checkpoint()
-            .map_err(CodecConformanceError::Adapter)?
-            != bytes
-        || adapter
+    for &context in contexts {
+        progressed
+            .advance(context)
+            .map_err(CodecConformanceError::Adapter)?;
+        let checkpoint = progressed
             .checkpoint()
-            .map_err(CodecConformanceError::Adapter)?
-            != original
+            .map_err(CodecConformanceError::Adapter)?;
+        check_codec_snapshot(&progressed, &checkpoint)?;
+    }
+
+    if adapter
+        .checkpoint()
+        .map_err(CodecConformanceError::Adapter)?
+        != original
     {
         return Err(CodecConformanceError::CodecMismatch);
     }

@@ -32,7 +32,9 @@ a theorem about asymptotics, a hardware result or a general numerical guarantee.
    comparison. Do not change an existing protocol because a backend needs a
    different dtype, precision, batching, stochastic or device policy.
 4. Run `check_codec_conformance` and `check_replay_conformance` on valid ordered
-   contexts. Add backend-specific malformed checkpoint, cancellation, failure,
+   contexts. Codec conformance round-trips the fresh source and every supplied
+   post-advance checkpoint so an initially empty cache/RNG cannot hide omitted
+   runtime state. Add backend-specific malformed checkpoint, cancellation, failure,
    independent-branch and RNG/cache tests. The generic checks are bounded
    diagnostics, not proof that an opaque device session is independent.
 5. Bind serialized artifacts to graph/plan, trial, code and input identities at
