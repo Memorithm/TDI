@@ -30,6 +30,9 @@ pub const CHIRAL_WIDTH: usize = 6;
 /// Versioned contract for the unaggregated `s/m/chi` channel surface.
 pub const CHANNEL_DECOMPOSITION_CONTRACT: &str = "tdi24-channel-decomposition-v1";
 
+/// Versioned contract for the right/left enantiomorphic score pair.
+pub const ENANTIOMORPHIC_SCORE_CONTRACT: &str = "tdi24-enantiomorphic-score-pair-v1";
+
 /// Finite six-component parity carrier `(x+, x-)`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Chiral6 {
@@ -317,6 +320,40 @@ pub fn enantiomorphic_scores(
     ))
 }
 
+/// Provenance-tagged right/left score pair.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EnantiomorphicScorePair {
+    /// Right-handed branch score.
+    pub right: f64,
+    /// Left-handed branch score.
+    pub left: f64,
+    /// Algebra contract used to define the carrier and parity transform.
+    pub algebra_contract: &'static str,
+    /// Primitive channel-decomposition contract used by the pair.
+    pub decomposition_contract: &'static str,
+    /// Contract that defines the R/L score semantics.
+    pub pair_contract: &'static str,
+}
+
+/// Evaluate the versioned enantiomorphic score pair.
+///
+/// Under simultaneous reflection of query and key, this contract requires the
+/// returned branches to swap: R(Mq,Mk)=L(q,k) and L(Mq,Mk)=R(q,k).
+pub fn tagged_enantiomorphic_scores(
+    query: Chiral6,
+    key: Chiral6,
+    weights: ChiralScoreWeights,
+) -> Result<EnantiomorphicScorePair, ChiralError> {
+    let (right, left) = enantiomorphic_scores(query, key, weights)?;
+    Ok(EnantiomorphicScorePair {
+        right,
+        left,
+        algebra_contract: CHIRAL_CONTRACT,
+        decomposition_contract: CHANNEL_DECOMPOSITION_CONTRACT,
+        pair_contract: ENANTIOMORPHIC_SCORE_CONTRACT,
+    })
+}
+
 fn finite_mul(lhs: f64, rhs: f64, field: &'static str) -> Result<f64, ChiralError> {
     finite_scalar(lhs * rhs, field)
 }
@@ -487,6 +524,20 @@ mod tests {
             enantiomorphic_scores(q.mirror(), k.mirror(), weights).unwrap();
         close(mirrored_right, left);
         close(mirrored_left, right);
+    }
+
+    #[test]
+    fn tagged_enantiomorphic_pair_has_stable_provenance_and_reflection_swap() {
+        let q = c([1.0, 2.0, -3.0], [0.5, -1.5, 2.5]);
+        let k = c([-4.0, 1.0, 2.0], [3.0, 0.25, -0.75]);
+        let weights = ChiralScoreWeights::new(0.7, -0.2, 1.3).unwrap();
+        let base = tagged_enantiomorphic_scores(q, k, weights).unwrap();
+        let reflected = tagged_enantiomorphic_scores(q.mirror(), k.mirror(), weights).unwrap();
+        assert_eq!(base.algebra_contract, CHIRAL_CONTRACT);
+        assert_eq!(base.decomposition_contract, CHANNEL_DECOMPOSITION_CONTRACT);
+        assert_eq!(base.pair_contract, ENANTIOMORPHIC_SCORE_CONTRACT);
+        close(reflected.right, base.left);
+        close(reflected.left, base.right);
     }
 
     #[test]
