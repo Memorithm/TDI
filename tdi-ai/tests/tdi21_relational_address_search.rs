@@ -3,7 +3,7 @@
 use tdi_ai::experimental::tdi21_relational_address_search::{
     AddressSample, AddressSearchError, DevelopmentAddressSet, UnaryAddressRule,
     ValidationAddressSet, development_from_relational_tasks, evaluate_address_validation,
-    fit_relational_address, validation_from_relational_tasks,
+    evaluate_cross_namespace_aliases, fit_relational_address, validation_from_relational_tasks,
 };
 use tdi_ai::experimental::tdi21_relational_tasks::{
     DevelopmentRelationalSet, ValidationRelationalSet,
@@ -105,21 +105,15 @@ fn basis_coverage_recovers_exact_identity_and_transfers_to_full_domain() {
 fn combined_namespaces_expose_five_encoder_aliases_under_sparse_fit() {
     let development =
         development_from_relational_tasks(&DevelopmentRelationalSet::v1()).unwrap();
+    let validation =
+        validation_from_relational_tasks(&ValidationRelationalSet::v1()).unwrap();
     let selected = fit_relational_address(&development).unwrap();
 
-    let combined = [17u8, 21, 34, 51, 68, 153, 157, 170, 187, 204]
-        .into_iter()
-        .map(|value| AddressSample {
-            input: value,
-            expected: value,
-        })
-        .collect::<Vec<_>>();
-    let validation = ValidationAddressSet::new(&combined).unwrap();
-    let evidence = evaluate_address_validation(&selected, &validation).unwrap();
-
-    assert_eq!(evidence.samples, 10);
+    let evidence =
+        evaluate_cross_namespace_aliases(&selected, &development, &validation).unwrap();
+    assert_eq!(evidence.development_samples, 5);
+    assert_eq!(evidence.validation_samples, 5);
     assert_eq!(evidence.prediction_aliases, 5);
-    assert_eq!(evidence.address_mismatches, 5);
 }
 
 #[test]
