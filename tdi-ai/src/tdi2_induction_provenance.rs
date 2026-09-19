@@ -30,7 +30,13 @@ pub fn canonical_batch_record(batch: &InductionBatch) -> String {
         InductionDomain::Validation => "validation",
     };
     let mut record = format!("tdi2.2-induction-batch-v2;domain={domain};");
-    for (episode, graph) in batch.episodes().iter().zip(batch.graphs()) {
+    let mut pairs = batch
+        .episodes()
+        .iter()
+        .zip(batch.graphs())
+        .collect::<Vec<_>>();
+    pairs.sort_unstable_by_key(|(episode, _)| episode.id());
+    for (episode, graph) in pairs {
         let _ = write!(record, "episode={}[", episode.id().raw());
         for frame in episode.frames() {
             let _ = write!(record, "frame={}:n=", frame.ordinal());
@@ -157,6 +163,43 @@ mod tests {
         assert_ne!(first, second);
         assert!(first.contains("3ff0000000000000"));
         assert!(first.contains("entity=9:p=7,"));
+    }
+
+    fn two_episode_batch(reverse: bool) -> InductionBatch {
+        let ids = if reverse {
+            [DEVELOPMENT_START + 1, DEVELOPMENT_START]
+        } else {
+            [DEVELOPMENT_START, DEVELOPMENT_START + 1]
+        };
+        let episodes = ids
+            .iter()
+            .map(|&id| {
+                ExperienceEpisode::new(
+                    EpisodeId::new(id),
+                    vec![ObservationFrame::new(
+                        0,
+                        NumericState::new(vec![(id - DEVELOPMENT_START) as f64]).expect("finite"),
+                        BooleanState::default(),
+                    )],
+                )
+                .expect("episode")
+            })
+            .collect();
+        let graphs = ids
+            .iter()
+            .map(|&id| {
+                ObservationGraph::new(EpisodeId::new(id), Vec::new(), Vec::new()).expect("graph")
+            })
+            .collect();
+        InductionBatch::new(InductionDomain::Development, episodes, graphs).expect("batch")
+    }
+
+    #[test]
+    fn canonical_input_is_independent_of_batch_pair_order() {
+        assert_eq!(
+            canonical_batch_record(&two_episode_batch(false)),
+            canonical_batch_record(&two_episode_batch(true))
+        );
     }
 
     #[test]

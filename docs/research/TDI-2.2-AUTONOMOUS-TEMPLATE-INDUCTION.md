@@ -117,7 +117,7 @@ and then only through the explicit consolidation interface.
 ## Evaluation stages
 
 1. Development: construct algorithms and bounded deterministic task families.
-2. Validation: frozen disjoint populations; no retuning after observation.
+2. Validation: frozen disjoint populations; no retuning after observation. The current Stage A API intentionally rejects Validation batches until every reserved Validation episode id is bound to an immutable content manifest or deterministic generator. An id range alone is not a frozen population.
 3. Protected/final: not created or opened by this 50-PR campaign.
 
 ## Primary measurements
