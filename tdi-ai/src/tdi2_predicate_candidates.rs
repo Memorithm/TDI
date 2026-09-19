@@ -71,6 +71,23 @@ pub enum CandidateProvenanceError {
         episode: EpisodeId,
         frame_ordinal: u32,
     },
+    /// A source frame does not expose enough numeric observations for this family.
+    InsufficientNumericEvidence {
+        family: PredicateCandidateFamily,
+        episode: EpisodeId,
+        frame_ordinal: u32,
+        required: usize,
+        actual: usize,
+    },
+    /// Temporal deltas require at least two ordered observations in every cited episode.
+    MissingTemporalPair { episode: EpisodeId },
+    /// An observed-unary candidate cites a frame with no observed predicate.
+    MissingObservedUnary {
+        episode: EpisodeId,
+        frame_ordinal: u32,
+    },
+    /// ExperienceEpisode does not yet bind relational graphs to frame provenance.
+    RelationalEvidenceUnbound,
 }
 
 impl CandidateProvenance {
@@ -114,7 +131,72 @@ impl CandidateProvenance {
 
         sources.sort_unstable();
         sources.dedup();
+        Self::validate_family_evidence(family, &sources, episodes)?;
         Ok(Self { family, sources })
+    }
+
+    fn validate_family_evidence(
+        family: PredicateCandidateFamily,
+        sources: &[CandidateSource],
+        episodes: &[ExperienceEpisode],
+    ) -> Result<(), CandidateProvenanceError> {
+        if family == PredicateCandidateFamily::ObservedRelation {
+            // ObservationGraph is intentionally a separate IR in this slice. Until an
+            // episode/frame binding exists, accepting frame-only provenance here would
+            // manufacture relational evidence. Fail closed.
+            return Err(CandidateProvenanceError::RelationalEvidenceUnbound);
+        }
+
+        for source in sources {
+            let episode = episodes
+                .iter()
+                .find(|episode| episode.id() == source.episode())
+                .expect("source episode validated above");
+            let frame = episode
+                .frames()
+                .binary_search_by_key(&source.frame_ordinal(), |frame| frame.ordinal())
+                .map(|index| &episode.frames()[index])
+                .expect("source frame validated above");
+            let required_numeric = match family {
+                PredicateCandidateFamily::ScalarThreshold
+                | PredicateCandidateFamily::TemporalDelta => 1,
+                PredicateCandidateFamily::PairwiseRelation => 2,
+                PredicateCandidateFamily::ObservedUnary
+                | PredicateCandidateFamily::ObservedRelation => 0,
+            };
+            if frame.numeric().len() < required_numeric {
+                return Err(CandidateProvenanceError::InsufficientNumericEvidence {
+                    family,
+                    episode: source.episode(),
+                    frame_ordinal: source.frame_ordinal(),
+                    required: required_numeric,
+                    actual: frame.numeric().len(),
+                });
+            }
+            if family == PredicateCandidateFamily::ObservedUnary
+                && frame.observed_predicates().is_empty()
+            {
+                return Err(CandidateProvenanceError::MissingObservedUnary {
+                    episode: source.episode(),
+                    frame_ordinal: source.frame_ordinal(),
+                });
+            }
+        }
+
+        if family == PredicateCandidateFamily::TemporalDelta {
+            let mut index = 0;
+            while index < sources.len() {
+                let episode = sources[index].episode();
+                let start = index;
+                while index < sources.len() && sources[index].episode() == episode {
+                    index += 1;
+                }
+                if index - start < 2 {
+                    return Err(CandidateProvenanceError::MissingTemporalPair { episode });
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Candidate family.
@@ -154,6 +236,33 @@ impl core::fmt::Display for CandidateProvenanceError {
                 "candidate source references unknown frame {frame_ordinal} in episode {}",
                 episode.raw()
             ),
+            Self::InsufficientNumericEvidence {
+                family,
+                episode,
+                frame_ordinal,
+                required,
+                actual,
+            } => write!(
+                formatter,
+                "candidate family {family:?} requires at least {required} numeric observations at frame {frame_ordinal} in episode {}, found {actual}",
+                episode.raw()
+            ),
+            Self::MissingTemporalPair { episode } => write!(
+                formatter,
+                "temporal candidate has fewer than two ordered sources in episode {}",
+                episode.raw()
+            ),
+            Self::MissingObservedUnary {
+                episode,
+                frame_ordinal,
+            } => write!(
+                formatter,
+                "observed-unary candidate cites predicate-free frame {frame_ordinal} in episode {}",
+                episode.raw()
+            ),
+            Self::RelationalEvidenceUnbound => formatter.write_str(
+                "observed-relation provenance requires an explicit observation-graph binding",
+            ),
         }
     }
 }
@@ -190,8 +299,8 @@ mod tests {
 
     #[test]
     fn candidate_provenance_is_observation_only_and_canonical() {
-        let episodes = [episode(2, &[1]), episode(9, &[4])];
-        let late = CandidateSource::new(EpisodeId::new(9), 4);
+        let episodes = [episode(2, &[1, 4])];
+        let late = CandidateSource::new(EpisodeId::new(2), 4);
         let early = CandidateSource::new(EpisodeId::new(2), 1);
         let provenance = CandidateProvenance::new(
             PredicateCandidateFamily::TemporalDelta,
@@ -239,6 +348,74 @@ mod tests {
                 episode: EpisodeId::new(7),
                 frame_ordinal: 2,
             })
+        );
+    }
+
+    #[test]
+    fn family_specific_evidence_is_required_fail_closed() {
+        let empty_numeric = ExperienceEpisode::new(
+            EpisodeId::new(1),
+            vec![ObservationFrame::new(
+                0,
+                NumericState::new(Vec::new()).expect("finite"),
+                BooleanState::new(Vec::new()),
+            )],
+        )
+        .expect("episode");
+        assert!(matches!(
+            CandidateProvenance::new(
+                PredicateCandidateFamily::ScalarThreshold,
+                vec![CandidateSource::new(EpisodeId::new(1), 0)],
+                &[empty_numeric],
+            ),
+            Err(CandidateProvenanceError::InsufficientNumericEvidence {
+                required: 1,
+                actual: 0,
+                ..
+            })
+        ));
+
+        let one_numeric = [episode(2, &[0])];
+        assert!(matches!(
+            CandidateProvenance::new(
+                PredicateCandidateFamily::PairwiseRelation,
+                vec![CandidateSource::new(EpisodeId::new(2), 0)],
+                &one_numeric,
+            ),
+            Err(CandidateProvenanceError::InsufficientNumericEvidence {
+                required: 2,
+                actual: 1,
+                ..
+            })
+        ));
+        assert_eq!(
+            CandidateProvenance::new(
+                PredicateCandidateFamily::TemporalDelta,
+                vec![CandidateSource::new(EpisodeId::new(2), 0)],
+                &one_numeric,
+            ),
+            Err(CandidateProvenanceError::MissingTemporalPair {
+                episode: EpisodeId::new(2)
+            })
+        );
+        assert_eq!(
+            CandidateProvenance::new(
+                PredicateCandidateFamily::ObservedUnary,
+                vec![CandidateSource::new(EpisodeId::new(2), 0)],
+                &one_numeric,
+            ),
+            Err(CandidateProvenanceError::MissingObservedUnary {
+                episode: EpisodeId::new(2),
+                frame_ordinal: 0,
+            })
+        );
+        assert_eq!(
+            CandidateProvenance::new(
+                PredicateCandidateFamily::ObservedRelation,
+                vec![CandidateSource::new(EpisodeId::new(2), 0)],
+                &one_numeric,
+            ),
+            Err(CandidateProvenanceError::RelationalEvidenceUnbound)
         );
     }
 
