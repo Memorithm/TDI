@@ -400,6 +400,147 @@ raise SystemExit("signal interruption point was not reached")
                     }
                     self.assertEqual(expected_tables, tables)
 
+    @unittest.skipUnless(hasattr(signal, "SIGKILL"), "requires POSIX SIGKILL")
+    def test_atomic_json_external_sigkill_preserves_publication_boundary(self):
+        child = r'''\
+import os
+from pathlib import Path
+import signal
+import sys
+import tdi_engine_store as store
+
+target = Path(sys.argv[1])
+stage = sys.argv[2]
+marker = Path(sys.argv[3])
+
+def pause_for_parent_kill():
+    with marker.open("xb") as stream:
+        stream.write(b"ready")
+        stream.flush()
+        os.fsync(stream.fileno())
+    signal.pause()
+
+if stage == "before-link":
+    store._publish_completed_temp = lambda *_args: pause_for_parent_kill()
+elif stage == "after-link-before-directory-fsync":
+    store.durable._fsync_directory = lambda *_args: pause_for_parent_kill()
+elif stage == "after-directory-fsync":
+    original = store._publish_completed_temp
+    def publish_then_pause(temporary, destination):
+        original(temporary, destination)
+        pause_for_parent_kill()
+    store._publish_completed_temp = publish_then_pause
+else:
+    raise SystemExit("unknown stage")
+store.atomic_json(target, {"value": "complete"})
+raise SystemExit("SIGKILL interruption point was not reached")
+'''
+        expected = (durable.canonical({"value": "complete"}) + "\n").encode()
+        cases = (
+            ("before-link", False),
+            ("after-link-before-directory-fsync", True),
+            ("after-directory-fsync", True),
+        )
+        for stage, published in cases:
+            with self.subTest(stage=stage):
+                root = self.root / f"json-sigkill-{stage}"
+                root.mkdir()
+                target = root / "artifact.json"
+                marker = root / ".ready"
+                self._run_signaled_child(
+                    child, target, stage, marker=marker, signum=signal.SIGKILL
+                )
+                self.assertEqual(published, target.exists())
+                if published:
+                    self.assertEqual(expected, target.read_bytes())
+                else:
+                    temporaries = list(root.glob(".tdi-*"))
+                    self.assertEqual(1, len(temporaries))
+                    self.assertEqual(expected, temporaries[0].read_bytes())
+
+    @unittest.skipUnless(hasattr(signal, "SIGKILL"), "requires POSIX SIGKILL")
+    def test_backup_external_sigkill_preserves_publication_boundary(self):
+        child = r'''\
+import os
+from pathlib import Path
+import signal
+import sys
+import tdi_engine_store as store
+
+source = Path(sys.argv[1])
+destination = Path(sys.argv[2])
+stage = sys.argv[3]
+marker = Path(sys.argv[4])
+
+def pause_for_parent_kill():
+    with marker.open("xb") as stream:
+        stream.write(b"ready")
+        stream.flush()
+        os.fsync(stream.fileno())
+    signal.pause()
+
+with store.EngineStore(source) as catalogue:
+    if stage == "before-link":
+        store._publish_completed_temp = lambda *_args: pause_for_parent_kill()
+    elif stage == "after-link-before-directory-fsync":
+        store.durable._fsync_directory = lambda *_args: pause_for_parent_kill()
+    elif stage == "after-directory-fsync":
+        original = store._publish_completed_temp
+        def publish_then_pause(temporary, target):
+            original(temporary, target)
+            pause_for_parent_kill()
+        store._publish_completed_temp = publish_then_pause
+    else:
+        raise SystemExit("unknown stage")
+    catalogue.backup(destination)
+raise SystemExit("SIGKILL interruption point was not reached")
+'''
+        cases = (
+            ("before-link", False),
+            ("after-link-before-directory-fsync", True),
+            ("after-directory-fsync", True),
+        )
+        expected_tables = {
+            "campaigns",
+            "events",
+            "results",
+            "cache",
+            "restored_artifacts",
+            "exports",
+            "searches",
+            "search_events",
+            "search_stages",
+            "shared_proofs",
+        }
+        for stage, published in cases:
+            with self.subTest(stage=stage):
+                root = self.root / f"backup-sigkill-{stage}"
+                root.mkdir()
+                source = root / "catalogue.sqlite"
+                destination = root / "backup.sqlite"
+                marker = root / ".ready"
+                self._run_signaled_child(
+                    child,
+                    source,
+                    destination,
+                    stage,
+                    marker=marker,
+                    signum=signal.SIGKILL,
+                )
+                self.assertEqual(published, destination.exists())
+                candidates = [destination] if published else list(root.glob(".tdi-backup-*"))
+                self.assertEqual(1, len(candidates))
+                with sqlite3.connect(candidates[0]) as backup:
+                    self.assertEqual(("ok",), backup.execute("PRAGMA integrity_check").fetchone())
+                    self.assertEqual((4,), backup.execute("PRAGMA user_version").fetchone())
+                    tables = {
+                        row[0]
+                        for row in backup.execute(
+                            "SELECT name FROM sqlite_master WHERE type='table'"
+                        )
+                    }
+                    self.assertEqual(expected_tables, tables)
+
     def test_backup_storage_failures_never_publish_named_partial_catalogue(self):
         destination = self.root / "backup.sqlite"
         with EngineStore(self.root / "catalogue.sqlite") as store:
