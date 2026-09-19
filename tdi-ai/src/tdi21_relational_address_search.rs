@@ -6,6 +6,7 @@
 
 use std::collections::BTreeMap;
 
+use super::tdi21_anf_synthesis::{AnfProgram, AnfSynthesisError, synthesize_anf};
 use super::tdi21_relational_tasks::{
     DevelopmentRelationalSet, RELATIONAL_V1_ENTITY_BITS, RELATIONAL_V1_RELATION_BITS,
     RelationalEpisode, ValidationRelationalSet,
@@ -94,6 +95,7 @@ pub enum AddressSearchError {
     IdentifierOutOfRange,
     CounterOverflow,
     AllocationFailed,
+    Synthesis(AnfSynthesisError),
 }
 
 fn address_limit() -> u16 {
@@ -306,6 +308,41 @@ impl AddressSearchResult {
             }
         }
         output
+    }
+
+    /// Canonicalize every selected output rule as an eight-variable
+    /// Zhegalkin/ANF program. This is a representation conversion only; it does
+    /// not read Validation data or alter the selected rule.
+    pub fn to_anf_programs(&self) -> Result<Vec<AnfProgram>, AddressSearchError> {
+        let rows = 1usize << RELATIONAL_ADDRESS_BITS;
+        let mut programs = Vec::new();
+        programs
+            .try_reserve_exact(RELATIONAL_ADDRESS_BITS as usize)
+            .map_err(|_| AddressSearchError::AllocationFailed)?;
+        for rule in self.rules {
+            let mut table = Vec::new();
+            table
+                .try_reserve_exact(rows)
+                .map_err(|_| AddressSearchError::AllocationFailed)?;
+            for input in 0..rows {
+                table.push(rule.evaluate(input as u8));
+            }
+            programs.push(
+                synthesize_anf(RELATIONAL_ADDRESS_BITS, &table)
+                    .map_err(AddressSearchError::Synthesis)?,
+            );
+        }
+        Ok(programs)
+    }
+
+    /// Semantic bits of the canonical ANF output programs only. This excludes
+    /// search traces, allocator/process memory and the B3 memory substrate.
+    pub fn anf_program_semantic_bits(&self) -> Result<usize, AddressSearchError> {
+        self.to_anf_programs()?.iter().try_fold(0usize, |total, program| {
+            total
+                .checked_add(program.semantic_bits())
+                .ok_or(AddressSearchError::CounterOverflow)
+        })
     }
 }
 
