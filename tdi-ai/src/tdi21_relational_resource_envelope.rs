@@ -146,3 +146,4 @@ pub fn build_declared_component_envelope(
         unallocated_component_bits,
     })
 }
+
