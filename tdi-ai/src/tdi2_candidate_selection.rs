@@ -59,6 +59,7 @@ impl SelectedCandidate {
 /// Fail-closed policy input errors.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CandidateSelectionError {
+    MixedEvaluationBatches,
     CatalogueLimitExceeded {
         actual: usize,
         maximum: usize,
@@ -110,6 +111,12 @@ pub fn select_candidates_v1(
                 candidate_key: score.candidate_key().to_owned(),
             });
         }
+        if scores
+            .first()
+            .is_some_and(|first| first.evaluation_batch_record() != score.evaluation_batch_record())
+        {
+            return Err(CandidateSelectionError::MixedEvaluationBatches);
+        }
     }
 
     let mut eligible = scores
@@ -146,6 +153,9 @@ pub fn select_candidates_v1(
 impl core::fmt::Display for CandidateSelectionError {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
+            Self::MixedEvaluationBatches => {
+                formatter.write_str("candidate scores use different observation populations")
+            }
             Self::CatalogueLimitExceeded { actual, maximum } => write!(
                 formatter,
                 "candidate score catalogue count {actual} exceeds bounded maximum {maximum}"
@@ -282,19 +292,19 @@ mod tests {
             &candidates[0],
             InductionDomain::Development,
             DEVELOPMENT_START + 1,
-            &[vec![0.5, 2.0], vec![0.75, 2.0]],
+            &[vec![0.5], vec![0.75]],
         );
         let mixed = score_on(
             &candidates[1],
             InductionDomain::Development,
-            DEVELOPMENT_START + 2,
-            &[vec![0.5, 2.0], vec![2.0, 2.0]],
+            DEVELOPMENT_START + 1,
+            &[vec![0.5], vec![0.75]],
         );
         let unknown = score_on(
             &candidates[2],
             InductionDomain::Development,
-            DEVELOPMENT_START + 3,
-            &[Vec::new()],
+            DEVELOPMENT_START + 1,
+            &[vec![0.5], vec![0.75]],
         );
         assert_eq!(unknown.known_observations(), 0);
 
@@ -327,6 +337,27 @@ mod tests {
             error,
             CandidateSelectionError::MixedDomains { .. }
         ));
+    }
+
+    #[test]
+    fn different_populations_in_the_same_domain_fail_closed() {
+        let candidates = source_candidates();
+        let first = score_on(
+            &candidates[0],
+            InductionDomain::Development,
+            DEVELOPMENT_START + 1,
+            &[vec![0.5]],
+        );
+        for (id, values) in [
+            (DEVELOPMENT_START + 2, vec![vec![0.5]]),
+            (DEVELOPMENT_START + 1, vec![vec![0.5], vec![0.5]]),
+        ] {
+            let other = score_on(&candidates[1], InductionDomain::Development, id, &values);
+            assert_eq!(
+                select_candidates_v1(&[first.clone(), other]),
+                Err(CandidateSelectionError::MixedEvaluationBatches)
+            );
+        }
     }
 
     #[test]

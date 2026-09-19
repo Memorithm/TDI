@@ -20,6 +20,7 @@ pub const CANDIDATE_SCORE_SCHEMA: &str = "tdi2.2-candidate-description-evidence-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CandidateDescriptionEvidenceScore {
     domain: InductionDomain,
+    evaluation_batch_record: String,
     candidate_key: String,
     canonical_description_bytes: u32,
     opportunities: u64,
@@ -32,6 +33,12 @@ pub struct CandidateDescriptionEvidenceScore {
 }
 
 impl CandidateDescriptionEvidenceScore {
+    /// Exact observation population shared by all scores in a matched ranking.
+    #[must_use]
+    pub fn evaluation_batch_record(&self) -> &str {
+        &self.evaluation_batch_record
+    }
+
     #[must_use]
     pub const fn domain(&self) -> InductionDomain {
         self.domain
@@ -142,6 +149,7 @@ pub fn score_candidate_evidence(
 
     Ok(CandidateDescriptionEvidenceScore {
         domain: evidence.domain(),
+        evaluation_batch_record: evidence.evaluation_batch_record().to_owned(),
         candidate_key: key,
         canonical_description_bytes,
         opportunities: counts.opportunities(),
