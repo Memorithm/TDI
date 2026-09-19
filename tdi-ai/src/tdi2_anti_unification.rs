@@ -275,16 +275,14 @@ impl AntiUnificationContext {
     }
 
     fn reclaimable_generated_variable(&self) -> Option<StructuralVariableId> {
-        self.reclaimable_variables
-            .iter()
-            .find_map(|variable| {
-                let already_claimed = self
-                    .mismatch_variables
-                    .values()
-                    .any(|claimed| claimed == variable)
-                    || self.allocated_variables.contains(variable);
-                (!already_claimed).then_some(*variable)
-            })
+        self.reclaimable_variables.iter().find_map(|variable| {
+            let already_claimed = self
+                .mismatch_variables
+                .values()
+                .any(|claimed| claimed == variable)
+                || self.allocated_variables.contains(variable);
+            (!already_claimed).then_some(*variable)
+        })
     }
 
     fn first_available_variable(&self) -> Option<StructuralVariableId> {

@@ -484,11 +484,7 @@ mod tests {
         let terms = [
             app(
                 3,
-                vec![
-                    retained.clone(),
-                    app(4, vec![atom(1), atom(1)]),
-                    atom(4),
-                ],
+                vec![retained.clone(), app(4, vec![atom(1), atom(1)]), atom(4)],
             ),
             app(
                 3,
