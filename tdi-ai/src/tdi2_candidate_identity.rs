@@ -210,6 +210,7 @@ pub fn deduplicate_candidates(
     )
 }
 
+#[cfg(test)]
 fn deduplicate_candidates_with_limit(
     batch: &InductionBatch,
     candidates: impl IntoIterator<Item = CanonicalPredicateCandidate>,
