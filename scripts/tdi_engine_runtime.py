@@ -195,10 +195,29 @@ def refresh(client, store, campaign):
             "admitted" if record["phase"] == "admitted" and state in ("created", "validated") else "executing")
     if phase == "admitted" and record["phase"] == "admitted":
         return record
-    current_phase = store.get(campaign)["phase"]
-    if phase == "executing" and current_phase == "cancel-requested":
-        phase = "cancel-requested"
-    store.transition(campaign, current_phase, phase, snapshot=response)
+    # A cancellation request and the execution response can race on separate
+    # catalogue connections. Re-read and retry only when another writer really
+    # changed the local phase between our read and compare-and-swap. This keeps
+    # refresh bounded and fail-closed while allowing the same authoritative Hub
+    # terminal snapshot to reconcile from `cancel-requested`.
+    terminal_phases = set(TERMINAL.values())
+    for _ in range(3):
+        current_phase = store.get(campaign)["phase"]
+        target_phase = phase
+        if target_phase == "executing" and current_phase == "cancel-requested":
+            target_phase = "cancel-requested"
+        if current_phase in terminal_phases and current_phase != target_phase:
+            raise durable.ContractError("local terminal campaign state conflicts with Hub workflow")
+        try:
+            store.transition(campaign, current_phase, target_phase, snapshot=response)
+        except durable.ContractError:
+            if store.get(campaign)["phase"] == current_phase:
+                raise
+            continue
+        phase = target_phase
+        break
+    else:
+        raise durable.ContractError("campaign state kept changing during Hub reconciliation")
     if phase == "completed":
         from tdi_engine_cache import publish_completed
         publish_completed(store, campaign)
