@@ -821,3 +821,29 @@ elastic_hub_benchmark_2026_09_19:
     - qualify_shared_capacity_accounting_before_simultaneous_campaign_admission
     - use_representative_CPU_and_IO_workloads_before_resource_policy_tuning
   authority: no_Go_no_optimizer_policy_change_no_protected_stage_or_scientific_promotion
+
+engine_and_PR_integration_2026_09_19:
+  status: reviewed_corrections_published_CI_and_remaining_merges_pending
+  merged:
+    TDI_531: edb81d2d71888a222715a0ab1016f6f7a8ca44ef
+    TDI_529: 81d688d2787db80325c4f92126cc8308aad826f7
+    TDI_533: 8cd2c83a3b33f6b2c0366372890b5cf5b8966a08
+    Hub_56: 4a2b2d1f0f14cdb84626b34367a08e6528f3dbd4
+  corrections:
+    - Hub_process_termination_and_reaping_failures_quarantine_shared_capacity
+    - exact_candidate_identity_revalidated_against_every_cited_observation
+    - candidate_rankings_require_identical_evaluation_populations
+    - temporal_raw_provenance_references_bounded_before_allocation
+    - upstream_baseline_numeric_pairwise_provenance_fixes_propagated_to_dependent_PRs
+    - structural_entity_constants_are_episode_scoped_and_term_construction_is_private
+    - current_main_integrated_and_protocol_workflow_path_conflicts_resolved
+  validation:
+    Hub_workspace: 221_tests_passed_Clippy_and_exact_head_CI_passed
+    TDI_2_combined_through_slice_17: 171_tests_passed_Clippy_warnings_denied_passed
+  auto_merge_requested: [532, 534, 535, 536, 537, 540, 541, 542, 543, 544]
+  additional_PR_545: corrections_published_6ba7bce96c4f3a7ccc4f97c6080ba3425e6dd582_CI_pending_base_is_slice_16
+  boundaries:
+    - protected_and_final_surfaces_unchanged
+    - Validation_input_remains_closed_until_immutable_content_binding_exists
+    - no_universal_performance_or_scientific_promotion
+    - auto_merge_is_not_evidence_of_completed_merge
