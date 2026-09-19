@@ -348,7 +348,10 @@ mod tests {
             first_score.source_evidence_record(),
             second_score.source_evidence_record()
         );
-        assert_ne!(first_score.canonical_record(), second_score.canonical_record());
+        assert_ne!(
+            first_score.canonical_record(),
+            second_score.canonical_record()
+        );
     }
 
     #[test]
