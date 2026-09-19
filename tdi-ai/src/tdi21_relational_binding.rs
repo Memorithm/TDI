@@ -312,7 +312,12 @@ impl RelationalBinder {
         {
             return Err(RelationalError::EventBudgetExhausted);
         }
-        if self.work.address_derivations.checked_add(required).is_none() {
+        if self
+            .work
+            .address_derivations
+            .checked_add(required)
+            .is_none()
+        {
             return Err(RelationalError::CounterOverflow);
         }
 
