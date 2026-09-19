@@ -85,6 +85,15 @@ pub struct AddressValidationEvidence {
     pub rule_evaluations: u64,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CrossNamespaceAliasEvidence {
+    pub development_samples: u64,
+    pub validation_samples: u64,
+    /// Additional distinct symbolic inputs mapped to an already-seen learned
+    /// output over the combined typed split support.
+    pub prediction_aliases: u64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AddressSearchError {
     EmptySamples,
@@ -386,6 +395,35 @@ pub fn evaluate_address_validation(
             &mut evidence.bit_mismatches,
             (predicted ^ sample.expected).count_ones() as u64,
         )?;
+    }
+    Ok(evidence)
+}
+
+pub fn evaluate_cross_namespace_aliases(
+    result: &AddressSearchResult,
+    development: &DevelopmentAddressSet,
+    validation: &ValidationAddressSet,
+) -> Result<CrossNamespaceAliasEvidence, AddressSearchError> {
+    let mut evidence = CrossNamespaceAliasEvidence::default();
+    let mut predicted_inputs = BTreeMap::new();
+
+    for sample in &development.0.samples {
+        checked_add(&mut evidence.development_samples, 1)?;
+        let predicted = result.predict(sample.input);
+        if let Some(previous_input) = predicted_inputs.insert(predicted, sample.input)
+            && previous_input != sample.input
+        {
+            checked_add(&mut evidence.prediction_aliases, 1)?;
+        }
+    }
+    for sample in &validation.0.samples {
+        checked_add(&mut evidence.validation_samples, 1)?;
+        let predicted = result.predict(sample.input);
+        if let Some(previous_input) = predicted_inputs.insert(predicted, sample.input)
+            && previous_input != sample.input
+        {
+            checked_add(&mut evidence.prediction_aliases, 1)?;
+        }
     }
     Ok(evidence)
 }
