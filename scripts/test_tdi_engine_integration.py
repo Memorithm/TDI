@@ -276,6 +276,48 @@ class OperationalIntegrationTests(unittest.TestCase):
             self.assertEqual("admitted", runtime.attach(client, store, campaign, lost.created["id"], {})["phase"])
             self.assertEqual("completed", runtime.execute(client, store, campaign)["phase"])
 
+    def test_lost_execution_response_reconciles_without_redispatch(self):
+        spec = prepare_fixture(self.client, self.worker, trials=1)
+        client = self.client
+
+        class LostExecutionResponse:
+            endpoint = client.endpoint
+            posts = 0
+
+            def request(self, method, path, **kwargs):
+                if method == "POST" and path.endswith("/executions"):
+                    self.posts += 1
+                    client.request(method, path, **kwargs)
+                    raise HubTransportUnknown("synthetic lost execution response")
+                return client.request(method, path, **kwargs)
+
+            def download(self, *args, **kwargs):
+                return client.download(*args, **kwargs)
+
+        lost = LostExecutionResponse()
+        with EngineStore(self.catalogue) as store:
+            campaign = runtime.submit(client, store, spec, {})
+            workflow = store.get(campaign)["workflow"]
+            with self.assertRaises(HubTransportUnknown):
+                runtime.execute(lost, store, campaign)
+            self.assertEqual(1, lost.posts)
+            self.assertEqual("executing", store.get(campaign)["phase"])
+
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                snapshot = client.request("GET", f"/api/v1/workflows/{workflow}")
+                if snapshot["state"] in ("succeeded", "failed", "cancelled"):
+                    break
+                time.sleep(0.02)
+            self.assertEqual("succeeded", snapshot["state"])
+
+            reconciled = runtime.execute(lost, store, campaign)
+            self.assertEqual("completed", reconciled["phase"])
+            self.assertEqual(1, lost.posts)
+            self.assertEqual(2, len(store.results(campaign)))
+            for step in reconciled["snapshot"]["steps"]:
+                self.assertEqual(1, len(step["attempts"]))
+
 
 if __name__ == "__main__":
     unittest.main()
