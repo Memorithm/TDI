@@ -492,16 +492,9 @@ mod tests {
             ),
             app(
                 3,
-                vec![
-                    retained.clone(),
-                    app(4, vec![atom(2), atom(3)]),
-                    atom(4),
-                ],
+                vec![retained.clone(), app(4, vec![atom(2), atom(3)]), atom(4)],
             ),
-            app(
-                3,
-                vec![retained.clone(), app(5, vec![atom(5)]), atom(6)],
-            ),
+            app(3, vec![retained.clone(), app(5, vec![atom(5)]), atom(6)]),
         ];
 
         let result = incremental_anti_unify(&terms).expect("reclaimed surplus variable");
