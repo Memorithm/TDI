@@ -47,6 +47,9 @@ pub const CARRIER_ACCOUNTING_CONTRACT: &str = "tdi25-carrier-accounting-v1";
 /// Versioned common scalar score-scale contract.
 pub const SCORE_SCALE_CONTRACT: &str = "tdi25-common-score-scale-v1";
 
+/// Versioned TDI-22 torsor-invariant bridge contract.
+pub const TORSOR_INVARIANT_BRIDGE_CONTRACT: &str = "tdi25-torsor-invariant-bridge-v1";
+
 const _GENERIC_MATCH_TORSOR: [(); TORSOR_WIDTH] = [(); GENERIC6_WIDTH];
 const _GENERIC_MATCH_CHIRAL: [(); super::tdi24_chiral::CHIRAL_WIDTH] = [(); GENERIC6_WIDTH];
 
@@ -183,6 +186,41 @@ impl Generic6 {
         }
         Ok(accumulator)
     }
+}
+
+/// TDI-22 invariants observed through the TDI-25 bridge.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TorsorInvariantSnapshot {
+    /// Reduction-point invariant squared resultant norm.
+    pub resultant_norm_squared: f64,
+    /// Reduction-point invariant scalar product R.M.
+    pub scalar_invariant: f64,
+    /// Origin-reduced moment C.
+    pub origin_moment: Vec3,
+    /// Contract defining this bridge diagnostic.
+    pub bridge_contract: &'static str,
+}
+
+/// Observe the upstream TDI-22 invariants without reimplementing them.
+pub fn torsor_invariant_snapshot(key: Torsor3) -> Result<TorsorInvariantSnapshot, Tdi25Error> {
+    Ok(TorsorInvariantSnapshot {
+        resultant_norm_squared: key.resultant_norm_squared().map_err(Tdi25Error::Torsor)?,
+        scalar_invariant: key.scalar_invariant().map_err(Tdi25Error::Torsor)?,
+        origin_moment: key.origin_moment().map_err(Tdi25Error::Torsor)?,
+        bridge_contract: TORSOR_INVARIANT_BRIDGE_CONTRACT,
+    })
+}
+
+/// Return invariant snapshots before and after reducing the same torsor at a
+/// new point. The caller retains the numerical tolerance policy.
+pub fn transported_torsor_invariants(
+    key: Torsor3,
+    target: Vec3,
+) -> Result<(TorsorInvariantSnapshot, TorsorInvariantSnapshot), Tdi25Error> {
+    let before = torsor_invariant_snapshot(key)?;
+    let transported = key.transport(target).map_err(Tdi25Error::Torsor)?;
+    let after = torsor_invariant_snapshot(transported)?;
+    Ok((before, after))
 }
 
 /// Score the TDI-22 torsor arm through the upstream factorized pairing.
@@ -490,6 +528,29 @@ mod tests {
                 expected: "tdi24-mirror-coupled-chiral-v1",
                 actual: "tdi24-mirror-coupled-chiral-v2",
             })
+        );
+    }
+
+    #[test]
+    fn torsor_transport_bridge_preserves_upstream_invariants_and_score() {
+        let query = Twist3::new(v(1.0, -2.0, 3.0), v(0.5, 4.0, -1.0)).unwrap();
+        let key =
+            Torsor3::new(v(2.0, 3.0, -4.0), v(-5.0, 7.0, 11.0), v(13.0, -17.0, 19.0)).unwrap();
+        let target = v(-2.0, 5.0, 7.0);
+        let query_position = v(-23.0, 29.0, 31.0);
+        let (before, after) = transported_torsor_invariants(key, target).unwrap();
+        assert_eq!(before.bridge_contract, TORSOR_INVARIANT_BRIDGE_CONTRACT);
+        assert_eq!(after.bridge_contract, TORSOR_INVARIANT_BRIDGE_CONTRACT);
+        close(before.resultant_norm_squared, after.resultant_norm_squared);
+        close(before.scalar_invariant, after.scalar_invariant);
+        close(before.origin_moment.x, after.origin_moment.x);
+        close(before.origin_moment.y, after.origin_moment.y);
+        close(before.origin_moment.z, after.origin_moment.z);
+
+        let transported = key.transport(target).unwrap();
+        close(
+            torsor_arm_score(query, key, query_position).unwrap(),
+            torsor_arm_score(query, transported, query_position).unwrap(),
         );
     }
 
