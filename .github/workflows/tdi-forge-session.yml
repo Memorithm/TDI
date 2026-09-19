@@ -1,10 +1,10 @@
 name: TDI Forge persistent session
 on:
   pull_request:
-    paths: ['scripts/tdi_*.py', 'scripts/check-tdi-forge-session.py', 'scripts/test_tdi_optuna_benchmark.py', 'scripts/requirements-optuna-benchmark.txt', 'docs/engineering/forge-session-comparison.md', '.github/workflows/tdi-forge-session.yml']
+    paths: ['scripts/tdi_*.py', 'scripts/check-tdi-forge-session.py', 'scripts/test_tdi_optuna_benchmark.py', 'scripts/profile-forge-session.py', 'scripts/benchmark-json-shape.py', 'scripts/test_forge_session_profile.py', 'scripts/test_json_shape_fastpath.py', 'scripts/requirements-optuna-benchmark.txt', 'docs/engineering/forge-session-comparison.md', '.github/workflows/tdi-forge-session.yml']
   push:
     branches: [main]
-    paths: ['scripts/tdi_*.py', 'scripts/check-tdi-forge-session.py', 'scripts/test_tdi_optuna_benchmark.py', 'scripts/requirements-optuna-benchmark.txt', 'docs/engineering/forge-session-comparison.md', '.github/workflows/tdi-forge-session.yml']
+    paths: ['scripts/tdi_*.py', 'scripts/check-tdi-forge-session.py', 'scripts/test_tdi_optuna_benchmark.py', 'scripts/profile-forge-session.py', 'scripts/benchmark-json-shape.py', 'scripts/test_forge_session_profile.py', 'scripts/test_json_shape_fastpath.py', 'scripts/requirements-optuna-benchmark.txt', 'docs/engineering/forge-session-comparison.md', '.github/workflows/tdi-forge-session.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -44,6 +44,7 @@ jobs:
           .venv-optuna/bin/python -m pip install -r scripts/requirements-optuna-benchmark.txt
           .venv-optuna/bin/python -m pip check
           PYTHONPATH=scripts .venv-optuna/bin/python -m unittest -v scripts/test_tdi_optuna_benchmark.py
+          PYTHONPATH=scripts .venv-optuna/bin/python -m unittest -v scripts/test_json_shape_fastpath.py scripts/test_forge_session_profile.py
       - name: Actual session, crash recovery, corruption, deadline and pidfd checks
         working-directory: integration-tdi
         run: .venv-optuna/bin/python scripts/check-tdi-forge-session.py --forge-worker ../integration-forge/target/release/examples/scientific_search
@@ -54,6 +55,11 @@ jobs:
           .venv-optuna/bin/python scripts/tdi_optuna_benchmark.py --verify-report session-transport/report.json
           .venv-optuna/bin/python scripts/tdi_optuna_benchmark.py --forge-worker ../integration-forge/target/release/examples/scientific_search --profile session-smoke --max-seconds 600 --output session-quality
           .venv-optuna/bin/python scripts/tdi_optuna_benchmark.py --verify-report session-quality/report.json
+      - name: Diagnostic profiling and shape-walk microbenchmark (not speed gates)
+        working-directory: integration-tdi
+        run: |
+          .venv-optuna/bin/python scripts/profile-forge-session.py --forge-worker ../integration-forge/target/release/examples/scientific_search --output session-diagnostic
+          .venv-optuna/bin/python scripts/benchmark-json-shape.py --session-directory session-quality/shifted-bowl/0/forge-tpe-session > session-diagnostic/shape-microbenchmark.json
       - name: Retain complete or partial evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -62,5 +68,6 @@ jobs:
           path: |
             integration-tdi/session-transport
             integration-tdi/session-quality
+            integration-tdi/session-diagnostic
           if-no-files-found: warn
           retention-days: 14
