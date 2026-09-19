@@ -78,6 +78,8 @@ pub mod tdi24_chiral;
 pub mod tdi24_vector;
 #[path = "tdi25_torsor_chiral.rs"]
 pub mod tdi25_torsor_chiral;
+#[path = "tdi2_anti_unification.rs"]
+pub mod tdi2_anti_unification;
 #[path = "tdi2_baseline_contract.rs"]
 pub mod tdi2_baseline_contract;
 #[path = "tdi2_candidate_evidence.rs"]
