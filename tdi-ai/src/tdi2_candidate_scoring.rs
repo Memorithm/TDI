@@ -313,6 +313,45 @@ mod tests {
     }
 
     #[test]
+    fn equal_counts_from_distinct_batches_keep_distinct_score_evidence() {
+        let source = batch(vec![episode(DEVELOPMENT_START, &[(0, vec![1.0])])]);
+        let threshold = generate_numeric_threshold_candidates(&source)
+            .expect("thresholds")
+            .into_iter()
+            .find(|candidate| candidate.direction() == ThresholdDirection::LessEqual)
+            .expect("<= candidate");
+        let canonical = CanonicalPredicateCandidate::from_threshold(&threshold);
+        let first_batch = batch(vec![episode(
+            DEVELOPMENT_START + 1,
+            &[(0, vec![0.5]), (1, vec![2.0])],
+        )]);
+        let second_batch = batch(vec![episode(
+            DEVELOPMENT_START + 2,
+            &[(0, vec![0.5]), (1, vec![2.0])],
+        )]);
+
+        let first_evidence =
+            account_candidate_evidence(&first_batch, core::slice::from_ref(&canonical))
+                .expect("first evidence")
+                .pop()
+                .expect("one candidate");
+        let second_evidence =
+            account_candidate_evidence(&second_batch, core::slice::from_ref(&canonical))
+                .expect("second evidence")
+                .pop()
+                .expect("one candidate");
+        assert_eq!(first_evidence.counts(), second_evidence.counts());
+
+        let first_score = score_candidate_evidence(&first_evidence).expect("first score");
+        let second_score = score_candidate_evidence(&second_evidence).expect("second score");
+        assert_ne!(
+            first_score.source_evidence_record(),
+            second_score.source_evidence_record()
+        );
+        assert_ne!(first_score.canonical_record(), second_score.canonical_record());
+    }
+
+    #[test]
     fn catalogue_scoring_preserves_exact_candidate_order() {
         let source = batch(vec![episode(DEVELOPMENT_START, &[(0, vec![1.0, 2.0])])]);
         let raw = generate_pairwise_relation_candidates(&source).expect("pairwise");
