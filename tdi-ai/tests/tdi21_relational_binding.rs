@@ -41,12 +41,14 @@ fn two_hop_composition_recovers_the_terminal_object() {
 #[test]
 fn three_hop_path_is_composed_with_one_lookup_per_hop() {
     let mut binder = RelationalBinder::new(config(128)).unwrap();
-    binder.bind(1, 3, 5).unwrap();
-    binder.bind(2, 5, 9).unwrap();
-    binder.bind(4, 9, 13).unwrap();
+    // These three symbolic addresses occupy distinct buckets under the fixed
+    // reference salt/capacity, isolating composition from eviction behavior.
+    binder.bind(1, 1, 2).unwrap();
+    binder.bind(2, 2, 3).unwrap();
+    binder.bind(3, 3, 4).unwrap();
     assert_eq!(
-        binder.compose_path(&[1, 2, 4], 3).unwrap(),
-        RelationalRead::Hit(13)
+        binder.compose_path(&[1, 2, 3], 1).unwrap(),
+        RelationalRead::Hit(4)
     );
     assert_eq!(binder.counters().work.memory_reads, 3);
     assert_eq!(binder.counters().work.pairwise_comparisons, 0);
