@@ -10,7 +10,7 @@ use super::tdi24_chiral::CHIRAL_WIDTH;
 use super::tdi24_vector::VECTOR6_WIDTH;
 
 /// Versioned accounting surface for TDI-24 reference implementations.
-pub const REFERENCE_ACCOUNTING_CONTRACT: &str = "tdi24-reference-accounting-v1";
+pub const REFERENCE_ACCOUNTING_CONTRACT: &str = "tdi24-reference-accounting-v2";
 
 const _MATCHED_WIDTHS: [(); VECTOR6_WIDTH] = [(); CHIRAL_WIDTH];
 
@@ -49,8 +49,9 @@ pub const fn pair_score_accounting(arm: ScoreArm) -> PairScoreAccounting {
         // Six products and six checked accumulator additions.
         ScoreArm::V6 => (6, 6),
         // s: 6M+6A, m: 6M+6A, chi: 6M+6A,
-        // three channel weights: 3M, final channel combination: 2A.
-        ScoreArm::C6 => (21, 20),
+        // mirror/chiral pairings: 6 sign negations, three channel
+        // weights: 3M, final channel combination: 2A.
+        ScoreArm::C6 => (21, 26),
     };
     PairScoreAccounting {
         arm,
@@ -102,6 +103,9 @@ pub fn row_accounting(
     if key_count == 0 || active_count == 0 || active_count > key_count {
         return Err(AccountingError::InvalidRowShape);
     }
+    let mask_tests = key_count
+        .checked_mul(2)
+        .ok_or(AccountingError::SizeOverflow)?;
     let mask_bytes = key_count
         .checked_mul(core::mem::size_of::<bool>())
         .ok_or(AccountingError::SizeOverflow)?;
@@ -112,7 +116,7 @@ pub fn row_accounting(
     Ok(RowAccounting {
         key_count,
         active_count,
-        mask_tests: key_count,
+        mask_tests,
         max_comparisons: active_count,
         subtractions: active_count,
         exponentials: active_count,
@@ -163,7 +167,7 @@ mod tests {
         let v6 = pair_score_accounting(ScoreArm::V6);
         let c6 = pair_score_accounting(ScoreArm::C6);
         assert_eq!((v6.multiplications, v6.additions), (6, 6));
-        assert_eq!((c6.multiplications, c6.additions), (21, 20));
+        assert_eq!((c6.multiplications, c6.additions), (21, 26));
         assert_eq!(v6.accounting_contract, REFERENCE_ACCOUNTING_CONTRACT);
         assert_eq!(c6.accounting_contract, REFERENCE_ACCOUNTING_CONTRACT);
     }
@@ -171,7 +175,7 @@ mod tests {
     #[test]
     fn row_accounting_matches_masked_reference_semantics() {
         let row = row_accounting(8, 5).unwrap();
-        assert_eq!(row.mask_tests, 8);
+        assert_eq!(row.mask_tests, 16);
         assert_eq!(row.max_comparisons, 5);
         assert_eq!(row.subtractions, 5);
         assert_eq!(row.exponentials, 5);
@@ -189,5 +193,6 @@ mod tests {
         assert_eq!(row_accounting(0, 0), Err(AccountingError::InvalidRowShape));
         assert_eq!(row_accounting(4, 0), Err(AccountingError::InvalidRowShape));
         assert_eq!(row_accounting(4, 5), Err(AccountingError::InvalidRowShape));
+        assert_eq!(row_accounting(usize::MAX, 1), Err(AccountingError::SizeOverflow));
     }
 }

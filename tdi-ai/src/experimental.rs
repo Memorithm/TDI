@@ -94,6 +94,8 @@ pub mod tdi2_candidate_identity;
 pub mod tdi2_candidate_scoring;
 #[path = "tdi2_candidate_selection.rs"]
 pub mod tdi2_candidate_selection;
+#[path = "tdi2_incremental_anti_unification.rs"]
+pub mod tdi2_incremental_anti_unification;
 #[path = "tdi2_induction_input.rs"]
 pub mod tdi2_induction_input;
 #[path = "tdi2_induction_provenance.rs"]
