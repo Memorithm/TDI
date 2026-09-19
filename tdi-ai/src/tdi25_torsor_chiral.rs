@@ -60,9 +60,9 @@ pub enum ComparisonArm {
 
 /// Static score-carrier accounting for one arm.
 ///
-/// The six score-carrier components are matched across arms. T6 additionally
-/// declares its three-component query-position geometry rather than hiding it
-/// inside the six-component score carrier.
+/// The six score-pairing components are matched across arms. T6 additionally
+/// accounts for its three-component stored key reference point and the
+/// three-component query position required before factorized pairing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CarrierAccounting {
     /// Arm being described.
@@ -86,18 +86,18 @@ pub struct CarrierAccounting {
 /// Return the declared static carrier accounting for an arm.
 #[must_use]
 pub const fn carrier_accounting(arm: ComparisonArm) -> CarrierAccounting {
-    let external_geometry_components = match arm {
-        ComparisonArm::T6 => 3,
-        ComparisonArm::C6 | ComparisonArm::G6 => 0,
+    let (key_components, external_geometry_components) = match arm {
+        ComparisonArm::T6 => (9, 3),
+        ComparisonArm::C6 | ComparisonArm::G6 => (6, 0),
     };
     CarrierAccounting {
         arm,
         query_components: 6,
-        key_components: 6,
+        key_components,
         score_components: 1,
         external_geometry_components,
         query_bytes: 6 * core::mem::size_of::<f64>(),
-        key_bytes: 6 * core::mem::size_of::<f64>(),
+        key_bytes: key_components * core::mem::size_of::<f64>(),
         accounting_contract: CARRIER_ACCOUNTING_CONTRACT,
     }
 }
@@ -338,8 +338,8 @@ mod tests {
     }
 
     #[test]
-    fn score_carrier_accounting_is_six_by_six_for_all_arms() {
-        for arm in [ComparisonArm::T6, ComparisonArm::C6, ComparisonArm::G6] {
+    fn chiral_and_generic_carrier_accounting_is_six_by_six() {
+        for arm in [ComparisonArm::C6, ComparisonArm::G6] {
             let accounting = carrier_accounting(arm);
             assert_eq!(accounting.query_components, 6);
             assert_eq!(accounting.key_components, 6);
@@ -352,10 +352,12 @@ mod tests {
 
     #[test]
     fn torsor_external_geometry_is_accounted_not_hidden() {
-        assert_eq!(
-            carrier_accounting(ComparisonArm::T6).external_geometry_components,
-            3
-        );
+        let torsor = carrier_accounting(ComparisonArm::T6);
+        assert_eq!(torsor.query_components, 6);
+        assert_eq!(torsor.key_components, 9);
+        assert_eq!(torsor.query_bytes, 6 * core::mem::size_of::<f64>());
+        assert_eq!(torsor.key_bytes, 9 * core::mem::size_of::<f64>());
+        assert_eq!(torsor.external_geometry_components, 3);
         assert_eq!(
             carrier_accounting(ComparisonArm::C6).external_geometry_components,
             0

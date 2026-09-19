@@ -10,8 +10,8 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | ---: | --- | --- |
 | 01 | TDI-25 programme + comparison scaffold | **landed** in #408; reuses TDI-22 and TDI-24 contracts; no copied algebra |
 | 02 | Contract/version provenance pin | **landed** in #489; exact TDI-22/TDI-24 semantic contract IDs recorded, validated and rejected on mismatch |
-| 03 | G6 generic six-component control | **stacked predecessor** #552; versioned finite 6D Euclidean control with matched width and fail-closed arithmetic |
-| 04 | Carrier/accounting equivalence | **current stacked slice**; explicit six-component query/key/readout accounting for T6/C6/G6 plus declared T6 geometry overhead |
+| 03 | G6 generic six-component control | **landed** in #552; versioned finite 6D Euclidean control with matched width and fail-closed arithmetic |
+| 04 | Carrier/accounting equivalence | **current slice**; explicit score-carrier accounting for T6/C6/G6 plus stored T6 reference and query-position geometry |
 | 05 | Score-scale contract | common declared normalization; no arm-specific hidden scaling |
 | 06 | Torsor invariant bridge tests | transport/factorization invariants remain valid in TDI-25 adapter |
 | 07 | Chiral invariant bridge tests | mirror/parity identities remain valid in TDI-25 adapter |
@@ -94,4 +94,4 @@ Pause the campaign when any of the following occurs:
 
 ## Progress accounting
 
-**2/50 merged** (#408, #489). Slice 03 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**3/50 merged** (#408, #489, #552). Slice 04 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
