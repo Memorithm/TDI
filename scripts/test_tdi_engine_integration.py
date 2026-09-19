@@ -28,7 +28,7 @@ import tdi_engine_archive as archive
 import tdi_engine_runtime as runtime
 from tdi_engine_store import EngineStore, identity
 from tdi_engine_viewer import make_handler
-from tdi_hub_client import HubClient, HubTransportUnknown
+from tdi_hub_client import HubClient, HubClientError, HubTransportUnknown
 from tdi_hub_fixture import prepare_fixture
 import tdi_experiment_supervisor as durable
 
@@ -252,6 +252,81 @@ class OperationalIntegrationTests(unittest.TestCase):
         self.assertFalse(thread.is_alive(), "cancellation did not release execution client")
         self.assertEqual([], failures)
         self.assertEqual("cancelled", self.cli("resume", campaign, expected_code=durable.EXIT_TRIAL_FAILURE)["phase"])
+
+    def test_deterministic_cancel_rejection_remains_retryable(self):
+        spec = self.fault_plan("import time; time.sleep(60)")
+        client = self.client
+
+        class RejectFirstCancel:
+            endpoint = client.endpoint
+            attempts = 0
+            posts = 0
+
+            def request(self, method, path, **kwargs):
+                if method == "POST" and path.endswith("/cancel"):
+                    self.attempts += 1
+                    if self.attempts == 1:
+                        raise HubClientError("synthetic deterministic cancel rejection")
+                    self.posts += 1
+                return client.request(method, path, **kwargs)
+
+            def download(self, *args, **kwargs):
+                return client.download(*args, **kwargs)
+
+        rejecting = RejectFirstCancel()
+        with EngineStore(self.catalogue) as store:
+            campaign = runtime.submit(client, store, spec, {})
+            workflow = store.get(campaign)["workflow"]
+
+        failures = []
+        def execute():
+            try:
+                with EngineStore(self.catalogue) as store:
+                    runtime.execute(client, store, campaign)
+            except Exception as error:
+                failures.append(error)
+
+        thread = threading.Thread(target=execute, daemon=True)
+        thread.start()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            snapshot = client.request("GET", f"/api/v1/workflows/{workflow}")
+            if snapshot["state"] == "running":
+                break
+            time.sleep(0.02)
+        self.assertEqual("running", snapshot["state"])
+
+        with EngineStore(self.catalogue) as store:
+            with self.assertRaises(HubClientError):
+                runtime.cancel(rejecting, store, campaign)
+            self.assertEqual("cancel-requested", store.get(campaign)["phase"])
+            self.assertEqual(1, rejecting.attempts)
+            self.assertEqual(0, rejecting.posts)
+            self.assertFalse(store.has_event(campaign, "cancel-response-unknown"))
+
+            retried = runtime.cancel(rejecting, store, campaign)
+            self.assertIn(retried["phase"], ("cancel-requested", "cancelled"))
+            self.assertEqual(2, rejecting.attempts)
+            self.assertEqual(1, rejecting.posts)
+
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                snapshot = client.request("GET", f"/api/v1/workflows/{workflow}")
+                if snapshot["state"] in ("succeeded", "failed", "cancelled"):
+                    break
+                time.sleep(0.02)
+            self.assertEqual("cancelled", snapshot["state"])
+            refreshed = runtime.refresh(rejecting, store, campaign)
+            self.assertEqual("cancelled", refreshed["phase"])
+            reconciled = runtime.cancel(rejecting, store, campaign)
+            self.assertEqual("cancelled", reconciled["phase"])
+            self.assertEqual(2, rejecting.attempts)
+            self.assertEqual(1, rejecting.posts)
+            self.assertEqual([], store.results(campaign))
+
+        thread.join(timeout=20)
+        self.assertFalse(thread.is_alive(), "execution did not observe cancellation")
+        self.assertEqual([], failures)
 
     def test_lost_cancel_response_reconciles_without_recancel(self):
         spec = self.fault_plan("import time; time.sleep(60)")
