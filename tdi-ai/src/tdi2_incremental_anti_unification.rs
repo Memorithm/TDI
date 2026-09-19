@@ -9,7 +9,7 @@ use super::tdi2_anti_unification::{AntiUnificationError, AntiUnificationResult, 
 use super::tdi2_structural_terms::{StructuralTerm, StructuralTermError, StructuralTermKind};
 
 /// Versioned identity for the incremental multi-example baseline.
-pub const INCREMENTAL_ANTI_UNIFICATION_SCHEMA: &str = "tdi2.2-incremental-anti-unification-v1";
+pub const INCREMENTAL_ANTI_UNIFICATION_SCHEMA: &str = "tdi2.2-incremental-anti-unification-v2";
 /// Maximum number of examples in one incremental anti-unification batch.
 pub const MAX_INCREMENTAL_ANTI_UNIFICATION_TERMS: usize = 256;
 /// Maximum aggregate structural nodes accepted across one input batch.
@@ -18,10 +18,10 @@ pub const MAX_INCREMENTAL_ANTI_UNIFICATION_INPUT_NODES: usize = 65_536;
 /// Replayable multi-example anti-unification result.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IncrementalAntiUnificationResult {
+    canonical_inputs: Vec<StructuralTerm>,
     seed: StructuralTerm,
     steps: Vec<AntiUnificationResult>,
     generalization: StructuralTerm,
-    input_count: usize,
 }
 
 impl IncrementalAntiUnificationResult {
@@ -36,49 +36,72 @@ impl IncrementalAntiUnificationResult {
     }
 
     #[must_use]
-    pub const fn input_count(&self) -> usize {
-        self.input_count
+    pub fn input_count(&self) -> usize {
+        self.canonical_inputs.len()
     }
 
     /// Recover the exact canonical input sequence from the retained witnesses.
+    ///
+    /// Duplicate inputs remain explicit evidence but do not create another fold
+    /// step. Each distinct input after the seed must have exactly one executable
+    /// witness, so neither missing nor surplus steps can be hidden.
     pub fn reconstruct_canonical_inputs(
         &self,
     ) -> Result<Vec<StructuralTerm>, IncrementalAntiUnificationError> {
-        let mut inputs = Vec::with_capacity(self.input_count);
-        inputs.push(self.seed.clone());
-        let mut current = self.seed.clone();
-        for step in &self.steps {
-            let replay_left = step
-                .reconstruct_left()
-                .map_err(IncrementalAntiUnificationError::Pairwise)?;
-            if replay_left != current {
-                return Err(IncrementalAntiUnificationError::ReplayMismatch);
-            }
-            inputs.push(
-                step.reconstruct_right()
-                    .map_err(IncrementalAntiUnificationError::Pairwise)?,
-            );
-            current = step.generalization().clone();
-        }
-        if current != self.generalization || inputs.len() != self.input_count {
+        if self.canonical_inputs.first() != Some(&self.seed) {
             return Err(IncrementalAntiUnificationError::ReplayMismatch);
         }
-        Ok(inputs)
+
+        let mut current = self.seed.clone();
+        let mut previous_input: Option<&StructuralTerm> = None;
+        let mut steps = self.steps.iter();
+        for input in &self.canonical_inputs {
+            if previous_input.is_some_and(|previous| previous != input) {
+                let step = steps
+                    .next()
+                    .ok_or(IncrementalAntiUnificationError::ReplayMismatch)?;
+                let replay_left = step
+                    .reconstruct_left()
+                    .map_err(IncrementalAntiUnificationError::Pairwise)?;
+                let replay_right = step
+                    .reconstruct_right()
+                    .map_err(IncrementalAntiUnificationError::Pairwise)?;
+                if replay_left != current || replay_right != *input {
+                    return Err(IncrementalAntiUnificationError::ReplayMismatch);
+                }
+                current = step.generalization().clone();
+            }
+            previous_input = Some(input);
+        }
+
+        if steps.next().is_some() || current != self.generalization {
+            return Err(IncrementalAntiUnificationError::ReplayMismatch);
+        }
+        Ok(self.canonical_inputs.clone())
     }
 
-    /// Deterministic record binding the canonical fold order and every witness.
+    /// Deterministic record binding every input, the distinct fold and witnesses.
     #[must_use]
     pub fn canonical_record(&self) -> String {
         use core::fmt::Write as _;
         let seed = self.seed.canonical_record();
         let final_term = self.generalization.canonical_record();
         let mut output = format!(
-            "{INCREMENTAL_ANTI_UNIFICATION_SCHEMA};inputs={};seed={}:{};steps={}:[",
-            self.input_count,
+            "{INCREMENTAL_ANTI_UNIFICATION_SCHEMA};inputs={}:[",
+            self.canonical_inputs.len()
+        );
+        for input in &self.canonical_inputs {
+            let record = input.canonical_record();
+            write!(output, "{}:{};", record.len(), record).expect("write to string");
+        }
+        write!(
+            output,
+            "];seed={}:{};steps={}:[",
             seed.len(),
             seed,
             self.steps.len()
-        );
+        )
+        .expect("write to string");
         for step in &self.steps {
             let record = step.canonical_record();
             write!(output, "{}:{};", record.len(), record).expect("write to string");
@@ -145,9 +168,12 @@ pub fn incremental_anti_unify(
     ordered.sort_unstable();
 
     let seed = ordered[0].clone();
+    let mut distinct_inputs = ordered.clone();
+    distinct_inputs.dedup();
+
     let mut generalization = seed.clone();
-    let mut steps = Vec::with_capacity(ordered.len().saturating_sub(1));
-    for term in ordered.iter().skip(1) {
+    let mut steps = Vec::with_capacity(distinct_inputs.len().saturating_sub(1));
+    for term in distinct_inputs.iter().skip(1) {
         let step =
             anti_unify(&generalization, term).map_err(IncrementalAntiUnificationError::Pairwise)?;
         generalization = step.generalization().clone();
@@ -155,10 +181,10 @@ pub fn incremental_anti_unify(
     }
 
     let result = IncrementalAntiUnificationResult {
+        canonical_inputs: ordered.clone(),
         seed,
         steps,
         generalization,
-        input_count: ordered.len(),
     };
     if result.reconstruct_canonical_inputs()? != ordered {
         return Err(IncrementalAntiUnificationError::ReplayMismatch);
@@ -277,6 +303,32 @@ mod tests {
         let unique = incremental_anti_unify(&[a.clone(), b.clone()]).expect("unique");
         let repeated = incremental_anti_unify(&[a.clone(), a, b]).expect("repeated");
         assert_eq!(unique.generalization(), repeated.generalization());
+        assert_eq!(repeated.input_count(), 3);
+        assert_eq!(unique.steps(), repeated.steps());
+        assert_eq!(repeated.steps().len(), 1);
+        assert_eq!(
+            repeated
+                .reconstruct_canonical_inputs()
+                .expect("replay")
+                .len(),
+            3
+        );
+        assert_ne!(unique.canonical_record(), repeated.canonical_record());
+    }
+
+    #[test]
+    fn duplicate_after_a_distinct_term_preserves_the_lgg_and_variable_budget() {
+        let retained =
+            StructuralTerm::variable(StructuralVariableId::new(u32::MAX - 1));
+        let a = app(3, vec![retained.clone(), atom(1)]);
+        let b = app(3, vec![retained, atom(2)]);
+
+        let unique = incremental_anti_unify(&[a.clone(), b.clone()]).expect("unique");
+        let repeated =
+            incremental_anti_unify(&[a, b.clone(), b]).expect("repeated");
+
+        assert_eq!(unique.generalization(), repeated.generalization());
+        assert_eq!(unique.steps(), repeated.steps());
         assert_eq!(repeated.input_count(), 3);
         assert_eq!(
             repeated
