@@ -513,17 +513,23 @@ class EngineStore:
         """Store verified evidence once; changed authoritative results are rejected."""
         reject_restricted_reference_metadata(evidence, "result evidence")
         raw = durable.canonical(evidence)
+        packed = self._pack_result(evidence)
         with self.db:
-            row = self.db.execute("SELECT evidence FROM results WHERE campaign=? AND step=? AND output=?",
-                                  (campaign, step, output)).fetchone()
-            if row:
-                if durable.canonical(self._unpack_result(row[0])) != raw:
-                    raise durable.ContractError("authoritative result changed")
-                return
-            packed = self._pack_result(evidence)
-            self.db.execute("INSERT INTO results VALUES (?,?,?,?)", (campaign, step, output, packed))
-            self._event(campaign, "result-verified", {"step": step, "output": output,
-                                                      "evidence_id": identity("tdi-result-evidence/v1", evidence)})
+            inserted = self.db.execute(
+                "INSERT OR IGNORE INTO results VALUES (?,?,?,?)",
+                (campaign, step, output, packed),
+            )
+            row = self.db.execute(
+                "SELECT evidence FROM results WHERE campaign=? AND step=? AND output=?",
+                (campaign, step, output),
+            ).fetchone()
+            if row is None:
+                raise durable.StorageError("verified result disappeared during reconciliation")
+            if durable.canonical(self._unpack_result(row[0])) != raw:
+                raise durable.ContractError("authoritative result changed")
+            if inserted.rowcount == 1:
+                self._event(campaign, "result-verified", {"step": step, "output": output,
+                                                          "evidence_id": identity("tdi-result-evidence/v1", evidence)})
 
     def results(self, campaign, *, after=0, limit=MAX_PAGE):
         """Return a bounded canonical page of result evidence, without payload downloads."""

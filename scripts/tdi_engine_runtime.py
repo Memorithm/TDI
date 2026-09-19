@@ -186,16 +186,25 @@ def refresh(client, store, campaign):
         raise durable.ContractError("workflow admission changed")
     state, actual_steps = validated_snapshot(spec, response)
     phase = TERMINAL.get(state)
-    # An exact duplicate terminal snapshot has already crossed the evidence
-    # boundary: successful outputs were verified before the terminal phase was
-    # committed.  Treat the duplicate as a read-only reconciliation so repeated
-    # GETs cannot append duplicate terminal commits or re-fetch artifact bytes.
-    # A changed terminal snapshot still follows the full verification path below
-    # and therefore remains subject to authoritative-result consistency checks.
+    # A terminal snapshot already committed before this refresh began has crossed
+    # the evidence boundary: successful outputs were verified before the terminal
+    # phase was committed. Treat that duplicate as a read-only reconciliation.
+    # Concurrent refreshes are rechecked again below after read-side verification
+    # so only one durable terminal transition can win.
     if (phase is not None and record["phase"] == phase
             and record["snapshot"] is not None
             and durable.canonical(record["snapshot"]) == durable.canonical(response)):
         return record
+    # Close the window between the initial catalogue read and the Hub GET before
+    # performing publication/artifact reads. Another reconciler may have already
+    # committed this exact terminal snapshot while this request was in flight.
+    if phase is not None:
+        current = store.get(campaign)
+        if (current["phase"] == phase and current["snapshot"] is not None
+                and durable.canonical(current["snapshot"]) == durable.canonical(response)):
+            return current
+        if current["phase"] in set(TERMINAL.values()) and current["phase"] != phase:
+            raise durable.ContractError("local terminal campaign state conflicts with Hub workflow")
     for key in sorted(actual_steps):
         step = actual_steps[key]
         if step.get("state") == "succeeded":
@@ -212,10 +221,17 @@ def refresh(client, store, campaign):
     # terminal snapshot to reconcile from `cancel-requested`.
     terminal_phases = set(TERMINAL.values())
     for _ in range(3):
-        current_phase = store.get(campaign)["phase"]
+        current = store.get(campaign)
+        current_phase = current["phase"]
         target_phase = phase
         if target_phase == "executing" and current_phase == "cancel-requested":
             target_phase = "cancel-requested"
+        # The first terminal transition is the durable authoritative campaign
+        # commit. If another reconciler won while this worker was validating the
+        # same terminal phase, keep that commit. Successful-output drift has
+        # already been rejected by idempotent result verification above.
+        if target_phase in terminal_phases and current_phase == target_phase:
+            return current
         if current_phase in terminal_phases and current_phase != target_phase:
             raise durable.ContractError("local terminal campaign state conflicts with Hub workflow")
         try:
