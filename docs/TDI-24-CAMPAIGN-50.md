@@ -13,8 +13,8 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 | 03 | Matched V6 vector reference | **landed** in #487; distinct finite 6D vector carrier, direct score only, matched width/arithmetic, no mirror/chiral API or hidden extra state |
 | 04 | Channel decomposition contract | **landed** in #492; expose `s`, `m`, `chi` separately with stable IDs, reflection parity and provenance/version tags |
 | 05 | R/L enantiomorphic score pair | **landed** in #548; versioned R/L pair with provenance and exact reflection swap |
-| 06 | Even/odd attention recombination contract | **current slice**; checked `(R+L)/2` and `(R-L)/2`, reflection-even/odd tests and R/L reconstruction |
-| 07 | Deterministic normalizer reference | stable masked normalization shared by V6/C6; no production claim |
+| 06 | Even/odd attention recombination contract | **stacked predecessor** #549; checked mean/contrast parity decomposition and R/L reconstruction |
+| 07 | Deterministic normalizer reference | **current stacked slice**; stable f64 masked softmax shared by V6/C6, fail-closed invalid rows; no production claim |
 | 08 | Causal/non-causal masking reference | identical masks and invalid-row behavior across arms |
 | 09 | Operation + storage accounting | comparable declared counts and memory components |
 | 10 | Stage-A audit/freeze | adversarial review; no unresolved P0/P1 semantic defects |
@@ -93,4 +93,4 @@ The campaign pauses rather than forcing a later PR when:
 
 ## Progress accounting
 
-**5/50 merged** (#406, #471, #487, #492, #548). Slice 06 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**5/50 merged** (#406, #471, #487, #492, #548). Slice 07 (#550) is the current stacked candidate; slice 06 (#549) remains an unmerged predecessor. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
