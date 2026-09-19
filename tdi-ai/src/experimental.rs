@@ -80,8 +80,12 @@ pub mod tdi24_vector;
 pub mod tdi25_torsor_chiral;
 #[path = "tdi2_baseline_contract.rs"]
 pub mod tdi2_baseline_contract;
+#[path = "tdi2_candidate_evidence.rs"]
+pub mod tdi2_candidate_evidence;
 #[path = "tdi2_candidate_identity.rs"]
 pub mod tdi2_candidate_identity;
+#[path = "tdi2_candidate_scoring.rs"]
+pub mod tdi2_candidate_scoring;
 #[path = "tdi2_induction_input.rs"]
 pub mod tdi2_induction_input;
 #[path = "tdi2_induction_provenance.rs"]
