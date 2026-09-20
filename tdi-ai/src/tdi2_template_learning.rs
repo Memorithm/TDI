@@ -114,3 +114,161 @@ mod positive_tests {
         );
     }
 }
+
+use std::collections::BTreeMap;
+use super::tdi2_structural_terms::{StructuralTermKind, StructuralVariableId};
+
+/// Exact first-order variable binding recovered while matching a candidate.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TemplateMatch {
+    bindings: Vec<(StructuralVariableId, StructuralTerm)>,
+}
+
+impl TemplateMatch {
+    #[must_use]
+    pub fn bindings(&self) -> &[(StructuralVariableId, StructuralTerm)] {
+        &self.bindings
+    }
+
+    #[must_use]
+    pub fn binding(&self, variable: StructuralVariableId) -> Option<&StructuralTerm> {
+        self.bindings
+            .binary_search_by_key(&variable, |(id, _)| *id)
+            .ok()
+            .map(|index| &self.bindings[index].1)
+    }
+}
+
+/// Match a generalized structural term against one concrete structural example.
+#[must_use]
+pub fn match_induced_template(
+    template: &StructuralTerm,
+    example: &StructuralTerm,
+) -> Option<TemplateMatch> {
+    let mut bindings = BTreeMap::new();
+    if !match_term(template, example, &mut bindings) {
+        return None;
+    }
+    Some(TemplateMatch {
+        bindings: bindings.into_iter().collect(),
+    })
+}
+
+fn match_term(
+    template: &StructuralTerm,
+    example: &StructuralTerm,
+    bindings: &mut BTreeMap<StructuralVariableId, StructuralTerm>,
+) -> bool {
+    match (template.kind(), example.kind()) {
+        (StructuralTermKind::Variable(variable), _) => match bindings.get(variable) {
+            Some(existing) => existing == example,
+            None => {
+                bindings.insert(*variable, example.clone());
+                true
+            }
+        },
+        (StructuralTermKind::Atom(left), StructuralTermKind::Atom(right)) => left == right,
+        (
+            StructuralTermKind::Application {
+                symbol: left_symbol,
+                arguments: left_arguments,
+            },
+            StructuralTermKind::Application {
+                symbol: right_symbol,
+                arguments: right_arguments,
+            },
+        ) => {
+            left_symbol == right_symbol
+                && left_arguments.len() == right_arguments.len()
+                && left_arguments
+                    .iter()
+                    .zip(right_arguments)
+                    .all(|(left, right)| match_term(left, right, bindings))
+        }
+        _ => false,
+    }
+}
+
+/// Held-out positive/negative accounting for one induced template candidate.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CandidateConstraintEvaluation {
+    pub positive_total: usize,
+    pub positive_admitted: usize,
+    pub negative_total: usize,
+    pub negative_admitted: usize,
+}
+
+impl CandidateConstraintEvaluation {
+    #[must_use]
+    pub const fn preserves_all_positives(self) -> bool {
+        self.positive_total == self.positive_admitted
+    }
+
+    #[must_use]
+    pub const fn rejects_all_negatives(self) -> bool {
+        self.negative_admitted == 0
+    }
+
+    #[must_use]
+    pub const fn passes(self) -> bool {
+        self.preserves_all_positives() && self.rejects_all_negatives()
+    }
+}
+
+/// Evaluate a candidate on explicitly supplied positive and negative structures.
+#[must_use]
+pub fn evaluate_candidate_constraints(
+    candidate: &PositiveTemplateCandidate,
+    positives: &[StructuralTerm],
+    negatives: &[StructuralTerm],
+) -> CandidateConstraintEvaluation {
+    CandidateConstraintEvaluation {
+        positive_total: positives.len(),
+        positive_admitted: positives
+            .iter()
+            .filter(|example| match_induced_template(candidate.generalization(), example).is_some())
+            .count(),
+        negative_total: negatives.len(),
+        negative_admitted: negatives
+            .iter()
+            .filter(|example| match_induced_template(candidate.generalization(), example).is_some())
+            .count(),
+    }
+}
+
+#[cfg(test)]
+mod constraint_tests {
+    use super::*;
+    use crate::experimental::tdi2_structural_terms::{
+        StructuralSymbol, StructuralVariableId,
+    };
+
+    fn atom(id: u32) -> StructuralTerm {
+        StructuralTerm::atom(StructuralSymbol::constructor(10_000 + id))
+    }
+
+    fn app(id: u32, arguments: Vec<StructuralTerm>) -> StructuralTerm {
+        StructuralTerm::application(StructuralSymbol::constructor(id), arguments).expect("term")
+    }
+
+    #[test]
+    fn repeated_variable_requires_consistent_binding() {
+        let variable = StructuralTerm::variable(StructuralVariableId::new(3));
+        let pattern = app(1, vec![variable.clone(), variable]);
+        assert!(match_induced_template(&pattern, &app(1, vec![atom(4), atom(4)])).is_some());
+        assert!(match_induced_template(&pattern, &app(1, vec![atom(4), atom(5)])).is_none());
+    }
+
+    #[test]
+    fn counterexample_remains_visible() {
+        let positives = [app(1, vec![atom(1)]), app(1, vec![atom(2)])];
+        let candidate = induce_positive_template(&positives).expect("candidate");
+        let evaluation = evaluate_candidate_constraints(
+            &candidate,
+            &positives,
+            &[app(2, vec![atom(3)]), app(1, vec![atom(9)])],
+        );
+        assert_eq!(evaluation.negative_admitted, 1);
+        assert!(!evaluation.passes());
+    }
+}
