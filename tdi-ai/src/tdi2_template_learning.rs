@@ -552,7 +552,6 @@ mod systematicity_tests {
     }
 }
 
-
 /// Separate evidence and complexity dimensions for a template candidate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TemplateCandidateScore {
@@ -610,7 +609,6 @@ mod score_tests {
     }
 }
 
-
 /// Frozen lexicographic Development/Validation candidate selection policy.
 pub const TEMPLATE_SELECTION_POLICY: &str =
     "tdi2.2-template-selection-v1:pos-desc;neg-asc;vars-asc;record-asc";
@@ -628,7 +626,11 @@ pub fn select_template_candidate<'a>(
         right_score
             .positive_admitted
             .cmp(&left_score.positive_admitted)
-            .then_with(|| left_score.negative_admitted.cmp(&right_score.negative_admitted))
+            .then_with(|| {
+                left_score
+                    .negative_admitted
+                    .cmp(&right_score.negative_admitted)
+            })
             .then_with(|| {
                 left_score
                     .contingent_variables
@@ -658,12 +660,9 @@ mod selection_tests {
         let candidates = [broad.clone(), narrow];
         let validation_positives = [fact(1, atom(1))];
         let validation_negatives = [fact(1, atom(9))];
-        let chosen = select_template_candidate(
-            &candidates,
-            &validation_positives,
-            &validation_negatives,
-        )
-        .expect("chosen");
+        let chosen =
+            select_template_candidate(&candidates, &validation_positives, &validation_negatives)
+                .expect("chosen");
         assert_ne!(chosen.canonical_record(), broad.canonical_record());
         assert!(TEMPLATE_SELECTION_POLICY.contains("neg-asc"));
     }
