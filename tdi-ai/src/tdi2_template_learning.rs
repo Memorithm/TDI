@@ -676,3 +676,65 @@ mod selection_tests {
         assert!(TEMPLATE_SELECTION_POLICY.contains("neg-asc"));
     }
 }
+
+
+use super::tdi2_structural_terms::StructuralTermError;
+
+/// Alpha-normalize variables by deterministic first occurrence.
+pub fn alpha_normalize_template(
+    term: &StructuralTerm,
+) -> Result<StructuralTerm, StructuralTermError> {
+    fn rewrite(
+        term: &StructuralTerm,
+        map: &mut BTreeMap<StructuralVariableId, StructuralVariableId>,
+        next: &mut u32,
+    ) -> Result<StructuralTerm, StructuralTermError> {
+        match term.kind() {
+            StructuralTermKind::Variable(old) => {
+                let new = *map.entry(*old).or_insert_with(|| {
+                    let id = StructuralVariableId::new(*next);
+                    *next += 1;
+                    id
+                });
+                Ok(StructuralTerm::variable(new))
+            }
+            StructuralTermKind::Atom(symbol) => Ok(StructuralTerm::atom(*symbol)),
+            StructuralTermKind::Application { symbol, arguments } => StructuralTerm::application(
+                *symbol,
+                arguments
+                    .iter()
+                    .map(|argument| rewrite(argument, map, next))
+                    .collect::<Result<Vec<_>, _>>()?,
+            ),
+        }
+    }
+    rewrite(term, &mut BTreeMap::new(), &mut 0)
+}
+
+pub fn alpha_equivalent(
+    left: &StructuralTerm,
+    right: &StructuralTerm,
+) -> Result<bool, StructuralTermError> {
+    Ok(alpha_normalize_template(left)? == alpha_normalize_template(right)?)
+}
+
+#[cfg(test)]
+mod equivalence_tests {
+    use super::*;
+    use crate::experimental::tdi2_structural_terms::{StructuralSymbol, StructuralTerm};
+
+    #[test]
+    fn variable_names_do_not_define_template_identity() {
+        let left = StructuralTerm::application(
+            StructuralSymbol::constructor(1),
+            vec![StructuralTerm::variable(StructuralVariableId::new(3))],
+        )
+        .expect("left");
+        let right = StructuralTerm::application(
+            StructuralSymbol::constructor(1),
+            vec![StructuralTerm::variable(StructuralVariableId::new(99))],
+        )
+        .expect("right");
+        assert!(alpha_equivalent(&left, &right).expect("equivalence"));
+    }
+}
