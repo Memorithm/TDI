@@ -327,3 +327,98 @@ mod surface_baseline_tests {
         assert_eq!(result.surface_overlap, 0);
     }
 }
+
+
+/// Minimal bounded conjunctive rule baseline over active Boolean predicates.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConjunctiveRule {
+    required: BooleanState,
+}
+
+impl ConjunctiveRule {
+    #[must_use]
+    pub fn required(&self) -> &BooleanState {
+        &self.required
+    }
+
+    #[must_use]
+    pub fn matches(&self, state: &BooleanState) -> bool {
+        self.required
+            .predicates()
+            .iter()
+            .all(|predicate| state.contains(*predicate))
+    }
+}
+
+pub fn induce_conjunctive_rule(positives: &[BooleanState]) -> Option<ConjunctiveRule> {
+    let first = positives.first()?;
+    let required = first
+        .predicates()
+        .iter()
+        .copied()
+        .filter(|predicate| {
+            positives
+                .iter()
+                .skip(1)
+                .all(|state| state.contains(*predicate))
+        })
+        .collect::<Vec<_>>();
+    Some(ConjunctiveRule {
+        required: BooleanState::new(required),
+    })
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SymbolicBaselineComparison {
+    pub candidate_matches_target: bool,
+    pub candidate_equals_anti_unification: bool,
+    pub conjunctive_rule_matches_target: bool,
+    pub conjunctive_rule_false_admission: bool,
+}
+
+pub fn compare_symbolic_baselines(
+    case_id: u32,
+    train_a: u32,
+    train_b: u32,
+    target_domain: u32,
+) -> Result<SymbolicBaselineComparison, CrossDomainError> {
+    let a = cross_domain_observation(train_a, case_id)?;
+    let b = cross_domain_observation(train_b, case_id)?;
+    let target = cross_domain_observation(target_domain, case_id)?;
+    let candidate = induce_positive_template(&[a.structure.clone(), b.structure.clone()])?;
+    let direct = super::tdi2_incremental_anti_unification::incremental_anti_unify(&[
+        a.structure,
+        b.structure,
+    ])?;
+    let rule = induce_conjunctive_rule(&[
+        cross_domain_observation(train_a, case_id)?.surface_predicates,
+        cross_domain_observation(train_b, case_id)?.surface_predicates,
+    ])
+    .expect("two positive states");
+    let unrelated = cross_domain_observation(target_domain + 100, case_id)?;
+
+    Ok(SymbolicBaselineComparison {
+        candidate_matches_target: match_induced_template(
+            candidate.generalization(),
+            &target.structure,
+        )
+        .is_some(),
+        candidate_equals_anti_unification: candidate.generalization() == direct.generalization(),
+        conjunctive_rule_matches_target: rule.matches(&target.surface_predicates),
+        conjunctive_rule_false_admission: rule.matches(&unrelated.surface_predicates),
+    })
+}
+
+#[cfg(test)]
+mod symbolic_baseline_tests {
+    use super::*;
+
+    #[test]
+    fn current_candidate_is_honestly_equivalent_to_anti_unification_baseline() {
+        let comparison = compare_symbolic_baselines(11, 1, 2, 3).expect("comparison");
+        assert!(comparison.candidate_matches_target);
+        assert!(comparison.candidate_equals_anti_unification);
+        assert!(comparison.conjunctive_rule_matches_target);
+        assert!(comparison.conjunctive_rule_false_admission);
+    }
+}
