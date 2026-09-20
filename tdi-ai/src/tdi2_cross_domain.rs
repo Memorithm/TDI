@@ -152,3 +152,75 @@ mod tests {
         assert!(!record.contains("relation:2001"));
     }
 }
+
+
+/// Explicit corruption accounting for one Boolean observation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PredicateCorruption {
+    pub original: usize,
+    pub retained: usize,
+    pub dropped: usize,
+    pub added_noise: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CorruptionError {
+    ZeroDropModulus,
+    NoiseIdentifierOverflow,
+}
+
+/// Deterministically drop a declared subset and inject reserved novel predicates.
+pub fn corrupt_surface_predicates(
+    state: &BooleanState,
+    drop_modulus: u32,
+    noise_base: u32,
+    noise_count: u16,
+) -> Result<(BooleanState, PredicateCorruption), CorruptionError> {
+    if drop_modulus == 0 {
+        return Err(CorruptionError::ZeroDropModulus);
+    }
+    let retained = state
+        .predicates()
+        .iter()
+        .copied()
+        .filter(|predicate| predicate.raw() % drop_modulus != 0)
+        .collect::<Vec<_>>();
+    let retained_count = retained.len();
+    let mut output = retained;
+    for offset in 0..noise_count {
+        let raw = noise_base
+            .checked_add(u32::from(offset))
+            .ok_or(CorruptionError::NoiseIdentifierOverflow)?;
+        output.push(PredicateId::new(raw));
+    }
+    let output = BooleanState::new(output);
+    Ok((
+        output,
+        PredicateCorruption {
+            original: state.len(),
+            retained: retained_count,
+            dropped: state.len().saturating_sub(retained_count),
+            added_noise: usize::from(noise_count),
+        },
+    ))
+}
+
+#[cfg(test)]
+mod corruption_tests {
+    use super::*;
+
+    #[test]
+    fn corruption_is_deterministic_and_accounted() {
+        let state = BooleanState::new(vec![
+            PredicateId::new(10),
+            PredicateId::new(11),
+            PredicateId::new(12),
+            PredicateId::new(13),
+        ]);
+        let first = corrupt_surface_predicates(&state, 2, 90_000, 3).expect("first");
+        let second = corrupt_surface_predicates(&state, 2, 90_000, 3).expect("second");
+        assert_eq!(first, second);
+        assert_eq!(first.1.dropped, 2);
+        assert_eq!(first.1.added_noise, 3);
+    }
+}
