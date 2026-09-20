@@ -60,6 +60,9 @@ pub const CHIRAL_INVARIANT_BRIDGE_CONTRACT: &str = "tdi25-chiral-invariant-bridg
 /// Versioned shared masking/normalization bridge contract.
 pub const MASK_NORMALIZER_BRIDGE_CONTRACT: &str = "tdi25-shared-mask-normalizer-v1";
 
+/// Versioned typed comparison-record contract.
+pub const COMPARISON_RECORD_CONTRACT: &str = "tdi25-comparison-record-v1";
+
 const _GENERIC_MATCH_TORSOR: [(); TORSOR_WIDTH] = [(); GENERIC6_WIDTH];
 const _GENERIC_MATCH_CHIRAL: [(); super::tdi24_chiral::CHIRAL_WIDTH] = [(); GENERIC6_WIDTH];
 
@@ -394,6 +397,107 @@ pub fn normalize_arm_row(
     })
 }
 
+/// Frozen task-family identity used by TDI-25 comparison records.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TaskFamily {
+    /// Transport/reduction-point geometry is target-relevant.
+    TorsorFavorable,
+    /// Reflection/handedness is target-relevant.
+    ChiralFavorable,
+    /// Both structural relations are required.
+    Mixed,
+    /// Neither structure is privileged by target construction.
+    Neutral,
+}
+
+/// Declared finite comparison budget for one record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ComparisonBudget {
+    /// Number of examples admitted to the bounded operation.
+    pub examples: u64,
+    /// Number of parameter-update steps, zero for non-trained paths.
+    pub updates: u64,
+}
+
+impl ComparisonBudget {
+    /// Construct a non-empty bounded comparison budget.
+    pub fn new(examples: u64, updates: u64) -> Result<Self, Tdi25Error> {
+        if examples == 0 {
+            Err(Tdi25Error::InvalidComparisonRecord { field: "examples" })
+        } else {
+            Ok(Self { examples, updates })
+        }
+    }
+}
+
+/// Failure category retained rather than silently dropping an arm/case.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ComparisonFailure {
+    Contract,
+    Numerical,
+    Normalization,
+    Task,
+    Resource,
+}
+
+/// Typed record outcome.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ComparisonOutcome {
+    /// Finite scalar result for the declared record.
+    Score(f64),
+    /// Preserved failure category.
+    Failure(ComparisonFailure),
+}
+
+/// One immutable Stage-A comparison record with explicit provenance.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ComparisonRecord {
+    pub family: TaskFamily,
+    pub arm: ComparisonArm,
+    pub seed_block: u64,
+    pub case_id: u64,
+    pub budget: ComparisonBudget,
+    pub outcome: ComparisonOutcome,
+    pub source_contracts: SourceContracts,
+    pub tdi25_contract: &'static str,
+    pub score_scale_contract: &'static str,
+    pub masking_contract: &'static str,
+    pub normalizer_contract: &'static str,
+    pub record_contract: &'static str,
+}
+
+/// Materialize one typed comparison record, rejecting non-finite successful
+/// scores and any drift in the pinned upstream semantic contracts.
+pub fn comparison_record(
+    family: TaskFamily,
+    arm: ComparisonArm,
+    seed_block: u64,
+    case_id: u64,
+    budget: ComparisonBudget,
+    outcome: ComparisonOutcome,
+) -> Result<ComparisonRecord, Tdi25Error> {
+    let source_contracts = validate_source_contracts()?;
+    if let ComparisonOutcome::Score(score) = outcome {
+        if !score.is_finite() {
+            return Err(Tdi25Error::InvalidComparisonRecord { field: "score" });
+        }
+    }
+    Ok(ComparisonRecord {
+        family,
+        arm,
+        seed_block,
+        case_id,
+        budget,
+        outcome,
+        source_contracts,
+        tdi25_contract: TDI25_CONTRACT,
+        score_scale_contract: SCORE_SCALE_CONTRACT,
+        masking_contract: MASKING_CONTRACT,
+        normalizer_contract: NORMALIZER_CONTRACT,
+        record_contract: COMPARISON_RECORD_CONTRACT,
+    })
+}
+
 /// Stage-0 score bundle. Values are kept separate; this type deliberately does
 /// not compute a winner, rank, aggregate metric or statistical conclusion.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -458,6 +562,11 @@ fn finite_scalar(value: f64, field: &'static str) -> Result<f64, Tdi25Error> {
 /// Stage-0 binding/control failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tdi25Error {
+    /// Typed comparison-record construction rejected malformed provenance/data.
+    InvalidComparisonRecord {
+        /// Rejected record field.
+        field: &'static str,
+    },
     /// Shared TDI-24 mask/normalizer rejected the row.
     Normalizer(NormalizerError),
     /// A required TDI-24 mirror/parity identity failed through the bridge.
@@ -492,6 +601,9 @@ pub enum Tdi25Error {
 impl fmt::Display for Tdi25Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidComparisonRecord { field } => {
+                write!(formatter, "invalid comparison record field: {field}")
+            }
             Self::Normalizer(error) => {
                 write!(formatter, "shared normalizer rejected row: {error:?}")
             }
@@ -540,6 +652,64 @@ mod tests {
         assert!(
             (lhs - rhs).abs() <= 64.0 * f64::EPSILON * scale,
             "lhs={lhs:?}, rhs={rhs:?}"
+        );
+    }
+
+    #[test]
+    fn typed_comparison_record_preserves_required_provenance() {
+        let budget = ComparisonBudget::new(128, 0).unwrap();
+        let record = comparison_record(
+            TaskFamily::Neutral,
+            ComparisonArm::G6,
+            17,
+            9,
+            budget,
+            ComparisonOutcome::Score(0.25),
+        )
+        .unwrap();
+        assert_eq!(record.family, TaskFamily::Neutral);
+        assert_eq!(record.arm, ComparisonArm::G6);
+        assert_eq!(record.seed_block, 17);
+        assert_eq!(record.case_id, 9);
+        assert_eq!(record.budget, budget);
+        assert_eq!(record.source_contracts, source_contracts());
+        assert_eq!(record.tdi25_contract, TDI25_CONTRACT);
+        assert_eq!(record.score_scale_contract, SCORE_SCALE_CONTRACT);
+        assert_eq!(record.masking_contract, MASKING_CONTRACT);
+        assert_eq!(record.normalizer_contract, NORMALIZER_CONTRACT);
+        assert_eq!(record.record_contract, COMPARISON_RECORD_CONTRACT);
+    }
+
+    #[test]
+    fn comparison_record_retains_failures_and_rejects_invalid_successes() {
+        let budget = ComparisonBudget::new(1, 0).unwrap();
+        let failed = comparison_record(
+            TaskFamily::Mixed,
+            ComparisonArm::T6,
+            3,
+            4,
+            budget,
+            ComparisonOutcome::Failure(ComparisonFailure::Resource),
+        )
+        .unwrap();
+        assert_eq!(
+            failed.outcome,
+            ComparisonOutcome::Failure(ComparisonFailure::Resource)
+        );
+        assert_eq!(
+            comparison_record(
+                TaskFamily::Mixed,
+                ComparisonArm::C6,
+                3,
+                5,
+                budget,
+                ComparisonOutcome::Score(f64::NAN),
+            ),
+            Err(Tdi25Error::InvalidComparisonRecord { field: "score" })
+        );
+        assert_eq!(
+            ComparisonBudget::new(0, 0),
+            Err(Tdi25Error::InvalidComparisonRecord { field: "examples" })
         );
     }
 
