@@ -224,3 +224,56 @@ mod corruption_tests {
         assert_eq!(first.1.added_noise, 3);
     }
 }
+
+
+/// Non-mutating diagnosis of how recent evidence relates to an existing template.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConceptDriftDiagnosis {
+    Stable,
+    Refuted,
+    SplitSuggested,
+}
+
+#[must_use]
+pub fn diagnose_concept_drift(
+    candidate: &PositiveTemplateCandidate,
+    recent_positives: &[StructuralTerm],
+    recent_negatives: &[StructuralTerm],
+) -> ConceptDriftDiagnosis {
+    let evaluation = super::tdi2_template_learning::evaluate_candidate_constraints(
+        candidate,
+        recent_positives,
+        recent_negatives,
+    );
+    let loses_positive = evaluation.positive_admitted < evaluation.positive_total;
+    let admits_negative = evaluation.negative_admitted > 0;
+    match (loses_positive, admits_negative) {
+        (false, false) => ConceptDriftDiagnosis::Stable,
+        (true, false) => ConceptDriftDiagnosis::Refuted,
+        (_, true) => ConceptDriftDiagnosis::SplitSuggested,
+    }
+}
+
+#[cfg(test)]
+mod drift_tests {
+    use super::*;
+
+    #[test]
+    fn contradictory_recent_evidence_requests_review_not_mutation() {
+        let training = [
+            cross_domain_observation(1, 3).expect("one").structure,
+            cross_domain_observation(2, 3).expect("two").structure,
+        ];
+        let candidate = induce_positive_template(&training).expect("candidate");
+        let old_shape_as_negative = [cross_domain_observation(3, 3).expect("negative").structure];
+        let changed_positive = StructuralTerm::application(
+            StructuralSymbol::constructor(99_999),
+            vec![StructuralTerm::atom(StructuralSymbol::constructor(1))],
+        )
+        .expect("changed");
+        assert_eq!(
+            diagnose_concept_drift(&candidate, &[changed_positive], &old_shape_as_negative),
+            ConceptDriftDiagnosis::SplitSuggested
+        );
+    }
+}
