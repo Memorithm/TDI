@@ -1,0 +1,25 @@
+schema_version: 1
+programme: TDI-25
+stage: A
+status: candidate_pending_exact_head_qualification_and_merge
+contract_versions:
+  comparison: tdi25-torsor-vs-chiral-v1
+  source_pin: tdi25-source-contract-pin-v1
+  torsor_source: tdi22-torsor-dual-pairing-v1
+  chiral_source: tdi24-mirror-coupled-chiral-v1
+  generic_control: tdi25-generic6-control-v1
+  carrier_accounting: tdi25-carrier-accounting-v1
+  score_scale: tdi25-common-score-scale-v1
+  torsor_invariant_bridge: tdi25-torsor-invariant-bridge-v1
+  chiral_invariant_bridge: tdi25-chiral-invariant-bridge-v1
+  mask_normalizer_bridge: tdi25-shared-mask-normalizer-v1
+  masking: tdi24-attention-mask-reference-v1
+  normalizer: tdi24-masked-softmax-reference-v1
+  comparison_record: tdi25-comparison-record-v1
+authorizations:
+  training: false
+  development_evaluation: false
+  validation_evaluation: false
+  protected_or_final_access: false
+  scientific_claim: false
+  performance_claim: false
