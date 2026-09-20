@@ -317,3 +317,89 @@ mod preservation_tests {
         assert!(score.is_exact());
     }
 }
+
+
+/// Higher-order consistency accounting for shared-role relation systems.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MappingSystematicity {
+    pub shared_role_pairs: usize,
+    pub jointly_preserved_pairs: usize,
+}
+
+#[must_use]
+pub fn mapping_systematicity(
+    patterns: &[RoleRelationPattern],
+    mapping: &RoleEntityMap,
+    target: &ObservationGraph,
+) -> MappingSystematicity {
+    let target_relations = target
+        .relations()
+        .iter()
+        .map(|relation| (relation.left(), relation.relation(), relation.right()))
+        .collect::<BTreeSet<_>>();
+    let preserved = |pattern: &RoleRelationPattern| {
+        match (mapping.resolve(pattern.left), mapping.resolve(pattern.right)) {
+            (Some(left), Some(right)) => {
+                target_relations.contains(&(left, pattern.relation, right))
+            }
+            _ => false,
+        }
+    };
+    let shares_role = |a: &RoleRelationPattern, b: &RoleRelationPattern| {
+        [a.left, a.right]
+            .into_iter()
+            .any(|role| role == b.left || role == b.right)
+    };
+
+    let mut result = MappingSystematicity::default();
+    for left in 0..patterns.len() {
+        for right in (left + 1)..patterns.len() {
+            if shares_role(&patterns[left], &patterns[right]) {
+                result.shared_role_pairs += 1;
+                if preserved(&patterns[left]) && preserved(&patterns[right]) {
+                    result.jointly_preserved_pairs += 1;
+                }
+            }
+        }
+    }
+    result
+}
+
+#[cfg(test)]
+mod mapping_systematicity_tests {
+    use super::*;
+    use crate::experimental::tdi2_intuition::BooleanState;
+    use crate::experimental::tdi2_observation_graph::{ObservedEntity, ObservedRelation};
+    use crate::experimental::tdi2_template_induction::EpisodeId;
+
+    #[test]
+    fn shared_middle_role_is_jointly_preserved() {
+        let r = [StructuralVariableId::new(0), StructuralVariableId::new(1), StructuralVariableId::new(2)];
+        let rel1 = ObservedRelationId::new(1);
+        let rel2 = ObservedRelationId::new(2);
+        let graph = ObservationGraph::new(
+            EpisodeId::new(3),
+            vec![10,20,30].into_iter().map(|id| ObservedEntity::new(ObservedEntityId::new(id), BooleanState::default())).collect(),
+            vec![
+                ObservedRelation::new(ObservedEntityId::new(10), rel1, ObservedEntityId::new(20)),
+                ObservedRelation::new(ObservedEntityId::new(20), rel2, ObservedEntityId::new(30)),
+            ],
+        ).expect("graph");
+        let mapping = RoleEntityMap::new(
+            &r,
+            &graph,
+            vec![
+                RoleEntityBinding::new(r[0], ObservedEntityId::new(10)),
+                RoleEntityBinding::new(r[1], ObservedEntityId::new(20)),
+                RoleEntityBinding::new(r[2], ObservedEntityId::new(30)),
+            ],
+        ).expect("mapping");
+        let patterns = [
+            RoleRelationPattern { left:r[0], relation:rel1, right:r[1] },
+            RoleRelationPattern { left:r[1], relation:rel2, right:r[2] },
+        ];
+        let diagnostic = mapping_systematicity(&patterns, &mapping, &graph);
+        assert_eq!(diagnostic.shared_role_pairs, 1);
+        assert_eq!(diagnostic.jointly_preserved_pairs, 1);
+    }
+}
