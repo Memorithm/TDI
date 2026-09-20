@@ -442,3 +442,120 @@ mod role_tests {
         assert_eq!(roles[0].distinct_entity_count(), 3);
     }
 }
+
+
+/// Descriptive relation-system diagnostic; deliberately not a single quality score.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RelationSystematicity {
+    pub relation_applications: usize,
+    pub role_linked_relations: usize,
+    pub distinct_roles_linked: usize,
+    pub roles_reused_across_relations: usize,
+}
+
+/// Count whether induced roles participate in a connected relation system.
+#[must_use]
+pub fn relation_systematicity(
+    template: &StructuralTerm,
+    roles: &[InducedRole],
+) -> RelationSystematicity {
+    let role_ids = roles
+        .iter()
+        .map(InducedRole::variable)
+        .collect::<BTreeSet<_>>();
+    let mut relation_applications = 0usize;
+    let mut role_linked_relations = 0usize;
+    let mut occurrences = BTreeMap::<StructuralVariableId, usize>::new();
+
+    fn walk(
+        term: &StructuralTerm,
+        role_ids: &BTreeSet<StructuralVariableId>,
+        relation_applications: &mut usize,
+        role_linked_relations: &mut usize,
+        occurrences: &mut BTreeMap<StructuralVariableId, usize>,
+    ) {
+        if let StructuralTermKind::Application { symbol, arguments } = term.kind() {
+            if symbol.namespace() == StructuralSymbolNamespace::Relation {
+                *relation_applications += 1;
+                let linked = arguments
+                    .iter()
+                    .filter_map(|argument| match argument.kind() {
+                        StructuralTermKind::Variable(variable) if role_ids.contains(variable) => {
+                            Some(*variable)
+                        }
+                        _ => None,
+                    })
+                    .collect::<BTreeSet<_>>();
+                if linked.len() >= 2 {
+                    *role_linked_relations += 1;
+                }
+                for variable in linked {
+                    *occurrences.entry(variable).or_default() += 1;
+                }
+            }
+            for argument in arguments {
+                walk(
+                    argument,
+                    role_ids,
+                    relation_applications,
+                    role_linked_relations,
+                    occurrences,
+                );
+            }
+        }
+    }
+
+    walk(
+        template,
+        &role_ids,
+        &mut relation_applications,
+        &mut role_linked_relations,
+        &mut occurrences,
+    );
+    RelationSystematicity {
+        relation_applications,
+        role_linked_relations,
+        distinct_roles_linked: occurrences.len(),
+        roles_reused_across_relations: occurrences.values().filter(|count| **count > 1).count(),
+    }
+}
+
+#[cfg(test)]
+mod systematicity_tests {
+    use super::*;
+    use crate::experimental::tdi2_observation_graph::ObservedRelationId;
+    use crate::experimental::tdi2_structural_terms::StructuralSymbol;
+
+    #[test]
+    fn linked_relation_system_is_counted_without_collapsing_to_one_score() {
+        let v0 = StructuralVariableId::new(0);
+        let v1 = StructuralVariableId::new(1);
+        let v2 = StructuralVariableId::new(2);
+        let r1 = StructuralTerm::application(
+            StructuralSymbol::relation(ObservedRelationId::new(1)),
+            vec![StructuralTerm::variable(v0), StructuralTerm::variable(v1)],
+        )
+        .expect("r1");
+        let r2 = StructuralTerm::application(
+            StructuralSymbol::relation(ObservedRelationId::new(2)),
+            vec![StructuralTerm::variable(v1), StructuralTerm::variable(v2)],
+        )
+        .expect("r2");
+        let root = StructuralTerm::application(
+            StructuralSymbol::constructor(99),
+            vec![r1, r2],
+        )
+        .expect("root");
+        let roles = [v0, v1, v2]
+            .into_iter()
+            .map(|variable| InducedRole {
+                variable,
+                binding_records: vec!["entity".to_owned()],
+            })
+            .collect::<Vec<_>>();
+        let diagnostic = relation_systematicity(&root, &roles);
+        assert_eq!(diagnostic.relation_applications, 2);
+        assert_eq!(diagnostic.role_linked_relations, 2);
+        assert_eq!(diagnostic.roles_reused_across_relations, 1);
+    }
+}
