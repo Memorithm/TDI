@@ -403,3 +403,161 @@ mod mapping_systematicity_tests {
         assert_eq!(diagnostic.jointly_preserved_pairs, 1);
     }
 }
+
+
+/// Hard bounds for the exact mapping oracle.
+pub const MAX_EXACT_MAPPING_ROLES: usize = 7;
+pub const MAX_EXACT_MAPPING_ENTITIES: usize = 9;
+pub const MAX_RETAINED_EXACT_MAPPINGS: usize = 128;
+
+/// Exact bounded search evidence.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExactMappingSearch {
+    pub expected_relations: usize,
+    pub best_matched: usize,
+    pub total_best_solutions: usize,
+    pub retained_solutions: Vec<RoleEntityMap>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MappingSearchError {
+    EmptyStructure,
+    TooManyRoles,
+    TooManyEntities,
+    NotEnoughEntities,
+    MappingConstraint(MappingConstraintError),
+}
+
+impl From<MappingConstraintError> for MappingSearchError {
+    fn from(error: MappingConstraintError) -> Self {
+        Self::MappingConstraint(error)
+    }
+}
+
+/// Enumerate all injective mappings within a deliberately small exact domain.
+pub fn exact_mapping_search(
+    roles: &[StructuralVariableId],
+    patterns: &[RoleRelationPattern],
+    target: &ObservationGraph,
+) -> Result<ExactMappingSearch, MappingSearchError> {
+    if patterns.is_empty() || roles.is_empty() {
+        return Err(MappingSearchError::EmptyStructure);
+    }
+    let mut roles = roles.to_vec();
+    roles.sort_unstable();
+    roles.dedup();
+    if roles.len() > MAX_EXACT_MAPPING_ROLES {
+        return Err(MappingSearchError::TooManyRoles);
+    }
+    if target.entities().len() > MAX_EXACT_MAPPING_ENTITIES {
+        return Err(MappingSearchError::TooManyEntities);
+    }
+    if roles.len() > target.entities().len() {
+        return Err(MappingSearchError::NotEnoughEntities);
+    }
+
+    let entities = target
+        .entities()
+        .iter()
+        .map(|entity| entity.id())
+        .collect::<Vec<_>>();
+    let mut best_matched = 0usize;
+    let mut total_best_solutions = 0usize;
+    let mut retained_solutions = Vec::new();
+    let mut current = Vec::<RoleEntityBinding>::with_capacity(roles.len());
+    let mut used = BTreeSet::<ObservedEntityId>::new();
+
+    struct SearchContext<'a> {
+        roles: &'a [StructuralVariableId],
+        patterns: &'a [RoleRelationPattern],
+        target: &'a ObservationGraph,
+        entities: &'a [ObservedEntityId],
+        best_matched: &'a mut usize,
+        total_best_solutions: &'a mut usize,
+        retained_solutions: &'a mut Vec<RoleEntityMap>,
+    }
+
+    fn visit(
+        index: usize,
+        current: &mut Vec<RoleEntityBinding>,
+        used: &mut BTreeSet<ObservedEntityId>,
+        context: &mut SearchContext<'_>,
+    ) -> Result<(), MappingSearchError> {
+        if index == context.roles.len() {
+            let mapping = RoleEntityMap::new(context.roles, context.target, current.clone())?;
+            let score = relation_preservation(context.patterns, &mapping, context.target);
+            if score.matched > *context.best_matched {
+                *context.best_matched = score.matched;
+                *context.total_best_solutions = 1;
+                context.retained_solutions.clear();
+                context.retained_solutions.push(mapping);
+            } else if score.matched == *context.best_matched {
+                *context.total_best_solutions = context.total_best_solutions.saturating_add(1);
+                if context.retained_solutions.len() < MAX_RETAINED_EXACT_MAPPINGS {
+                    context.retained_solutions.push(mapping);
+                }
+            }
+            return Ok(());
+        }
+
+        for &entity in context.entities {
+            if used.insert(entity) {
+                current.push(RoleEntityBinding::new(context.roles[index], entity));
+                visit(index + 1, current, used, context)?;
+                current.pop();
+                used.remove(&entity);
+            }
+        }
+        Ok(())
+    }
+
+    let mut context = SearchContext {
+        roles: &roles,
+        patterns,
+        target,
+        entities: &entities,
+        best_matched: &mut best_matched,
+        total_best_solutions: &mut total_best_solutions,
+        retained_solutions: &mut retained_solutions,
+    };
+    visit(0, &mut current, &mut used, &mut context)?;
+
+    Ok(ExactMappingSearch {
+        expected_relations: patterns.len(),
+        best_matched,
+        total_best_solutions,
+        retained_solutions,
+    })
+}
+
+#[cfg(test)]
+mod exact_mapping_tests {
+    use super::*;
+    use crate::experimental::tdi2_intuition::BooleanState;
+    use crate::experimental::tdi2_observation_graph::{ObservedEntity, ObservedRelation};
+    use crate::experimental::tdi2_template_induction::EpisodeId;
+
+    #[test]
+    fn typed_relation_triangle_has_one_exact_mapping() {
+        let roles = [StructuralVariableId::new(0), StructuralVariableId::new(1), StructuralVariableId::new(2)];
+        let relation = [ObservedRelationId::new(1), ObservedRelationId::new(2), ObservedRelationId::new(3)];
+        let graph = ObservationGraph::new(
+            EpisodeId::new(4),
+            vec![10,20,30].into_iter().map(|id| ObservedEntity::new(ObservedEntityId::new(id), BooleanState::default())).collect(),
+            vec![
+                ObservedRelation::new(ObservedEntityId::new(20), relation[0], ObservedEntityId::new(30)),
+                ObservedRelation::new(ObservedEntityId::new(30), relation[1], ObservedEntityId::new(10)),
+                ObservedRelation::new(ObservedEntityId::new(20), relation[2], ObservedEntityId::new(10)),
+            ],
+        ).expect("graph");
+        let patterns = [
+            RoleRelationPattern { left:roles[0], relation:relation[0], right:roles[1] },
+            RoleRelationPattern { left:roles[1], relation:relation[1], right:roles[2] },
+            RoleRelationPattern { left:roles[0], relation:relation[2], right:roles[2] },
+        ];
+        let result = exact_mapping_search(&roles, &patterns, &graph).expect("search");
+        assert_eq!(result.best_matched, 3);
+        assert_eq!(result.total_best_solutions, 1);
+        assert_eq!(result.retained_solutions[0].resolve(roles[0]), Some(ObservedEntityId::new(20)));
+    }
+}
