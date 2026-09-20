@@ -422,3 +422,73 @@ mod symbolic_baseline_tests {
         assert!(comparison.conjunctive_rule_false_admission);
     }
 }
+
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CrossDomainCampaignSummary {
+    pub total: usize,
+    pub structural_transfer_success: usize,
+    pub zero_surface_overlap: usize,
+    pub candidate_equals_anti_unification: usize,
+    pub conjunctive_rule_false_admission: usize,
+}
+
+pub fn run_cross_domain_campaign(
+    start_case: u32,
+    count: usize,
+    train_a: u32,
+    train_b: u32,
+    target_domain: u32,
+) -> Result<CrossDomainCampaignSummary, CrossDomainError> {
+    let mut summary = CrossDomainCampaignSummary::default();
+    for offset in 0..count {
+        let offset = u32::try_from(offset).map_err(|_| CrossDomainError::IdentifierOverflow)?;
+        let case_id = start_case
+            .checked_add(offset)
+            .ok_or(CrossDomainError::IdentifierOverflow)?;
+        let surface = compare_structural_to_surface(case_id, train_a, train_b, target_domain)?;
+        let symbolic = compare_symbolic_baselines(case_id, train_a, train_b, target_domain)?;
+        summary.total += 1;
+        summary.structural_transfer_success += usize::from(surface.structural_transfer);
+        summary.zero_surface_overlap += usize::from(surface.surface_overlap == 0);
+        summary.candidate_equals_anti_unification +=
+            usize::from(symbolic.candidate_equals_anti_unification);
+        summary.conjunctive_rule_false_admission +=
+            usize::from(symbolic.conjunctive_rule_false_admission);
+    }
+    Ok(summary)
+}
+
+pub const CROSS_DOMAIN_DEVELOPMENT_START: u32 = 1_000;
+pub const CROSS_DOMAIN_DEVELOPMENT_CASES: usize = 32;
+
+pub fn run_cross_domain_development() -> Result<CrossDomainCampaignSummary, CrossDomainError> {
+    run_cross_domain_campaign(
+        CROSS_DOMAIN_DEVELOPMENT_START,
+        CROSS_DOMAIN_DEVELOPMENT_CASES,
+        1,
+        2,
+        3,
+    )
+}
+
+#[cfg(test)]
+mod cross_domain_development_tests {
+    use super::*;
+
+    #[test]
+    fn development_retains_the_anti_unification_null_result() {
+        let summary = run_cross_domain_development().expect("development");
+        assert_eq!(summary.total, CROSS_DOMAIN_DEVELOPMENT_CASES);
+        assert_eq!(summary.structural_transfer_success, CROSS_DOMAIN_DEVELOPMENT_CASES);
+        assert_eq!(summary.zero_surface_overlap, CROSS_DOMAIN_DEVELOPMENT_CASES);
+        assert_eq!(
+            summary.candidate_equals_anti_unification,
+            CROSS_DOMAIN_DEVELOPMENT_CASES
+        );
+        assert_eq!(
+            summary.conjunctive_rule_false_admission,
+            CROSS_DOMAIN_DEVELOPMENT_CASES
+        );
+    }
+}
