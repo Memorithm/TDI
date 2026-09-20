@@ -552,7 +552,6 @@ mod systematicity_tests {
     }
 }
 
-
 /// Separate evidence and complexity dimensions for a template candidate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TemplateCandidateScore {
