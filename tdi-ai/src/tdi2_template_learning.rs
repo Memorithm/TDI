@@ -349,3 +349,96 @@ mod partition_tests {
         assert_eq!(partition.contingent_variables()[0].0.indices(), &[0]);
     }
 }
+
+
+use std::collections::BTreeSet;
+use super::tdi2_structural_terms::StructuralSymbolNamespace;
+
+/// One variable whose bindings are concrete episode-local entities in every example.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InducedRole {
+    variable: StructuralVariableId,
+    binding_records: Vec<String>,
+}
+
+impl InducedRole {
+    #[must_use]
+    pub const fn variable(&self) -> StructuralVariableId {
+        self.variable
+    }
+
+    #[must_use]
+    pub fn binding_records(&self) -> &[String] {
+        &self.binding_records
+    }
+
+    #[must_use]
+    pub fn distinct_entity_count(&self) -> usize {
+        self.binding_records.iter().collect::<BTreeSet<_>>().len()
+    }
+}
+
+/// Promote a contingent variable to a role candidate only when every supplied
+/// positive example binds it to an observable entity constant.
+#[must_use]
+pub fn induce_roles(
+    candidate: &PositiveTemplateCandidate,
+    positives: &[StructuralTerm],
+) -> Vec<InducedRole> {
+    let variables = partition_template(candidate.generalization())
+        .contingent_variables
+        .into_iter()
+        .map(|(_, variable)| variable)
+        .collect::<BTreeSet<_>>();
+
+    variables
+        .into_iter()
+        .filter_map(|variable| {
+            let mut bindings = Vec::with_capacity(positives.len());
+            for example in positives {
+                let matched = match_induced_template(candidate.generalization(), example)?;
+                let bound = matched.binding(variable)?;
+                match bound.kind() {
+                    StructuralTermKind::Atom(symbol)
+                        if symbol.namespace() == StructuralSymbolNamespace::Entity =>
+                    {
+                        bindings.push(bound.canonical_record());
+                    }
+                    _ => return None,
+                }
+            }
+            Some(InducedRole {
+                variable,
+                binding_records: bindings,
+            })
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod role_tests {
+    use super::*;
+    use crate::experimental::tdi2_observation_graph::{ObservedEntityId, ObservedRelationId};
+    use crate::experimental::tdi2_structural_terms::{StructuralSymbol, StructuralTerm};
+    use crate::experimental::tdi2_template_induction::EpisodeId;
+
+    fn relation(episode: u64, entity: u32) -> StructuralTerm {
+        StructuralTerm::application(
+            StructuralSymbol::relation(ObservedRelationId::new(3)),
+            vec![StructuralTerm::atom(StructuralSymbol::entity(
+                EpisodeId::new(episode),
+                ObservedEntityId::new(entity),
+            ))],
+        )
+        .expect("term")
+    }
+
+    #[test]
+    fn changing_entity_constants_induce_a_role() {
+        let positives = [relation(1, 10), relation(2, 20), relation(3, 30)];
+        let candidate = induce_positive_template(&positives).expect("candidate");
+        let roles = induce_roles(&candidate, &positives);
+        assert_eq!(roles.len(), 1);
+        assert_eq!(roles[0].distinct_entity_count(), 3);
+    }
+}
