@@ -559,3 +559,61 @@ mod systematicity_tests {
         assert_eq!(diagnostic.roles_reused_across_relations, 1);
     }
 }
+
+
+/// Separate evidence and complexity dimensions for a template candidate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TemplateCandidateScore {
+    pub positive_total: usize,
+    pub positive_admitted: usize,
+    pub negative_total: usize,
+    pub negative_admitted: usize,
+    pub fixed_nodes: usize,
+    pub contingent_variables: usize,
+    pub role_linked_relations: usize,
+}
+
+#[must_use]
+pub fn score_template_candidate(
+    candidate: &PositiveTemplateCandidate,
+    positives: &[StructuralTerm],
+    negatives: &[StructuralTerm],
+) -> TemplateCandidateScore {
+    let evaluation = evaluate_candidate_constraints(candidate, positives, negatives);
+    let partition = partition_template(candidate.generalization());
+    let roles = induce_roles(candidate, positives);
+    let systematicity = relation_systematicity(candidate.generalization(), &roles);
+    TemplateCandidateScore {
+        positive_total: evaluation.positive_total,
+        positive_admitted: evaluation.positive_admitted,
+        negative_total: evaluation.negative_total,
+        negative_admitted: evaluation.negative_admitted,
+        fixed_nodes: partition.fixed_nodes().len(),
+        contingent_variables: partition.contingent_variables().len(),
+        role_linked_relations: systematicity.role_linked_relations,
+    }
+}
+
+#[cfg(test)]
+mod score_tests {
+    use super::*;
+    use crate::experimental::tdi2_structural_terms::{StructuralSymbol, StructuralTerm};
+
+    fn atom(id: u32) -> StructuralTerm {
+        StructuralTerm::atom(StructuralSymbol::constructor(id))
+    }
+    fn fact(id: u32, x: StructuralTerm) -> StructuralTerm {
+        StructuralTerm::application(StructuralSymbol::constructor(id), vec![x]).expect("term")
+    }
+
+    #[test]
+    fn fit_and_complexity_remain_separate_fields() {
+        let positives = [fact(1, atom(10)), fact(1, atom(11))];
+        let candidate = induce_positive_template(&positives).expect("candidate");
+        let score = score_template_candidate(&candidate, &positives, &[fact(2, atom(12))]);
+        assert_eq!(score.positive_admitted, 2);
+        assert_eq!(score.negative_admitted, 0);
+        assert!(score.fixed_nodes > 0);
+        assert!(score.contingent_variables > 0);
+    }
+}
