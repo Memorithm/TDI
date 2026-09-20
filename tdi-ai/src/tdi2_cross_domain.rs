@@ -492,3 +492,42 @@ mod cross_domain_development_tests {
         );
     }
 }
+
+
+pub const CROSS_DOMAIN_VALIDATION_START: u32 = 2_000;
+pub const CROSS_DOMAIN_VALIDATION_CASES: usize = 32;
+
+pub fn run_cross_domain_validation() -> Result<CrossDomainCampaignSummary, CrossDomainError> {
+    run_cross_domain_campaign(
+        CROSS_DOMAIN_VALIDATION_START,
+        CROSS_DOMAIN_VALIDATION_CASES,
+        4,
+        5,
+        6,
+    )
+}
+
+#[cfg(test)]
+mod cross_domain_validation_tests {
+    use super::*;
+
+    #[test]
+    fn validation_is_disjoint_and_preserves_null_baseline_finding() {
+        assert!(
+            CROSS_DOMAIN_DEVELOPMENT_START + CROSS_DOMAIN_DEVELOPMENT_CASES as u32
+                <= CROSS_DOMAIN_VALIDATION_START
+        );
+        let summary = run_cross_domain_validation().expect("validation");
+        assert_eq!(summary.total, CROSS_DOMAIN_VALIDATION_CASES);
+        assert_eq!(summary.structural_transfer_success, CROSS_DOMAIN_VALIDATION_CASES);
+        assert_eq!(summary.zero_surface_overlap, CROSS_DOMAIN_VALIDATION_CASES);
+        assert_eq!(
+            summary.candidate_equals_anti_unification,
+            CROSS_DOMAIN_VALIDATION_CASES
+        );
+        assert_eq!(
+            summary.conjunctive_rule_false_admission,
+            CROSS_DOMAIN_VALIDATION_CASES
+        );
+    }
+}
