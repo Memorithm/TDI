@@ -198,5 +198,7 @@ pub mod tdi2_structural_terms;
 pub mod tdi2_template_induction;
 #[path = "tdi2_template_learning.rs"]
 pub mod tdi2_template_learning;
+#[path = "tdi2_analogical_mapping.rs"]
+pub mod tdi2_analogical_mapping;
 #[path = "tdi2_temporal_delta.rs"]
 pub mod tdi2_temporal_delta;
