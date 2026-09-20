@@ -632,3 +632,53 @@ mod approximate_mapping_tests {
         assert_eq!(first, second);
     }
 }
+
+
+/// Decision surface for mapping search; ambiguity is not silently tie-broken.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MappingDecision {
+    Selected(RoleEntityMap),
+    Ambiguous { exact_solutions: usize },
+    InsufficientStructure { matched: usize, expected: usize },
+}
+
+#[must_use]
+pub fn decide_exact_mapping(search: &ExactMappingSearch) -> MappingDecision {
+    if search.best_matched < search.expected_relations {
+        return MappingDecision::InsufficientStructure {
+            matched: search.best_matched,
+            expected: search.expected_relations,
+        };
+    }
+    if search.total_best_solutions != 1 {
+        return MappingDecision::Ambiguous {
+            exact_solutions: search.total_best_solutions,
+        };
+    }
+    match search.retained_solutions.first() {
+        Some(mapping) => MappingDecision::Selected(mapping.clone()),
+        None => MappingDecision::InsufficientStructure {
+            matched: search.best_matched,
+            expected: search.expected_relations,
+        },
+    }
+}
+
+#[cfg(test)]
+mod mapping_decision_tests {
+    use super::*;
+
+    #[test]
+    fn exact_ties_are_ambiguous_not_arbitrarily_selected() {
+        let search = ExactMappingSearch {
+            expected_relations: 2,
+            best_matched: 2,
+            total_best_solutions: 3,
+            retained_solutions: Vec::new(),
+        };
+        assert_eq!(
+            decide_exact_mapping(&search),
+            MappingDecision::Ambiguous { exact_solutions: 3 }
+        );
+    }
+}
