@@ -16,8 +16,8 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | 06 | Torsor invariant bridge tests | **landed** in #555; observe upstream invariants before/after transport and verify TDI-25 score invariance |
 | 07 | Chiral invariant bridge tests | **landed** in #557; fail-closed M²/J²/MJM and s/m/chi reflection identities through the TDI-25 adapter |
 | 08 | Shared masking/normalization reference | **stacked predecessor** #561; T6/C6/G6 call the same TDI-24 mask/normalizer path |
-| 09 | Typed comparison record | **current stacked slice**; family, arm, seed block, case, budget, contracts and retained failure provenance |
-| 10 | Stage-A audit/freeze | adversarial review; no unresolved material semantic defect |
+| 09 | Typed comparison record | **stacked predecessor** #563; family, arm, seed block, case, budget, contracts and retained failure provenance |
+| 10 | Stage-A audit/freeze | **current stacked slice**; cross-contract audit, non-authorizing freeze manifest and fail-closed malformed evidence checks |
 
 ## Phase B — balanced task families and split discipline (PR 11–20)
 
