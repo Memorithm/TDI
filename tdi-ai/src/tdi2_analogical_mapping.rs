@@ -561,3 +561,74 @@ mod exact_mapping_tests {
         assert_eq!(result.retained_solutions[0].resolve(roles[0]), Some(ObservedEntityId::new(20)));
     }
 }
+
+
+/// Deterministic bounded structural approximation using role/entity degree signatures.
+pub fn approximate_mapping(
+    roles: &[StructuralVariableId],
+    patterns: &[RoleRelationPattern],
+    target: &ObservationGraph,
+) -> Result<RoleEntityMap, MappingSearchError> {
+    if roles.is_empty() || patterns.is_empty() {
+        return Err(MappingSearchError::EmptyStructure);
+    }
+    if roles.len() > target.entities().len() {
+        return Err(MappingSearchError::NotEnoughEntities);
+    }
+    let mut role_degree = BTreeMap::<StructuralVariableId, usize>::new();
+    for pattern in patterns {
+        *role_degree.entry(pattern.left).or_default() += 1;
+        *role_degree.entry(pattern.right).or_default() += 1;
+    }
+    let mut entity_degree = BTreeMap::<ObservedEntityId, usize>::new();
+    for relation in target.relations() {
+        *entity_degree.entry(relation.left()).or_default() += 1;
+        *entity_degree.entry(relation.right()).or_default() += 1;
+    }
+
+    let mut ordered_roles = roles.to_vec();
+    ordered_roles.sort_unstable_by_key(|role| {
+        (core::cmp::Reverse(*role_degree.get(role).unwrap_or(&0)), role.raw())
+    });
+    let mut available = target.entities().iter().map(|entity| entity.id()).collect::<Vec<_>>();
+    let mut bindings = Vec::with_capacity(ordered_roles.len());
+
+    for role in ordered_roles {
+        let role_d = *role_degree.get(&role).unwrap_or(&0);
+        let (index, entity) = available
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, entity)| {
+                let entity_d = *entity_degree.get(entity).unwrap_or(&0);
+                (role_d.abs_diff(entity_d), entity.raw())
+            })
+            .map(|(index, entity)| (index, *entity))
+            .ok_or(MappingSearchError::NotEnoughEntities)?;
+        available.remove(index);
+        bindings.push(RoleEntityBinding::new(role, entity));
+    }
+    RoleEntityMap::new(roles, target, bindings).map_err(Into::into)
+}
+
+#[cfg(test)]
+mod approximate_mapping_tests {
+    use super::*;
+    use crate::experimental::tdi2_intuition::BooleanState;
+    use crate::experimental::tdi2_observation_graph::{ObservedEntity, ObservedRelation};
+    use crate::experimental::tdi2_template_induction::EpisodeId;
+
+    #[test]
+    fn structural_degree_mapper_is_deterministic() {
+        let roles = [StructuralVariableId::new(0), StructuralVariableId::new(1)];
+        let relation = ObservedRelationId::new(8);
+        let graph = ObservationGraph::new(
+            EpisodeId::new(5),
+            vec![10,20].into_iter().map(|id| ObservedEntity::new(ObservedEntityId::new(id), BooleanState::default())).collect(),
+            vec![ObservedRelation::new(ObservedEntityId::new(10), relation, ObservedEntityId::new(20))],
+        ).expect("graph");
+        let patterns = [RoleRelationPattern { left:roles[0], relation, right:roles[1] }];
+        let first = approximate_mapping(&roles, &patterns, &graph).expect("first");
+        let second = approximate_mapping(&roles, &patterns, &graph).expect("second");
+        assert_eq!(first, second);
+    }
+}
