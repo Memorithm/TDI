@@ -875,3 +875,71 @@ mod merge_tests {
         assert_eq!(merged.source_records().len(), 4);
     }
 }
+
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StructuralMutationKind {
+    Create,
+    Generalize,
+    Specialize,
+    Split,
+    Merge,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StructuralReviewDecision {
+    Admissible,
+    Rejected,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StructuralReviewEvidence {
+    pub mutation: StructuralMutationKind,
+    pub support: usize,
+    pub evaluation: CandidateConstraintEvaluation,
+    pub structural_precondition: bool,
+}
+
+impl StructuralReviewEvidence {
+    #[must_use]
+    pub const fn decision(self) -> StructuralReviewDecision {
+        if self.support > 0
+            && self.evaluation.preserves_all_positives()
+            && self.evaluation.rejects_all_negatives()
+            && self.structural_precondition
+        {
+            StructuralReviewDecision::Admissible
+        } else {
+            StructuralReviewDecision::Rejected
+        }
+    }
+}
+
+#[cfg(test)]
+mod review_tests {
+    use super::*;
+
+    #[test]
+    fn mutation_review_requires_evidence_and_structural_precondition() {
+        let good = StructuralReviewEvidence {
+            mutation: StructuralMutationKind::Create,
+            support: 3,
+            evaluation: CandidateConstraintEvaluation {
+                positive_total: 2,
+                positive_admitted: 2,
+                negative_total: 1,
+                negative_admitted: 0,
+            },
+            structural_precondition: true,
+        };
+        assert_eq!(good.decision(), StructuralReviewDecision::Admissible);
+        assert_eq!(
+            StructuralReviewEvidence {
+                structural_precondition: false,
+                ..good
+            }
+            .decision(),
+            StructuralReviewDecision::Rejected
+        );
+    }
+}
