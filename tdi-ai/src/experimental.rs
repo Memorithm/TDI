@@ -86,6 +86,8 @@ pub mod tdi24_accounting;
 pub mod tdi24_attention;
 #[path = "tdi24_chiral.rs"]
 pub mod tdi24_chiral;
+#[path = "tdi24_tasks.rs"]
+pub mod tdi24_tasks;
 #[path = "tdi24_vector.rs"]
 pub mod tdi24_vector;
 #[path = "tdi25_torsor_chiral.rs"]
