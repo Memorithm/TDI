@@ -277,3 +277,53 @@ mod drift_tests {
         );
     }
 }
+
+
+/// Count exact shared active predicates; no learned metric or hidden weighting.
+#[must_use]
+pub fn boolean_surface_overlap(left: &BooleanState, right: &BooleanState) -> usize {
+    left.predicates()
+        .iter()
+        .filter(|predicate| right.contains(**predicate))
+        .count()
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StructuralVsSurface {
+    pub structural_transfer: bool,
+    pub surface_overlap: usize,
+}
+
+pub fn compare_structural_to_surface(
+    case_id: u32,
+    train_a: u32,
+    train_b: u32,
+    target_domain: u32,
+) -> Result<StructuralVsSurface, CrossDomainError> {
+    let candidate = induce_cross_domain_template(train_a, train_b, case_id)?;
+    let source_surface = cross_domain_observation(train_b, case_id)?;
+    let target = cross_domain_observation(target_domain, case_id)?;
+    Ok(StructuralVsSurface {
+        structural_transfer: match_induced_template(
+            candidate.generalization(),
+            &target.structure,
+        )
+        .is_some(),
+        surface_overlap: boolean_surface_overlap(
+            &source_surface.surface_predicates,
+            &target.surface_predicates,
+        ),
+    })
+}
+
+#[cfg(test)]
+mod surface_baseline_tests {
+    use super::*;
+
+    #[test]
+    fn surface_disjoint_case_has_zero_boolean_overlap_but_structural_match() {
+        let result = compare_structural_to_surface(8, 1, 2, 3).expect("comparison");
+        assert!(result.structural_transfer);
+        assert_eq!(result.surface_overlap, 0);
+    }
+}
