@@ -738,3 +738,97 @@ mod equivalence_tests {
         assert!(alpha_equivalent(&left, &right).expect("equivalence"));
     }
 }
+
+
+/// Binding cluster used only to review a potential structural split.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BindingCluster {
+    pub binding_record: String,
+    pub positive_count: usize,
+    pub negative_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SplitProposal {
+    pub variable: StructuralVariableId,
+    pub clusters: Vec<BindingCluster>,
+}
+
+impl SplitProposal {
+    #[must_use]
+    pub fn is_discriminating(&self) -> bool {
+        self.clusters
+            .iter()
+            .any(|cluster| cluster.positive_count > 0 && cluster.negative_count == 0)
+            && self
+                .clusters
+                .iter()
+                .any(|cluster| cluster.negative_count > 0 && cluster.positive_count == 0)
+    }
+}
+
+#[must_use]
+pub fn propose_binding_splits(
+    candidate: &PositiveTemplateCandidate,
+    positives: &[StructuralTerm],
+    negatives: &[StructuralTerm],
+) -> Vec<SplitProposal> {
+    let variables = partition_template(candidate.generalization())
+        .contingent_variables
+        .into_iter()
+        .map(|(_, variable)| variable)
+        .collect::<BTreeSet<_>>();
+
+    variables
+        .into_iter()
+        .filter_map(|variable| {
+            let mut counts = BTreeMap::<String, (usize, usize)>::new();
+            for example in positives {
+                let matched = match_induced_template(candidate.generalization(), example)?;
+                let key = matched.binding(variable)?.canonical_record();
+                counts.entry(key).or_default().0 += 1;
+            }
+            for example in negatives {
+                if let Some(matched) = match_induced_template(candidate.generalization(), example) {
+                    if let Some(bound) = matched.binding(variable) {
+                        counts.entry(bound.canonical_record()).or_default().1 += 1;
+                    }
+                }
+            }
+            let clusters = counts
+                .into_iter()
+                .map(
+                    |(binding_record, (positive_count, negative_count))| BindingCluster {
+                        binding_record,
+                        positive_count,
+                        negative_count,
+                    },
+                )
+                .collect::<Vec<_>>();
+            (clusters.len() > 1).then_some(SplitProposal { variable, clusters })
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod split_tests {
+    use super::*;
+    use crate::experimental::tdi2_structural_terms::{StructuralSymbol, StructuralTerm};
+
+    fn atom(id: u32) -> StructuralTerm {
+        StructuralTerm::atom(StructuralSymbol::constructor(id))
+    }
+    fn fact(x: StructuralTerm) -> StructuralTerm {
+        StructuralTerm::application(StructuralSymbol::constructor(1), vec![x]).expect("fact")
+    }
+
+    #[test]
+    fn counterexample_binding_can_make_split_discriminating() {
+        let candidate =
+            induce_positive_template(&[fact(atom(1)), fact(atom(2))]).expect("candidate");
+        let positives = [fact(atom(1)), fact(atom(1))];
+        let negatives = [fact(atom(9))];
+        let splits = propose_binding_splits(&candidate, &positives, &negatives);
+        assert!(splits.iter().any(SplitProposal::is_discriminating));
+    }
+}
