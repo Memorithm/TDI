@@ -832,3 +832,46 @@ mod split_tests {
         assert!(splits.iter().any(SplitProposal::is_discriminating));
     }
 }
+
+
+/// Merge alpha-equivalent candidates without hiding duplicate support rows.
+pub fn propose_alpha_merge(
+    left: &PositiveTemplateCandidate,
+    right: &PositiveTemplateCandidate,
+) -> Result<Option<PositiveTemplateCandidate>, StructuralTermError> {
+    if !alpha_equivalent(left.generalization(), right.generalization())? {
+        return Ok(None);
+    }
+    let mut sources = left.source_records.clone();
+    sources.extend(right.source_records.iter().cloned());
+    sources.sort_unstable();
+    Ok(Some(PositiveTemplateCandidate {
+        generalization: alpha_normalize_template(left.generalization())?,
+        support: left.support + right.support,
+        source_records: sources,
+    }))
+}
+
+#[cfg(test)]
+mod merge_tests {
+    use super::*;
+    use crate::experimental::tdi2_structural_terms::{StructuralSymbol, StructuralTerm};
+
+    fn atom(id: u32) -> StructuralTerm {
+        StructuralTerm::atom(StructuralSymbol::constructor(id))
+    }
+    fn fact(x: StructuralTerm) -> StructuralTerm {
+        StructuralTerm::application(StructuralSymbol::constructor(1), vec![x]).expect("fact")
+    }
+
+    #[test]
+    fn equivalent_candidates_merge_support_without_deduplicating_evidence() {
+        let left = induce_positive_template(&[fact(atom(1)), fact(atom(2))]).expect("left");
+        let right = induce_positive_template(&[fact(atom(3)), fact(atom(4))]).expect("right");
+        let merged = propose_alpha_merge(&left, &right)
+            .expect("merge")
+            .expect("equivalent");
+        assert_eq!(merged.support(), 4);
+        assert_eq!(merged.source_records().len(), 4);
+    }
+}
