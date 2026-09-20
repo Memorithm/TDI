@@ -745,3 +745,147 @@ mod mapping_control_tests {
         assert_ne!(rotated.resolve(roles[0]), Some(ObservedEntityId::new(0)));
     }
 }
+
+
+use super::tdi2_intuition::BooleanState;
+use super::tdi2_observation_graph::{ObservedEntity, ObservedRelation};
+use super::tdi2_template_induction::EpisodeId;
+
+/// Frozen deterministic mapping case with evaluator-only expected correspondence.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MappingCase {
+    pub roles: Vec<StructuralVariableId>,
+    pub patterns: Vec<RoleRelationPattern>,
+    pub target: ObservationGraph,
+    pub expected: RoleEntityMap,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MappingCampaignSummary {
+    pub total: usize,
+    pub unique_exact: usize,
+    pub ambiguous: usize,
+    pub insufficient: usize,
+    pub wrong_unique: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MappingCampaignError {
+    CaseIdOverflow,
+    Search(MappingSearchError),
+    Constraint(MappingConstraintError),
+}
+
+impl From<MappingSearchError> for MappingCampaignError {
+    fn from(error: MappingSearchError) -> Self { Self::Search(error) }
+}
+impl From<MappingConstraintError> for MappingCampaignError {
+    fn from(error: MappingConstraintError) -> Self { Self::Constraint(error) }
+}
+
+/// Build one surface-novel typed-relation case. Expected bindings are retained
+/// by the evaluator only and never passed into exact_mapping_search.
+pub fn mapping_case(case_id: u32) -> Result<MappingCase, MappingCampaignError> {
+    let base = 100_000u32
+        .checked_add(case_id.checked_mul(10).ok_or(MappingCampaignError::CaseIdOverflow)?)
+        .ok_or(MappingCampaignError::CaseIdOverflow)?;
+    let entities = [
+        ObservedEntityId::new(base + 1),
+        ObservedEntityId::new(base + 2),
+        ObservedEntityId::new(base + 3),
+    ];
+    let permutations = [
+        [0usize, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+    ];
+    let permutation = permutations[(case_id as usize) % permutations.len()];
+    let roles = vec![
+        StructuralVariableId::new(0),
+        StructuralVariableId::new(1),
+        StructuralVariableId::new(2),
+    ];
+    let mapped = [
+        entities[permutation[0]],
+        entities[permutation[1]],
+        entities[permutation[2]],
+    ];
+    let relations = [
+        ObservedRelationId::new(101),
+        ObservedRelationId::new(102),
+        ObservedRelationId::new(103),
+    ];
+    let patterns = vec![
+        RoleRelationPattern { left: roles[0], relation: relations[0], right: roles[1] },
+        RoleRelationPattern { left: roles[1], relation: relations[1], right: roles[2] },
+        RoleRelationPattern { left: roles[0], relation: relations[2], right: roles[2] },
+    ];
+    let target = ObservationGraph::new(
+        EpisodeId::new(20_000 + u64::from(case_id)),
+        entities
+            .iter()
+            .copied()
+            .map(|id| ObservedEntity::new(id, BooleanState::default()))
+            .collect(),
+        vec![
+            ObservedRelation::new(mapped[0], relations[0], mapped[1]),
+            ObservedRelation::new(mapped[1], relations[1], mapped[2]),
+            ObservedRelation::new(mapped[0], relations[2], mapped[2]),
+        ],
+    )
+    .expect("fixed case graph is structurally valid");
+    let expected = RoleEntityMap::new(
+        &roles,
+        &target,
+        vec![
+            RoleEntityBinding::new(roles[0], mapped[0]),
+            RoleEntityBinding::new(roles[1], mapped[1]),
+            RoleEntityBinding::new(roles[2], mapped[2]),
+        ],
+    )?;
+    Ok(MappingCase { roles, patterns, target, expected })
+}
+
+pub fn run_mapping_campaign(
+    start_case: u32,
+    count: usize,
+) -> Result<MappingCampaignSummary, MappingCampaignError> {
+    let mut summary = MappingCampaignSummary::default();
+    for offset in 0..count {
+        let offset = u32::try_from(offset).map_err(|_| MappingCampaignError::CaseIdOverflow)?;
+        let case_id = start_case.checked_add(offset).ok_or(MappingCampaignError::CaseIdOverflow)?;
+        let case = mapping_case(case_id)?;
+        let search = exact_mapping_search(&case.roles, &case.patterns, &case.target)?;
+        summary.total += 1;
+        match decide_exact_mapping(&search) {
+            MappingDecision::Selected(mapping) if mapping == case.expected => summary.unique_exact += 1,
+            MappingDecision::Selected(_) => summary.wrong_unique += 1,
+            MappingDecision::Ambiguous { .. } => summary.ambiguous += 1,
+            MappingDecision::InsufficientStructure { .. } => summary.insufficient += 1,
+        }
+    }
+    Ok(summary)
+}
+
+pub const MAPPING_DEVELOPMENT_START: u32 = 1_000;
+pub const MAPPING_DEVELOPMENT_CASES: usize = 32;
+
+pub fn run_mapping_development() -> Result<MappingCampaignSummary, MappingCampaignError> {
+    run_mapping_campaign(MAPPING_DEVELOPMENT_START, MAPPING_DEVELOPMENT_CASES)
+}
+
+#[cfg(test)]
+mod mapping_development_tests {
+    use super::*;
+    #[test]
+    fn development_recovers_surface_novel_role_mappings() {
+        let summary = run_mapping_development().expect("campaign");
+        assert_eq!(summary.total, MAPPING_DEVELOPMENT_CASES);
+        assert_eq!(summary.unique_exact, MAPPING_DEVELOPMENT_CASES);
+        assert_eq!(summary.ambiguous, 0);
+        assert_eq!(summary.wrong_unique, 0);
+    }
+}
