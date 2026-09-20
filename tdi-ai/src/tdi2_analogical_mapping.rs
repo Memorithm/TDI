@@ -682,3 +682,66 @@ mod mapping_decision_tests {
         );
     }
 }
+
+
+/// Surface-identity control: role raw ids are treated as target entity raw ids.
+#[must_use]
+pub fn surface_identity_control(
+    roles: &[StructuralVariableId],
+    target: &ObservationGraph,
+) -> Option<RoleEntityMap> {
+    if roles.is_empty() {
+        return None;
+    }
+    let bindings = roles
+        .iter()
+        .copied()
+        .map(|role| RoleEntityBinding::new(role, ObservedEntityId::new(role.raw())))
+        .collect::<Vec<_>>();
+    RoleEntityMap::new(roles, target, bindings).ok()
+}
+
+/// Deterministic arbitrary-permutation control independent of relation structure.
+#[must_use]
+pub fn rotated_entity_control(
+    roles: &[StructuralVariableId],
+    target: &ObservationGraph,
+    offset: usize,
+) -> Option<RoleEntityMap> {
+    if roles.is_empty() || roles.len() > target.entities().len() {
+        return None;
+    }
+    let mut roles = roles.to_vec();
+    roles.sort_unstable();
+    let entities = target.entities().iter().map(|entity| entity.id()).collect::<Vec<_>>();
+    let shift = offset % entities.len();
+    let bindings = roles
+        .iter()
+        .enumerate()
+        .map(|(index, role)| {
+            RoleEntityBinding::new(*role, entities[(index + shift) % entities.len()])
+        })
+        .collect::<Vec<_>>();
+    RoleEntityMap::new(&roles, target, bindings).ok()
+}
+
+#[cfg(test)]
+mod mapping_control_tests {
+    use super::*;
+    use crate::experimental::tdi2_intuition::BooleanState;
+    use crate::experimental::tdi2_observation_graph::ObservedEntity;
+    use crate::experimental::tdi2_template_induction::EpisodeId;
+
+    #[test]
+    fn controls_are_explicitly_surface_or_arbitrary() {
+        let graph = ObservationGraph::new(
+            EpisodeId::new(6),
+            vec![0,1,10].into_iter().map(|id| ObservedEntity::new(ObservedEntityId::new(id), BooleanState::default())).collect(),
+            Vec::new(),
+        ).expect("graph");
+        let roles = [StructuralVariableId::new(0), StructuralVariableId::new(1)];
+        assert!(surface_identity_control(&roles, &graph).is_some());
+        let rotated = rotated_entity_control(&roles, &graph, 1).expect("rotated");
+        assert_ne!(rotated.resolve(roles[0]), Some(ObservedEntityId::new(0)));
+    }
+}
