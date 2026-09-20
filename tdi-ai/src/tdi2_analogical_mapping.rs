@@ -221,3 +221,99 @@ mod mapping_constraint_tests {
         ));
     }
 }
+
+
+use super::tdi2_observation_graph::ObservedRelationId;
+
+/// Relation between two abstract role variables.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RoleRelationPattern {
+    pub left: StructuralVariableId,
+    pub relation: ObservedRelationId,
+    pub right: StructuralVariableId,
+}
+
+/// Exact relation-preservation accounting for one candidate mapping.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RelationPreservation {
+    pub expected: usize,
+    pub matched: usize,
+    pub missing: usize,
+}
+
+impl RelationPreservation {
+    #[must_use]
+    pub const fn is_exact(self) -> bool { self.expected > 0 && self.missing == 0 }
+}
+
+#[must_use]
+pub fn relation_preservation(
+    patterns: &[RoleRelationPattern],
+    mapping: &RoleEntityMap,
+    target: &ObservationGraph,
+) -> RelationPreservation {
+    let target_relations = target
+        .relations()
+        .iter()
+        .map(|relation| (relation.left(), relation.relation(), relation.right()))
+        .collect::<BTreeSet<_>>();
+    let mut matched = 0usize;
+    for pattern in patterns {
+        if let (Some(left), Some(right)) = (
+            mapping.resolve(pattern.left),
+            mapping.resolve(pattern.right),
+        ) {
+            if target_relations.contains(&(left, pattern.relation, right)) {
+                matched += 1;
+            }
+        }
+    }
+    RelationPreservation {
+        expected: patterns.len(),
+        matched,
+        missing: patterns.len().saturating_sub(matched),
+    }
+}
+
+#[cfg(test)]
+mod preservation_tests {
+    use super::*;
+    use crate::experimental::tdi2_intuition::BooleanState;
+    use crate::experimental::tdi2_observation_graph::{ObservedEntity, ObservedRelation};
+    use crate::experimental::tdi2_template_induction::EpisodeId;
+
+    #[test]
+    fn exact_mapping_preserves_typed_directional_relation() {
+        let roles = [StructuralVariableId::new(1), StructuralVariableId::new(2)];
+        let relation = ObservedRelationId::new(7);
+        let graph = ObservationGraph::new(
+            EpisodeId::new(2),
+            vec![
+                ObservedEntity::new(ObservedEntityId::new(100), BooleanState::default()),
+                ObservedEntity::new(ObservedEntityId::new(200), BooleanState::default()),
+            ],
+            vec![ObservedRelation::new(
+                ObservedEntityId::new(100),
+                relation,
+                ObservedEntityId::new(200),
+            )],
+        )
+        .expect("graph");
+        let mapping = RoleEntityMap::new(
+            &roles,
+            &graph,
+            vec![
+                RoleEntityBinding::new(roles[0], ObservedEntityId::new(100)),
+                RoleEntityBinding::new(roles[1], ObservedEntityId::new(200)),
+            ],
+        )
+        .expect("mapping");
+        let score = relation_preservation(
+            &[RoleRelationPattern { left: roles[0], relation, right: roles[1] }],
+            &mapping,
+            &graph,
+        );
+        assert_eq!(score, RelationPreservation { expected: 1, matched: 1, missing: 0 });
+        assert!(score.is_exact());
+    }
+}
