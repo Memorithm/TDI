@@ -48,8 +48,12 @@ pub mod tdi21_freeze;
 pub mod tdi21_predicate_identifiability;
 #[path = "tdi21_provenance.rs"]
 pub mod tdi21_provenance;
+#[path = "tdi21_relational_address_search.rs"]
+pub mod tdi21_relational_address_search;
 #[path = "tdi21_relational_binding.rs"]
 pub mod tdi21_relational_binding;
+#[path = "tdi21_relational_learned.rs"]
+pub mod tdi21_relational_learned;
 #[path = "tdi21_relational_tasks.rs"]
 pub mod tdi21_relational_tasks;
 #[path = "tdi21_sequence_materializer.rs"]
