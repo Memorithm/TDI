@@ -531,3 +531,74 @@ mod cross_domain_validation_tests {
         );
     }
 }
+
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CrossDomainLogicalAccounting {
+    pub support: usize,
+    pub source_records: usize,
+    pub template_nodes: usize,
+    pub variables: usize,
+    pub canonical_bytes: usize,
+}
+
+#[must_use]
+pub fn cross_domain_logical_accounting(
+    candidate: &PositiveTemplateCandidate,
+) -> CrossDomainLogicalAccounting {
+    fn count(term: &StructuralTerm) -> (usize, usize) {
+        match term.kind() {
+            super::tdi2_structural_terms::StructuralTermKind::Variable(_) => (1, 1),
+            super::tdi2_structural_terms::StructuralTermKind::Atom(_) => (1, 0),
+            super::tdi2_structural_terms::StructuralTermKind::Application { arguments, .. } => {
+                arguments.iter().fold((1usize, 0usize), |(nodes, variables), child| {
+                    let (child_nodes, child_variables) = count(child);
+                    (nodes + child_nodes, variables + child_variables)
+                })
+            }
+        }
+    }
+    let (template_nodes, variables) = count(candidate.generalization());
+    CrossDomainLogicalAccounting {
+        support: candidate.support(),
+        source_records: candidate.source_records().len(),
+        template_nodes,
+        variables,
+        canonical_bytes: candidate.canonical_record().len(),
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CrossDomainReplay {
+    pub first: CrossDomainCampaignSummary,
+    pub second: CrossDomainCampaignSummary,
+    pub identical: bool,
+    pub accounting: CrossDomainLogicalAccounting,
+}
+
+pub fn replay_cross_domain_validation() -> Result<CrossDomainReplay, CrossDomainError> {
+    let first = run_cross_domain_validation()?;
+    let second = run_cross_domain_validation()?;
+    let candidate = induce_cross_domain_template(4, 5, CROSS_DOMAIN_VALIDATION_START)?;
+    Ok(CrossDomainReplay {
+        first,
+        second,
+        identical: first == second,
+        accounting: cross_domain_logical_accounting(&candidate),
+    })
+}
+
+#[cfg(test)]
+mod replay_tests {
+    use super::*;
+
+    #[test]
+    fn validation_replays_exactly_and_cost_is_logical_not_wall_clock() {
+        let replay = replay_cross_domain_validation().expect("replay");
+        assert!(replay.identical);
+        assert_eq!(replay.accounting.support, 2);
+        assert!(replay.accounting.template_nodes > 0);
+        assert!(replay.accounting.variables > 0);
+        assert!(replay.accounting.canonical_bytes > 0);
+    }
+}
