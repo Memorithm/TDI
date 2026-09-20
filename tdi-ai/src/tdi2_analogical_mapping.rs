@@ -889,3 +889,31 @@ mod mapping_development_tests {
         assert_eq!(summary.wrong_unique, 0);
     }
 }
+
+
+pub const MAPPING_VALIDATION_START: u32 = 2_000;
+pub const MAPPING_VALIDATION_CASES: usize = 32;
+
+/// Frozen non-final Validation population; no parameter selection occurs here.
+pub fn run_mapping_validation() -> Result<MappingCampaignSummary, MappingCampaignError> {
+    run_mapping_campaign(MAPPING_VALIDATION_START, MAPPING_VALIDATION_CASES)
+}
+
+#[cfg(test)]
+mod mapping_validation_tests {
+    use super::*;
+
+    #[test]
+    fn validation_population_is_disjoint_and_requires_no_retuning() {
+        assert!(
+            MAPPING_DEVELOPMENT_START + MAPPING_DEVELOPMENT_CASES as u32
+                <= MAPPING_VALIDATION_START
+        );
+        let summary = run_mapping_validation().expect("validation");
+        assert_eq!(summary.total, MAPPING_VALIDATION_CASES);
+        assert_eq!(summary.unique_exact, MAPPING_VALIDATION_CASES);
+        assert_eq!(summary.ambiguous, 0);
+        assert_eq!(summary.insufficient, 0);
+        assert_eq!(summary.wrong_unique, 0);
+    }
+}
