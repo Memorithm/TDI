@@ -617,3 +617,62 @@ mod score_tests {
         assert!(score.contingent_variables > 0);
     }
 }
+
+
+/// Frozen lexicographic Development/Validation candidate selection policy.
+pub const TEMPLATE_SELECTION_POLICY: &str =
+    "tdi2.2-template-selection-v1:pos-desc;neg-asc;vars-asc;record-asc";
+
+/// Select a candidate without fitting weights on the evaluated population.
+#[must_use]
+pub fn select_template_candidate<'a>(
+    candidates: &'a [PositiveTemplateCandidate],
+    positives: &[StructuralTerm],
+    negatives: &[StructuralTerm],
+) -> Option<&'a PositiveTemplateCandidate> {
+    candidates.iter().min_by(|left, right| {
+        let left_score = score_template_candidate(left, positives, negatives);
+        let right_score = score_template_candidate(right, positives, negatives);
+        right_score
+            .positive_admitted
+            .cmp(&left_score.positive_admitted)
+            .then_with(|| left_score.negative_admitted.cmp(&right_score.negative_admitted))
+            .then_with(|| {
+                left_score
+                    .contingent_variables
+                    .cmp(&right_score.contingent_variables)
+            })
+            .then_with(|| left.canonical_record().cmp(&right.canonical_record()))
+    })
+}
+
+#[cfg(test)]
+mod selection_tests {
+    use super::*;
+    use crate::experimental::tdi2_structural_terms::{StructuralSymbol, StructuralTerm};
+
+    fn atom(id: u32) -> StructuralTerm {
+        StructuralTerm::atom(StructuralSymbol::constructor(id))
+    }
+    fn fact(id: u32, x: StructuralTerm) -> StructuralTerm {
+        StructuralTerm::application(StructuralSymbol::constructor(id), vec![x]).expect("term")
+    }
+
+    #[test]
+    fn frozen_policy_prefers_negative_rejection_after_equal_positive_fit() {
+        let broad_positives = [fact(1, atom(1)), fact(1, atom(2))];
+        let broad = induce_positive_template(&broad_positives).expect("broad");
+        let narrow = induce_positive_template(&[fact(1, atom(1))]).expect("narrow");
+        let candidates = [broad.clone(), narrow];
+        let validation_positives = [fact(1, atom(1))];
+        let validation_negatives = [fact(1, atom(9))];
+        let chosen = select_template_candidate(
+            &candidates,
+            &validation_positives,
+            &validation_negatives,
+        )
+        .expect("chosen");
+        assert_ne!(chosen.canonical_record(), broad.canonical_record());
+        assert!(TEMPLATE_SELECTION_POLICY.contains("neg-asc"));
+    }
+}
