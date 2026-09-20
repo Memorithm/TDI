@@ -272,3 +272,80 @@ mod constraint_tests {
         assert!(!evaluation.passes());
     }
 }
+
+
+/// Stable structural path from a template root to a term node.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct StructuralPath(Vec<u16>);
+
+impl StructuralPath {
+    #[must_use]
+    pub fn indices(&self) -> &[u16] {
+        &self.0
+    }
+}
+
+/// Explicit partition of fixed structural nodes and contingent variables.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TemplatePartition {
+    fixed_nodes: Vec<StructuralPath>,
+    contingent_variables: Vec<(StructuralPath, StructuralVariableId)>,
+}
+
+impl TemplatePartition {
+    #[must_use]
+    pub fn fixed_nodes(&self) -> &[StructuralPath] {
+        &self.fixed_nodes
+    }
+
+    #[must_use]
+    pub fn contingent_variables(&self) -> &[(StructuralPath, StructuralVariableId)] {
+        &self.contingent_variables
+    }
+}
+
+/// Partition an induced term without assigning semantics to variable positions.
+#[must_use]
+pub fn partition_template(template: &StructuralTerm) -> TemplatePartition {
+    fn visit(term: &StructuralTerm, path: &mut Vec<u16>, out: &mut TemplatePartition) {
+        match term.kind() {
+            StructuralTermKind::Variable(variable) => out
+                .contingent_variables
+                .push((StructuralPath(path.clone()), *variable)),
+            StructuralTermKind::Atom(_) => out.fixed_nodes.push(StructuralPath(path.clone())),
+            StructuralTermKind::Application { arguments, .. } => {
+                out.fixed_nodes.push(StructuralPath(path.clone()));
+                for (index, child) in arguments.iter().enumerate() {
+                    path.push(u16::try_from(index).expect("bounded arity fits u16"));
+                    visit(child, path, out);
+                    path.pop();
+                }
+            }
+        }
+    }
+    let mut out = TemplatePartition::default();
+    visit(template, &mut Vec::new(), &mut out);
+    out
+}
+
+#[cfg(test)]
+mod partition_tests {
+    use super::*;
+    use crate::experimental::tdi2_structural_terms::StructuralSymbol;
+
+    #[test]
+    fn variables_are_contingent_while_constructor_is_fixed() {
+        let term = StructuralTerm::application(
+            StructuralSymbol::constructor(1),
+            vec![
+                StructuralTerm::variable(StructuralVariableId::new(7)),
+                StructuralTerm::atom(StructuralSymbol::constructor(2)),
+            ],
+        )
+        .expect("term");
+        let partition = partition_template(&term);
+        assert_eq!(partition.contingent_variables().len(), 1);
+        assert_eq!(partition.fixed_nodes().len(), 2);
+        assert_eq!(partition.contingent_variables()[0].0.indices(), &[0]);
+    }
+}
