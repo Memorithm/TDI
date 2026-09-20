@@ -115,8 +115,8 @@ mod positive_tests {
     }
 }
 
-use std::collections::BTreeMap;
 use super::tdi2_structural_terms::{StructuralTermKind, StructuralVariableId};
+use std::collections::BTreeMap;
 
 /// Exact first-order variable binding recovered while matching a candidate.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -239,9 +239,7 @@ pub fn evaluate_candidate_constraints(
 #[cfg(test)]
 mod constraint_tests {
     use super::*;
-    use crate::experimental::tdi2_structural_terms::{
-        StructuralSymbol, StructuralVariableId,
-    };
+    use crate::experimental::tdi2_structural_terms::{StructuralSymbol, StructuralVariableId};
 
     fn atom(id: u32) -> StructuralTerm {
         StructuralTerm::atom(StructuralSymbol::constructor(10_000 + id))
@@ -272,7 +270,6 @@ mod constraint_tests {
         assert!(!evaluation.passes());
     }
 }
-
 
 /// Stable structural path from a template root to a term node.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -350,9 +347,8 @@ mod partition_tests {
     }
 }
 
-
-use std::collections::BTreeSet;
 use super::tdi2_structural_terms::StructuralSymbolNamespace;
+use std::collections::BTreeSet;
 
 /// One variable whose bindings are concrete episode-local entities in every example.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -442,7 +438,6 @@ mod role_tests {
         assert_eq!(roles[0].distinct_entity_count(), 3);
     }
 }
-
 
 /// Descriptive relation-system diagnostic; deliberately not a single quality score.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -541,11 +536,8 @@ mod systematicity_tests {
             vec![StructuralTerm::variable(v1), StructuralTerm::variable(v2)],
         )
         .expect("r2");
-        let root = StructuralTerm::application(
-            StructuralSymbol::constructor(99),
-            vec![r1, r2],
-        )
-        .expect("root");
+        let root = StructuralTerm::application(StructuralSymbol::constructor(99), vec![r1, r2])
+            .expect("root");
         let roles = [v0, v1, v2]
             .into_iter()
             .map(|variable| InducedRole {
