@@ -387,10 +387,10 @@ pub fn evaluate_address_validation(
             u64::from(RELATIONAL_ADDRESS_BITS),
         )?;
         let predicted = result.predict(sample.input);
-        if let Some(previous_input) = predicted_inputs.insert(predicted, sample.input)
-            && previous_input != sample.input
-        {
-            checked_add(&mut evidence.prediction_aliases, 1)?;
+        if let Some(previous_input) = predicted_inputs.insert(predicted, sample.input) {
+            if previous_input != sample.input {
+                checked_add(&mut evidence.prediction_aliases, 1)?;
+            }
         }
         if predicted != sample.expected {
             checked_add(&mut evidence.address_mismatches, 1)?;
@@ -414,19 +414,19 @@ pub fn evaluate_cross_namespace_aliases(
     for sample in &development.0.samples {
         checked_add(&mut evidence.development_samples, 1)?;
         let predicted = result.predict(sample.input);
-        if let Some(previous_input) = predicted_inputs.insert(predicted, sample.input)
-            && previous_input != sample.input
-        {
-            checked_add(&mut evidence.prediction_aliases, 1)?;
+        if let Some(previous_input) = predicted_inputs.insert(predicted, sample.input) {
+            if previous_input != sample.input {
+                checked_add(&mut evidence.prediction_aliases, 1)?;
+            }
         }
     }
     for sample in &validation.0.samples {
         checked_add(&mut evidence.validation_samples, 1)?;
         let predicted = result.predict(sample.input);
-        if let Some(previous_input) = predicted_inputs.insert(predicted, sample.input)
-            && previous_input != sample.input
-        {
-            checked_add(&mut evidence.prediction_aliases, 1)?;
+        if let Some(previous_input) = predicted_inputs.insert(predicted, sample.input) {
+            if previous_input != sample.input {
+                checked_add(&mut evidence.prediction_aliases, 1)?;
+            }
         }
     }
     Ok(evidence)
