@@ -200,5 +200,7 @@ pub mod tdi2_template_induction;
 pub mod tdi2_template_learning;
 #[path = "tdi2_analogical_mapping.rs"]
 pub mod tdi2_analogical_mapping;
+#[path = "tdi2_cross_domain.rs"]
+pub mod tdi2_cross_domain;
 #[path = "tdi2_temporal_delta.rs"]
 pub mod tdi2_temporal_delta;
