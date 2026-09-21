@@ -1,0 +1,21 @@
+schema_version: 1
+programme: TDI-24
+stage: B
+status: candidate_pending_exact_head_qualification_and_merge
+contract_versions:
+  reflection_discriminative: tdi24-reflection-discriminative-generator-v1
+  reflection_nuisance: tdi24-reflection-nuisance-generator-v1
+  direction_reversal: tdi24-direction-reversal-generator-v1
+  non_chiral_control: tdi24-non-chiral-control-generator-v1
+  difficulty_strata: tdi24-difficulty-strata-v1
+  split_manifest: tdi24-split-manifest-v1
+  protected_label: tdi24-protected-label-api-v1
+  seed_registry: tdi24-seed-registry-v1
+  dataset_canonicalization: tdi24-dataset-canonicalization-v1
+authorizations:
+  training: false
+  development_evaluation: false
+  validation_evaluation: false
+  protected_or_final_access: false
+  scientific_claim: false
+  performance_claim: false
