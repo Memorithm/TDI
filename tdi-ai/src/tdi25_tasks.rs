@@ -10,6 +10,8 @@
 //! torsor nor chirality in the target construction.
 //! Slice 15 registers explicit position-geometry arms (linear/helical/
 //! learned/external) so no geometry is an implicit default.
+//! Slice 16 adds bounded deterministic difficulty strata independent of
+//! model output.
 
 use core::fmt;
 
@@ -36,6 +38,12 @@ pub const POSITION_GEOMETRY_ARM_CONTRACT: &str = "tdi25-position-geometry-arm-v1
 
 /// Inclusive upper bound on admissible geometry indices.
 pub const POSITION_GEOMETRY_INDEX_MAX: u64 = 1024;
+
+/// Versioned TDI-25 difficulty-strata contract.
+pub const DIFFICULTY_STRATA_CONTRACT: &str = "tdi25-difficulty-strata-v1";
+
+/// Inclusive upper bound on admissible difficulty levels (`0..=MAX`).
+pub const DIFFICULTY_LEVEL_MAX: u8 = 3;
 
 /// Inference-visible input for one torsor transport case.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -553,6 +561,55 @@ pub const fn position_geometry_registry() -> [PositionGeometryArm; 4] {
     ]
 }
 
+/// Bounded difficulty level independent of any model output.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct DifficultyLevel {
+    /// Discrete level in `0..=DIFFICULTY_LEVEL_MAX`.
+    pub level: u8,
+}
+
+impl DifficultyLevel {
+    /// Construct a fail-closed level.
+    pub fn new(level: u8) -> Result<Self, Tdi25TaskError> {
+        if level > DIFFICULTY_LEVEL_MAX {
+            return Err(Tdi25TaskError::DifficultyOutOfRange);
+        }
+        Ok(Self { level })
+    }
+
+    /// Deterministic stratum for a seed; never consults model output.
+    #[must_use]
+    pub fn from_seed(seed: u64) -> Self {
+        Self {
+            level: (seed % u64::from(DIFFICULTY_LEVEL_MAX + 1)) as u8,
+        }
+    }
+
+    /// Positive finite magnitude scale for the stratum.
+    #[must_use]
+    pub fn magnitude_scale(self) -> f64 {
+        1.0 + f64::from(self.level) * 0.25
+    }
+}
+
+/// Difficulty metadata attached to an existing Phase-B family seed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DifficultyStratum {
+    pub seed: u64,
+    pub level: DifficultyLevel,
+    pub generator_contract: &'static str,
+}
+
+/// Assign a bounded difficulty stratum from a deterministic seed.
+#[must_use]
+pub fn difficulty_stratum(seed: u64) -> DifficultyStratum {
+    DifficultyStratum {
+        seed,
+        level: DifficultyLevel::from_seed(seed),
+        generator_contract: DIFFICULTY_STRATA_CONTRACT,
+    }
+}
+
 /// TDI-25 task-generation failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tdi25TaskError {
@@ -560,6 +617,7 @@ pub enum Tdi25TaskError {
     GeometryIndexOutOfRange,
     ExternalPositionRequired,
     UnknownGeometryArm,
+    DifficultyOutOfRange,
     Bridge(Tdi25Error),
 }
 
@@ -574,6 +632,9 @@ impl fmt::Display for Tdi25TaskError {
                 formatter.write_str("TDI-25 external position geometry requires a supplied point")
             }
             Self::UnknownGeometryArm => formatter.write_str("TDI-25 unknown position geometry arm"),
+            Self::DifficultyOutOfRange => {
+                formatter.write_str("TDI-25 difficulty level out of admissible range")
+            }
             Self::Bridge(error) => write!(formatter, "TDI-25 bridge rejected task: {error}"),
         }
     }
@@ -914,5 +975,28 @@ mod tests {
             ),
             Err(Tdi25TaskError::GeometryIndexOutOfRange)
         );
+    }
+
+    #[test]
+    fn difficulty_strata_are_deterministic_bounded_and_model_independent() {
+        for seed in 0..64 {
+            let stratum = difficulty_stratum(seed);
+            assert_eq!(stratum, difficulty_stratum(seed));
+            assert!(stratum.level.level <= DIFFICULTY_LEVEL_MAX);
+            assert_eq!(stratum.generator_contract, DIFFICULTY_STRATA_CONTRACT);
+            assert_eq!(stratum.level, DifficultyLevel::from_seed(seed));
+            let scale = stratum.level.magnitude_scale();
+            assert!(scale.is_finite() && scale >= 1.0);
+            assert!(scale <= 1.0 + f64::from(DIFFICULTY_LEVEL_MAX) * 0.25);
+        }
+        assert_eq!(
+            DifficultyLevel::new(DIFFICULTY_LEVEL_MAX + 1),
+            Err(Tdi25TaskError::DifficultyOutOfRange)
+        );
+        let mut seen = [false; (DIFFICULTY_LEVEL_MAX as usize) + 1];
+        for seed in 0..32 {
+            seen[difficulty_stratum(seed).level.level as usize] = true;
+        }
+        assert!(seen.iter().all(|hit| *hit));
     }
 }
