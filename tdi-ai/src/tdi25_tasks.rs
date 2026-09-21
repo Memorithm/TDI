@@ -4,18 +4,30 @@
 //! keeping the oracle separate from inference inputs.
 //! Slice 12 adds chiral-favorable mirrored handedness pairs with the same
 //! oracle/input separation.
+//! Slice 13 adds mixed geometry tasks that require both a transported
+//! relation and a parity-sensitive relation.
+//! Slice 14 adds neutral six-component controls that privilege neither
+//! torsor nor chirality in the target construction.
 
 use core::fmt;
 
 use super::tdi22_torsor::{Torsor3, Twist3, Vec3};
 use super::tdi24_chiral::{Chiral6, ChiralScoreWeights};
-use super::tdi25_torsor_chiral::{TaskFamily, Tdi25Error, chiral_arm_score, torsor_arm_score};
+use super::tdi25_torsor_chiral::{
+    Generic6, TaskFamily, Tdi25Error, chiral_arm_score, generic_arm_score, torsor_arm_score,
+};
 
 /// Versioned TDI-25 torsor-favorable transport task contract.
 pub const TORSOR_TRANSPORT_TASK_CONTRACT: &str = "tdi25-torsor-transport-task-v1";
 
 /// Versioned TDI-25 chiral-favorable reflection task contract.
 pub const CHIRAL_REFLECTION_TASK_CONTRACT: &str = "tdi25-chiral-reflection-task-v1";
+
+/// Versioned TDI-25 mixed-geometry task contract.
+pub const MIXED_GEOMETRY_TASK_CONTRACT: &str = "tdi25-mixed-geometry-task-v1";
+
+/// Versioned TDI-25 neutral six-component control task contract.
+pub const NEUTRAL_CONTROL_TASK_CONTRACT: &str = "tdi25-neutral-control-task-v1";
 
 /// Inference-visible input for one torsor transport case.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -184,6 +196,227 @@ pub fn chiral_reflection_pair(pair_id: u64) -> Result<ChiralReflectionPair, Tdi2
     })
 }
 
+/// Inference-visible input combining torsor transport and chiral reflection.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MixedGeometryInput {
+    pub case_id: u64,
+    pub torsor_query: Twist3,
+    pub torsor_key: Torsor3,
+    pub query_position: Vec3,
+    pub chiral_query: Chiral6,
+    pub chiral_key: Chiral6,
+    pub weights: ChiralScoreWeights,
+    pub task_family: TaskFamily,
+    pub generator_contract: &'static str,
+}
+
+/// Oracle requiring both transport invariance and parity-sensitive handedness.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MixedGeometryOracle {
+    pub pair_id: u64,
+    pub handedness: HandednessTarget,
+    pub expected_torsor_score: f64,
+    pub expected_chiral_score: f64,
+    pub generator_contract: &'static str,
+}
+
+/// Base vs jointly-transformed mixed geometry pair.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MixedGeometryPair {
+    pub base: MixedGeometryInput,
+    pub transformed: MixedGeometryInput,
+    pub base_oracle: MixedGeometryOracle,
+    pub transformed_oracle: MixedGeometryOracle,
+}
+
+/// Deterministically generate one mixed geometry task.
+///
+/// The transformed member applies torsor reduction-point transport and
+/// simultaneous chiral mirror reflection together. The oracle demands the
+/// shared torsor score (transport-invariant) and opposite handedness with a
+/// parity-odd chiral score (reflection-sensitive).
+pub fn mixed_geometry_pair(pair_id: u64) -> Result<MixedGeometryPair, Tdi25TaskError> {
+    let base_id = pair_id
+        .checked_mul(2)
+        .ok_or(Tdi25TaskError::CaseIdOverflow)?;
+    let transformed_id = base_id
+        .checked_add(1)
+        .ok_or(Tdi25TaskError::CaseIdOverflow)?;
+
+    let offset = ((pair_id % 37) as f64 + 1.0) / 96.0;
+    let v = |x, y, z| {
+        Vec3::new(x, y, z).map_err(|error| Tdi25TaskError::Bridge(Tdi25Error::Torsor(error)))
+    };
+
+    let resultant = v(2.0 + offset, 3.0, -4.0)?;
+    let moment = v(-5.0, 7.0 + offset, 11.0)?;
+    let reference = v(13.0, -17.0, 19.0 + offset)?;
+    let target_reference = v(-2.0 - offset, 5.0, 7.0)?;
+    let query_position = v(-23.0, 29.0 + offset, 31.0)?;
+    let torsor_query = Twist3::new(v(1.0, -2.0, 3.0 + offset)?, v(0.5 + offset, 4.0, -1.0)?)
+        .map_err(|error| Tdi25TaskError::Bridge(Tdi25Error::Torsor(error)))?;
+    let original_key = Torsor3::new(resultant, moment, reference)
+        .map_err(|error| Tdi25TaskError::Bridge(Tdi25Error::Torsor(error)))?;
+    let transported_key = original_key
+        .transport(target_reference)
+        .map_err(|error| Tdi25TaskError::Bridge(Tdi25Error::Torsor(error)))?;
+    let expected_torsor_score = torsor_arm_score(torsor_query, original_key, query_position)
+        .map_err(Tdi25TaskError::Bridge)?;
+
+    let weights = ChiralScoreWeights::new(0.7, -0.2, 1.3)
+        .map_err(|error| Tdi25TaskError::Bridge(Tdi25Error::Chiral(error)))?;
+    let chiral_query = Chiral6::new([1.0 + offset, -0.75, 0.5], [0.625, -1.0 - offset, 1.5])
+        .map_err(|error| Tdi25TaskError::Bridge(Tdi25Error::Chiral(error)))?;
+    let chiral_key = Chiral6::new([-0.5, 1.25 + offset, -1.0], [1.75 + offset, 0.375, -0.875])
+        .map_err(|error| Tdi25TaskError::Bridge(Tdi25Error::Chiral(error)))?;
+    let base_chiral_score =
+        chiral_arm_score(chiral_query, chiral_key, weights).map_err(Tdi25TaskError::Bridge)?;
+    let mirrored_query = chiral_query.mirror();
+    let mirrored_key = chiral_key.mirror();
+    let transformed_chiral_score =
+        chiral_arm_score(mirrored_query, mirrored_key, weights).map_err(Tdi25TaskError::Bridge)?;
+
+    let make_input = |case_id, torsor_key, chiral_query, chiral_key| MixedGeometryInput {
+        case_id,
+        torsor_query,
+        torsor_key,
+        query_position,
+        chiral_query,
+        chiral_key,
+        weights,
+        task_family: TaskFamily::Mixed,
+        generator_contract: MIXED_GEOMETRY_TASK_CONTRACT,
+    };
+
+    Ok(MixedGeometryPair {
+        base: make_input(base_id, original_key, chiral_query, chiral_key),
+        transformed: make_input(
+            transformed_id,
+            transported_key,
+            mirrored_query,
+            mirrored_key,
+        ),
+        base_oracle: MixedGeometryOracle {
+            pair_id,
+            handedness: HandednessTarget::Right,
+            expected_torsor_score,
+            expected_chiral_score: base_chiral_score,
+            generator_contract: MIXED_GEOMETRY_TASK_CONTRACT,
+        },
+        transformed_oracle: MixedGeometryOracle {
+            pair_id,
+            handedness: HandednessTarget::Left,
+            expected_torsor_score,
+            expected_chiral_score: transformed_chiral_score,
+            generator_contract: MIXED_GEOMETRY_TASK_CONTRACT,
+        },
+    })
+}
+
+/// Structure-agnostic binary target for neutral controls.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NeutralTarget {
+    /// Positive class under the deterministic sign schedule.
+    ClassA,
+    /// Negative class under the deterministic sign schedule.
+    ClassB,
+}
+
+/// Inference-visible input for one neutral Generic6 control case.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NeutralControlInput {
+    pub case_id: u64,
+    pub query: Generic6,
+    pub key: Generic6,
+    pub task_family: TaskFamily,
+    pub generator_contract: &'static str,
+}
+
+/// Target/score oracle retained separately from inference input.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NeutralControlOracle {
+    pub pair_id: u64,
+    pub target: NeutralTarget,
+    pub expected_score: f64,
+    pub generator_contract: &'static str,
+}
+
+/// Opposite-target neutral pair that privileges neither torsor nor chirality.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NeutralControlPair {
+    pub class_a: NeutralControlInput,
+    pub class_b: NeutralControlInput,
+    pub class_a_oracle: NeutralControlOracle,
+    pub class_b_oracle: NeutralControlOracle,
+}
+
+/// Deterministically generate one neutral six-component control pair.
+///
+/// Both members use the matched Generic6 capacity only. The class label is
+/// driven by a global sign on generic components, not by torsor transport or
+/// chiral parity structure.
+pub fn neutral_control_pair(pair_id: u64) -> Result<NeutralControlPair, Tdi25TaskError> {
+    let class_a_id = pair_id
+        .checked_mul(2)
+        .ok_or(Tdi25TaskError::CaseIdOverflow)?;
+    let class_b_id = class_a_id
+        .checked_add(1)
+        .ok_or(Tdi25TaskError::CaseIdOverflow)?;
+
+    let offset = ((pair_id % 43) as f64 + 1.0) / 112.0;
+    let make_carriers = |sign: f64| -> Result<(Generic6, Generic6), Tdi25TaskError> {
+        let query = Generic6::new([
+            sign * (1.0 + offset),
+            0.5,
+            -0.75,
+            0.375 + offset,
+            -0.875,
+            1.25 - offset,
+        ])
+        .map_err(Tdi25TaskError::Bridge)?;
+        let key = Generic6::new([
+            1.0,
+            sign * (0.625 + offset),
+            0.25,
+            -1.125,
+            0.625 + offset,
+            0.5,
+        ])
+        .map_err(Tdi25TaskError::Bridge)?;
+        Ok((query, key))
+    };
+
+    let (query_a, key_a) = make_carriers(1.0)?;
+    let (query_b, key_b) = make_carriers(-1.0)?;
+    let score_a = generic_arm_score(query_a, key_a).map_err(Tdi25TaskError::Bridge)?;
+    let score_b = generic_arm_score(query_b, key_b).map_err(Tdi25TaskError::Bridge)?;
+
+    let make_input = |case_id, query, key| NeutralControlInput {
+        case_id,
+        query,
+        key,
+        task_family: TaskFamily::Neutral,
+        generator_contract: NEUTRAL_CONTROL_TASK_CONTRACT,
+    };
+
+    Ok(NeutralControlPair {
+        class_a: make_input(class_a_id, query_a, key_a),
+        class_b: make_input(class_b_id, query_b, key_b),
+        class_a_oracle: NeutralControlOracle {
+            pair_id,
+            target: NeutralTarget::ClassA,
+            expected_score: score_a,
+            generator_contract: NEUTRAL_CONTROL_TASK_CONTRACT,
+        },
+        class_b_oracle: NeutralControlOracle {
+            pair_id,
+            target: NeutralTarget::ClassB,
+            expected_score: score_b,
+            generator_contract: NEUTRAL_CONTROL_TASK_CONTRACT,
+        },
+    })
+}
+
 /// TDI-25 task-generation failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tdi25TaskError {
@@ -321,6 +554,156 @@ mod tests {
     fn chiral_case_id_overflow_fails_closed() {
         assert_eq!(
             chiral_reflection_pair(u64::MAX),
+            Err(Tdi25TaskError::CaseIdOverflow)
+        );
+    }
+
+    #[test]
+    fn mixed_pairs_are_deterministic_and_keep_oracle_outside_inputs() {
+        let pair = mixed_geometry_pair(7).unwrap();
+        assert_eq!(pair, mixed_geometry_pair(7).unwrap());
+        assert_ne!(pair.base.case_id, pair.transformed.case_id);
+        assert_eq!(pair.base.task_family, TaskFamily::Mixed);
+        assert_eq!(pair.transformed.task_family, TaskFamily::Mixed);
+        assert_eq!(
+            pair.base_oracle.generator_contract,
+            MIXED_GEOMETRY_TASK_CONTRACT
+        );
+        assert_eq!(pair.base_oracle.handedness, HandednessTarget::Right);
+        assert_eq!(pair.transformed_oracle.handedness, HandednessTarget::Left);
+        assert_eq!(
+            pair.base_oracle.expected_torsor_score,
+            pair.transformed_oracle.expected_torsor_score
+        );
+        assert_ne!(
+            pair.base_oracle.expected_chiral_score,
+            pair.transformed_oracle.expected_chiral_score
+        );
+    }
+
+    #[test]
+    fn mixed_transform_preserves_torsor_score_and_flips_chiral_parity() {
+        for pair_id in 0..24 {
+            let pair = mixed_geometry_pair(pair_id).unwrap();
+            assert_eq!(
+                pair.base.torsor_key.resultant(),
+                pair.transformed.torsor_key.resultant()
+            );
+            assert_ne!(
+                pair.base.torsor_key.reference(),
+                pair.transformed.torsor_key.reference()
+            );
+            assert_eq!(
+                pair.transformed.chiral_query,
+                pair.base.chiral_query.mirror()
+            );
+            assert_eq!(pair.transformed.chiral_key, pair.base.chiral_key.mirror());
+            assert!(pair.base.weights.gamma.abs() > 0.0);
+
+            let base_torsor = torsor_arm_score(
+                pair.base.torsor_query,
+                pair.base.torsor_key,
+                pair.base.query_position,
+            )
+            .unwrap();
+            let transformed_torsor = torsor_arm_score(
+                pair.transformed.torsor_query,
+                pair.transformed.torsor_key,
+                pair.transformed.query_position,
+            )
+            .unwrap();
+            close(base_torsor, pair.base_oracle.expected_torsor_score);
+            close(
+                transformed_torsor,
+                pair.transformed_oracle.expected_torsor_score,
+            );
+            close(base_torsor, transformed_torsor);
+
+            let base_chiral = chiral_arm_score(
+                pair.base.chiral_query,
+                pair.base.chiral_key,
+                pair.base.weights,
+            )
+            .unwrap();
+            let transformed_chiral = chiral_arm_score(
+                pair.transformed.chiral_query,
+                pair.transformed.chiral_key,
+                pair.transformed.weights,
+            )
+            .unwrap();
+            close(base_chiral, pair.base_oracle.expected_chiral_score);
+            close(
+                transformed_chiral,
+                pair.transformed_oracle.expected_chiral_score,
+            );
+
+            let base_obs = observables(pair.base.chiral_query, pair.base.chiral_key).unwrap();
+            let transformed_obs =
+                observables(pair.transformed.chiral_query, pair.transformed.chiral_key).unwrap();
+            close(transformed_obs.direct, base_obs.direct);
+            close(transformed_obs.mirrored, base_obs.mirrored);
+            close(transformed_obs.chiral, -base_obs.chiral);
+        }
+    }
+
+    #[test]
+    fn mixed_case_id_overflow_fails_closed() {
+        assert_eq!(
+            mixed_geometry_pair(u64::MAX),
+            Err(Tdi25TaskError::CaseIdOverflow)
+        );
+    }
+
+    #[test]
+    fn neutral_pairs_are_deterministic_and_keep_oracle_outside_inputs() {
+        let pair = neutral_control_pair(5).unwrap();
+        assert_eq!(pair, neutral_control_pair(5).unwrap());
+        assert_ne!(pair.class_a.case_id, pair.class_b.case_id);
+        assert_eq!(pair.class_a.task_family, TaskFamily::Neutral);
+        assert_eq!(pair.class_b.task_family, TaskFamily::Neutral);
+        assert_eq!(
+            pair.class_a_oracle.generator_contract,
+            NEUTRAL_CONTROL_TASK_CONTRACT
+        );
+        assert_eq!(pair.class_a_oracle.target, NeutralTarget::ClassA);
+        assert_eq!(pair.class_b_oracle.target, NeutralTarget::ClassB);
+        assert_ne!(
+            pair.class_a_oracle.expected_score,
+            pair.class_b_oracle.expected_score
+        );
+    }
+
+    #[test]
+    fn neutral_targets_use_generic_capacity_without_torsor_or_chiral_privilege() {
+        for pair_id in 0..24 {
+            let pair = neutral_control_pair(pair_id).unwrap();
+            let score_a = generic_arm_score(pair.class_a.query, pair.class_a.key).unwrap();
+            let score_b = generic_arm_score(pair.class_b.query, pair.class_b.key).unwrap();
+            close(score_a, pair.class_a_oracle.expected_score);
+            close(score_b, pair.class_b_oracle.expected_score);
+
+            // Class label tracks only the global generic sign schedule.
+            assert_eq!(pair.class_a.query.as_array()[0].signum(), 1.0);
+            assert_eq!(pair.class_b.query.as_array()[0].signum(), -1.0);
+            // Shared nuisance coordinates (indices 2,3,5 on query; 0,2,5 on key)
+            // stay identical across classes — no chirality/torsor channeling.
+            let qa = pair.class_a.query.as_array();
+            let qb = pair.class_b.query.as_array();
+            let ka = pair.class_a.key.as_array();
+            let kb = pair.class_b.key.as_array();
+            close(qa[2], qb[2]);
+            close(qa[3], qb[3]);
+            close(qa[5], qb[5]);
+            close(ka[0], kb[0]);
+            close(ka[2], kb[2]);
+            close(ka[5], kb[5]);
+        }
+    }
+
+    #[test]
+    fn neutral_case_id_overflow_fails_closed() {
+        assert_eq!(
+            neutral_control_pair(u64::MAX),
             Err(Tdi25TaskError::CaseIdOverflow)
         );
     }

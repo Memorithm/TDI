@@ -24,9 +24,9 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | Slice | Deliverable | Gate / definition of done |
 | ---: | --- | --- |
 | 11 | Torsor-favorable transport tasks | **landed** in #568; two reductions of one physical torsor share one separated deterministic score oracle |
-| 12 | Chiral-favorable reflection tasks | **current stacked slice**; mirrored handedness pairs with deterministic oracle |
-| 13 | Mixed geometry tasks | transported relation + parity-sensitive relation both required |
-| 14 | Neutral six-component controls | neither torsor nor chirality privileged by target construction |
+| 12 | Chiral-favorable reflection tasks | **landed** in #603; mirrored handedness pairs with deterministic oracle |
+| 13 | Mixed geometry tasks | **landed** in #605; transported relation + parity-sensitive relation both required |
+| 14 | Neutral six-component controls | **current stacked slice**; neither torsor nor chirality privileged by target construction |
 | 15 | Position-geometry arm registry | linear/helical/learned/external geometry kept explicit |
 | 16 | Difficulty strata | bounded deterministic levels independent of model output |
 | 17 | Development/Validation split manifest | split identity embedded in every case |
@@ -94,4 +94,4 @@ Pause the campaign when any of the following occurs:
 
 ## Progress accounting
 
-**11/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568). Slice 12 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**13/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605). Slice 14 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
