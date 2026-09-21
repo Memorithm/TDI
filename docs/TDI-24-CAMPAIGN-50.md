@@ -24,8 +24,8 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 | Slice | Deliverable | Gate / definition of done |
 | ---: | --- | --- |
 | 11 | Reflection-discriminative generator | **landed** in #562; deterministic exact mirrored pairs with opposite handedness labels |
-| 12 | Reflection-nuisance generator | **current stacked slice**; family-namespaced exact mirrored pairs with one invariant even-sector target |
-| 13 | Direction/reversal generator | ordered-relational tasks without target leakage |
+| 12 | Reflection-nuisance generator | **landed** in #565; family-namespaced exact mirrored pairs with one invariant even-sector target |
+| 13 | Direction/reversal generator | **current stacked slice**; deterministic query/key order reversal with opposite direction oracle and antisymmetric chi |
 | 14 | Non-chiral negative-control generator | parity carries no target information |
 | 15 | Difficulty strata | deterministic bounded levels independent of model output |
 | 16 | Split manifest | Development/Validation identities embedded in every case |
@@ -93,4 +93,4 @@ The campaign pauses rather than forcing a later PR when:
 
 ## Progress accounting
 
-**10/50 merged** (#406, #471, #487, #492, #548, #549, #550, #551, #556). Slice 10 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**12/50 merged** (#406, #471, #487, #492, #548, #549, #550, #551, #556, #559, #562, #565). Slice 13 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
