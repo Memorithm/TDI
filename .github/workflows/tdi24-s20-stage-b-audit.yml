@@ -1,0 +1,26 @@
+name: TDI-24.0 slice 20 Stage-B audit
+on:
+  pull_request:
+    paths:
+      - 'tdi-ai/src/tdi24_tasks.rs'
+      - 'tdi-ai/tests/tdi24_stage_b_audit.rs'
+      - 'docs/TDI-24-CAMPAIGN-50.md'
+      - 'docs/TDI-24-STAGE-B-AUDIT.md'
+      - 'docs/tdi24-stage-b-freeze.yaml'
+      - 'scripts/check-tdi24-s20.sh'
+      - '.github/workflows/tdi24-s20-stage-b-audit.yml'
+permissions:
+  contents: read
+jobs:
+  stage-b-audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+      - run: bash scripts/check-tdi24-s20.sh
