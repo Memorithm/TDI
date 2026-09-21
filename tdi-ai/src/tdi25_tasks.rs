@@ -6,12 +6,16 @@
 //! oracle/input separation.
 //! Slice 13 adds mixed geometry tasks that require both a transported
 //! relation and a parity-sensitive relation.
+//! Slice 14 adds neutral six-component controls that privilege neither
+//! torsor nor chirality in the target construction.
 
 use core::fmt;
 
 use super::tdi22_torsor::{Torsor3, Twist3, Vec3};
 use super::tdi24_chiral::{Chiral6, ChiralScoreWeights};
-use super::tdi25_torsor_chiral::{TaskFamily, Tdi25Error, chiral_arm_score, torsor_arm_score};
+use super::tdi25_torsor_chiral::{
+    Generic6, TaskFamily, Tdi25Error, chiral_arm_score, generic_arm_score, torsor_arm_score,
+};
 
 /// Versioned TDI-25 torsor-favorable transport task contract.
 pub const TORSOR_TRANSPORT_TASK_CONTRACT: &str = "tdi25-torsor-transport-task-v1";
@@ -21,6 +25,9 @@ pub const CHIRAL_REFLECTION_TASK_CONTRACT: &str = "tdi25-chiral-reflection-task-
 
 /// Versioned TDI-25 mixed-geometry task contract.
 pub const MIXED_GEOMETRY_TASK_CONTRACT: &str = "tdi25-mixed-geometry-task-v1";
+
+/// Versioned TDI-25 neutral six-component control task contract.
+pub const NEUTRAL_CONTROL_TASK_CONTRACT: &str = "tdi25-neutral-control-task-v1";
 
 /// Inference-visible input for one torsor transport case.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -306,6 +313,110 @@ pub fn mixed_geometry_pair(pair_id: u64) -> Result<MixedGeometryPair, Tdi25TaskE
     })
 }
 
+/// Structure-agnostic binary target for neutral controls.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NeutralTarget {
+    /// Positive class under the deterministic sign schedule.
+    ClassA,
+    /// Negative class under the deterministic sign schedule.
+    ClassB,
+}
+
+/// Inference-visible input for one neutral Generic6 control case.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NeutralControlInput {
+    pub case_id: u64,
+    pub query: Generic6,
+    pub key: Generic6,
+    pub task_family: TaskFamily,
+    pub generator_contract: &'static str,
+}
+
+/// Target/score oracle retained separately from inference input.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NeutralControlOracle {
+    pub pair_id: u64,
+    pub target: NeutralTarget,
+    pub expected_score: f64,
+    pub generator_contract: &'static str,
+}
+
+/// Opposite-target neutral pair that privileges neither torsor nor chirality.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NeutralControlPair {
+    pub class_a: NeutralControlInput,
+    pub class_b: NeutralControlInput,
+    pub class_a_oracle: NeutralControlOracle,
+    pub class_b_oracle: NeutralControlOracle,
+}
+
+/// Deterministically generate one neutral six-component control pair.
+///
+/// Both members use the matched Generic6 capacity only. The class label is
+/// driven by a global sign on generic components, not by torsor transport or
+/// chiral parity structure.
+pub fn neutral_control_pair(pair_id: u64) -> Result<NeutralControlPair, Tdi25TaskError> {
+    let class_a_id = pair_id
+        .checked_mul(2)
+        .ok_or(Tdi25TaskError::CaseIdOverflow)?;
+    let class_b_id = class_a_id
+        .checked_add(1)
+        .ok_or(Tdi25TaskError::CaseIdOverflow)?;
+
+    let offset = ((pair_id % 43) as f64 + 1.0) / 112.0;
+    let make_carriers = |sign: f64| -> Result<(Generic6, Generic6), Tdi25TaskError> {
+        let query = Generic6::new([
+            sign * (1.0 + offset),
+            0.5,
+            -0.75,
+            0.375 + offset,
+            -0.875,
+            1.25 - offset,
+        ])
+        .map_err(Tdi25TaskError::Bridge)?;
+        let key = Generic6::new([
+            1.0,
+            sign * (0.625 + offset),
+            0.25,
+            -1.125,
+            0.625 + offset,
+            0.5,
+        ])
+        .map_err(Tdi25TaskError::Bridge)?;
+        Ok((query, key))
+    };
+
+    let (query_a, key_a) = make_carriers(1.0)?;
+    let (query_b, key_b) = make_carriers(-1.0)?;
+    let score_a = generic_arm_score(query_a, key_a).map_err(Tdi25TaskError::Bridge)?;
+    let score_b = generic_arm_score(query_b, key_b).map_err(Tdi25TaskError::Bridge)?;
+
+    let make_input = |case_id, query, key| NeutralControlInput {
+        case_id,
+        query,
+        key,
+        task_family: TaskFamily::Neutral,
+        generator_contract: NEUTRAL_CONTROL_TASK_CONTRACT,
+    };
+
+    Ok(NeutralControlPair {
+        class_a: make_input(class_a_id, query_a, key_a),
+        class_b: make_input(class_b_id, query_b, key_b),
+        class_a_oracle: NeutralControlOracle {
+            pair_id,
+            target: NeutralTarget::ClassA,
+            expected_score: score_a,
+            generator_contract: NEUTRAL_CONTROL_TASK_CONTRACT,
+        },
+        class_b_oracle: NeutralControlOracle {
+            pair_id,
+            target: NeutralTarget::ClassB,
+            expected_score: score_b,
+            generator_contract: NEUTRAL_CONTROL_TASK_CONTRACT,
+        },
+    })
+}
+
 /// TDI-25 task-generation failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tdi25TaskError {
@@ -539,6 +650,60 @@ mod tests {
     fn mixed_case_id_overflow_fails_closed() {
         assert_eq!(
             mixed_geometry_pair(u64::MAX),
+            Err(Tdi25TaskError::CaseIdOverflow)
+        );
+    }
+
+    #[test]
+    fn neutral_pairs_are_deterministic_and_keep_oracle_outside_inputs() {
+        let pair = neutral_control_pair(5).unwrap();
+        assert_eq!(pair, neutral_control_pair(5).unwrap());
+        assert_ne!(pair.class_a.case_id, pair.class_b.case_id);
+        assert_eq!(pair.class_a.task_family, TaskFamily::Neutral);
+        assert_eq!(pair.class_b.task_family, TaskFamily::Neutral);
+        assert_eq!(
+            pair.class_a_oracle.generator_contract,
+            NEUTRAL_CONTROL_TASK_CONTRACT
+        );
+        assert_eq!(pair.class_a_oracle.target, NeutralTarget::ClassA);
+        assert_eq!(pair.class_b_oracle.target, NeutralTarget::ClassB);
+        assert_ne!(
+            pair.class_a_oracle.expected_score,
+            pair.class_b_oracle.expected_score
+        );
+    }
+
+    #[test]
+    fn neutral_targets_use_generic_capacity_without_torsor_or_chiral_privilege() {
+        for pair_id in 0..24 {
+            let pair = neutral_control_pair(pair_id).unwrap();
+            let score_a = generic_arm_score(pair.class_a.query, pair.class_a.key).unwrap();
+            let score_b = generic_arm_score(pair.class_b.query, pair.class_b.key).unwrap();
+            close(score_a, pair.class_a_oracle.expected_score);
+            close(score_b, pair.class_b_oracle.expected_score);
+
+            // Class label tracks only the global generic sign schedule.
+            assert_eq!(pair.class_a.query.as_array()[0].signum(), 1.0);
+            assert_eq!(pair.class_b.query.as_array()[0].signum(), -1.0);
+            // Shared nuisance coordinates (indices 2,3,5 on query; 0,2,5 on key)
+            // stay identical across classes — no chirality/torsor channeling.
+            let qa = pair.class_a.query.as_array();
+            let qb = pair.class_b.query.as_array();
+            let ka = pair.class_a.key.as_array();
+            let kb = pair.class_b.key.as_array();
+            close(qa[2], qb[2]);
+            close(qa[3], qb[3]);
+            close(qa[5], qb[5]);
+            close(ka[0], kb[0]);
+            close(ka[2], kb[2]);
+            close(ka[5], kb[5]);
+        }
+    }
+
+    #[test]
+    fn neutral_case_id_overflow_fails_closed() {
+        assert_eq!(
+            neutral_control_pair(u64::MAX),
             Err(Tdi25TaskError::CaseIdOverflow)
         );
     }
