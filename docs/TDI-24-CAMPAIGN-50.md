@@ -32,13 +32,13 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 | 17 | Protected-label API | **landed** in #604; inference callback cannot access expected target |
 | 18 | Seed registry + disjointness tests | **landed** in #608; no overlap across declared domains |
 | 19 | Dataset canonicalization/hash | **landed** in #609; stable canonical record and digest |
-| 20 | Stage-B data audit/freeze | **current stacked slice**; leakage/adversarial audit green before training/evaluation |
+| 20 | Stage-B data audit/freeze | **landed** in #610; leakage/adversarial audit green before training/evaluation |
 
 ## Phase C — matched training/evaluation machinery (PR 21–30)
 
 | Slice | Deliverable | Gate / definition of done |
 | ---: | --- | --- |
-| 21 | V6 evaluator | deterministic non-final Development/Validation path |
+| 21 | V6 evaluator | **current stacked slice**; deterministic non-final Development/Validation path |
 | 22 | C6 evaluator | same evaluator contract and readout budget |
 | 23 | Parameter-count matcher | reject unmatched trainable-capacity configurations |
 | 24 | Initialization matcher | paired deterministic initialization policy |
@@ -93,4 +93,4 @@ The campaign pauses rather than forcing a later PR when:
 
 ## Progress accounting
 
-**19/50 merged** (#406, #471, #487, #492, #548, #549, #550, #551, #556, #559, #562, #565, #567, #569, #601, #602, #604, #608, #609). Slice 20 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**20/50 merged** (#406, #471, #487, #492, #548, #549, #550, #551, #556, #559, #562, #565, #567, #569, #601, #602, #604, #608, #609, #610). Slice 21 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
