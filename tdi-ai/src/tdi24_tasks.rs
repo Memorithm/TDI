@@ -22,8 +22,58 @@ pub const NON_CHIRAL_CONTROL_CONTRACT: &str = "tdi24-non-chiral-control-generato
 /// Versioned Slice-15 difficulty-strata contract.
 pub const DIFFICULTY_STRATA_CONTRACT: &str = "tdi24-difficulty-strata-v1";
 
+/// Versioned Slice-16 Development/Validation split-manifest contract.
+pub const SPLIT_MANIFEST_CONTRACT: &str = "tdi24-split-manifest-v1";
+
 /// Inclusive upper bound on admissible difficulty levels (`0..=MAX`).
 pub const DIFFICULTY_LEVEL_MAX: u8 = 3;
+
+/// Typed population split carried by every Phase-B case.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum DataSplit {
+    /// Non-final Development population.
+    Development,
+    /// Non-final Validation population.
+    Validation,
+}
+
+impl DataSplit {
+    /// Stable lowercase label for manifests and audits.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Development => "development",
+            Self::Validation => "validation",
+        }
+    }
+
+    /// Fail-closed parse of a split label.
+    pub fn parse(label: &str) -> Result<Self, Tdi24TaskError> {
+        match label {
+            "development" => Ok(Self::Development),
+            "validation" => Ok(Self::Validation),
+            _ => Err(Tdi24TaskError::UnknownSplitIdentity),
+        }
+    }
+}
+
+/// Complete typed identity of one task case within a split.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SplitCaseIdentity {
+    pub split: DataSplit,
+    pub case_id: u64,
+    pub split_contract: &'static str,
+}
+
+/// Build the typed split identity embedded beside a case id.
+#[must_use]
+pub const fn split_case_identity(split: DataSplit, case_id: u64) -> SplitCaseIdentity {
+    SplitCaseIdentity {
+        split,
+        case_id,
+        split_contract: SPLIT_MANIFEST_CONTRACT,
+    }
+}
 
 const NUISANCE_CASE_ID_PREFIX: u64 = 1_u64 << 63;
 
@@ -41,6 +91,8 @@ pub enum HandednessTarget {
 pub struct ReflectionDiscriminativeCase {
     /// Pair identity shared by both mirrored members.
     pub pair_id: u64,
+    /// Typed Development/Validation population identity.
+    pub split: DataSplit,
     /// Globally deterministic member identity (`2*pair_id` or `2*pair_id+1`).
     pub case_id: u64,
     /// Query carrier.
@@ -83,6 +135,7 @@ pub fn reflection_discriminative_pair(
 
     let right = ReflectionDiscriminativeCase {
         pair_id,
+        split: DataSplit::Development,
         case_id: right_id,
         query,
         key,
@@ -91,6 +144,7 @@ pub fn reflection_discriminative_pair(
     };
     let left = ReflectionDiscriminativeCase {
         pair_id,
+        split: DataSplit::Development,
         case_id: left_id,
         query: query.mirror(),
         key: key.mirror(),
@@ -114,6 +168,8 @@ pub enum ReflectionInvariantTarget {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ReflectionNuisanceCase {
     pub pair_id: u64,
+    /// Typed Development/Validation population identity.
+    pub split: DataSplit,
     pub case_id: u64,
     pub query: Chiral6,
     pub key: Chiral6,
@@ -159,6 +215,7 @@ pub fn reflection_nuisance_pair(pair_id: u64) -> Result<ReflectionNuisancePair, 
 
     let canonical = ReflectionNuisanceCase {
         pair_id,
+        split: DataSplit::Development,
         case_id: canonical_id,
         query,
         key,
@@ -167,6 +224,7 @@ pub fn reflection_nuisance_pair(pair_id: u64) -> Result<ReflectionNuisancePair, 
     };
     let reflected = ReflectionNuisanceCase {
         pair_id,
+        split: DataSplit::Development,
         case_id: reflected_id,
         query: query.mirror(),
         key: key.mirror(),
@@ -190,6 +248,8 @@ pub enum DirectionTarget {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DirectionReversalCase {
     pub pair_id: u64,
+    /// Typed Development/Validation population identity.
+    pub split: DataSplit,
     pub case_id: u64,
     pub query: Chiral6,
     pub key: Chiral6,
@@ -228,6 +288,7 @@ pub fn direction_reversal_pair(pair_id: u64) -> Result<DirectionReversalPair, Td
     Ok(DirectionReversalPair {
         forward: DirectionReversalCase {
             pair_id,
+            split: DataSplit::Development,
             case_id: forward_id,
             query,
             key,
@@ -236,6 +297,7 @@ pub fn direction_reversal_pair(pair_id: u64) -> Result<DirectionReversalPair, Td
         },
         reverse: DirectionReversalCase {
             pair_id,
+            split: DataSplit::Development,
             case_id: reverse_id,
             query: key,
             key: query,
@@ -256,6 +318,8 @@ pub enum NonChiralTarget {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NonChiralControlCase {
     pub case_id: u64,
+    /// Typed Development/Validation population identity.
+    pub split: DataSplit,
     pub nuisance_id: u64,
     pub query: Chiral6,
     pub key: Chiral6,
@@ -290,6 +354,7 @@ pub fn non_chiral_control_case(case_id: u64) -> Result<NonChiralControlCase, Tdi
 
     Ok(NonChiralControlCase {
         case_id,
+        split: DataSplit::Development,
         nuisance_id,
         query,
         key,
@@ -346,6 +411,49 @@ pub fn difficulty_stratum(seed: u64) -> DifficultyStratum {
     }
 }
 
+/// Materialize a reflection-discriminative pair in one typed split.
+pub fn reflection_discriminative_pair_in_split(
+    pair_id: u64,
+    split: DataSplit,
+) -> Result<ReflectionDiscriminativePair, Tdi24TaskError> {
+    let mut pair = reflection_discriminative_pair(pair_id)?;
+    pair.right.split = split;
+    pair.left.split = split;
+    Ok(pair)
+}
+
+/// Materialize a reflection-nuisance pair in one typed split.
+pub fn reflection_nuisance_pair_in_split(
+    pair_id: u64,
+    split: DataSplit,
+) -> Result<ReflectionNuisancePair, Tdi24TaskError> {
+    let mut pair = reflection_nuisance_pair(pair_id)?;
+    pair.canonical.split = split;
+    pair.reflected.split = split;
+    Ok(pair)
+}
+
+/// Materialize a direction/reversal pair in one typed split.
+pub fn direction_reversal_pair_in_split(
+    pair_id: u64,
+    split: DataSplit,
+) -> Result<DirectionReversalPair, Tdi24TaskError> {
+    let mut pair = direction_reversal_pair(pair_id)?;
+    pair.forward.split = split;
+    pair.reverse.split = split;
+    Ok(pair)
+}
+
+/// Materialize a non-chiral control in one typed split.
+pub fn non_chiral_control_case_in_split(
+    case_id: u64,
+    split: DataSplit,
+) -> Result<NonChiralControlCase, Tdi24TaskError> {
+    let mut case = non_chiral_control_case(case_id)?;
+    case.split = split;
+    Ok(case)
+}
+
 /// Task-generation failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tdi24TaskError {
@@ -355,6 +463,8 @@ pub enum Tdi24TaskError {
     Chiral(ChiralError),
     /// Difficulty level exceeded the bounded admissible range.
     DifficultyOutOfRange,
+    /// Split identity label is not Development or Validation.
+    UnknownSplitIdentity,
 }
 
 impl fmt::Display for Tdi24TaskError {
@@ -364,6 +474,9 @@ impl fmt::Display for Tdi24TaskError {
             Self::Chiral(error) => write!(formatter, "generated chiral fixture invalid: {error}"),
             Self::DifficultyOutOfRange => {
                 formatter.write_str("TDI-24 difficulty level out of bounded range")
+            }
+            Self::UnknownSplitIdentity => {
+                formatter.write_str("TDI-24 unknown split identity label")
             }
         }
     }
@@ -570,5 +683,84 @@ mod tests {
             );
             let _ = stratum.level.magnitude_scale();
         }
+    }
+
+    #[test]
+    fn development_and_validation_identities_are_typed_and_disjoint() {
+        let development = split_case_identity(DataSplit::Development, 17);
+        let validation = split_case_identity(DataSplit::Validation, 17);
+        assert_ne!(development, validation);
+        assert_eq!(development.case_id, validation.case_id);
+        assert_eq!(development.split_contract, SPLIT_MANIFEST_CONTRACT);
+        assert_eq!(validation.split_contract, SPLIT_MANIFEST_CONTRACT);
+        assert_eq!(DataSplit::Development.as_str(), "development");
+        assert_eq!(DataSplit::Validation.as_str(), "validation");
+        assert_eq!(
+            DataSplit::parse("development").unwrap(),
+            DataSplit::Development
+        );
+        assert_eq!(
+            DataSplit::parse("validation").unwrap(),
+            DataSplit::Validation
+        );
+        assert_eq!(
+            DataSplit::parse("protected"),
+            Err(Tdi24TaskError::UnknownSplitIdentity)
+        );
+        assert_eq!(
+            DataSplit::parse("final"),
+            Err(Tdi24TaskError::UnknownSplitIdentity)
+        );
+    }
+
+    #[test]
+    fn every_phase_b_family_embeds_the_requested_split() {
+        for split in [DataSplit::Development, DataSplit::Validation] {
+            let discriminative = reflection_discriminative_pair_in_split(3, split).unwrap();
+            assert_eq!(discriminative.right.split, split);
+            assert_eq!(discriminative.left.split, split);
+
+            let nuisance = reflection_nuisance_pair_in_split(4, split).unwrap();
+            assert_eq!(nuisance.canonical.split, split);
+            assert_eq!(nuisance.reflected.split, split);
+
+            let direction = direction_reversal_pair_in_split(5, split).unwrap();
+            assert_eq!(direction.forward.split, split);
+            assert_eq!(direction.reverse.split, split);
+
+            let control = non_chiral_control_case_in_split(6, split).unwrap();
+            assert_eq!(control.split, split);
+        }
+        assert_eq!(
+            reflection_discriminative_pair(1).unwrap().right.split,
+            DataSplit::Development
+        );
+    }
+
+    #[test]
+    fn split_choice_does_not_change_task_payload_or_oracle() {
+        let dev = reflection_discriminative_pair_in_split(11, DataSplit::Development).unwrap();
+        let val = reflection_discriminative_pair_in_split(11, DataSplit::Validation).unwrap();
+        assert_eq!(dev.right.query, val.right.query);
+        assert_eq!(dev.right.key, val.right.key);
+        assert_eq!(dev.right.target, val.right.target);
+        assert_eq!(dev.right.case_id, val.right.case_id);
+        assert_ne!(dev.right.split, val.right.split);
+
+        let n_dev = reflection_nuisance_pair_in_split(9, DataSplit::Development).unwrap();
+        let n_val = reflection_nuisance_pair_in_split(9, DataSplit::Validation).unwrap();
+        assert_eq!(n_dev.canonical.target, n_val.canonical.target);
+        assert_eq!(n_dev.canonical.query, n_val.canonical.query);
+
+        let d_dev = direction_reversal_pair_in_split(8, DataSplit::Development).unwrap();
+        let d_val = direction_reversal_pair_in_split(8, DataSplit::Validation).unwrap();
+        assert_eq!(d_dev.forward.target, d_val.forward.target);
+        assert_eq!(d_dev.forward.query, d_val.forward.query);
+
+        let c_dev = non_chiral_control_case_in_split(7, DataSplit::Development).unwrap();
+        let c_val = non_chiral_control_case_in_split(7, DataSplit::Validation).unwrap();
+        assert_eq!(c_dev.target, c_val.target);
+        assert_eq!(c_dev.query, c_val.query);
+        assert_ne!(c_dev.split, c_val.split);
     }
 }
