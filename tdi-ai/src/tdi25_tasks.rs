@@ -2,14 +2,20 @@
 //!
 //! Slice 11 introduces deterministic torsor-favorable transport tasks while
 //! keeping the oracle separate from inference inputs.
+//! Slice 12 adds chiral-favorable mirrored handedness pairs with the same
+//! oracle/input separation.
 
 use core::fmt;
 
 use super::tdi22_torsor::{Torsor3, Twist3, Vec3};
-use super::tdi25_torsor_chiral::{TaskFamily, Tdi25Error, torsor_arm_score};
+use super::tdi24_chiral::{Chiral6, ChiralScoreWeights};
+use super::tdi25_torsor_chiral::{TaskFamily, Tdi25Error, chiral_arm_score, torsor_arm_score};
 
 /// Versioned TDI-25 torsor-favorable transport task contract.
 pub const TORSOR_TRANSPORT_TASK_CONTRACT: &str = "tdi25-torsor-transport-task-v1";
+
+/// Versioned TDI-25 chiral-favorable reflection task contract.
+pub const CHIRAL_REFLECTION_TASK_CONTRACT: &str = "tdi25-chiral-reflection-task-v1";
 
 /// Inference-visible input for one torsor transport case.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -88,6 +94,96 @@ pub fn torsor_transport_pair(pair_id: u64) -> Result<TorsorTransportPair, Tdi25T
     })
 }
 
+/// Handedness oracle for one member of a mirrored chiral pair.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HandednessTarget {
+    /// Canonical orientation emitted first by the deterministic generator.
+    Right,
+    /// Simultaneously mirrored partner.
+    Left,
+}
+
+/// Inference-visible input for one chiral reflection case.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ChiralReflectionInput {
+    pub case_id: u64,
+    pub query: Chiral6,
+    pub key: Chiral6,
+    pub weights: ChiralScoreWeights,
+    pub task_family: TaskFamily,
+    pub generator_contract: &'static str,
+}
+
+/// Handedness/score oracle retained separately from inference input.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ChiralReflectionOracle {
+    pub pair_id: u64,
+    pub handedness: HandednessTarget,
+    pub expected_score: f64,
+    pub generator_contract: &'static str,
+}
+
+/// Mirrored handedness pair with per-member oracles kept outside inputs.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ChiralReflectionPair {
+    pub right: ChiralReflectionInput,
+    pub left: ChiralReflectionInput,
+    pub right_oracle: ChiralReflectionOracle,
+    pub left_oracle: ChiralReflectionOracle,
+}
+
+/// Deterministically generate one chiral-favorable reflection pair.
+pub fn chiral_reflection_pair(pair_id: u64) -> Result<ChiralReflectionPair, Tdi25TaskError> {
+    let right_id = pair_id
+        .checked_mul(2)
+        .ok_or(Tdi25TaskError::CaseIdOverflow)?;
+    let left_id = right_id
+        .checked_add(1)
+        .ok_or(Tdi25TaskError::CaseIdOverflow)?;
+
+    // Bounded offset keeps every Stage-A scalar finite and model-independent.
+    let offset = ((pair_id % 29) as f64 + 1.0) / 64.0;
+    // gamma != 0 so the parity-odd channel makes handedness target-relevant.
+    let weights = ChiralScoreWeights::new(0.7, -0.2, 1.3)
+        .map_err(|error| Tdi25TaskError::Bridge(Tdi25Error::Chiral(error)))?;
+    let query = Chiral6::new([1.0 + offset, -0.75, 0.5], [0.625, -1.0 - offset, 1.5])
+        .map_err(|error| Tdi25TaskError::Bridge(Tdi25Error::Chiral(error)))?;
+    let key = Chiral6::new([-0.5, 1.25 + offset, -1.0], [1.75 + offset, 0.375, -0.875])
+        .map_err(|error| Tdi25TaskError::Bridge(Tdi25Error::Chiral(error)))?;
+
+    let right_score = chiral_arm_score(query, key, weights).map_err(Tdi25TaskError::Bridge)?;
+    let left_query = query.mirror();
+    let left_key = key.mirror();
+    let left_score =
+        chiral_arm_score(left_query, left_key, weights).map_err(Tdi25TaskError::Bridge)?;
+
+    let make_input = |case_id, query, key| ChiralReflectionInput {
+        case_id,
+        query,
+        key,
+        weights,
+        task_family: TaskFamily::ChiralFavorable,
+        generator_contract: CHIRAL_REFLECTION_TASK_CONTRACT,
+    };
+
+    Ok(ChiralReflectionPair {
+        right: make_input(right_id, query, key),
+        left: make_input(left_id, left_query, left_key),
+        right_oracle: ChiralReflectionOracle {
+            pair_id,
+            handedness: HandednessTarget::Right,
+            expected_score: right_score,
+            generator_contract: CHIRAL_REFLECTION_TASK_CONTRACT,
+        },
+        left_oracle: ChiralReflectionOracle {
+            pair_id,
+            handedness: HandednessTarget::Left,
+            expected_score: left_score,
+            generator_contract: CHIRAL_REFLECTION_TASK_CONTRACT,
+        },
+    })
+}
+
 /// TDI-25 task-generation failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tdi25TaskError {
@@ -108,6 +204,7 @@ impl std::error::Error for Tdi25TaskError {}
 
 #[cfg(test)]
 mod tests {
+    use super::super::tdi24_chiral::observables;
     use super::*;
 
     fn close(lhs: f64, rhs: f64) {
@@ -165,9 +262,65 @@ mod tests {
     }
 
     #[test]
-    fn case_id_overflow_fails_closed() {
+    fn torsor_case_id_overflow_fails_closed() {
         assert_eq!(
             torsor_transport_pair(u64::MAX),
+            Err(Tdi25TaskError::CaseIdOverflow)
+        );
+    }
+
+    #[test]
+    fn reflection_pairs_are_deterministic_and_keep_oracle_outside_inputs() {
+        let pair = chiral_reflection_pair(11).unwrap();
+        assert_eq!(pair, chiral_reflection_pair(11).unwrap());
+        assert_ne!(pair.right.case_id, pair.left.case_id);
+        assert_eq!(pair.right.task_family, TaskFamily::ChiralFavorable);
+        assert_eq!(pair.left.task_family, TaskFamily::ChiralFavorable);
+        assert_eq!(
+            pair.right_oracle.generator_contract,
+            CHIRAL_REFLECTION_TASK_CONTRACT
+        );
+        assert_eq!(pair.right_oracle.handedness, HandednessTarget::Right);
+        assert_eq!(pair.left_oracle.handedness, HandednessTarget::Left);
+        assert_ne!(
+            pair.right_oracle.expected_score,
+            pair.left_oracle.expected_score
+        );
+    }
+
+    #[test]
+    fn mirrored_members_are_exact_mirrors_with_parity_odd_oracle_scores() {
+        for pair_id in 0..32 {
+            let pair = chiral_reflection_pair(pair_id).unwrap();
+            assert_eq!(pair.left.query, pair.right.query.mirror());
+            assert_eq!(pair.left.key, pair.right.key.mirror());
+            assert_eq!(pair.left.weights, pair.right.weights);
+            assert!(pair.right.weights.gamma.abs() > 0.0);
+
+            let right_score =
+                chiral_arm_score(pair.right.query, pair.right.key, pair.right.weights).unwrap();
+            let left_score =
+                chiral_arm_score(pair.left.query, pair.left.key, pair.left.weights).unwrap();
+            close(right_score, pair.right_oracle.expected_score);
+            close(left_score, pair.left_oracle.expected_score);
+
+            let base = observables(pair.right.query, pair.right.key).unwrap();
+            let reflected = observables(pair.left.query, pair.left.key).unwrap();
+            close(reflected.direct, base.direct);
+            close(reflected.mirrored, base.mirrored);
+            close(reflected.chiral, -base.chiral);
+            // Even channels cancel in the score difference; only gamma*chi remains.
+            close(
+                right_score - left_score,
+                2.0 * pair.right.weights.gamma * base.chiral,
+            );
+        }
+    }
+
+    #[test]
+    fn chiral_case_id_overflow_fails_closed() {
+        assert_eq!(
+            chiral_reflection_pair(u64::MAX),
             Err(Tdi25TaskError::CaseIdOverflow)
         );
     }
