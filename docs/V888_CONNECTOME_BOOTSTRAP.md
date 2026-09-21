@@ -1,12 +1,12 @@
-# TDI-22.x — BANC V888 sparse recurrent dynamics bootstrap
+# TDI-26.x — BANC V888 sparse recurrent dynamics bootstrap
 
 Status: Stage-0 bootstrap. No confirmatory run is authorized by this document.
 
 ## Independence from frozen programmes
 
-TDI-22 is a new research line. It must not alter, read or repurpose protected final/confirmatory surfaces from TDI-7, TDI-8, TDI-9, TDI-11, TDI-12 or TDI-21.
+TDI-26 is a new research line. It must not alter, read or repurpose protected final/confirmatory surfaces from TDI-7, TDI-8, TDI-9, TDI-11, TDI-12 or TDI-21.
 
-TDI-8 remains the ASSR/ASSR-H programme. TDI-22 studies topology and sparse recurrent dynamics. Cross-series comparisons may be added only through a later explicit protocol.
+TDI-8 remains the ASSR/ASSR-H programme. TDI-26 studies topology and sparse recurrent dynamics. Cross-series comparisons may be added only through a later explicit protocol.
 
 ## Source constraint
 
@@ -24,7 +24,7 @@ Raw BANC data must not be committed to TDI. TDI consumes deterministic descripto
 
 Do V888-derived structural properties provide predictive or computational value beyond competent sparse-graph controls under matched resource budgets?
 
-TDI-22 must be able to conclude no.
+TDI-26 must be able to conclude no.
 
 ## Architecture/control ladder
 
@@ -41,11 +41,11 @@ Provisional development arms:
 - C8: trainable sparse graph initialized from the V888 prior;
 - C9: trainable sparse graph initialized from a matched random control.
 
-These names are provisional until TDI-22.0 freezes them.
+These names are provisional until TDI-26.0 freezes them.
 
 ## Stage sequence
 
-### TDI-22.0 — scope/preregistration bootstrap
+### TDI-26.0 — scope/preregistration bootstrap
 
 Freeze:
 - source artifact identity;
@@ -61,7 +61,7 @@ Freeze:
 
 No final data may be generated before freeze.
 
-### TDI-22.1 — deterministic evaluator
+### TDI-26.1 — deterministic evaluator
 
 Implement Rust evaluator using SciRust primitives:
 - identical task streams across arms;
@@ -71,7 +71,7 @@ Implement Rust evaluator using SciRust primitives:
 - task outputs;
 - failure/timeout semantics.
 
-### TDI-22.2 — topology identifiability controls
+### TDI-26.2 — topology identifiability controls
 
 Before outcome tests, verify that the declared descriptors actually distinguish:
 - random sparse;
@@ -81,7 +81,7 @@ Before outcome tests, verify that the declared descriptors actually distinguish:
 
 If V888 becomes indistinguishable under the descriptor panel, revise the scientific question before confirmatory work.
 
-### TDI-22.3 — intervention-conditioned trajectories
+### TDI-26.3 — intervention-conditioned trajectories
 
 Run development-only interventions:
 - random node silencing;
@@ -93,7 +93,7 @@ Run development-only interventions:
 
 Measure recovery trajectories without assuming that recovery is beneficial.
 
-### TDI-22.4 — predictive descriptor test
+### TDI-26.4 — predictive descriptor test
 
 Ask whether early trajectory descriptors predict later task deficit beyond:
 - degree;
@@ -105,16 +105,16 @@ Ask whether early trajectory descriptors predict later task deficit beyond:
 
 Use out-of-sample evaluation.
 
-### TDI-22.5 — event-driven versus fixed-step semantics
+### TDI-26.5 — event-driven versus fixed-step semantics
 
 Scientific and systems separation:
 - first establish semantic parity on the same dynamics;
 - then measure resource differences;
 - never interpret a faster scheduler as a better architecture.
 
-### TDI-22.6 — ASSR bridge
+### TDI-26.6 — ASSR bridge
 
-Only after TDI-22 internal controls:
+Only after TDI-26 internal controls:
 - compare topology-free recurrent state;
 - ASSR;
 - connectomic sparse recurrence;
@@ -122,11 +122,11 @@ Only after TDI-22 internal controls:
 
 This is a new cross-series development experiment and must not modify TDI-8.2.
 
-### TDI-22.7 — SML-GENIUS bridge
+### TDI-26.7 — SML-GENIUS bridge
 
 Evaluate frozen SML/CSP candidates using TDI-owned tasks and counters. TDI may reject promotion even if the SML repository reports internal success.
 
-### TDI-22.8 — FLAT hybrid bridge
+### TDI-26.8 — FLAT hybrid bridge
 
 Compare:
 - dense FLAT attention;
@@ -137,7 +137,7 @@ Compare:
 
 Budget matching must state which dimensions are equal and which are not.
 
-### TDI-22.9 — robustness/OOD
+### TDI-26.9 — robustness/OOD
 
 Test changed:
 - sequence horizon;
@@ -149,7 +149,7 @@ Test changed:
 
 Do not call this biological generalization.
 
-### TDI-22.10 — confirmatory gate
+### TDI-26.10 — confirmatory gate
 
 A future confirmatory stage requires a separate human-authorized freeze artifact. This bootstrap does not authorize execution.
 
