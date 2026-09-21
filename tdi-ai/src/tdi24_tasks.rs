@@ -25,6 +25,9 @@ pub const DIFFICULTY_STRATA_CONTRACT: &str = "tdi24-difficulty-strata-v1";
 /// Versioned Slice-16 Development/Validation split-manifest contract.
 pub const SPLIT_MANIFEST_CONTRACT: &str = "tdi24-split-manifest-v1";
 
+/// Versioned Slice-17 protected-label API contract.
+pub const PROTECTED_LABEL_CONTRACT: &str = "tdi24-protected-label-api-v1";
+
 /// Inclusive upper bound on admissible difficulty levels (`0..=MAX`).
 pub const DIFFICULTY_LEVEL_MAX: u8 = 3;
 
@@ -73,6 +76,193 @@ pub const fn split_case_identity(split: DataSplit, case_id: u64) -> SplitCaseIde
         case_id,
         split_contract: SPLIT_MANIFEST_CONTRACT,
     }
+}
+
+/// Phase-B task family identity carried on inference views.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TaskFamily {
+    /// Slice-11 reflection-discriminative generator.
+    ReflectionDiscriminative,
+    /// Slice-12 reflection-nuisance generator.
+    ReflectionNuisance,
+    /// Slice-13 direction/reversal generator.
+    DirectionReversal,
+    /// Slice-14 non-chiral negative-control generator.
+    NonChiralControl,
+}
+
+impl TaskFamily {
+    /// Stable lowercase family label.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ReflectionDiscriminative => "reflection_discriminative",
+            Self::ReflectionNuisance => "reflection_nuisance",
+            Self::DirectionReversal => "direction_reversal",
+            Self::NonChiralControl => "non_chiral_control",
+        }
+    }
+
+    /// Generator contract pin for this family.
+    #[must_use]
+    pub const fn generator_contract(self) -> &'static str {
+        match self {
+            Self::ReflectionDiscriminative => REFLECTION_DISCRIMINATIVE_CONTRACT,
+            Self::ReflectionNuisance => REFLECTION_NUISANCE_CONTRACT,
+            Self::DirectionReversal => DIRECTION_REVERSAL_CONTRACT,
+            Self::NonChiralControl => NON_CHIRAL_CONTROL_CONTRACT,
+        }
+    }
+}
+
+/// Inference-visible carriers and identity. Deliberately omits any oracle/target.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct InferenceView {
+    /// Task family that produced the case.
+    pub family: TaskFamily,
+    /// Typed Development/Validation population identity.
+    pub split: DataSplit,
+    /// Globally deterministic case identity.
+    pub case_id: u64,
+    /// Pair id (or nuisance id for non-chiral controls).
+    pub group_id: u64,
+    /// Query carrier visible to inference.
+    pub query: Chiral6,
+    /// Key carrier visible to inference.
+    pub key: Chiral6,
+    /// Protected-label API contract pin.
+    pub label_contract: &'static str,
+}
+
+/// Sealed expected target retained outside the inference callback.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProtectedLabel<T> {
+    target: T,
+}
+
+impl<T> ProtectedLabel<T> {
+    /// Seal an oracle/target away from inference callbacks.
+    #[must_use]
+    pub const fn seal(target: T) -> Self {
+        Self { target }
+    }
+
+    /// Reveal only on the evaluation/scoring path — never passed to inference.
+    #[must_use]
+    pub const fn reveal_for_evaluation(&self) -> &T {
+        &self.target
+    }
+}
+
+/// Labeled case pairing an inference view with a sealed oracle.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LabeledCase<T> {
+    view: InferenceView,
+    label: ProtectedLabel<T>,
+}
+
+impl<T> LabeledCase<T> {
+    /// Construct a labeled case from an inference view and sealed target.
+    #[must_use]
+    pub const fn new(view: InferenceView, target: T) -> Self {
+        Self {
+            view,
+            label: ProtectedLabel::seal(target),
+        }
+    }
+
+    /// Borrow the inference-visible view (no target).
+    #[must_use]
+    pub const fn inference_view(&self) -> &InferenceView {
+        &self.view
+    }
+
+    /// Borrow the sealed label for evaluation/scoring only.
+    #[must_use]
+    pub const fn protected_label(&self) -> &ProtectedLabel<T> {
+        &self.label
+    }
+}
+
+/// Invoke an inference callback that, by construction, receives only [`InferenceView`].
+#[must_use]
+pub fn run_inference_callback<T, R, F>(case: &LabeledCase<T>, callback: F) -> R
+where
+    F: FnOnce(&InferenceView) -> R,
+{
+    callback(case.inference_view())
+}
+
+/// Seal a reflection-discriminative case into the protected-label API.
+#[must_use]
+pub fn seal_reflection_discriminative(
+    case: &ReflectionDiscriminativeCase,
+) -> LabeledCase<HandednessTarget> {
+    LabeledCase::new(
+        InferenceView {
+            family: TaskFamily::ReflectionDiscriminative,
+            split: case.split,
+            case_id: case.case_id,
+            group_id: case.pair_id,
+            query: case.query,
+            key: case.key,
+            label_contract: PROTECTED_LABEL_CONTRACT,
+        },
+        case.target,
+    )
+}
+
+/// Seal a reflection-nuisance case into the protected-label API.
+#[must_use]
+pub fn seal_reflection_nuisance(
+    case: &ReflectionNuisanceCase,
+) -> LabeledCase<ReflectionInvariantTarget> {
+    LabeledCase::new(
+        InferenceView {
+            family: TaskFamily::ReflectionNuisance,
+            split: case.split,
+            case_id: case.case_id,
+            group_id: case.pair_id,
+            query: case.query,
+            key: case.key,
+            label_contract: PROTECTED_LABEL_CONTRACT,
+        },
+        case.target,
+    )
+}
+
+/// Seal a direction/reversal case into the protected-label API.
+#[must_use]
+pub fn seal_direction_reversal(case: &DirectionReversalCase) -> LabeledCase<DirectionTarget> {
+    LabeledCase::new(
+        InferenceView {
+            family: TaskFamily::DirectionReversal,
+            split: case.split,
+            case_id: case.case_id,
+            group_id: case.pair_id,
+            query: case.query,
+            key: case.key,
+            label_contract: PROTECTED_LABEL_CONTRACT,
+        },
+        case.target,
+    )
+}
+
+/// Seal a non-chiral control case into the protected-label API.
+#[must_use]
+pub fn seal_non_chiral_control(case: &NonChiralControlCase) -> LabeledCase<NonChiralTarget> {
+    LabeledCase::new(
+        InferenceView {
+            family: TaskFamily::NonChiralControl,
+            split: case.split,
+            case_id: case.case_id,
+            group_id: case.nuisance_id,
+            query: case.query,
+            key: case.key,
+            label_contract: PROTECTED_LABEL_CONTRACT,
+        },
+        case.target,
+    )
 }
 
 const NUISANCE_CASE_ID_PREFIX: u64 = 1_u64 << 63;
@@ -762,5 +952,103 @@ mod tests {
         assert_eq!(c_dev.target, c_val.target);
         assert_eq!(c_dev.query, c_val.query);
         assert_ne!(c_dev.split, c_val.split);
+    }
+
+    #[test]
+    fn protected_label_api_hides_targets_from_inference_callbacks() {
+        let pair = reflection_discriminative_pair(21).unwrap();
+        let labeled = seal_reflection_discriminative(&pair.right);
+        assert_eq!(
+            labeled.inference_view().label_contract,
+            PROTECTED_LABEL_CONTRACT
+        );
+        assert_eq!(
+            labeled.inference_view().family,
+            TaskFamily::ReflectionDiscriminative
+        );
+        assert_eq!(labeled.inference_view().query, pair.right.query);
+        assert_eq!(labeled.inference_view().key, pair.right.key);
+        assert_eq!(labeled.inference_view().case_id, pair.right.case_id);
+        assert_eq!(labeled.inference_view().group_id, pair.right.pair_id);
+        assert_eq!(
+            *labeled.protected_label().reveal_for_evaluation(),
+            HandednessTarget::Right
+        );
+
+        let observed = run_inference_callback(&labeled, |view| {
+            // Callback surface exposes carriers/identity only.
+            assert_eq!(view.query, pair.right.query);
+            assert_eq!(view.key, pair.right.key);
+            format!("{:?}", view)
+        });
+        assert!(!observed.contains("target"));
+        assert!(!observed.contains("Right"));
+        assert!(!observed.contains("Left"));
+        assert!(observed.contains("ReflectionDiscriminative"));
+    }
+
+    #[test]
+    fn every_phase_b_family_seals_targets_outside_inference_views() {
+        let discriminative =
+            seal_reflection_discriminative(&reflection_discriminative_pair(3).unwrap().left);
+        assert_eq!(
+            *discriminative.protected_label().reveal_for_evaluation(),
+            HandednessTarget::Left
+        );
+        assert_eq!(
+            discriminative.inference_view().family.generator_contract(),
+            REFLECTION_DISCRIMINATIVE_CONTRACT
+        );
+
+        let nuisance = seal_reflection_nuisance(&reflection_nuisance_pair(4).unwrap().canonical);
+        assert_eq!(
+            run_inference_callback(&nuisance, |view| {
+                assert_eq!(view.split, DataSplit::Development);
+                view.family
+            }),
+            TaskFamily::ReflectionNuisance
+        );
+        assert_eq!(
+            *nuisance.protected_label().reveal_for_evaluation(),
+            reflection_nuisance_pair(4).unwrap().canonical.target
+        );
+
+        let direction = seal_direction_reversal(&direction_reversal_pair(5).unwrap().reverse);
+        assert_eq!(
+            *direction.protected_label().reveal_for_evaluation(),
+            DirectionTarget::Reverse
+        );
+        assert_eq!(
+            run_inference_callback(&direction, |view| view.case_id),
+            direction_reversal_pair(5).unwrap().reverse.case_id
+        );
+
+        let control = seal_non_chiral_control(&non_chiral_control_case(6).unwrap());
+        assert_eq!(
+            control.inference_view().group_id,
+            non_chiral_control_case(6).unwrap().nuisance_id
+        );
+        assert_eq!(
+            *control.protected_label().reveal_for_evaluation(),
+            non_chiral_control_case(6).unwrap().target
+        );
+        let leaked = run_inference_callback(&control, |view| format!("{view:?}"));
+        assert!(!leaked.contains("ClassA"));
+        assert!(!leaked.contains("ClassB"));
+        assert!(!leaked.contains("target"));
+    }
+
+    #[test]
+    fn sealed_inference_view_preserves_split_without_exposing_oracle() {
+        let case = reflection_discriminative_pair_in_split(11, DataSplit::Validation)
+            .unwrap()
+            .right;
+        let labeled = seal_reflection_discriminative(&case);
+        assert_eq!(labeled.inference_view().split, DataSplit::Validation);
+        assert_eq!(
+            *labeled.protected_label().reveal_for_evaluation(),
+            case.target
+        );
+        assert_eq!(TaskFamily::NonChiralControl.as_str(), "non_chiral_control");
     }
 }
