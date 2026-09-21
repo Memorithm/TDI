@@ -29,8 +29,8 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 | 14 | Non-chiral negative-control generator | **landed** in #569; opposite targets share identical odd sectors within nuisance strata |
 | 15 | Difficulty strata | **landed** in #601; deterministic bounded levels (0..=3) with fail-closed range checks, independent of model output |
 | 16 | Split manifest | **landed** in #602; Development/Validation identities embedded in every case |
-| 17 | Protected-label API | **current stacked slice**; inference callback cannot access expected target |
-| 18 | Seed registry + disjointness tests | no overlap across declared domains |
+| 17 | Protected-label API | **landed** in #604; inference callback cannot access expected target |
+| 18 | Seed registry + disjointness tests | **current stacked slice**; no overlap across declared domains |
 | 19 | Dataset canonicalization/hash | stable canonical record and digest |
 | 20 | Stage-B data audit/freeze | leakage/adversarial audit green before training/evaluation |
 
@@ -93,4 +93,4 @@ The campaign pauses rather than forcing a later PR when:
 
 ## Progress accounting
 
-**16/50 merged** (#406, #471, #487, #492, #548, #549, #550, #551, #556, #559, #562, #565, #567, #569, #601, #602). Slice 17 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**17/50 merged** (#406, #471, #487, #492, #548, #549, #550, #551, #556, #559, #562, #565, #567, #569, #601, #602, #604). Slice 18 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
