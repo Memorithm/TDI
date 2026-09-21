@@ -184,6 +184,6 @@ TDI is **dual-licensed**; see [`LICENSING.md`](LICENSING.md).
 
 Copyright 2026 Tarek Zekriti.
 
-## TDI-22.x — BANC v888 sparse recurrent dynamics
+## TDI-26.x — BANC v888 sparse recurrent dynamics
 
-The V888-only connectomic research line is bootstrapped in [`docs/V888_CONNECTOME_BOOTSTRAP.md`](docs/V888_CONNECTOME_BOOTSTRAP.md). TDI-22 is independent from the frozen/protected TDI-7/8/9/11/12/21 confirmatory surfaces. It studies whether V888-derived sparse recurrent structure adds predictive or computational value beyond edge-count-, degree-, reciprocity- and modularity-matched controls. Stage 0 does not authorize a confirmatory run.
+The V888-only connectomic research line is bootstrapped in [`docs/V888_CONNECTOME_BOOTSTRAP.md`](docs/V888_CONNECTOME_BOOTSTRAP.md). TDI-26 is independent from the frozen/protected TDI-7/8/9/11/12/21/22 confirmatory and programme surfaces. It studies whether V888-derived sparse recurrent structure adds predictive or computational value beyond edge-count-, degree-, reciprocity- and modularity-matched controls. Stage 0 does not authorize a confirmatory run.
