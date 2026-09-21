@@ -158,3 +158,14 @@ Required CI must be green on the exact PR head before merge.
 Reread the roadmap and applicable overlays at every session start, before preregistration/evaluator/final-evaluation changes, before cross-repository scientific or Boolean integration work, after scientific-strategy changes, and before relevant PR/merge decisions.
 
 Do not merge the roadmap or integration overlays themselves into `main` unless the user explicitly requests it.
+
+## TDI-26.x BANC v888 sparse recurrent bootstrap and stage gate
+
+TDI-26.x is the V888-only sparse recurrent/topology research line. Before TDI-26 work, read in order:
+
+1. `docs/TDI-26-PROGRAMME.md`;
+2. `docs/V888_CONNECTOME_BOOTSTRAP.md`.
+
+TDI-26 is independent from TDI-22 torsor-attention and must not read, modify, reinterpret or reuse protected final/confirmatory surfaces from other TDI series. Stage 0 may define provenance, matched topology controls, deterministic evaluators and development-only interventions. No TDI-26 confirmatory run is authorized by the bootstrap. New implementation is Rust-first and may use CPU/WGPU portable runtime contracts; it must not introduce an NVIDIA dependency.
+
+Before a TDI-26 PR or merge decision, re-read the V888 bootstrap and require the ordinary exact-head CI gates. A later confirmation stage requires a separately frozen and explicitly authorized protocol.
