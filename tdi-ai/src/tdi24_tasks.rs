@@ -28,6 +28,9 @@ pub const SPLIT_MANIFEST_CONTRACT: &str = "tdi24-split-manifest-v1";
 /// Versioned Slice-17 protected-label API contract.
 pub const PROTECTED_LABEL_CONTRACT: &str = "tdi24-protected-label-api-v1";
 
+/// Versioned Slice-18 seed-registry contract.
+pub const SEED_REGISTRY_CONTRACT: &str = "tdi24-seed-registry-v1";
+
 /// Inclusive upper bound on admissible difficulty levels (`0..=MAX`).
 pub const DIFFICULTY_LEVEL_MAX: u8 = 3;
 
@@ -263,6 +266,109 @@ pub fn seal_non_chiral_control(case: &NonChiralControlCase) -> LabeledCase<NonCh
         },
         case.target,
     )
+}
+
+/// Declared provenance-bound seed domain.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SeedDomain {
+    /// Non-final Development seed namespace.
+    Development,
+    /// Non-final Validation seed namespace.
+    Validation,
+}
+
+impl SeedDomain {
+    const fn domain_tag(self) -> u64 {
+        match self {
+            Self::Development => 0x5444_4932_3444_4556,
+            Self::Validation => 0x5444_4932_3456_414C,
+        }
+    }
+
+    /// Stable lowercase domain label.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Development => "development",
+            Self::Validation => "validation",
+        }
+    }
+
+    /// Fail-closed parse of a seed-domain label.
+    pub fn parse(label: &str) -> Result<Self, Tdi24TaskError> {
+        match label {
+            "development" => Ok(Self::Development),
+            "validation" => Ok(Self::Validation),
+            _ => Err(Tdi24TaskError::UnknownSeedDomain),
+        }
+    }
+
+    /// Map a typed data split onto its seed domain.
+    #[must_use]
+    pub const fn from_split(split: DataSplit) -> Self {
+        match split {
+            DataSplit::Development => Self::Development,
+            DataSplit::Validation => Self::Validation,
+        }
+    }
+}
+
+fn family_seed_tag(family: TaskFamily) -> u64 {
+    match family {
+        TaskFamily::ReflectionDiscriminative => 0x5244_4631_0000_0001,
+        TaskFamily::ReflectionNuisance => 0x5244_4632_0000_0002,
+        TaskFamily::DirectionReversal => 0x5244_4633_0000_0003,
+        TaskFamily::NonChiralControl => 0x5244_4634_0000_0004,
+    }
+}
+
+/// Domain-separated mix of a declared local seed.
+#[must_use]
+pub fn mix_registered_seed(domain: SeedDomain, family: TaskFamily, local_seed: u64) -> u64 {
+    // Stage the mix so domain/family tags cannot cancel inside the local-seed
+    // XOR subspace (which would otherwise create systematic cross-family
+    // collisions for dense local ranges).
+    let mut state = local_seed
+        .wrapping_add(0x9E37_79B9_7F4A_7C15)
+        .wrapping_mul(domain.domain_tag() | 1);
+    state ^= family_seed_tag(family).rotate_left(17);
+    state = (state ^ (state >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    state = (state ^ (state >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    state ^ (state >> 31)
+}
+
+/// One registry entry binding a local seed to a domain-separated mixed seed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct RegisteredSeed {
+    pub domain: SeedDomain,
+    pub family: TaskFamily,
+    pub local_seed: u64,
+    pub mixed_seed: u64,
+    pub registry_contract: &'static str,
+}
+
+/// Register a local seed under a declared domain/family namespace.
+#[must_use]
+pub fn register_seed(domain: SeedDomain, family: TaskFamily, local_seed: u64) -> RegisteredSeed {
+    RegisteredSeed {
+        domain,
+        family,
+        local_seed,
+        mixed_seed: mix_registered_seed(domain, family, local_seed),
+        registry_contract: SEED_REGISTRY_CONTRACT,
+    }
+}
+
+/// Fail closed when mixed seeds collide across distinct declared domains.
+pub fn assert_seed_domain_disjointness(seeds: &[RegisteredSeed]) -> Result<(), Tdi24TaskError> {
+    for (index, left) in seeds.iter().enumerate() {
+        for right in seeds.iter().skip(index + 1) {
+            if left.mixed_seed == right.mixed_seed && left.domain != right.domain {
+                return Err(Tdi24TaskError::SeedDomainOverlap);
+            }
+        }
+    }
+    Ok(())
 }
 
 const NUISANCE_CASE_ID_PREFIX: u64 = 1_u64 << 63;
@@ -655,6 +761,10 @@ pub enum Tdi24TaskError {
     DifficultyOutOfRange,
     /// Split identity label is not Development or Validation.
     UnknownSplitIdentity,
+    /// Seed-domain label is not Development or Validation.
+    UnknownSeedDomain,
+    /// Mixed seeds collide across distinct declared domains.
+    SeedDomainOverlap,
 }
 
 impl fmt::Display for Tdi24TaskError {
@@ -668,6 +778,8 @@ impl fmt::Display for Tdi24TaskError {
             Self::UnknownSplitIdentity => {
                 formatter.write_str("TDI-24 unknown split identity label")
             }
+            Self::UnknownSeedDomain => formatter.write_str("TDI-24 unknown seed domain label"),
+            Self::SeedDomainOverlap => formatter.write_str("TDI-24 seed domain overlap"),
         }
     }
 }
@@ -1050,5 +1162,94 @@ mod tests {
             case.target
         );
         assert_eq!(TaskFamily::NonChiralControl.as_str(), "non_chiral_control");
+    }
+
+    #[test]
+    fn seed_registry_is_deterministic_and_domain_separated() {
+        let families = [
+            TaskFamily::ReflectionDiscriminative,
+            TaskFamily::ReflectionNuisance,
+            TaskFamily::DirectionReversal,
+            TaskFamily::NonChiralControl,
+        ];
+        for family in families {
+            for local in 0..64 {
+                let development = register_seed(SeedDomain::Development, family, local);
+                let validation = register_seed(SeedDomain::Validation, family, local);
+                assert_eq!(
+                    development,
+                    register_seed(SeedDomain::Development, family, local)
+                );
+                assert_eq!(development.registry_contract, SEED_REGISTRY_CONTRACT);
+                assert_eq!(
+                    development.mixed_seed,
+                    mix_registered_seed(SeedDomain::Development, family, local)
+                );
+                assert_ne!(development.mixed_seed, validation.mixed_seed);
+                assert_eq!(
+                    SeedDomain::from_split(DataSplit::Development),
+                    SeedDomain::Development
+                );
+                assert_eq!(
+                    SeedDomain::from_split(DataSplit::Validation),
+                    SeedDomain::Validation
+                );
+            }
+        }
+        assert_eq!(
+            SeedDomain::parse("protected"),
+            Err(Tdi24TaskError::UnknownSeedDomain)
+        );
+        assert_eq!(
+            SeedDomain::parse("final"),
+            Err(Tdi24TaskError::UnknownSeedDomain)
+        );
+        assert_eq!(SeedDomain::Development.as_str(), "development");
+    }
+
+    #[test]
+    fn declared_seed_domains_have_no_mixed_seed_overlap() {
+        let families = [
+            TaskFamily::ReflectionDiscriminative,
+            TaskFamily::ReflectionNuisance,
+            TaskFamily::DirectionReversal,
+            TaskFamily::NonChiralControl,
+        ];
+        let mut seeds = Vec::new();
+        for family in families {
+            for local in 0..256u64 {
+                seeds.push(register_seed(SeedDomain::Development, family, local));
+                seeds.push(register_seed(SeedDomain::Validation, family, local));
+            }
+        }
+        assert_eq!(seeds.len(), 2048);
+        assert_eq!(assert_seed_domain_disjointness(&seeds), Ok(()));
+
+        let mixed = seeds
+            .iter()
+            .map(|seed| seed.mixed_seed)
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(mixed.len(), seeds.len());
+
+        let forged = [
+            RegisteredSeed {
+                domain: SeedDomain::Development,
+                family: TaskFamily::ReflectionDiscriminative,
+                local_seed: 0,
+                mixed_seed: 0xDEAD_BEEF,
+                registry_contract: SEED_REGISTRY_CONTRACT,
+            },
+            RegisteredSeed {
+                domain: SeedDomain::Validation,
+                family: TaskFamily::ReflectionDiscriminative,
+                local_seed: 1,
+                mixed_seed: 0xDEAD_BEEF,
+                registry_contract: SEED_REGISTRY_CONTRACT,
+            },
+        ];
+        assert_eq!(
+            assert_seed_domain_disjointness(&forged),
+            Err(Tdi24TaskError::SeedDomainOverlap)
+        );
     }
 }
