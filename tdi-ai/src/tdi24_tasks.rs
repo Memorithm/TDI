@@ -10,6 +10,11 @@ use super::tdi24_chiral::{Chiral6, ChiralError};
 /// Versioned Slice-11 reflection-discriminative generator contract.
 pub const REFLECTION_DISCRIMINATIVE_CONTRACT: &str = "tdi24-reflection-discriminative-generator-v1";
 
+/// Versioned Slice-12 reflection-nuisance generator contract.
+pub const REFLECTION_NUISANCE_CONTRACT: &str = "tdi24-reflection-nuisance-generator-v1";
+
+const NUISANCE_CASE_ID_PREFIX: u64 = 1_u64 << 63;
+
 /// Handedness oracle for one member of a mirrored pair.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HandednessTarget {
@@ -83,6 +88,85 @@ pub fn reflection_discriminative_pair(
     Ok(ReflectionDiscriminativePair { right, left })
 }
 
+/// Reflection-invariant binary oracle for the nuisance family.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReflectionInvariantTarget {
+    /// Positive even-sector class.
+    ClassA,
+    /// Negative even-sector class.
+    ClassB,
+}
+
+/// One case where mirror reflection is a nuisance transformation and must not
+/// alter the oracle target.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ReflectionNuisanceCase {
+    pub pair_id: u64,
+    pub case_id: u64,
+    pub query: Chiral6,
+    pub key: Chiral6,
+    pub target: ReflectionInvariantTarget,
+    pub generator_contract: &'static str,
+}
+
+/// Exact mirrored nuisance pair with one shared target.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ReflectionNuisancePair {
+    pub canonical: ReflectionNuisanceCase,
+    pub reflected: ReflectionNuisanceCase,
+}
+
+/// Deterministically materialize one reflection-nuisance pair.
+pub fn reflection_nuisance_pair(pair_id: u64) -> Result<ReflectionNuisancePair, Tdi24TaskError> {
+    let local_base = pair_id
+        .checked_mul(2)
+        .filter(|value| *value < (u64::MAX >> 1))
+        .ok_or(Tdi24TaskError::CaseIdOverflow)?;
+    let canonical_id = NUISANCE_CASE_ID_PREFIX | local_base;
+    let reflected_id = canonical_id
+        .checked_add(1)
+        .ok_or(Tdi24TaskError::CaseIdOverflow)?;
+
+    let target = if pair_id % 2 == 0 {
+        ReflectionInvariantTarget::ClassA
+    } else {
+        ReflectionInvariantTarget::ClassB
+    };
+    let sign = match target {
+        ReflectionInvariantTarget::ClassA => 1.0,
+        ReflectionInvariantTarget::ClassB => -1.0,
+    };
+    let offset = ((pair_id % 31) as f64 + 1.0) / 80.0;
+    let query = Chiral6::new(
+        [sign * (1.0 + offset), 0.5, -0.25],
+        [0.75 + offset, -0.625, 1.125],
+    )
+    .map_err(Tdi24TaskError::Chiral)?;
+    let key = Chiral6::new([1.0, -0.5 + offset, 0.875], [-1.25, 0.375 + offset, 0.5])
+        .map_err(Tdi24TaskError::Chiral)?;
+
+    let canonical = ReflectionNuisanceCase {
+        pair_id,
+        case_id: canonical_id,
+        query,
+        key,
+        target,
+        generator_contract: REFLECTION_NUISANCE_CONTRACT,
+    };
+    let reflected = ReflectionNuisanceCase {
+        pair_id,
+        case_id: reflected_id,
+        query: query.mirror(),
+        key: key.mirror(),
+        target,
+        generator_contract: REFLECTION_NUISANCE_CONTRACT,
+    };
+    Ok(ReflectionNuisancePair {
+        canonical,
+        reflected,
+    })
+}
+
 /// Task-generation failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tdi24TaskError {
@@ -146,6 +230,46 @@ mod tests {
         );
         assert_eq!(
             reflection_discriminative_pair(u64::MAX),
+            Err(Tdi24TaskError::CaseIdOverflow)
+        );
+    }
+    #[test]
+    fn reflection_nuisance_pairs_are_deterministic_target_invariant_and_namespaced() {
+        for pair_id in 0..64 {
+            let pair = reflection_nuisance_pair(pair_id).unwrap();
+            assert_eq!(pair, reflection_nuisance_pair(pair_id).unwrap());
+            assert_eq!(pair.canonical.target, pair.reflected.target);
+            assert_eq!(pair.reflected.query, pair.canonical.query.mirror());
+            assert_eq!(pair.reflected.key, pair.canonical.key.mirror());
+            assert_ne!(pair.canonical.case_id, pair.reflected.case_id);
+            assert_ne!(
+                pair.canonical.case_id,
+                reflection_discriminative_pair(pair_id)
+                    .unwrap()
+                    .right
+                    .case_id
+            );
+            assert_ne!(pair.canonical.case_id & NUISANCE_CASE_ID_PREFIX, 0);
+        }
+    }
+
+    #[test]
+    fn nuisance_reflection_changes_only_the_odd_observable_not_the_target() {
+        for pair_id in 0..32 {
+            let pair = reflection_nuisance_pair(pair_id).unwrap();
+            let canonical = observables(pair.canonical.query, pair.canonical.key).unwrap();
+            let reflected = observables(pair.reflected.query, pair.reflected.key).unwrap();
+            assert_eq!(canonical.direct, reflected.direct);
+            assert_eq!(canonical.mirrored, reflected.mirrored);
+            assert_eq!(canonical.chiral, -reflected.chiral);
+            assert_eq!(pair.canonical.target, pair.reflected.target);
+        }
+    }
+
+    #[test]
+    fn nuisance_case_id_overflow_fails_closed() {
+        assert_eq!(
+            reflection_nuisance_pair(u64::MAX),
             Err(Tdi24TaskError::CaseIdOverflow)
         );
     }
