@@ -15,15 +15,15 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | 05 | Score-scale contract | **landed** in #554; one finite positive divisor applied identically to T6/C6/G6 |
 | 06 | Torsor invariant bridge tests | **landed** in #555; observe upstream invariants before/after transport and verify TDI-25 score invariance |
 | 07 | Chiral invariant bridge tests | **landed** in #557; fail-closed M²/J²/MJM and s/m/chi reflection identities through the TDI-25 adapter |
-| 08 | Shared masking/normalization reference | **stacked predecessor** #561; T6/C6/G6 call the same TDI-24 mask/normalizer path |
-| 09 | Typed comparison record | **stacked predecessor** #563; family, arm, seed block, case, budget, contracts and retained failure provenance |
-| 10 | Stage-A audit/freeze | **current stacked slice**; cross-contract audit, non-authorizing freeze manifest and fail-closed malformed evidence checks |
+| 08 | Shared masking/normalization reference | **landed** in #561; T6/C6/G6 call the same TDI-24 mask/normalizer path |
+| 09 | Typed comparison record | **landed** in #563; family, arm, seed block, case, budget, contracts and retained failure provenance |
+| 10 | Stage-A audit/freeze | **landed** in #566; cross-contract audit and non-authorizing freeze manifest |
 
 ## Phase B — balanced task families and split discipline (PR 11–20)
 
 | Slice | Deliverable | Gate / definition of done |
 | ---: | --- | --- |
-| 11 | Torsor-favorable transport tasks | reduction-point/translation semantics with deterministic oracle |
+| 11 | Torsor-favorable transport tasks | **current stacked slice**; two reductions of one physical torsor share one separated deterministic score oracle |
 | 12 | Chiral-favorable reflection tasks | mirrored handedness pairs with deterministic oracle |
 | 13 | Mixed geometry tasks | transported relation + parity-sensitive relation both required |
 | 14 | Neutral six-component controls | neither torsor nor chirality privileged by target construction |
@@ -94,4 +94,4 @@ Pause the campaign when any of the following occurs:
 
 ## Progress accounting
 
-**7/50 merged** (#408, #489, #552, #553, #554, #555, #557). Slice 08 is current. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**10/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566). Slice 11 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
