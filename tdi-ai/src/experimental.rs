@@ -198,5 +198,7 @@ pub mod tdi2_predicate_discovery_controls;
 pub mod tdi2_structural_terms;
 #[path = "tdi2_template_induction.rs"]
 pub mod tdi2_template_induction;
+#[path = "tdi2_template_learning.rs"]
+pub mod tdi2_template_learning;
 #[path = "tdi2_temporal_delta.rs"]
 pub mod tdi2_temporal_delta;
