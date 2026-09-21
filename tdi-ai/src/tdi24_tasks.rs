@@ -31,6 +31,9 @@ pub const PROTECTED_LABEL_CONTRACT: &str = "tdi24-protected-label-api-v1";
 /// Versioned Slice-18 seed-registry contract.
 pub const SEED_REGISTRY_CONTRACT: &str = "tdi24-seed-registry-v1";
 
+/// Versioned Slice-19 dataset canonicalization/hash contract.
+pub const DATASET_CANONICALIZATION_CONTRACT: &str = "tdi24-dataset-canonicalization-v1";
+
 /// Inclusive upper bound on admissible difficulty levels (`0..=MAX`).
 pub const DIFFICULTY_LEVEL_MAX: u8 = 3;
 
@@ -369,6 +372,65 @@ pub fn assert_seed_domain_disjointness(seeds: &[RegisteredSeed]) -> Result<(), T
         }
     }
     Ok(())
+}
+
+fn format_f64_bits(value: f64) -> String {
+    format!("{:016x}", value.to_bits())
+}
+
+fn format_chiral6(carrier: Chiral6) -> String {
+    carrier
+        .as_array()
+        .into_iter()
+        .map(format_f64_bits)
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// Stable canonical record for an inference-visible case (no oracle/target).
+#[must_use]
+pub fn canonical_inference_record(view: &InferenceView) -> String {
+    format!(
+        "{DATASET_CANONICALIZATION_CONTRACT};family={};split={};case={:016x};group={:016x};query={};key={};label={}",
+        view.family.as_str(),
+        view.split.as_str(),
+        view.case_id,
+        view.group_id,
+        format_chiral6(view.query),
+        format_chiral6(view.key),
+        view.label_contract,
+    )
+}
+
+/// Non-cryptographic stable digest of a canonical record.
+#[must_use]
+pub fn canonical_digest(record: &str) -> String {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for byte in record.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{hash:016x}")
+}
+
+/// Canonical record plus digest for one inference view.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CanonicalCaseDigest {
+    pub record: String,
+    pub digest: String,
+    pub contract: &'static str,
+}
+
+/// Build the stable canonical record/digest pair for an inference view.
+#[must_use]
+pub fn canonicalize_inference_view(view: &InferenceView) -> CanonicalCaseDigest {
+    let record = canonical_inference_record(view);
+    let digest = canonical_digest(&record);
+    CanonicalCaseDigest {
+        record,
+        digest,
+        contract: DATASET_CANONICALIZATION_CONTRACT,
+    }
 }
 
 const NUISANCE_CASE_ID_PREFIX: u64 = 1_u64 << 63;
@@ -1251,5 +1313,52 @@ mod tests {
             assert_seed_domain_disjointness(&forged),
             Err(Tdi24TaskError::SeedDomainOverlap)
         );
+    }
+
+    #[test]
+    fn dataset_canonicalization_is_stable_and_excludes_targets() {
+        let labeled =
+            seal_reflection_discriminative(&reflection_discriminative_pair(17).unwrap().right);
+        let first = canonicalize_inference_view(labeled.inference_view());
+        let second = canonicalize_inference_view(labeled.inference_view());
+        assert_eq!(first, second);
+        assert_eq!(first.contract, DATASET_CANONICALIZATION_CONTRACT);
+        assert_eq!(first.digest, canonical_digest(&first.record));
+        assert!(first.record.starts_with(DATASET_CANONICALIZATION_CONTRACT));
+        assert!(!first.record.contains("target"));
+        assert!(!first.record.contains("Right"));
+        assert!(!first.record.contains("Left"));
+        assert!(first.record.contains("reflection_discriminative"));
+        assert!(first.record.contains("development"));
+
+        let validation = seal_reflection_discriminative(
+            &reflection_discriminative_pair_in_split(17, DataSplit::Validation)
+                .unwrap()
+                .right,
+        );
+        let validation_digest = canonicalize_inference_view(validation.inference_view());
+        assert_ne!(first.digest, validation_digest.digest);
+        assert!(validation_digest.record.contains("validation"));
+    }
+
+    #[test]
+    fn every_phase_b_family_has_a_deterministic_canonical_digest() {
+        let views = [
+            *seal_reflection_discriminative(&reflection_discriminative_pair(1).unwrap().left)
+                .inference_view(),
+            *seal_reflection_nuisance(&reflection_nuisance_pair(2).unwrap().canonical)
+                .inference_view(),
+            *seal_direction_reversal(&direction_reversal_pair(3).unwrap().forward).inference_view(),
+            *seal_non_chiral_control(&non_chiral_control_case(4).unwrap()).inference_view(),
+        ];
+        let mut digests = std::collections::BTreeSet::new();
+        for view in views {
+            let digest = canonicalize_inference_view(&view);
+            assert_eq!(digest, canonicalize_inference_view(&view));
+            assert_eq!(digest.digest.len(), 16);
+            assert!(!digest.record.contains("target"));
+            digests.insert(digest.digest);
+        }
+        assert_eq!(digests.len(), 4);
     }
 }
