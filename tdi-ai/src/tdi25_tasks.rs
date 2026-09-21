@@ -8,6 +8,8 @@
 //! relation and a parity-sensitive relation.
 //! Slice 14 adds neutral six-component controls that privilege neither
 //! torsor nor chirality in the target construction.
+//! Slice 15 registers explicit position-geometry arms (linear/helical/
+//! learned/external) so no geometry is an implicit default.
 
 use core::fmt;
 
@@ -28,6 +30,12 @@ pub const MIXED_GEOMETRY_TASK_CONTRACT: &str = "tdi25-mixed-geometry-task-v1";
 
 /// Versioned TDI-25 neutral six-component control task contract.
 pub const NEUTRAL_CONTROL_TASK_CONTRACT: &str = "tdi25-neutral-control-task-v1";
+
+/// Versioned TDI-25 position-geometry arm registry contract.
+pub const POSITION_GEOMETRY_ARM_CONTRACT: &str = "tdi25-position-geometry-arm-v1";
+
+/// Inclusive upper bound on admissible geometry indices.
+pub const POSITION_GEOMETRY_INDEX_MAX: u64 = 1024;
 
 /// Inference-visible input for one torsor transport case.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -417,10 +425,141 @@ pub fn neutral_control_pair(pair_id: u64) -> Result<NeutralControlPair, Tdi25Tas
     })
 }
 
+/// Explicit position-geometry experimental arm.
+///
+/// A physical 3D coordinate is never an implicit token assumption; every
+/// geometry choice carries provenance through this registry.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum PositionGeometryArm {
+    /// Uniform linear abscissa along x.
+    Linear,
+    /// Discrete helical sample on a bounded octagon with linear z.
+    Helical,
+    /// Deterministic frozen lookup table (not a trained embedding).
+    Learned,
+    /// Caller-supplied external coordinate with fail-closed validation.
+    External,
+}
+
+impl PositionGeometryArm {
+    /// Stable lowercase label for manifests and audits.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Linear => "linear",
+            Self::Helical => "helical",
+            Self::Learned => "learned",
+            Self::External => "external",
+        }
+    }
+
+    /// Human-readable provenance retained beside every sample.
+    #[must_use]
+    pub const fn provenance(self) -> &'static str {
+        match self {
+            Self::Linear => "tdi25-geometry-linear-abscissa-v1",
+            Self::Helical => "tdi25-geometry-helical-octagon-v1",
+            Self::Learned => "tdi25-geometry-learned-table-v1",
+            Self::External => "tdi25-geometry-external-supplied-v1",
+        }
+    }
+
+    /// Fail-closed parse of an arm label.
+    pub fn parse(label: &str) -> Result<Self, Tdi25TaskError> {
+        match label {
+            "linear" => Ok(Self::Linear),
+            "helical" => Ok(Self::Helical),
+            "learned" => Ok(Self::Learned),
+            "external" => Ok(Self::External),
+            _ => Err(Tdi25TaskError::UnknownGeometryArm),
+        }
+    }
+}
+
+/// One materialized position sample with explicit arm provenance.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PositionGeometrySample {
+    pub arm: PositionGeometryArm,
+    pub index: u64,
+    pub point: Vec3,
+    pub arm_provenance: &'static str,
+    pub generator_contract: &'static str,
+}
+
+/// Resolve a position for the declared geometry arm.
+///
+/// `external` is required only for [`PositionGeometryArm::External`].
+pub fn position_geometry_point(
+    arm: PositionGeometryArm,
+    index: u64,
+    external: Option<Vec3>,
+) -> Result<PositionGeometrySample, Tdi25TaskError> {
+    if index > POSITION_GEOMETRY_INDEX_MAX {
+        return Err(Tdi25TaskError::GeometryIndexOutOfRange);
+    }
+
+    let point = match arm {
+        PositionGeometryArm::Linear => Vec3::new(index as f64 / 64.0, 0.0, 0.0)
+            .map_err(|error| Tdi25TaskError::Bridge(Tdi25Error::Torsor(error)))?,
+        PositionGeometryArm::Helical => {
+            let (x, y) = match index % 8 {
+                0 => (1.0, 0.0),
+                1 => (1.0, 1.0),
+                2 => (0.0, 1.0),
+                3 => (-1.0, 1.0),
+                4 => (-1.0, 0.0),
+                5 => (-1.0, -1.0),
+                6 => (0.0, -1.0),
+                _ => (1.0, -1.0),
+            };
+            Vec3::new(x, y, index as f64 / 64.0)
+                .map_err(|error| Tdi25TaskError::Bridge(Tdi25Error::Torsor(error)))?
+        }
+        PositionGeometryArm::Learned => {
+            // Frozen deterministic table: cyclic unit-ish offsets, not trainable.
+            let table = [
+                (0.25, -0.5, 0.75),
+                (-0.75, 0.25, 0.5),
+                (0.5, 0.75, -0.25),
+                (-0.25, -0.75, 0.125),
+            ];
+            let (x, y, z) = table[(index as usize) % table.len()];
+            let scale = 1.0 + (index / 4) as f64 / 64.0;
+            Vec3::new(x * scale, y * scale, z * scale)
+                .map_err(|error| Tdi25TaskError::Bridge(Tdi25Error::Torsor(error)))?
+        }
+        PositionGeometryArm::External => {
+            external.ok_or(Tdi25TaskError::ExternalPositionRequired)?
+        }
+    };
+
+    Ok(PositionGeometrySample {
+        arm,
+        index,
+        point,
+        arm_provenance: arm.provenance(),
+        generator_contract: POSITION_GEOMETRY_ARM_CONTRACT,
+    })
+}
+
+/// Enumerate the frozen registry in stable order.
+#[must_use]
+pub const fn position_geometry_registry() -> [PositionGeometryArm; 4] {
+    [
+        PositionGeometryArm::Linear,
+        PositionGeometryArm::Helical,
+        PositionGeometryArm::Learned,
+        PositionGeometryArm::External,
+    ]
+}
+
 /// TDI-25 task-generation failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tdi25TaskError {
     CaseIdOverflow,
+    GeometryIndexOutOfRange,
+    ExternalPositionRequired,
+    UnknownGeometryArm,
     Bridge(Tdi25Error),
 }
 
@@ -428,6 +567,13 @@ impl fmt::Display for Tdi25TaskError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::CaseIdOverflow => formatter.write_str("TDI-25 task case id overflow"),
+            Self::GeometryIndexOutOfRange => {
+                formatter.write_str("TDI-25 position geometry index out of range")
+            }
+            Self::ExternalPositionRequired => {
+                formatter.write_str("TDI-25 external position geometry requires a supplied point")
+            }
+            Self::UnknownGeometryArm => formatter.write_str("TDI-25 unknown position geometry arm"),
             Self::Bridge(error) => write!(formatter, "TDI-25 bridge rejected task: {error}"),
         }
     }
@@ -705,6 +851,68 @@ mod tests {
         assert_eq!(
             neutral_control_pair(u64::MAX),
             Err(Tdi25TaskError::CaseIdOverflow)
+        );
+    }
+
+    #[test]
+    fn position_geometry_registry_is_explicit_and_complete() {
+        let registry = position_geometry_registry();
+        assert_eq!(registry.len(), 4);
+        assert_eq!(registry[0], PositionGeometryArm::Linear);
+        assert_eq!(registry[1], PositionGeometryArm::Helical);
+        assert_eq!(registry[2], PositionGeometryArm::Learned);
+        assert_eq!(registry[3], PositionGeometryArm::External);
+        for arm in registry {
+            assert_eq!(PositionGeometryArm::parse(arm.as_str()).unwrap(), arm);
+            assert!(!arm.provenance().is_empty());
+        }
+        assert_eq!(
+            PositionGeometryArm::parse("implicit"),
+            Err(Tdi25TaskError::UnknownGeometryArm)
+        );
+    }
+
+    #[test]
+    fn position_geometry_points_are_deterministic_with_provenance() {
+        for index in 0..32 {
+            let linear = position_geometry_point(PositionGeometryArm::Linear, index, None).unwrap();
+            assert_eq!(
+                linear,
+                position_geometry_point(PositionGeometryArm::Linear, index, None).unwrap()
+            );
+            assert_eq!(linear.generator_contract, POSITION_GEOMETRY_ARM_CONTRACT);
+            assert_eq!(
+                linear.arm_provenance,
+                PositionGeometryArm::Linear.provenance()
+            );
+            close(linear.point.y, 0.0);
+            close(linear.point.z, 0.0);
+
+            let helical =
+                position_geometry_point(PositionGeometryArm::Helical, index, None).unwrap();
+            assert_eq!(helical.arm, PositionGeometryArm::Helical);
+
+            let learned =
+                position_geometry_point(PositionGeometryArm::Learned, index, None).unwrap();
+            assert_eq!(learned.arm, PositionGeometryArm::Learned);
+            assert_ne!(learned.point, linear.point);
+        }
+
+        let supplied = Vec3::new(1.0, -2.0, 0.5).unwrap();
+        let external =
+            position_geometry_point(PositionGeometryArm::External, 3, Some(supplied)).unwrap();
+        assert_eq!(external.point, supplied);
+        assert_eq!(
+            position_geometry_point(PositionGeometryArm::External, 3, None),
+            Err(Tdi25TaskError::ExternalPositionRequired)
+        );
+        assert_eq!(
+            position_geometry_point(
+                PositionGeometryArm::Linear,
+                POSITION_GEOMETRY_INDEX_MAX + 1,
+                None
+            ),
+            Err(Tdi25TaskError::GeometryIndexOutOfRange)
         );
     }
 }
