@@ -41,9 +41,7 @@ impl TopologyArm {
             Self::RandomSparse => "c1_random_sparse",
             Self::DegreeMatched => "c2_degree_matched",
             Self::DegreeReciprocityMatched => "c3_degree_reciprocity_matched",
-            Self::DegreeReciprocityModularityMatched => {
-                "c4_degree_reciprocity_modularity_matched"
-            }
+            Self::DegreeReciprocityModularityMatched => "c4_degree_reciprocity_modularity_matched",
             Self::V888StructuralPrior => "c5_v888_structural_prior",
         }
     }
@@ -242,9 +240,8 @@ impl fmt::Display for Tdi26Error {
                 formatter,
                 "TDI-26 directed edge budget {directed_edges} exceeds simple-graph maximum {max_edges}"
             ),
-            Self::MissingRequiredControl => {
-                formatter.write_str("TDI-26 matched comparison is missing a required sparse control")
-            }
+            Self::MissingRequiredControl => formatter
+                .write_str("TDI-26 matched comparison is missing a required sparse control"),
             Self::UnmatchedSparseBudget {
                 expected,
                 found,
@@ -392,6 +389,9 @@ mod tests {
             InterventionKind::TargetedHighDegreeNodeSilencing.as_str(),
             "targeted_high_degree_node_silencing"
         );
-        assert_eq!(InterventionKind::InterModuleCut.as_str(), "inter_module_cut");
+        assert_eq!(
+            InterventionKind::InterModuleCut.as_str(),
+            "inter_module_cut"
+        );
     }
 }
