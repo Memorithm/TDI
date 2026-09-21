@@ -26,8 +26,8 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 | 11 | Reflection-discriminative generator | **landed** in #562; deterministic exact mirrored pairs with opposite handedness labels |
 | 12 | Reflection-nuisance generator | **landed** in #565; family-namespaced exact mirrored pairs with one invariant even-sector target |
 | 13 | Direction/reversal generator | **landed** in #567; deterministic query/key order reversal with opposite direction oracle and antisymmetric chi |
-| 14 | Non-chiral negative-control generator | **current stacked slice**; opposite targets share identical odd sectors within nuisance strata |
-| 15 | Difficulty strata | deterministic bounded levels independent of model output |
+| 14 | Non-chiral negative-control generator | **landed** in #569; opposite targets share identical odd sectors within nuisance strata |
+| 15 | Difficulty strata | **current stacked slice**; deterministic bounded levels (0..=3) with fail-closed range checks, independent of model output |
 | 16 | Split manifest | Development/Validation identities embedded in every case |
 | 17 | Protected-label API | inference callback cannot access expected target |
 | 18 | Seed registry + disjointness tests | no overlap across declared domains |
@@ -93,4 +93,4 @@ The campaign pauses rather than forcing a later PR when:
 
 ## Progress accounting
 
-**13/50 merged** (#406, #471, #487, #492, #548, #549, #550, #551, #556, #559, #562, #565, #567). Slice 14 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**14/50 merged** (#406, #471, #487, #492, #548, #549, #550, #551, #556, #559, #562, #565, #567, #569). Slice 15 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
