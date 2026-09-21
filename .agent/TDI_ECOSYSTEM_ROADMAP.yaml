@@ -848,3 +848,27 @@ engine_and_PR_integration_2026_09_19:
     - Validation_input_remains_closed_until_immutable_content_binding_exists
     - no_universal_performance_or_scientific_promotion
     - auto_merge_is_not_evidence_of_completed_merge
+
+tdi26_v888_sparse_recurrent_program:
+  status: active_stage0_user_directed_2026_09_21
+  source_scope:
+    connectome: FlyWire_BANC_v888_only
+    raw_dataset_in_repository: false
+  independence:
+    tdi22_torsor_attention_unchanged: true
+    protected_holdouts_untouched: true
+  ordered_bootstrap:
+    - TDI_26_0_scope_and_preregistration_bootstrap
+    - TDI_26_1_deterministic_evaluator
+    - TDI_26_2_topology_identifiability_controls
+    - TDI_26_3_intervention_conditioned_trajectories
+    - TDI_26_4_predictive_descriptor_test
+    - TDI_26_5_event_driven_vs_fixed_step_semantics
+    - TDI_26_6_ASSR_bridge
+    - TDI_26_7_SML_GENIUS_bridge
+    - TDI_26_8_FLAT_hybrid_bridge
+    - TDI_26_9_robustness_OOD
+    - TDI_26_10_future_confirmatory_gate
+  nvidia_dependency_for_new_programme: false
+  authoritative_main_document: docs/V888_CONNECTOME_BOOTSTRAP.md
+  confirmatory_execution_authorized: false
