@@ -13,6 +13,9 @@ pub const REFLECTION_DISCRIMINATIVE_CONTRACT: &str = "tdi24-reflection-discrimin
 /// Versioned Slice-12 reflection-nuisance generator contract.
 pub const REFLECTION_NUISANCE_CONTRACT: &str = "tdi24-reflection-nuisance-generator-v1";
 
+/// Versioned Slice-13 ordered direction/reversal generator contract.
+pub const DIRECTION_REVERSAL_CONTRACT: &str = "tdi24-direction-reversal-generator-v1";
+
 const NUISANCE_CASE_ID_PREFIX: u64 = 1_u64 << 63;
 
 /// Handedness oracle for one member of a mirrored pair.
@@ -167,6 +170,72 @@ pub fn reflection_nuisance_pair(pair_id: u64) -> Result<ReflectionNuisancePair, 
     })
 }
 
+/// Ordered relation oracle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DirectionTarget {
+    Forward,
+    Reverse,
+}
+
+/// One ordered query-key relation.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DirectionReversalCase {
+    pub pair_id: u64,
+    pub case_id: u64,
+    pub query: Chiral6,
+    pub key: Chiral6,
+    pub target: DirectionTarget,
+    pub generator_contract: &'static str,
+}
+
+/// Exact order-reversal pair.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DirectionReversalPair {
+    pub forward: DirectionReversalCase,
+    pub reverse: DirectionReversalCase,
+}
+
+/// Deterministically materialize one ordered relation and its reversal.
+pub fn direction_reversal_pair(pair_id: u64) -> Result<DirectionReversalPair, Tdi24TaskError> {
+    let local_base = pair_id
+        .checked_mul(2)
+        .filter(|value| *value < (1_u64 << 62))
+        .ok_or(Tdi24TaskError::CaseIdOverflow)?;
+    let prefix = 1_u64 << 62;
+    let forward_id = prefix | local_base;
+    let reverse_id = forward_id
+        .checked_add(1)
+        .ok_or(Tdi24TaskError::CaseIdOverflow)?;
+
+    let offset = ((pair_id % 37) as f64 + 1.0) / 96.0;
+    let query = Chiral6::new([1.0 + offset, -0.5, 0.75], [0.25, -1.125 - offset, 1.5])
+        .map_err(Tdi24TaskError::Chiral)?;
+    let key = Chiral6::new(
+        [-0.625, 1.375 + offset, -1.25],
+        [1.625 + offset, 0.5, -0.375],
+    )
+    .map_err(Tdi24TaskError::Chiral)?;
+
+    Ok(DirectionReversalPair {
+        forward: DirectionReversalCase {
+            pair_id,
+            case_id: forward_id,
+            query,
+            key,
+            target: DirectionTarget::Forward,
+            generator_contract: DIRECTION_REVERSAL_CONTRACT,
+        },
+        reverse: DirectionReversalCase {
+            pair_id,
+            case_id: reverse_id,
+            query: key,
+            key: query,
+            target: DirectionTarget::Reverse,
+            generator_contract: DIRECTION_REVERSAL_CONTRACT,
+        },
+    })
+}
+
 /// Task-generation failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tdi24TaskError {
@@ -271,6 +340,43 @@ mod tests {
         assert_eq!(
             reflection_nuisance_pair(u64::MAX),
             Err(Tdi24TaskError::CaseIdOverflow)
+        );
+    }
+    #[test]
+    fn direction_reversal_pairs_swap_order_and_oracle_without_mutating_values() {
+        for pair_id in 0..64 {
+            let pair = direction_reversal_pair(pair_id).unwrap();
+            assert_eq!(pair.reverse.query, pair.forward.key);
+            assert_eq!(pair.reverse.key, pair.forward.query);
+            assert_eq!(pair.forward.target, DirectionTarget::Forward);
+            assert_eq!(pair.reverse.target, DirectionTarget::Reverse);
+            assert_ne!(pair.forward.case_id, pair.reverse.case_id);
+
+            let forward = observables(pair.forward.query, pair.forward.key).unwrap();
+            let reverse = observables(pair.reverse.query, pair.reverse.key).unwrap();
+            assert_eq!(forward.direct, reverse.direct);
+            assert_eq!(forward.mirrored, reverse.mirrored);
+            assert_eq!(forward.chiral, -reverse.chiral);
+            assert_ne!(forward.chiral, 0.0);
+        }
+    }
+
+    #[test]
+    fn direction_reversal_generator_is_deterministic_and_fails_closed_on_id_overflow() {
+        assert_eq!(
+            direction_reversal_pair(19).unwrap(),
+            direction_reversal_pair(19).unwrap()
+        );
+        assert_eq!(
+            direction_reversal_pair(u64::MAX),
+            Err(Tdi24TaskError::CaseIdOverflow)
+        );
+        assert_eq!(
+            direction_reversal_pair(1)
+                .unwrap()
+                .forward
+                .generator_contract,
+            DIRECTION_REVERSAL_CONTRACT
         );
     }
 }
