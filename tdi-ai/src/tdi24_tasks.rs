@@ -19,6 +19,12 @@ pub const DIRECTION_REVERSAL_CONTRACT: &str = "tdi24-direction-reversal-generato
 /// Versioned Slice-14 non-chiral negative-control generator contract.
 pub const NON_CHIRAL_CONTROL_CONTRACT: &str = "tdi24-non-chiral-control-generator-v1";
 
+/// Versioned Slice-15 difficulty-strata contract.
+pub const DIFFICULTY_STRATA_CONTRACT: &str = "tdi24-difficulty-strata-v1";
+
+/// Inclusive upper bound on admissible difficulty levels (`0..=MAX`).
+pub const DIFFICULTY_LEVEL_MAX: u8 = 3;
+
 const NUISANCE_CASE_ID_PREFIX: u64 = 1_u64 << 63;
 
 /// Handedness oracle for one member of a mirrored pair.
@@ -292,6 +298,54 @@ pub fn non_chiral_control_case(case_id: u64) -> Result<NonChiralControlCase, Tdi
     })
 }
 
+/// Bounded difficulty stratum independent of any model output.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct DifficultyLevel {
+    /// Discrete level in `0..=DIFFICULTY_LEVEL_MAX`.
+    pub level: u8,
+}
+
+impl DifficultyLevel {
+    /// Construct a fail-closed level.
+    pub fn new(level: u8) -> Result<Self, Tdi24TaskError> {
+        if level > DIFFICULTY_LEVEL_MAX {
+            return Err(Tdi24TaskError::DifficultyOutOfRange);
+        }
+        Ok(Self { level })
+    }
+
+    /// Deterministic stratum for a seed; never consults model output.
+    pub fn from_seed(seed: u64) -> Self {
+        Self {
+            level: (seed % u64::from(DIFFICULTY_LEVEL_MAX + 1)) as u8,
+        }
+    }
+
+    /// Positive finite magnitude scale for the stratum.
+    ///
+    /// Scales stay small so Stage-A finite arithmetic remains admissible.
+    pub fn magnitude_scale(self) -> f64 {
+        1.0 + f64::from(self.level) * 0.25
+    }
+}
+
+/// Difficulty metadata attached to an existing Phase-B family seed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DifficultyStratum {
+    pub seed: u64,
+    pub level: DifficultyLevel,
+    pub generator_contract: &'static str,
+}
+
+/// Assign a bounded difficulty stratum from a deterministic seed.
+pub fn difficulty_stratum(seed: u64) -> DifficultyStratum {
+    DifficultyStratum {
+        seed,
+        level: DifficultyLevel::from_seed(seed),
+        generator_contract: DIFFICULTY_STRATA_CONTRACT,
+    }
+}
+
 /// Task-generation failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tdi24TaskError {
@@ -299,6 +353,8 @@ pub enum Tdi24TaskError {
     CaseIdOverflow,
     /// The underlying chiral carrier rejected a generated fixture.
     Chiral(ChiralError),
+    /// Difficulty level exceeded the bounded admissible range.
+    DifficultyOutOfRange,
 }
 
 impl fmt::Display for Tdi24TaskError {
@@ -306,6 +362,9 @@ impl fmt::Display for Tdi24TaskError {
         match self {
             Self::CaseIdOverflow => formatter.write_str("TDI-24 case id overflow"),
             Self::Chiral(error) => write!(formatter, "generated chiral fixture invalid: {error}"),
+            Self::DifficultyOutOfRange => {
+                formatter.write_str("TDI-24 difficulty level out of bounded range")
+            }
         }
     }
 }
@@ -470,6 +529,46 @@ mod tests {
             let class_b = non_chiral_control_case(2 * nuisance_id + 1).unwrap();
             assert_eq!(class_a.query.odd(), class_b.query.odd());
             assert_eq!(class_a.key.odd(), class_b.key.odd());
+        }
+    }
+
+    #[test]
+    fn difficulty_strata_are_bounded_deterministic_and_model_independent() {
+        for seed in 0..64 {
+            let stratum = difficulty_stratum(seed);
+            assert_eq!(stratum, difficulty_stratum(seed));
+            assert!(stratum.level.level <= DIFFICULTY_LEVEL_MAX);
+            assert_eq!(stratum.generator_contract, DIFFICULTY_STRATA_CONTRACT);
+            assert_eq!(stratum.level, DifficultyLevel::from_seed(seed));
+            let scale = stratum.level.magnitude_scale();
+            assert!(scale.is_finite());
+            assert!(scale >= 1.0);
+            assert!(scale <= 1.0 + f64::from(DIFFICULTY_LEVEL_MAX) * 0.25);
+        }
+        assert_eq!(
+            DifficultyLevel::new(DIFFICULTY_LEVEL_MAX + 1),
+            Err(Tdi24TaskError::DifficultyOutOfRange)
+        );
+        // Every admissible level appears in a full residue cycle.
+        let mut seen = [false; 4];
+        for seed in 0..4 {
+            seen[difficulty_stratum(seed).level.level as usize] = true;
+        }
+        assert_eq!(seen, [true, true, true, true]);
+    }
+
+    #[test]
+    fn difficulty_scale_is_independent_of_existing_family_oracles() {
+        for pair_id in 0..32 {
+            let stratum = difficulty_stratum(pair_id);
+            let pair = reflection_discriminative_pair(pair_id).unwrap();
+            assert_eq!(pair.right.target, HandednessTarget::Right);
+            assert_eq!(pair.left.target, HandednessTarget::Left);
+            assert_eq!(
+                pair.right.query,
+                reflection_discriminative_pair(pair_id).unwrap().right.query
+            );
+            let _ = stratum.level.magnitude_scale();
         }
     }
 }
