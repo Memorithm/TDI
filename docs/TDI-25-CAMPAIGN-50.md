@@ -27,8 +27,8 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | 12 | Chiral-favorable reflection tasks | **landed** in #603; mirrored handedness pairs with deterministic oracle |
 | 13 | Mixed geometry tasks | **landed** in #605; transported relation + parity-sensitive relation both required |
 | 14 | Neutral six-component controls | **landed** in #606; neither torsor nor chirality privileged by target construction |
-| 15 | Position-geometry arm registry | **current stacked slice**; linear/helical/learned/external geometry kept explicit |
-| 16 | Difficulty strata | bounded deterministic levels independent of model output |
+| 15 | Position-geometry arm registry | **landed** in #607; linear/helical/learned/external geometry kept explicit |
+| 16 | Difficulty strata | **current stacked slice**; bounded deterministic levels independent of model output |
 | 17 | Development/Validation split manifest | split identity embedded in every case |
 | 18 | Protected-label inference API | inference path cannot read target/oracle label |
 | 19 | Seed/case canonicalization + hash | disjoint reproducible populations |
@@ -94,4 +94,4 @@ Pause the campaign when any of the following occurs:
 
 ## Progress accounting
 
-**14/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606). Slice 15 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**15/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606, #607). Slice 16 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
