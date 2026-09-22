@@ -38,8 +38,8 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 
 | Slice | Deliverable | Gate / definition of done |
 | ---: | --- | --- |
-| 21 | V6 evaluator | **current stacked slice**; deterministic non-final Development/Validation path |
-| 22 | C6 evaluator | same evaluator contract and readout budget |
+| 21 | V6 evaluator | **landed** in #611; deterministic non-final Development/Validation path |
+| 22 | C6 evaluator | **current stacked slice**; same evaluator contract and readout budget |
 | 23 | Parameter-count matcher | reject unmatched trainable-capacity configurations |
 | 24 | Initialization matcher | paired deterministic initialization policy |
 | 25 | Optimizer/update-budget contract | same examples, ordering, steps and stopping rule |
@@ -93,4 +93,4 @@ The campaign pauses rather than forcing a later PR when:
 
 ## Progress accounting
 
-**20/50 merged** (#406, #471, #487, #492, #548, #549, #550, #551, #556, #559, #562, #565, #567, #569, #601, #602, #604, #608, #609, #610). Slice 21 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**21/50 merged** (#406, #471, #487, #492, #548, #549, #550, #551, #556, #559, #562, #565, #567, #569, #601, #602, #604, #608, #609, #610, #611). Slice 22 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
