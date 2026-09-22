@@ -9,6 +9,7 @@
 use core::fmt;
 
 use super::tdi24_accounting::ScoreArm;
+use super::tdi24_chiral::{CHIRAL_CONTRACT, Chiral6, ChiralError, ChiralScoreWeights, chiral_score};
 use super::tdi24_tasks::{
     DataSplit, DirectionTarget, HandednessTarget, InferenceView, LabeledCase, NonChiralTarget,
     ReflectionInvariantTarget, TaskFamily, canonicalize_inference_view, run_inference_callback,
@@ -20,6 +21,9 @@ pub const EVALUATOR_ENVELOPE_CONTRACT: &str = "tdi24-evaluator-envelope-v1";
 
 /// Versioned V6 evaluator contract.
 pub const V6_EVALUATOR_CONTRACT: &str = "tdi24-v6-evaluator-v1";
+
+/// Versioned C6 evaluator contract.
+pub const C6_EVALUATOR_CONTRACT: &str = "tdi24-c6-evaluator-v1";
 
 /// Matched readout-budget contract shared across Phase-C evaluator arms.
 pub const READOUT_BUDGET_CONTRACT: &str = "tdi24-readout-budget-v1";
@@ -38,6 +42,8 @@ pub const NON_TRAINED_UPDATE_BUDGET: u64 = 0;
 pub enum EvalArm {
     /// Matched six-dimensional vector control.
     V6,
+    /// Matched six-dimensional chiral candidate.
+    C6,
 }
 
 impl EvalArm {
@@ -46,6 +52,7 @@ impl EvalArm {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::V6 => "v6",
+            Self::C6 => "c6",
         }
     }
 
@@ -54,6 +61,7 @@ impl EvalArm {
     pub const fn evaluator_contract(self) -> &'static str {
         match self {
             Self::V6 => V6_EVALUATOR_CONTRACT,
+            Self::C6 => C6_EVALUATOR_CONTRACT,
         }
     }
 
@@ -62,6 +70,7 @@ impl EvalArm {
     pub const fn score_arm(self) -> ScoreArm {
         match self {
             Self::V6 => ScoreArm::V6,
+            Self::C6 => ScoreArm::C6,
         }
     }
 }
@@ -112,6 +121,17 @@ impl EvaluatorConfig {
         Ok(Self {
             split,
             arm: EvalArm::V6,
+            budget: ReadoutBudget::matched_non_trained(),
+            envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
+        })
+    }
+
+    /// Construct a fail-closed C6 Development/Validation configuration.
+    pub fn c6(split: DataSplit) -> Result<Self, EvalError> {
+        validate_non_final_split(split)?;
+        Ok(Self {
+            split,
+            arm: EvalArm::C6,
             budget: ReadoutBudget::matched_non_trained(),
             envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
         })
@@ -194,9 +214,6 @@ impl EvaluatorRun {
         if config.budget.max_cases == 0 || config.budget.max_readout_scalars_per_case == 0 {
             return Err(EvalError::InvalidBudget);
         }
-        if config.arm != EvalArm::V6 {
-            return Err(EvalError::UnsupportedArm);
-        }
         Ok(Self {
             config,
             records: Vec::new(),
@@ -276,6 +293,40 @@ impl EvaluatorRun {
         });
         Ok(self.records.last().expect("just pushed"))
     }
+
+    /// Evaluate one sealed labeled case through the C6 path.
+    pub fn evaluate_c6_binary<T, S>(&mut self, case: &LabeledCase<T>, oracle_sign: S) -> Result<&EvalRecord, EvalError>
+    where S: FnOnce(&T) -> Result<i8, EvalError>,
+    {
+        if self.config.arm != EvalArm::C6 { return Err(EvalError::UnsupportedArm); }
+        if self.records.len() as u64 >= self.config.budget.max_cases { return Err(EvalError::CaseBudgetExceeded); }
+        let view = case.inference_view();
+        if view.split != self.config.split { return Err(EvalError::SplitMismatch { expected: self.config.split, actual: view.split }); }
+        let scored = run_inference_callback(case, score_c6_from_view);
+        let outcome = match scored {
+            Ok(score) if self.config.budget.max_readout_scalars_per_case >= 2 => match oracle_sign(case.protected_label().reveal_for_evaluation()) {
+                Ok(sign) if sign == 1 || sign == -1 => EvalOutcome::Scored { score, correct: score * f64::from(sign) > 0.0 },
+                _ => EvalOutcome::Failure(EvalFailure::Task),
+            },
+            Ok(_) => EvalOutcome::Failure(EvalFailure::Resource),
+            Err(EvalError::ChiralNumerical(_)) => EvalOutcome::Failure(EvalFailure::Numerical),
+            Err(EvalError::ContractMismatch { .. }) => EvalOutcome::Failure(EvalFailure::Contract),
+            Err(_) => EvalOutcome::Failure(EvalFailure::Task),
+        };
+        let digest = canonicalize_inference_view(view).digest;
+        self.records.push(EvalRecord { arm: EvalArm::C6, split: view.split, family: view.family, case_id: view.case_id, group_id: view.group_id, outcome, canonical_digest: digest, envelope_contract: EVALUATOR_ENVELOPE_CONTRACT, arm_contract: C6_EVALUATOR_CONTRACT, budget_contract: READOUT_BUDGET_CONTRACT, vector_contract: CHIRAL_CONTRACT, label_contract: view.label_contract });
+        Ok(self.records.last().expect("just pushed"))
+    }
+}
+
+/// Score an inference view with the matched C6 chiral reference.
+pub fn score_c6_from_view(view: &InferenceView) -> Result<f64, EvalError> {
+    let q = view.query.as_array();
+    let k = view.key.as_array();
+    let query = Chiral6::from_array(q).map_err(EvalError::ChiralNumerical)?;
+    let key = Chiral6::from_array(k).map_err(EvalError::ChiralNumerical)?;
+    let weights = ChiralScoreWeights::new(1.0, 0.0, 1.0).map_err(EvalError::ChiralNumerical)?;
+    chiral_score(query, key, weights).map_err(EvalError::ChiralNumerical)
 }
 
 /// Score an inference view with the matched V6 vector reference.
@@ -322,6 +373,8 @@ pub enum EvalError {
     CaseBudgetExceeded,
     /// V6 arithmetic rejected the carriers.
     Numerical(Vector6Error),
+    /// C6 arithmetic rejected the carriers.
+    ChiralNumerical(ChiralError),
 }
 
 impl fmt::Display for EvalError {
@@ -343,6 +396,7 @@ impl fmt::Display for EvalError {
             Self::UnsupportedArm => formatter.write_str("evaluator arm is not supported"),
             Self::CaseBudgetExceeded => formatter.write_str("evaluator case budget exceeded"),
             Self::Numerical(error) => write!(formatter, "v6 numerical failure: {error}"),
+            Self::ChiralNumerical(error) => write!(formatter, "c6 numerical failure: {error}"),
         }
     }
 }
@@ -389,6 +443,32 @@ mod tests {
         reflection_discriminative_pair_in_split, reflection_nuisance_pair, seal_non_chiral_control,
         seal_reflection_discriminative, seal_reflection_nuisance,
     };
+
+    #[test]
+    fn c6_evaluator_contract_and_budget_match_v6() {
+        assert_eq!(C6_EVALUATOR_CONTRACT, "tdi24-c6-evaluator-v1");
+        let v6 = EvaluatorConfig::v6(DataSplit::Development).unwrap();
+        let c6 = EvaluatorConfig::c6(DataSplit::Development).unwrap();
+        assert_eq!(v6.budget, c6.budget);
+        assert_eq!(EvalArm::C6.score_arm(), ScoreArm::C6);
+    }
+
+    #[test]
+    fn c6_development_and_validation_paths_are_deterministic_and_sealed() {
+        for split in [DataSplit::Development, DataSplit::Validation] {
+            let case = reflection_discriminative_pair_in_split(7, split).unwrap().right;
+            let labeled = seal_reflection_discriminative(&case);
+            let mut first = EvaluatorRun::open(EvaluatorConfig::c6(split).unwrap()).unwrap();
+            let a = first.evaluate_c6_binary(&labeled, handedness_sign).unwrap().clone();
+            let mut second = EvaluatorRun::open(EvaluatorConfig::c6(split).unwrap()).unwrap();
+            let b = second.evaluate_c6_binary(&labeled, handedness_sign).unwrap().clone();
+            assert_eq!(a, b);
+            assert_eq!(a.arm, EvalArm::C6);
+            assert_eq!(a.arm_contract, C6_EVALUATOR_CONTRACT);
+            assert_eq!(a.vector_contract, CHIRAL_CONTRACT);
+            assert!(matches!(a.outcome, EvalOutcome::Scored { .. }));
+        }
+    }
 
     #[test]
     fn v6_evaluator_contracts_and_budget_are_pinned() {
