@@ -38,8 +38,21 @@ The result is a growing body of **code + preregistration + evaluator + provenanc
 | **TDI-11.x** | **Hallucination Dynamics & Control Research Programme** | 🟠 Active bootstrap | Studies supported vs unsupported generation in fully specified worlds, measurable precursors, causal perturbations, risk estimation and bounded adaptive verification / recovery / abstention. |
 | **TDI-12.x** | **Ordinal Universality of Operator Responses** | 🟠 Active Stage-0 bootstrap | Tests whether ordinal/rank relations among resolvent and Green response observables transport more stably than absolute calibration across dimension, coefficient family and perturbation regime. |
 | **TDI-21.x** | **Boolean Relational Architecture Research Programme** | 🟠 Active Stage-0 development | B0/B1 attention controls, causal B2/B3 Boolean memories, synthesized/searched B4 ANF routing and a current relational binding/composition harness; no trained-model or matched-budget superiority claim. |
+| **TDI-22.x** | **Torsor representation research** | 🟠 Active | Exact torsor semantics and bounded evaluation foundations reused by the TDI-25 matched torsor-vs-chiral campaign. |
+| **TDI-23.x** | **Bounded categorical rewrite research** | 🟠 Active | Rooted IR provenance, exact equivalence checks and a bounded local rewrite calculus; recursive optimisation and downstream promotion remain evidence-gated. |
+| **TDI-24.x** | **V6 vector vs C6 chiral campaign** | 🟠 Active — 22/50 merged | Matched V6 and C6 Development/Validation evaluators are implemented; the next gate is trainable-parameter capacity matching before training comparisons. |
+| **TDI-25.x** | **Torsor vs chiral campaign** | 🟠 Active | Builds matched task/evaluation machinery for torsor-vs-chiral comparisons using the frozen TDI-22/TDI-24 foundations. |
+| **TDI-26.x** | **V888 sparse recurrent dynamics** | 🟠 Stage-0 bootstrap | V888 topology contracts and matched sparse controls are bootstrapped; no confirmatory or superiority result is authorised. |
 
-The table currently surfaces the programme lines documented in this homepage plus TDI-21. It is not a claim that intermediate series numbers are absent; canonical programme files under [`docs/`](docs/) remain authoritative for series not yet summarized here.
+The table is a concise navigation surface, not a substitute for the programme ledgers. Canonical programme files under [`docs/`](docs/) and immutable result artefacts remain authoritative for scientific status.
+
+## Current development snapshot
+
+On the current `main` line, TDI-24 has completed its first matched evaluator pair: V6 landed in PR #611 and C6 landed in PR #615. The C6 integration was qualified with 72 successful workflows on its exact PR head before merge. Historical TDI-24 CI gates were also made monotonic so later campaign progress no longer invalidates earlier landed slices.
+
+The immediate TDI-24 frontier is **slice 23: trainable-parameter capacity matching**. Its purpose is to reject V6/C6 training comparisons whose trainable capacities are not explicitly matched. This is an experimental-control requirement, not a performance claim.
+
+TDI-25 continues the torsor-vs-chiral line, while TDI-26 keeps V888 sparse recurrent topology work isolated from protected/final experiment surfaces. None of these active lines currently authorises a universal architecture-superiority claim.
 
 ## Current research frontier
 
