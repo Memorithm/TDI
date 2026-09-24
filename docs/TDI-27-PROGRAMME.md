@@ -131,6 +131,13 @@ Add deterministic bootstrap/resampling, label-shuffle nulls, confidence
 intervals for (I), cosine stability and accepted rank, and sample-size
 sensitivity.
 
+The Development resampling layer must keep the replicate count and RNG seed
+caller-supplied: there is no implicit default that could later masquerade as a
+frozen statistical choice. Index bootstrap uses sampling with replacement and
+unbiased bounded integer draws; every requested draw must be accounted for.
+The first slice establishes only this deterministic sampling substrate and does
+not define an interval, p-value, acceptance threshold, or confirmatory rule.
+
 ### TDI-27.2 — projection-method differential
 
 Compare the current two-pass modified Gram-Schmidt reference against an
