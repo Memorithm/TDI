@@ -251,15 +251,9 @@ pub fn residualize(
     if !residual_norm.is_finite() {
         return Err(ConceptGeometryError::NonFiniteValue);
     }
-    let innovation_energy_ratio =
-        (residual_norm * residual_norm) / (raw_norm * raw_norm);
+    let innovation_energy_ratio = (residual_norm * residual_norm) / (raw_norm * raw_norm);
     let unit_direction = if residual_norm > tolerance {
-        Some(
-            residual
-                .iter()
-                .map(|value| value / residual_norm)
-                .collect(),
-        )
+        Some(residual.iter().map(|value| value / residual_norm).collect())
     } else {
         None
     };
@@ -382,12 +376,8 @@ mod tests {
 
     #[test]
     fn residual_energy_matches_analytic_case() {
-        let report = residualize(
-            &[3.0, 4.0, 0.0],
-            &[vec![1.0, 0.0, 0.0]],
-            DEFAULT_TOLERANCE,
-        )
-        .unwrap();
+        let report =
+            residualize(&[3.0, 4.0, 0.0], &[vec![1.0, 0.0, 0.0]], DEFAULT_TOLERANCE).unwrap();
         close(report.raw_norm(), 5.0);
         close(report.residual_norm(), 4.0);
         close(report.innovation_energy_ratio(), 16.0 / 25.0);
@@ -397,12 +387,7 @@ mod tests {
 
     #[test]
     fn fully_explained_direction_has_no_unit_residual() {
-        let report = residualize(
-            &[2.0, 0.0],
-            &[vec![1.0, 0.0]],
-            DEFAULT_TOLERANCE,
-        )
-        .unwrap();
+        let report = residualize(&[2.0, 0.0], &[vec![1.0, 0.0]], DEFAULT_TOLERANCE).unwrap();
         close(report.residual_norm(), 0.0);
         close(report.innovation_energy_ratio(), 0.0);
         assert!(report.unit_direction().is_none());
