@@ -43,6 +43,7 @@ The result is a growing body of **code + preregistration + evaluator + provenanc
 | **TDI-24.x** | **V6 vector vs C6 chiral campaign** | 🟠 Active — 22/50 merged | Matched V6 and C6 Development/Validation evaluators are implemented; the next gate is trainable-parameter capacity matching before training comparisons. |
 | **TDI-25.x** | **Torsor vs chiral campaign** | 🟠 Active | Builds matched task/evaluation machinery for torsor-vs-chiral comparisons using the frozen TDI-22/TDI-24 foundations. |
 | **TDI-26.x** | **V888 sparse recurrent dynamics** | 🟠 Stage-0 bootstrap | V888 topology contracts and matched sparse controls are bootstrapped; no confirmatory or superiority result is authorised. |
+| **TDI-27.x** | **Latent Orthogonal Innovation / Concept Geometry** | 🟠 Stage-0 Development | Measures mean-contrast residual energy, stability, causal specificity, interaction and sequential latent rank after declared subspace removal; initial research is synthetic and non-confirmatory. |
 
 The table is a concise navigation surface, not a substitute for the programme ledgers. Canonical programme files under [`docs/`](docs/) and immutable result artefacts remain authoritative for scientific status.
 
@@ -139,6 +140,45 @@ bash scripts/check-tdi21-development.sh
 ```
 
 A future FLAT-ATTENTION hybrid remains downstream and conditional on reproducible TDI-21 evidence. The intended research boundary is: TDI-21 validates Boolean semantics; SciRust may later receive stable reusable primitives; hardware-specific realization is evaluated separately; FLAT-ATTENTION may only then compare Boolean-only, softmax-only and Boolean-pre-routing-to-restricted-softmax modes. Switching costs, retained/reconstructed numerical KV state and quality calibration must be measured before claiming an elastic hybrid advantage.
+
+
+### TDI-27.x — Latent Orthogonal Innovation / Concept Geometry
+
+[TDI-27.x](docs/TDI-27-PROGRAMME.md) turns two established latent-space
+operations — signed mean contrast and removal of a declared subspace — into a
+controlled research bench. The programme does **not** claim those operations
+as novel. It asks whether their residual structure becomes informative only
+when geometry, stability and causal controls are evaluated together.
+
+The primary Development observables are:
+
+- **innovation energy** (I=\|r\|^2/\|v\|^2), where
+  (v=\mu_P-\mu_C) and (r=(I-P_U)v);
+- **resampling stability** of the signed residual direction;
+- **causal novelty gap** against equal-norm matched orthogonal controls;
+- **interaction residual** (J(a,b)=E(a+b)-E(a)-E(b));
+- **sequential accepted rank** after repeatedly removing previously accepted
+  innovation directions.
+
+The ordered programme is **27.0 bootstrap/synthetic falsification -> 27.1
+resampling and null calibration -> 27.2 independent projection-method
+differential -> 27.3 causal intervention harness -> 27.4 cross-layer transport
+-> 27.5 sequential latent-rank tests -> 27.6 real-model Development adapters
+-> 27.7 evidence-gated SciRust/FLAT promotion -> 27.8 possible future
+confirmation**.
+
+The first executable bench is already isolated in
+`tdi-bench/src/concept_geometry_v27.rs` with a synthetic Development runner.
+Reproduce the launch with:
+
+```bash
+bash scripts/check-tdi27-bootstrap.sh
+cargo run --locked -p tdi-bench --bin tdi27_concept_geometry
+```
+
+Stage 0 explicitly keeps confirmatory and final execution disabled. No
+real-model, architecture-superiority, compute-reduction or hardware conclusion
+can be inferred from the synthetic launch.
 
 ## What the completed programme has taught us
 
