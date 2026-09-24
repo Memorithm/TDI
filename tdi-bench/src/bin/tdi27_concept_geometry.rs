@@ -1,8 +1,8 @@
 //! Synthetic Development launch for TDI-27 concept geometry.
 
 use tdi_bench::concept_geometry_v27::{
-    causal_novelty_gap, interaction_residual, mean_difference, residualize,
-    sequential_innovations, ConceptGeometryError, DEFAULT_TOLERANCE,
+    ConceptGeometryError, DEFAULT_TOLERANCE, causal_novelty_gap, interaction_residual,
+    mean_difference, residualize, sequential_innovations,
 };
 
 fn response(state: &[f64]) -> f64 {
