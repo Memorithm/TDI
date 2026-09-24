@@ -7,6 +7,112 @@
 
 pub const DEFAULT_TOLERANCE: f64 = 1.0e-12;
 
+
+/// Caller-supplied deterministic resampling plan for TDI-27 Development work.
+///
+/// No default seed or replicate count is provided so a later protocol can
+/// declare them explicitly without silently changing statistical semantics.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DevelopmentResamplingPlan {
+    replicates: usize,
+    seed: u64,
+}
+
+impl DevelopmentResamplingPlan {
+    pub fn new(replicates: usize, seed: u64) -> Result<Self, ConceptGeometryError> {
+        if replicates < 2 {
+            return Err(ConceptGeometryError::InvalidReplicateCount);
+        }
+        Ok(Self { replicates, seed })
+    }
+
+    #[must_use]
+    pub const fn replicates(self) -> usize {
+        self.replicates
+    }
+
+    #[must_use]
+    pub const fn seed(self) -> u64 {
+        self.seed
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct SplitMix64 {
+    state: u64,
+}
+
+impl SplitMix64 {
+    const fn new(seed: u64) -> Self {
+        Self { state: seed }
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        self.state = self.state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut value = self.state;
+        value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        value = (value ^ (value >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        value ^ (value >> 31)
+    }
+
+    fn bounded(&mut self, upper: usize) -> Result<usize, ConceptGeometryError> {
+        let upper = u64::try_from(upper).map_err(|_| ConceptGeometryError::SampleCountTooLarge)?;
+        if upper == 0 {
+            return Err(ConceptGeometryError::EmptyGroup);
+        }
+
+        let threshold = upper.wrapping_neg() % upper;
+        loop {
+            let value = self.next_u64();
+            if value >= threshold {
+                return usize::try_from(value % upper)
+                    .map_err(|_| ConceptGeometryError::SampleCountTooLarge);
+            }
+        }
+    }
+}
+
+/// Deterministically draw bootstrap indices with replacement.
+///
+/// The output contains exactly `plan.replicates()` rows and each row contains
+/// exactly `sample_count` indices in `0..sample_count`.
+pub fn bootstrap_index_replicates(
+    sample_count: usize,
+    plan: DevelopmentResamplingPlan,
+) -> Result<Vec<Vec<usize>>, ConceptGeometryError> {
+    if sample_count == 0 {
+        return Err(ConceptGeometryError::EmptyGroup);
+    }
+    let total = plan
+        .replicates()
+        .checked_mul(sample_count)
+        .ok_or(ConceptGeometryError::ReplicateAccountingOverflow)?;
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(plan.replicates())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    let mut rng = SplitMix64::new(plan.seed());
+
+    let mut drawn = 0usize;
+    for _ in 0..plan.replicates() {
+        let mut replicate = Vec::new();
+        replicate
+            .try_reserve_exact(sample_count)
+            .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+        for _ in 0..sample_count {
+            replicate.push(rng.bounded(sample_count)?);
+            drawn = drawn
+                .checked_add(1)
+                .ok_or(ConceptGeometryError::ReplicateAccountingOverflow)?;
+        }
+        output.push(replicate);
+    }
+    if drawn != total {
+        return Err(ConceptGeometryError::ReplicateAccountingOverflow);
+    }
+    Ok(output)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConceptGeometryError {
     EmptyGroup,
@@ -16,6 +122,9 @@ pub enum ConceptGeometryError {
     InvalidTolerance,
     ZeroNorm,
     EmptyControls,
+    InvalidReplicateCount,
+    SampleCountTooLarge,
+    ReplicateAccountingOverflow,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -364,6 +473,47 @@ mod tests {
             (left - right).abs() < 1.0e-12,
             "left={left:?} right={right:?}"
         );
+    }
+
+    #[test]
+    fn development_resampling_plan_requires_two_replicates() {
+        assert_eq!(
+            DevelopmentResamplingPlan::new(1, 7),
+            Err(ConceptGeometryError::InvalidReplicateCount)
+        );
+        let plan = DevelopmentResamplingPlan::new(4, 7).unwrap();
+        assert_eq!(plan.replicates(), 4);
+        assert_eq!(plan.seed(), 7);
+    }
+
+    #[test]
+    fn bootstrap_indices_are_deterministic_bounded_and_complete() {
+        let plan = DevelopmentResamplingPlan::new(5, 0x27_01).unwrap();
+        let left = bootstrap_index_replicates(7, plan).unwrap();
+        let right = bootstrap_index_replicates(7, plan).unwrap();
+        assert_eq!(left, right);
+        assert_eq!(left.len(), 5);
+        assert!(left.iter().all(|replicate| replicate.len() == 7));
+        assert!(
+            left.iter()
+                .flatten()
+                .all(|index| *index < 7)
+        );
+    }
+
+    #[test]
+    fn changing_resampling_seed_changes_draws() {
+        let left = bootstrap_index_replicates(
+            8,
+            DevelopmentResamplingPlan::new(4, 1).unwrap(),
+        )
+        .unwrap();
+        let right = bootstrap_index_replicates(
+            8,
+            DevelopmentResamplingPlan::new(4, 2).unwrap(),
+        )
+        .unwrap();
+        assert_ne!(left, right);
     }
 
     #[test]
