@@ -7,9 +7,12 @@
 //! audits. TDI-8 modules transcribe frozen bounded-evaluator rules that belong in
 //! benchmark/evidence processing rather than architecture primitives. TDI-12
 //! modules expose deterministic non-final operator-response records built only
-//! from the generic TDI-10 finite operator primitives.
+//! from the generic TDI-10 finite operator primitives. TDI-27 adds Development-only
+//! latent concept-geometry diagnostics for mean contrasts, orthogonal innovation,
+//! sequential residual rank, and causal-control summaries.
 
 pub mod attention_v7;
+pub mod concept_geometry_v27;
 pub mod decision_v8;
 pub mod engine_adapters;
 #[path = "gaussian_mmi_v7_stable.rs"]
