@@ -25,7 +25,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       REPOSITORY: ${{ github.repository }}
     steps:
-      - name: Disable frozen TDI-5.x and TDI-6.x workflows without editing them
+      - name: Disable frozen/completed historical workflows without editing them
         shell: bash
         run: |
           set -euo pipefail
@@ -49,6 +49,7 @@ jobs:
             tdi66-ci.yml
             tdi67-ci.yml
             tdi68-ci.yml
+            tdi71-ci.yml
           )
 
           for workflow in "${workflows[@]}"; do
