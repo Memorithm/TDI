@@ -1,7 +1,7 @@
 schema_version: 3
 kind: tdi_ecosystem_agent_roadmap
 status: active
-last_updated: "2026-09-24"
+last_updated: "2026-09-25"
 repository: Memorithm/TDI
 intended_consumer: autonomous_coding_agent
 merge_policy: never_merge_this_file_to_default_branch_unless_user_explicitly_requests
@@ -913,4 +913,42 @@ tdi27_latent_concept_geometry_program:
   development_execution_authorized: true
   confirmatory_execution_authorized: false
   final_execution_authorized: false
+
+frozen_workflow_retirement_2026_09_25:
+  status: active_repository_policy
+  rule: frozen_or_completed_scientific_stages_do_not_run_scientific_workers_on_ordinary_PRs
+  preserve_checked_in_historical_workflow_files: true
+  allowed_for_frozen_stages:
+    - read_only_integrity_checks
+    - hash_presence_and_hash_verification
+    - closed_runner_and_no_authorization_surface_checks
+  forbidden_for_frozen_stages:
+    - evaluator_execution
+    - benchmark_execution
+    - population_generation
+    - reproduction_or_confirmatory_execution
+    - rewriting_historical_manifests_to_make_current_CI_green
+  repository_actions_retired:
+    - tdi5-ci.yml
+    - tdi51-ci.yml
+    - tdi52-ci.yml
+    - tdi53-ci.yml
+    - tdi54-ci.yml
+    - tdi55-ci.yml
+    - tdi56-ci.yml
+    - tdi57-ci.yml
+    - tdi58-ci.yml
+    - tdi59-ci.yml
+    - tdi61-ci.yml
+    - tdi62-ci.yml
+    - tdi63-ci.yml
+    - tdi64-ci.yml
+    - tdi65-ci.yml
+    - tdi66-ci.yml
+    - tdi67-ci.yml
+    - tdi68-ci.yml
+  completed_TDI_7_1_worker_retirement_pending_or_in_progress: tdi71-ci.yml
+  active_read_only_TDI_7_post_holdout_integrity_gate_retained: tdi7-prearm-ci.yml
+  implementation_pull_request: https://github.com/Memorithm/TDI/pull/622
+  authority: workflow_execution_state_only_no_change_to_frozen_scientific_evidence
 
