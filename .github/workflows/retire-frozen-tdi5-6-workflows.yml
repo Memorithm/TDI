@@ -1,6 +1,10 @@
 name: Retire frozen TDI-5.x and TDI-6.x workflows
 
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/retire-frozen-tdi5-6-workflows.yml'
+      - 'AGENTS.md'
   push:
     branches:
       - main
