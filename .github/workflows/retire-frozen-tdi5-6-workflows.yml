@@ -57,6 +57,21 @@ jobs:
             gh api               --method PUT               -H "Accept: application/vnd.github+json"               -H "X-GitHub-Api-Version: 2022-11-28"               "repos/${REPOSITORY}/actions/workflows/${workflow}/disable"
           done
 
+          # Disabling prevents future runs but does not necessarily stop runs that
+          # were already queued or executing. Retire those as well so frozen
+          # series cannot continue consuming workers after this gate fires.
+          for workflow in "${workflows[@]}"; do
+            for status in queued in_progress waiting pending requested; do
+              while IFS= read -r run_id; do
+                [[ -n "${run_id}" ]] || continue
+                echo "Cancelling frozen workflow run: workflow=${workflow} run=${run_id} status=${status}"
+                gh api                   --method POST                   -H "Accept: application/vnd.github+json"                   -H "X-GitHub-Api-Version: 2022-11-28"                   "repos/${REPOSITORY}/actions/runs/${run_id}/cancel"                   >/dev/null || true
+              done < <(
+                gh api                   -H "Accept: application/vnd.github+json"                   -H "X-GitHub-Api-Version: 2022-11-28"                   "repos/${REPOSITORY}/actions/workflows/${workflow}/runs?status=${status}&per_page=100"                   --jq '.workflow_runs[].id'
+              )
+            done
+          done
+
           for workflow in "${workflows[@]}"; do
             state="$(
               gh api                 -H "Accept: application/vnd.github+json"                 -H "X-GitHub-Api-Version: 2022-11-28"                 "repos/${REPOSITORY}/actions/workflows/${workflow}"                 --jq '.state'
