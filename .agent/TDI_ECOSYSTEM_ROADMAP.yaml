@@ -947,8 +947,11 @@ frozen_workflow_retirement_2026_09_25:
     - tdi66-ci.yml
     - tdi67-ci.yml
     - tdi68-ci.yml
-  completed_TDI_7_1_worker_retirement_pending_or_in_progress: tdi71-ci.yml
+  completed_TDI_7_1_worker_retired: tdi71-ci.yml
   active_read_only_TDI_7_post_holdout_integrity_gate_retained: tdi7-prearm-ci.yml
+  frozen_TDI_5_6_workflow_state_verified_disabled_manually: true
+  TDI_7_1_workflow_state_verified_disabled_manually: true
+  queued_TDI_7_1_run_cancellation_observed: true
   implementation_pull_request: https://github.com/Memorithm/TDI/pull/622
   authority: workflow_execution_state_only_no_change_to_frozen_scientific_evidence
 
