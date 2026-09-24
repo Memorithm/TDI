@@ -1,7 +1,7 @@
 schema_version: 3
 kind: tdi_ecosystem_agent_roadmap
 status: active
-last_updated: "2026-09-16"
+last_updated: "2026-09-24"
 repository: Memorithm/TDI
 intended_consumer: autonomous_coding_agent
 merge_policy: never_merge_this_file_to_default_branch_unless_user_explicitly_requests
@@ -872,3 +872,45 @@ tdi26_v888_sparse_recurrent_program:
   nvidia_dependency_for_new_programme: false
   authoritative_main_document: docs/V888_CONNECTOME_BOOTSTRAP.md
   confirmatory_execution_authorized: false
+
+tdi27_latent_concept_geometry_program:
+  status: active_stage0_user_directed_2026_09_24
+  authoritative_main_document: docs/TDI-27-PROGRAMME.md
+  implementation_owner: Memorithm/TDI
+  initial_bench:
+    module: tdi-bench/src/concept_geometry_v27.rs
+    runner: tdi-bench/src/bin/tdi27_concept_geometry.rs
+    gate: scripts/check-tdi27-bootstrap.sh
+  scientific_questions:
+    - residual_geometric_innovation_after_declared_subspace_removal
+    - resampling_and_null_stability
+    - causal_specificity_against_equal_norm_orthogonal_controls
+    - functional_interaction_despite_geometric_orthogonality
+    - sequential_effective_latent_rank_across_ordered_contrasts
+  primary_development_metrics:
+    - innovation_energy_ratio
+    - signed_direction_stability
+    - causal_novelty_gap
+    - interaction_residual
+    - sequential_accepted_rank
+  ordered_bootstrap:
+    - TDI_27_0_bootstrap_and_synthetic_falsification
+    - TDI_27_1_resampling_and_null_calibration
+    - TDI_27_2_projection_method_differential
+    - TDI_27_3_causal_intervention_harness
+    - TDI_27_4_cross_layer_transport
+    - TDI_27_5_sequential_latent_rank
+    - TDI_27_6_real_model_development_adapters
+    - TDI_27_7_evidence_gated_downstream_promotion
+    - TDI_27_8_possible_future_confirmation
+  boundaries:
+    mean_contrast_and_orthogonal_projection_are_novelty_claims: false
+    synthetic_stage0_is_real_model_evidence: false
+    protected_or_final_TDI_surfaces_may_be_used: false
+    flat_attention_promotion_from_geometry_alone: false
+    scirust_promotion_requires_independent_general_qualification: true
+    hardware_claims_require_owner_repository_measurement: true
+  development_execution_authorized: true
+  confirmatory_execution_authorized: false
+  final_execution_authorized: false
+
