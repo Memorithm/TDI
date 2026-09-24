@@ -169,3 +169,35 @@ TDI-26.x is the V888-only sparse recurrent/topology research line. Before TDI-26
 TDI-26 is independent from TDI-22 torsor-attention and must not read, modify, reinterpret or reuse protected final/confirmatory surfaces from other TDI series. Stage 0 may define provenance, matched topology controls, deterministic evaluators and development-only interventions. No TDI-26 confirmatory run is authorized by the bootstrap. New implementation is Rust-first and may use CPU/WGPU portable runtime contracts; it must not introduce an NVIDIA dependency.
 
 Before a TDI-26 PR or merge decision, re-read the V888 bootstrap and require the ordinary exact-head CI gates. A later confirmation stage requires a separately frozen and explicitly authorized protocol.
+
+## TDI-27.x latent orthogonal innovation / concept-geometry bootstrap
+
+TDI-27.x is the Development-first latent concept-geometry research line. Before
+TDI-27 work, read:
+
+1. `docs/TDI-27-PROGRAMME.md`;
+2. `tdi-bench/src/concept_geometry_v27.rs` when changing numerical semantics.
+
+Stage 0 may implement and execute only synthetic Development geometry,
+residualisation, null/control, stability, interaction and causal-summary
+surfaces. It must not create a confirmatory/final dataset, seed list, result
+payload or model-performance claim. Mean contrasts and orthogonal projection
+are established primitives; TDI-27 must not describe them alone as scientific
+novelty.
+
+The initial scientific ladder is geometric innovation -> resampling/null
+calibration -> independent projection-method differential -> causal
+intervention controls -> cross-layer transport -> sequential effective-rank
+tests -> real-model Development adapters -> evidence-gated downstream
+promotion. A large residual norm alone never authorizes FLAT-ATTENTION, NNIS,
+SciRust or ElasticXxx promotion.
+
+Before a TDI-27 PR or merge decision, run:
+
+```bash
+bash scripts/check-tdi27-bootstrap.sh
+```
+
+Required CI must be green on the exact PR head before merge. TDI-27 remains
+isolated from protected/final surfaces of all earlier TDI series.
+
