@@ -7,7 +7,6 @@
 
 pub const DEFAULT_TOLERANCE: f64 = 1.0e-12;
 
-
 /// Caller-supplied deterministic resampling plan for TDI-27 Development work.
 ///
 /// No default seed or replicate count is provided so a later protocol can
@@ -494,25 +493,15 @@ mod tests {
         assert_eq!(left, right);
         assert_eq!(left.len(), 5);
         assert!(left.iter().all(|replicate| replicate.len() == 7));
-        assert!(
-            left.iter()
-                .flatten()
-                .all(|index| *index < 7)
-        );
+        assert!(left.iter().flatten().all(|index| *index < 7));
     }
 
     #[test]
     fn changing_resampling_seed_changes_draws() {
-        let left = bootstrap_index_replicates(
-            8,
-            DevelopmentResamplingPlan::new(4, 1).unwrap(),
-        )
-        .unwrap();
-        let right = bootstrap_index_replicates(
-            8,
-            DevelopmentResamplingPlan::new(4, 2).unwrap(),
-        )
-        .unwrap();
+        let left =
+            bootstrap_index_replicates(8, DevelopmentResamplingPlan::new(4, 1).unwrap()).unwrap();
+        let right =
+            bootstrap_index_replicates(8, DevelopmentResamplingPlan::new(4, 2).unwrap()).unwrap();
         assert_ne!(left, right);
     }
 
