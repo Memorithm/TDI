@@ -122,3 +122,42 @@ preregistration under the TDI-6 identifier.
 - For **TDI-6**, confirm the discipline shift is acceptable in principle
   (new dependencies such as an eigensolver; tolerance-based reproduction
   instead of byte-exact) before its first preregistration is frozen.
+
+## 6. 2026-09-24 active extension — TDI-27 concept geometry
+
+The historical Track A/Track B plan above is retained as provenance. The
+current repository has since expanded through later TDI series. TDI-27 is an
+independent Development-first line and does not retroactively alter TDI-5/TDI-6
+results or stage gates.
+
+The ordered TDI-27 roadmap is:
+
+1. **27.0 — bootstrap and synthetic falsification:** deterministic mean
+   contrasts, robust orthogonal residualisation, explicit zero-residual state,
+   sequential innovation and synthetic causal/interaction controls.
+2. **27.1 — resampling/null calibration:** deterministic bootstrap,
+   label-shuffle/no-contrast nulls, sample-size sensitivity and uncertainty on
+   innovation energy, direction stability and accepted rank.
+3. **27.2 — numerical differential:** compare two-pass modified Gram-Schmidt
+   against an independent QR/SVD or pseudoinverse implementation, including
+   near-degenerate subspaces.
+4. **27.3 — causal intervention:** equal-norm dose-response interventions,
+   matched orthogonal controls, target/non-target outcomes and fixed alpha
+   schedules.
+5. **27.4 — cross-layer transport:** alignment-aware persistence tests; raw
+   cross-basis cosine is insufficient.
+6. **27.5 — sequential latent rank:** ordered innovation bases across
+   layers/tasks/concepts and explicit collapse/redundancy detection.
+7. **27.6 — real-model Development adapters:** versioned activation-trace
+   adapters only; protected/final surfaces remain inaccessible.
+8. **27.7 — downstream promotion:** general numerical/statistical primitives
+   may move to SciRust only after independent qualification; FLAT-ATTENTION and
+   NNIS require their own correctness/performance evidence.
+9. **27.8 — possible confirmation:** only after model population, controls,
+   metrics, thresholds, resampling and final-data derivation are separately
+   frozen.
+
+The authoritative current TDI-27 specification is
+`docs/TDI-27-PROGRAMME.md`. Stage 0 authorizes synthetic Development research
+only; confirmatory and final execution remain disabled.
+

@@ -1,0 +1,445 @@
+//! TDI-27 Development-only latent concept-geometry primitives.
+//!
+//! These routines implement deterministic mean contrasts, orthogonal
+//! residualisation, sequential innovation, and small causal-summary helpers.
+//! They are research diagnostics, not a novelty classifier and not a
+//! confirmatory evaluation surface.
+
+pub const DEFAULT_TOLERANCE: f64 = 1.0e-12;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConceptGeometryError {
+    EmptyGroup,
+    EmptyVector,
+    DimensionMismatch,
+    NonFiniteValue,
+    InvalidTolerance,
+    ZeroNorm,
+    EmptyControls,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ResidualDirection {
+    raw: Vec<f64>,
+    residual: Vec<f64>,
+    unit_direction: Option<Vec<f64>>,
+    raw_norm: f64,
+    residual_norm: f64,
+    innovation_energy_ratio: f64,
+    basis_rank: usize,
+}
+
+impl ResidualDirection {
+    #[must_use]
+    pub fn raw(&self) -> &[f64] {
+        &self.raw
+    }
+
+    #[must_use]
+    pub fn residual(&self) -> &[f64] {
+        &self.residual
+    }
+
+    #[must_use]
+    pub fn unit_direction(&self) -> Option<&[f64]> {
+        self.unit_direction.as_deref()
+    }
+
+    #[must_use]
+    pub const fn raw_norm(&self) -> f64 {
+        self.raw_norm
+    }
+
+    #[must_use]
+    pub const fn residual_norm(&self) -> f64 {
+        self.residual_norm
+    }
+
+    #[must_use]
+    pub const fn innovation_energy_ratio(&self) -> f64 {
+        self.innovation_energy_ratio
+    }
+
+    #[must_use]
+    pub const fn basis_rank(&self) -> usize {
+        self.basis_rank
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct SequentialInnovationStep {
+    index: usize,
+    raw_norm: f64,
+    residual_norm: f64,
+    innovation_energy_ratio: f64,
+    accepted: bool,
+    unit_direction: Option<Vec<f64>>,
+}
+
+impl SequentialInnovationStep {
+    #[must_use]
+    pub const fn index(&self) -> usize {
+        self.index
+    }
+
+    #[must_use]
+    pub const fn raw_norm(&self) -> f64 {
+        self.raw_norm
+    }
+
+    #[must_use]
+    pub const fn residual_norm(&self) -> f64 {
+        self.residual_norm
+    }
+
+    #[must_use]
+    pub const fn innovation_energy_ratio(&self) -> f64 {
+        self.innovation_energy_ratio
+    }
+
+    #[must_use]
+    pub const fn accepted(&self) -> bool {
+        self.accepted
+    }
+
+    #[must_use]
+    pub fn unit_direction(&self) -> Option<&[f64]> {
+        self.unit_direction.as_deref()
+    }
+}
+
+fn valid_tolerance(tolerance: f64) -> Result<(), ConceptGeometryError> {
+    if !tolerance.is_finite() || tolerance <= 0.0 {
+        return Err(ConceptGeometryError::InvalidTolerance);
+    }
+    Ok(())
+}
+
+fn dot(left: &[f64], right: &[f64]) -> f64 {
+    left.iter().zip(right).map(|(a, b)| a * b).sum()
+}
+
+fn norm(vector: &[f64]) -> f64 {
+    dot(vector, vector).sqrt()
+}
+
+fn validate_vector(vector: &[f64]) -> Result<(), ConceptGeometryError> {
+    if vector.is_empty() {
+        return Err(ConceptGeometryError::EmptyVector);
+    }
+    if vector.iter().any(|value| !value.is_finite()) {
+        return Err(ConceptGeometryError::NonFiniteValue);
+    }
+    Ok(())
+}
+
+fn validate_rows(rows: &[Vec<f64>]) -> Result<usize, ConceptGeometryError> {
+    let first = rows.first().ok_or(ConceptGeometryError::EmptyGroup)?;
+    validate_vector(first)?;
+    let width = first.len();
+    for row in rows {
+        validate_vector(row)?;
+        if row.len() != width {
+            return Err(ConceptGeometryError::DimensionMismatch);
+        }
+    }
+    Ok(width)
+}
+
+fn mean(rows: &[Vec<f64>]) -> Result<Vec<f64>, ConceptGeometryError> {
+    let width = validate_rows(rows)?;
+    let mut result = vec![0.0; width];
+    for row in rows {
+        for (target, value) in result.iter_mut().zip(row) {
+            *target += value;
+        }
+    }
+    let scale = 1.0 / rows.len() as f64;
+    for value in &mut result {
+        *value *= scale;
+    }
+    Ok(result)
+}
+
+/// Compute the signed mean contrast P - C.
+pub fn mean_difference(
+    positive: &[Vec<f64>],
+    control: &[Vec<f64>],
+) -> Result<Vec<f64>, ConceptGeometryError> {
+    let positive_mean = mean(positive)?;
+    let control_mean = mean(control)?;
+    if positive_mean.len() != control_mean.len() {
+        return Err(ConceptGeometryError::DimensionMismatch);
+    }
+    Ok(positive_mean
+        .iter()
+        .zip(control_mean)
+        .map(|(left, right)| left - right)
+        .collect())
+}
+
+fn remove_basis_components(vector: &mut [f64], basis: &[Vec<f64>]) {
+    // A second pass reduces loss of orthogonality for nearly dependent inputs.
+    for _ in 0..2 {
+        for direction in basis {
+            let coefficient = dot(vector, direction);
+            for (value, basis_value) in vector.iter_mut().zip(direction) {
+                *value -= coefficient * basis_value;
+            }
+        }
+    }
+}
+
+/// Build an orthonormal basis with two-pass modified Gram-Schmidt.
+///
+/// Degenerate directions are skipped. An empty input basis is valid.
+pub fn orthonormalize(
+    directions: &[Vec<f64>],
+    width: usize,
+    tolerance: f64,
+) -> Result<Vec<Vec<f64>>, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    if width == 0 {
+        return Err(ConceptGeometryError::EmptyVector);
+    }
+    let mut basis = Vec::<Vec<f64>>::new();
+    for direction in directions {
+        validate_vector(direction)?;
+        if direction.len() != width {
+            return Err(ConceptGeometryError::DimensionMismatch);
+        }
+        let mut candidate = direction.clone();
+        remove_basis_components(&mut candidate, &basis);
+        let candidate_norm = norm(&candidate);
+        if !candidate_norm.is_finite() {
+            return Err(ConceptGeometryError::NonFiniteValue);
+        }
+        if candidate_norm > tolerance {
+            for value in &mut candidate {
+                *value /= candidate_norm;
+            }
+            basis.push(candidate);
+        }
+    }
+    Ok(basis)
+}
+
+/// Remove the span of `basis_directions` from `vector`.
+///
+/// If the residual norm is at or below `tolerance`, `unit_direction` is
+/// `None`. This explicitly represents the case in which normalisation would
+/// divide by zero or amplify numerical noise.
+pub fn residualize(
+    vector: &[f64],
+    basis_directions: &[Vec<f64>],
+    tolerance: f64,
+) -> Result<ResidualDirection, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    validate_vector(vector)?;
+    let raw_norm = norm(vector);
+    if !raw_norm.is_finite() {
+        return Err(ConceptGeometryError::NonFiniteValue);
+    }
+    if raw_norm <= tolerance {
+        return Err(ConceptGeometryError::ZeroNorm);
+    }
+
+    let basis = orthonormalize(basis_directions, vector.len(), tolerance)?;
+    let mut residual = vector.to_vec();
+    remove_basis_components(&mut residual, &basis);
+    let residual_norm = norm(&residual);
+    if !residual_norm.is_finite() {
+        return Err(ConceptGeometryError::NonFiniteValue);
+    }
+    let innovation_energy_ratio = (residual_norm * residual_norm) / (raw_norm * raw_norm);
+    let unit_direction = if residual_norm > tolerance {
+        Some(residual.iter().map(|value| value / residual_norm).collect())
+    } else {
+        None
+    };
+
+    Ok(ResidualDirection {
+        raw: vector.to_vec(),
+        residual,
+        unit_direction,
+        raw_norm,
+        residual_norm,
+        innovation_energy_ratio,
+        basis_rank: basis.len(),
+    })
+}
+
+pub fn cosine_similarity(
+    left: &[f64],
+    right: &[f64],
+    tolerance: f64,
+) -> Result<f64, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    validate_vector(left)?;
+    validate_vector(right)?;
+    if left.len() != right.len() {
+        return Err(ConceptGeometryError::DimensionMismatch);
+    }
+    let left_norm = norm(left);
+    let right_norm = norm(right);
+    if left_norm <= tolerance || right_norm <= tolerance {
+        return Err(ConceptGeometryError::ZeroNorm);
+    }
+    Ok(dot(left, right) / (left_norm * right_norm))
+}
+
+/// Target intervention effect minus the mean matched-control effect.
+pub fn causal_novelty_gap(
+    target_effect: f64,
+    matched_control_effects: &[f64],
+) -> Result<f64, ConceptGeometryError> {
+    if !target_effect.is_finite()
+        || matched_control_effects
+            .iter()
+            .any(|effect| !effect.is_finite())
+    {
+        return Err(ConceptGeometryError::NonFiniteValue);
+    }
+    if matched_control_effects.is_empty() {
+        return Err(ConceptGeometryError::EmptyControls);
+    }
+    let control_mean =
+        matched_control_effects.iter().sum::<f64>() / matched_control_effects.len() as f64;
+    Ok(target_effect - control_mean)
+}
+
+/// Non-additive interaction when all effects are measured from one baseline.
+pub fn interaction_residual(
+    effect_a: f64,
+    effect_b: f64,
+    effect_ab: f64,
+) -> Result<f64, ConceptGeometryError> {
+    if !effect_a.is_finite() || !effect_b.is_finite() || !effect_ab.is_finite() {
+        return Err(ConceptGeometryError::NonFiniteValue);
+    }
+    Ok(effect_ab - effect_a - effect_b)
+}
+
+/// Sequentially remove all previously accepted innovation directions.
+pub fn sequential_innovations(
+    directions: &[Vec<f64>],
+    tolerance: f64,
+) -> Result<Vec<SequentialInnovationStep>, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    let first = directions.first().ok_or(ConceptGeometryError::EmptyGroup)?;
+    validate_vector(first)?;
+    let width = first.len();
+    let mut basis = Vec::<Vec<f64>>::new();
+    let mut steps = Vec::with_capacity(directions.len());
+
+    for (index, direction) in directions.iter().enumerate() {
+        validate_vector(direction)?;
+        if direction.len() != width {
+            return Err(ConceptGeometryError::DimensionMismatch);
+        }
+        let report = residualize(direction, &basis, tolerance)?;
+        let unit_direction = report.unit_direction.clone();
+        let accepted = unit_direction.is_some();
+        if let Some(unit) = &unit_direction {
+            basis.push(unit.clone());
+        }
+        steps.push(SequentialInnovationStep {
+            index,
+            raw_norm: report.raw_norm,
+            residual_norm: report.residual_norm,
+            innovation_energy_ratio: report.innovation_energy_ratio,
+            accepted,
+            unit_direction,
+        });
+    }
+    Ok(steps)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn close(left: f64, right: f64) {
+        assert!(
+            (left - right).abs() < 1.0e-12,
+            "left={left:?} right={right:?}"
+        );
+    }
+
+    #[test]
+    fn mean_contrast_preserves_declared_sign() {
+        let control = vec![vec![0.0, 1.0], vec![2.0, 3.0]];
+        let positive = vec![vec![3.0, 5.0], vec![5.0, 7.0]];
+        let contrast = mean_difference(&positive, &control).unwrap();
+        assert_eq!(contrast, vec![3.0, 4.0]);
+    }
+
+    #[test]
+    fn residual_energy_matches_analytic_case() {
+        let report =
+            residualize(&[3.0, 4.0, 0.0], &[vec![1.0, 0.0, 0.0]], DEFAULT_TOLERANCE).unwrap();
+        close(report.raw_norm(), 5.0);
+        close(report.residual_norm(), 4.0);
+        close(report.innovation_energy_ratio(), 16.0 / 25.0);
+        assert_eq!(report.basis_rank(), 1);
+        assert_eq!(report.unit_direction().unwrap(), &[0.0, 1.0, 0.0]);
+    }
+
+    #[test]
+    fn fully_explained_direction_has_no_unit_residual() {
+        let report = residualize(&[2.0, 0.0], &[vec![1.0, 0.0]], DEFAULT_TOLERANCE).unwrap();
+        close(report.residual_norm(), 0.0);
+        close(report.innovation_energy_ratio(), 0.0);
+        assert!(report.unit_direction().is_none());
+    }
+
+    #[test]
+    fn non_orthogonal_inputs_do_not_duplicate_basis_rank() {
+        let basis = orthonormalize(
+            &[
+                vec![1.0, 0.0, 0.0],
+                vec![2.0, 0.0, 0.0],
+                vec![1.0, 1.0, 0.0],
+            ],
+            3,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+        assert_eq!(basis.len(), 2);
+        close(dot(&basis[0], &basis[1]), 0.0);
+        close(norm(&basis[0]), 1.0);
+        close(norm(&basis[1]), 1.0);
+    }
+
+    #[test]
+    fn sequential_innovation_extracts_three_independent_axes() {
+        let steps = sequential_innovations(
+            &[
+                vec![1.0, 0.0, 0.0],
+                vec![1.0, 1.0, 0.0],
+                vec![2.0, 2.0, 1.0],
+            ],
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+        assert_eq!(steps.len(), 3);
+        assert!(steps.iter().all(SequentialInnovationStep::accepted));
+        close(steps[0].innovation_energy_ratio(), 1.0);
+        close(steps[1].innovation_energy_ratio(), 0.5);
+        close(steps[2].innovation_energy_ratio(), 1.0 / 9.0);
+    }
+
+    #[test]
+    fn causal_and_interaction_helpers_keep_semantics_separate() {
+        close(causal_novelty_gap(0.75, &[0.0, 0.25]).unwrap(), 0.625);
+        close(interaction_residual(1.0, 1.0, 2.5).unwrap(), 0.5);
+    }
+
+    #[test]
+    fn cosine_rejects_zero_norm() {
+        assert_eq!(
+            cosine_similarity(&[0.0, 0.0], &[1.0, 0.0], DEFAULT_TOLERANCE),
+            Err(ConceptGeometryError::ZeroNorm)
+        );
+    }
+}
