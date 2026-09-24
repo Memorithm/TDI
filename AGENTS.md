@@ -175,7 +175,9 @@ Before a TDI-26 PR or merge decision, re-read the V888 bootstrap and require the
 TDI-1 through TDI-6.x are frozen historical evidence. Their historical workflow
 files are part of that evidence and must not be edited merely to keep current
 PR CI green. Repository Actions state must keep TDI-5.x/TDI-6.x execution
-workflows disabled after retirement.
+workflows disabled after retirement. TDI-7.1 is also complete and its dedicated
+bounded-preflight worker must remain disabled; the TDI-7 post-holdout integrity
+gate remains the read-only replacement.
 
 For a frozen series:
 
@@ -189,7 +191,8 @@ For a frozen series:
 
 The repository-level retirement workflow
 `.github/workflows/retire-frozen-tdi5-6-workflows.yml` disables the historical
-TDI-5.x/TDI-6.x Actions definitions through GitHub's workflow-state API without
+TDI-5.x/TDI-6.x definitions and completed TDI-7.1 worker through GitHub's
+workflow-state API without
 changing their checked-in contents.
 
 ## TDI-27.x latent orthogonal innovation / concept-geometry bootstrap
