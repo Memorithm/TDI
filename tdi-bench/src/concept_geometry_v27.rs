@@ -321,6 +321,9 @@ pub enum ConceptGeometryError {
     ReplicateAccountingOverflow,
     InvalidBootstrapIndex,
     UndefinedReferenceDirection,
+    EmptyScalarSample,
+    InvalidOrderStatisticRank,
+    InvalidOrderStatisticRanks,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -683,6 +686,95 @@ pub fn bootstrap_direction_stability(
     Ok(BootstrapDirectionStability {
         reference_unit_direction,
         replicate_cosines,
+    })
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DevelopmentOrderInterval {
+    lower_rank: usize,
+    upper_rank: usize,
+    lower_value: f64,
+    upper_value: f64,
+}
+
+impl DevelopmentOrderInterval {
+    #[must_use]
+    pub const fn lower_rank(self) -> usize {
+        self.lower_rank
+    }
+
+    #[must_use]
+    pub const fn upper_rank(self) -> usize {
+        self.upper_rank
+    }
+
+    #[must_use]
+    pub const fn lower_value(self) -> f64 {
+        self.lower_value
+    }
+
+    #[must_use]
+    pub const fn upper_value(self) -> f64 {
+        self.upper_value
+    }
+}
+
+fn sorted_finite_scalars(values: &[f64]) -> Result<Vec<f64>, ConceptGeometryError> {
+    if values.is_empty() {
+        return Err(ConceptGeometryError::EmptyScalarSample);
+    }
+    if values.iter().any(|value| !value.is_finite()) {
+        return Err(ConceptGeometryError::NonFiniteValue);
+    }
+
+    let mut sorted = values.to_vec();
+    sorted.sort_by(f64::total_cmp);
+    Ok(sorted)
+}
+
+/// Select one zero-based order statistic from finite Development values.
+///
+/// The caller supplies the rank directly. This primitive deliberately does not
+/// choose a probability-to-rank convention or attach confidence semantics.
+pub fn development_order_statistic(
+    values: &[f64],
+    rank: usize,
+) -> Result<f64, ConceptGeometryError> {
+    let sorted = sorted_finite_scalars(values)?;
+    sorted
+        .get(rank)
+        .copied()
+        .ok_or(ConceptGeometryError::InvalidOrderStatisticRank)
+}
+
+/// Select a closed interval between two caller-supplied zero-based ranks.
+///
+/// This is an order-statistic container only. It does not define a confidence
+/// level, bootstrap coverage rule, interpolation method, or scientific verdict.
+pub fn development_order_interval(
+    values: &[f64],
+    lower_rank: usize,
+    upper_rank: usize,
+) -> Result<DevelopmentOrderInterval, ConceptGeometryError> {
+    if lower_rank > upper_rank {
+        return Err(ConceptGeometryError::InvalidOrderStatisticRanks);
+    }
+
+    let sorted = sorted_finite_scalars(values)?;
+    let lower_value = sorted
+        .get(lower_rank)
+        .copied()
+        .ok_or(ConceptGeometryError::InvalidOrderStatisticRank)?;
+    let upper_value = sorted
+        .get(upper_rank)
+        .copied()
+        .ok_or(ConceptGeometryError::InvalidOrderStatisticRank)?;
+
+    Ok(DevelopmentOrderInterval {
+        lower_rank,
+        upper_rank,
+        lower_value,
+        upper_value,
     })
 }
 
@@ -1121,6 +1213,45 @@ mod tests {
         assert_eq!(
             bootstrap_direction_stability(&positive, &control, &basis, DEFAULT_TOLERANCE, plan,),
             Err(ConceptGeometryError::UndefinedReferenceDirection)
+        );
+    }
+
+    #[test]
+    fn development_order_statistics_use_exact_caller_supplied_ranks() {
+        let values = [4.0, 1.0, 3.0, 3.0, 9.0];
+
+        close(development_order_statistic(&values, 0).unwrap(), 1.0);
+        close(development_order_statistic(&values, 2).unwrap(), 3.0);
+        close(development_order_statistic(&values, 4).unwrap(), 9.0);
+
+        let interval = development_order_interval(&values, 1, 3).unwrap();
+        assert_eq!(interval.lower_rank(), 1);
+        assert_eq!(interval.upper_rank(), 3);
+        close(interval.lower_value(), 3.0);
+        close(interval.upper_value(), 4.0);
+    }
+
+    #[test]
+    fn development_order_statistics_fail_closed_on_invalid_inputs() {
+        assert_eq!(
+            development_order_statistic(&[], 0),
+            Err(ConceptGeometryError::EmptyScalarSample)
+        );
+        assert_eq!(
+            development_order_statistic(&[1.0, f64::NAN], 0),
+            Err(ConceptGeometryError::NonFiniteValue)
+        );
+        assert_eq!(
+            development_order_statistic(&[1.0, 2.0], 2),
+            Err(ConceptGeometryError::InvalidOrderStatisticRank)
+        );
+        assert_eq!(
+            development_order_interval(&[1.0, 2.0], 1, 0),
+            Err(ConceptGeometryError::InvalidOrderStatisticRanks)
+        );
+        assert_eq!(
+            development_order_interval(&[1.0, 2.0], 0, 2),
+            Err(ConceptGeometryError::InvalidOrderStatisticRank)
         );
     }
 
