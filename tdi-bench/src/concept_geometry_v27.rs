@@ -112,7 +112,6 @@ pub fn bootstrap_index_replicates(
     Ok(output)
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IndependentGroupBootstrapIndices {
     positive: Vec<usize>,
@@ -168,8 +167,10 @@ pub fn independent_group_bootstrap_indices(
         .try_reserve_exact(plan.replicates())
         .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
 
-    let mut positive_rng =
-        SplitMix64::new(domain_separated_seed(plan.seed(), POSITIVE_BOOTSTRAP_DOMAIN));
+    let mut positive_rng = SplitMix64::new(domain_separated_seed(
+        plan.seed(),
+        POSITIVE_BOOTSTRAP_DOMAIN,
+    ));
     let mut control_rng =
         SplitMix64::new(domain_separated_seed(plan.seed(), CONTROL_BOOTSTRAP_DOMAIN));
     let mut positive_drawn = 0usize;
@@ -606,8 +607,16 @@ mod tests {
         let plan = DevelopmentResamplingPlan::new(6, 0x27_02).unwrap();
         let replicates = independent_group_bootstrap_indices(4, 7, plan).unwrap();
         assert_eq!(replicates.len(), 6);
-        assert!(replicates.iter().all(|replicate| replicate.positive().len() == 4));
-        assert!(replicates.iter().all(|replicate| replicate.control().len() == 7));
+        assert!(
+            replicates
+                .iter()
+                .all(|replicate| replicate.positive().len() == 4)
+        );
+        assert!(
+            replicates
+                .iter()
+                .all(|replicate| replicate.control().len() == 7)
+        );
         assert!(
             replicates
                 .iter()
