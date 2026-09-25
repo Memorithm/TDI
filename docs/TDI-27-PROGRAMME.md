@@ -169,6 +169,12 @@ order statistic or a closed rank interval. It deliberately does not choose a
 probability-to-rank conversion, interpolation convention, confidence level,
 coverage interpretation, or decision threshold.
 
+Innovation energy can now be summarized without discarding the underlying
+bootstrap evidence: the Development report keeps the full-sample
+`I = ||r||^2 / ||v||^2`, every bootstrap replicate value, and one closed
+order-statistic interval at caller-supplied ranks. The interval remains an
+ordered-value summary only and has no confidence interpretation at this stage.
+
 These slices still define no statistical confidence interval, p-value,
 acceptance threshold, or scientific verdict.
 

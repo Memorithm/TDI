@@ -778,6 +778,65 @@ pub fn development_order_interval(
     })
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct BootstrapInnovationEnergySummary {
+    full_sample_value: f64,
+    replicate_values: Vec<f64>,
+    order_interval: DevelopmentOrderInterval,
+}
+
+impl BootstrapInnovationEnergySummary {
+    #[must_use]
+    pub const fn full_sample_value(&self) -> f64 {
+        self.full_sample_value
+    }
+
+    #[must_use]
+    pub fn replicate_values(&self) -> &[f64] {
+        &self.replicate_values
+    }
+
+    #[must_use]
+    pub const fn order_interval(&self) -> DevelopmentOrderInterval {
+        self.order_interval
+    }
+}
+
+/// Summarize bootstrap innovation-energy values with caller-supplied ranks.
+///
+/// The returned interval is only an interval of ordered bootstrap values. This
+/// function does not assign confidence coverage, convert probabilities to
+/// ranks, choose an interpolation rule, or classify the scientific result.
+pub fn bootstrap_innovation_energy_summary(
+    positive: &[Vec<f64>],
+    control: &[Vec<f64>],
+    basis_directions: &[Vec<f64>],
+    tolerance: f64,
+    plan: DevelopmentResamplingPlan,
+    lower_rank: usize,
+    upper_rank: usize,
+) -> Result<BootstrapInnovationEnergySummary, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+
+    let full_sample_contrast = mean_difference(positive, control)?;
+    let full_sample_residual = residualize(&full_sample_contrast, basis_directions, tolerance)?;
+    let full_sample_value = full_sample_residual.innovation_energy_ratio();
+
+    let bootstrap =
+        bootstrap_residual_geometries(positive, control, basis_directions, tolerance, plan)?;
+    let replicate_values = bootstrap
+        .iter()
+        .map(|report| report.residual().innovation_energy_ratio())
+        .collect::<Vec<_>>();
+    let order_interval = development_order_interval(&replicate_values, lower_rank, upper_rank)?;
+
+    Ok(BootstrapInnovationEnergySummary {
+        full_sample_value,
+        replicate_values,
+        order_interval,
+    })
+}
+
 pub fn cosine_similarity(
     left: &[f64],
     right: &[f64],
@@ -1251,6 +1310,63 @@ mod tests {
         );
         assert_eq!(
             development_order_interval(&[1.0, 2.0], 0, 2),
+            Err(ConceptGeometryError::InvalidOrderStatisticRank)
+        );
+    }
+
+    #[test]
+    fn bootstrap_innovation_energy_summary_retains_full_distribution() {
+        let positive = vec![
+            vec![3.0, 4.0, 1.0],
+            vec![3.0, 4.0, 1.0],
+            vec![3.0, 4.0, 1.0],
+        ];
+        let control = vec![
+            vec![1.0, 1.0, 1.0],
+            vec![1.0, 1.0, 1.0],
+            vec![1.0, 1.0, 1.0],
+        ];
+        let basis = vec![vec![1.0, 0.0, 0.0]];
+        let plan = DevelopmentResamplingPlan::new(5, 0x2701_0701).unwrap();
+
+        let summary = bootstrap_innovation_energy_summary(
+            &positive,
+            &control,
+            &basis,
+            DEFAULT_TOLERANCE,
+            plan,
+            1,
+            3,
+        )
+        .unwrap();
+
+        close(summary.full_sample_value(), 9.0 / 13.0);
+        assert_eq!(summary.replicate_values().len(), 5);
+        for value in summary.replicate_values() {
+            close(*value, 9.0 / 13.0);
+        }
+        close(summary.order_interval().lower_value(), 9.0 / 13.0);
+        close(summary.order_interval().upper_value(), 9.0 / 13.0);
+        assert_eq!(summary.order_interval().lower_rank(), 1);
+        assert_eq!(summary.order_interval().upper_rank(), 3);
+    }
+
+    #[test]
+    fn bootstrap_innovation_energy_summary_propagates_rank_errors() {
+        let positive = vec![vec![2.0, 1.0], vec![2.0, 1.0]];
+        let control = vec![vec![0.0, 0.0], vec![0.0, 0.0]];
+        let plan = DevelopmentResamplingPlan::new(2, 0x2701_0702).unwrap();
+
+        assert_eq!(
+            bootstrap_innovation_energy_summary(
+                &positive,
+                &control,
+                &[],
+                DEFAULT_TOLERANCE,
+                plan,
+                0,
+                2,
+            ),
             Err(ConceptGeometryError::InvalidOrderStatisticRank)
         );
     }
