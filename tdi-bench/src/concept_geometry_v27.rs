@@ -576,6 +576,54 @@ pub fn residualize(
     })
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct BootstrapResidualGeometry {
+    mean_contrast: BootstrapMeanContrast,
+    residual: ResidualDirection,
+}
+
+impl BootstrapResidualGeometry {
+    #[must_use]
+    pub fn mean_contrast(&self) -> &BootstrapMeanContrast {
+        &self.mean_contrast
+    }
+
+    #[must_use]
+    pub fn residual(&self) -> &ResidualDirection {
+        &self.residual
+    }
+}
+
+/// Apply one declared nuisance/known subspace to every bootstrap mean contrast.
+///
+/// The same basis and tolerance are used for every replicate. A replicate with
+/// a zero raw contrast is rejected by `residualize` rather than being dropped
+/// from the bootstrap distribution. A fully explained non-zero contrast remains
+/// representable with zero residual energy and no unit residual direction.
+pub fn bootstrap_residual_geometries(
+    positive: &[Vec<f64>],
+    control: &[Vec<f64>],
+    basis_directions: &[Vec<f64>],
+    tolerance: f64,
+    plan: DevelopmentResamplingPlan,
+) -> Result<Vec<BootstrapResidualGeometry>, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    let contrasts = bootstrap_mean_contrasts(positive, control, plan)?;
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(contrasts.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+
+    for mean_contrast in contrasts {
+        let residual = residualize(mean_contrast.contrast(), basis_directions, tolerance)?;
+        output.push(BootstrapResidualGeometry {
+            mean_contrast,
+            residual,
+        });
+    }
+    Ok(output)
+}
+
 pub fn cosine_similarity(
     left: &[f64],
     right: &[f64],
@@ -916,6 +964,83 @@ mod tests {
         close(steps[0].innovation_energy_ratio(), 1.0);
         close(steps[1].innovation_energy_ratio(), 0.5);
         close(steps[2].innovation_energy_ratio(), 1.0 / 9.0);
+    }
+
+    #[test]
+    fn bootstrap_residual_geometry_matches_analytic_constant_groups() {
+        let positive = vec![
+            vec![3.0, 4.0, 1.0],
+            vec![3.0, 4.0, 1.0],
+            vec![3.0, 4.0, 1.0],
+        ];
+        let control = vec![
+            vec![1.0, 1.0, 1.0],
+            vec![1.0, 1.0, 1.0],
+            vec![1.0, 1.0, 1.0],
+        ];
+        let basis = vec![vec![1.0, 0.0, 0.0]];
+        let plan = DevelopmentResamplingPlan::new(4, 0x2701_0401).unwrap();
+
+        let reports = bootstrap_residual_geometries(
+            &positive,
+            &control,
+            &basis,
+            DEFAULT_TOLERANCE,
+            plan,
+        )
+        .unwrap();
+
+        assert_eq!(reports.len(), 4);
+        for report in reports {
+            assert_eq!(report.mean_contrast().contrast(), &[2.0, 3.0, 0.0]);
+            close(report.residual().raw_norm(), 13.0_f64.sqrt());
+            close(report.residual().residual_norm(), 3.0);
+            close(report.residual().innovation_energy_ratio(), 9.0 / 13.0);
+            assert_eq!(
+                report.residual().unit_direction().unwrap(),
+                &[0.0, 1.0, 0.0]
+            );
+        }
+    }
+
+    #[test]
+    fn bootstrap_residual_geometry_preserves_fully_explained_replicates() {
+        let positive = vec![vec![2.0, 0.0], vec![2.0, 0.0]];
+        let control = vec![vec![0.0, 0.0], vec![0.0, 0.0]];
+        let basis = vec![vec![1.0, 0.0]];
+        let plan = DevelopmentResamplingPlan::new(3, 0x2701_0402).unwrap();
+
+        let reports = bootstrap_residual_geometries(
+            &positive,
+            &control,
+            &basis,
+            DEFAULT_TOLERANCE,
+            plan,
+        )
+        .unwrap();
+
+        for report in reports {
+            close(report.residual().innovation_energy_ratio(), 0.0);
+            assert!(report.residual().unit_direction().is_none());
+        }
+    }
+
+    #[test]
+    fn bootstrap_residual_geometry_fails_closed_on_zero_raw_contrast() {
+        let positive = vec![vec![1.0, 1.0], vec![1.0, 1.0]];
+        let control = vec![vec![1.0, 1.0], vec![1.0, 1.0]];
+        let plan = DevelopmentResamplingPlan::new(2, 0x2701_0403).unwrap();
+
+        assert_eq!(
+            bootstrap_residual_geometries(
+                &positive,
+                &control,
+                &[],
+                DEFAULT_TOLERANCE,
+                plan,
+            ),
+            Err(ConceptGeometryError::ZeroNorm)
+        );
     }
 
     #[test]
