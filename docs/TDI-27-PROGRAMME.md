@@ -175,6 +175,17 @@ bootstrap evidence: the Development report keeps the full-sample
 order-statistic interval at caller-supplied ranks. The interval remains an
 ordered-value summary only and has no confidence interpretation at this stage.
 
+The null-control substrate now includes deterministic label permutations over
+the pooled P/C samples. Every replicate preserves the original group
+cardinalities and forms a complete partition of the pooled indices. The
+permutation stream is domain-separated from the bootstrap streams.
+
+Each shuffled partition is then mapped to an explicit signed null contrast
+`mean(P_shuffle) - mean(C_shuffle)`. The report retains the exact pooled
+indices assigned to both groups so every null contrast is reproducible and
+auditable. This mechanism defines the shuffled-label population only; it does
+not define a tail probability, rejection threshold, p-value, or verdict.
+
 These slices still define no statistical confidence interval, p-value,
 acceptance threshold, or scientific verdict.
 

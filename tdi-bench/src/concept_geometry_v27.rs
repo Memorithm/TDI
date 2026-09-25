@@ -307,6 +307,144 @@ pub fn bootstrap_mean_contrasts(
     Ok(output)
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LabelShuffleIndices {
+    positive: Vec<usize>,
+    control: Vec<usize>,
+}
+
+impl LabelShuffleIndices {
+    #[must_use]
+    pub fn positive(&self) -> &[usize] {
+        &self.positive
+    }
+
+    #[must_use]
+    pub fn control(&self) -> &[usize] {
+        &self.control
+    }
+}
+
+const LABEL_SHUFFLE_DOMAIN: u64 = 0x5444_4932_374c_424c;
+
+/// Deterministically permute group labels while preserving P/C cardinalities.
+///
+/// Every replicate is a complete partition of the pooled sample indices.
+/// This Development primitive defines only the permutation mechanism. It does
+/// not define a null rejection threshold, tail rule, p-value, or verdict.
+pub fn label_shuffle_indices(
+    positive_count: usize,
+    control_count: usize,
+    plan: DevelopmentResamplingPlan,
+) -> Result<Vec<LabelShuffleIndices>, ConceptGeometryError> {
+    if positive_count == 0 || control_count == 0 {
+        return Err(ConceptGeometryError::EmptyGroup);
+    }
+    let total = positive_count
+        .checked_add(control_count)
+        .ok_or(ConceptGeometryError::SampleCountOverflow)?;
+
+    let mut rng = SplitMix64::new(domain_separated_seed(plan.seed(), LABEL_SHUFFLE_DOMAIN));
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(plan.replicates())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+
+    for _ in 0..plan.replicates() {
+        let mut permutation = (0..total).collect::<Vec<_>>();
+        for index in (1..total).rev() {
+            let swap_with = rng.bounded(index + 1)?;
+            permutation.swap(index, swap_with);
+        }
+
+        let positive = permutation[..positive_count].to_vec();
+        let control = permutation[positive_count..].to_vec();
+        output.push(LabelShuffleIndices { positive, control });
+    }
+
+    Ok(output)
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct LabelShuffleMeanContrast {
+    positive_indices: Vec<usize>,
+    control_indices: Vec<usize>,
+    contrast: Vec<f64>,
+}
+
+impl LabelShuffleMeanContrast {
+    #[must_use]
+    pub fn positive_indices(&self) -> &[usize] {
+        &self.positive_indices
+    }
+
+    #[must_use]
+    pub fn control_indices(&self) -> &[usize] {
+        &self.control_indices
+    }
+
+    #[must_use]
+    pub fn contrast(&self) -> &[f64] {
+        &self.contrast
+    }
+}
+
+/// Convert cardinality-preserving shuffled labels into signed null contrasts.
+///
+/// The pooled observations are unchanged; only group membership is permuted.
+/// Every report retains its exact pooled indices for provenance and computes
+/// `mean(shuffled_positive) - mean(shuffled_control)`.
+pub fn label_shuffle_mean_contrasts(
+    positive: &[Vec<f64>],
+    control: &[Vec<f64>],
+    plan: DevelopmentResamplingPlan,
+) -> Result<Vec<LabelShuffleMeanContrast>, ConceptGeometryError> {
+    let positive_width = validate_rows(positive)?;
+    let control_width = validate_rows(control)?;
+    if positive_width != control_width {
+        return Err(ConceptGeometryError::DimensionMismatch);
+    }
+
+    let mut pooled = Vec::new();
+    pooled
+        .try_reserve_exact(
+            positive
+                .len()
+                .checked_add(control.len())
+                .ok_or(ConceptGeometryError::SampleCountOverflow)?,
+        )
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    pooled.extend_from_slice(positive);
+    pooled.extend_from_slice(control);
+
+    let shuffles = label_shuffle_indices(positive.len(), control.len(), plan)?;
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(shuffles.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+
+    for shuffle in shuffles {
+        let positive_mean = indexed_mean(&pooled, shuffle.positive())?;
+        let control_mean = indexed_mean(&pooled, shuffle.control())?;
+        let contrast = positive_mean
+            .iter()
+            .zip(&control_mean)
+            .map(|(left, right)| left - right)
+            .collect::<Vec<_>>();
+        if contrast.iter().any(|value| !value.is_finite()) {
+            return Err(ConceptGeometryError::NonFiniteValue);
+        }
+
+        output.push(LabelShuffleMeanContrast {
+            positive_indices: shuffle.positive().to_vec(),
+            control_indices: shuffle.control().to_vec(),
+            contrast,
+        });
+    }
+
+    Ok(output)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConceptGeometryError {
     EmptyGroup,
@@ -324,6 +462,7 @@ pub enum ConceptGeometryError {
     EmptyScalarSample,
     InvalidOrderStatisticRank,
     InvalidOrderStatisticRanks,
+    SampleCountOverflow,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1109,6 +1248,92 @@ mod tests {
         assert_eq!(
             bootstrap_mean_contrasts(&positive, &control, plan),
             Err(ConceptGeometryError::NonFiniteValue)
+        );
+    }
+
+    #[test]
+    fn label_shuffle_is_deterministic_and_preserves_a_complete_partition() {
+        let plan = DevelopmentResamplingPlan::new(5, 0x2701_0801).unwrap();
+        let left = label_shuffle_indices(3, 4, plan).unwrap();
+        let right = label_shuffle_indices(3, 4, plan).unwrap();
+        assert_eq!(left, right);
+        assert_eq!(left.len(), 5);
+
+        for replicate in left {
+            assert_eq!(replicate.positive().len(), 3);
+            assert_eq!(replicate.control().len(), 4);
+
+            let mut pooled = replicate
+                .positive()
+                .iter()
+                .chain(replicate.control())
+                .copied()
+                .collect::<Vec<_>>();
+            pooled.sort_unstable();
+            assert_eq!(pooled, (0..7).collect::<Vec<_>>());
+        }
+    }
+
+    #[test]
+    fn label_shuffle_changes_with_seed_and_rejects_empty_groups() {
+        let left =
+            label_shuffle_indices(4, 4, DevelopmentResamplingPlan::new(3, 1).unwrap()).unwrap();
+        let right =
+            label_shuffle_indices(4, 4, DevelopmentResamplingPlan::new(3, 2).unwrap()).unwrap();
+        assert_ne!(left, right);
+
+        let plan = DevelopmentResamplingPlan::new(2, 9).unwrap();
+        assert_eq!(
+            label_shuffle_indices(0, 4, plan),
+            Err(ConceptGeometryError::EmptyGroup)
+        );
+        assert_eq!(
+            label_shuffle_indices(4, 0, plan),
+            Err(ConceptGeometryError::EmptyGroup)
+        );
+    }
+
+    #[test]
+    fn label_shuffle_contrasts_match_manual_pooled_reconstruction() {
+        let positive = vec![vec![4.0, 8.0], vec![6.0, 10.0]];
+        let control = vec![vec![0.0, 2.0], vec![2.0, 4.0], vec![8.0, 12.0]];
+        let plan = DevelopmentResamplingPlan::new(4, 0x2701_0901).unwrap();
+        let reports = label_shuffle_mean_contrasts(&positive, &control, plan).unwrap();
+
+        let pooled = positive.iter().chain(&control).cloned().collect::<Vec<_>>();
+
+        assert_eq!(reports.len(), 4);
+        for report in reports {
+            let shuffled_positive = report
+                .positive_indices()
+                .iter()
+                .map(|&index| pooled[index].clone())
+                .collect::<Vec<_>>();
+            let shuffled_control = report
+                .control_indices()
+                .iter()
+                .map(|&index| pooled[index].clone())
+                .collect::<Vec<_>>();
+            assert_eq!(
+                report.contrast(),
+                mean_difference(&shuffled_positive, &shuffled_control).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn label_shuffle_contrasts_are_deterministic_and_dimension_checked() {
+        let positive = vec![vec![1.0, 3.0], vec![2.0, 4.0]];
+        let control = vec![vec![5.0, 7.0], vec![6.0, 8.0]];
+        let plan = DevelopmentResamplingPlan::new(3, 0x2701_0902).unwrap();
+        assert_eq!(
+            label_shuffle_mean_contrasts(&positive, &control, plan).unwrap(),
+            label_shuffle_mean_contrasts(&positive, &control, plan).unwrap()
+        );
+
+        assert_eq!(
+            label_shuffle_mean_contrasts(&[vec![1.0, 2.0]], &[vec![1.0, 2.0, 3.0]], plan,),
+            Err(ConceptGeometryError::DimensionMismatch)
         );
     }
 
