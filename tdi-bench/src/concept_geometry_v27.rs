@@ -1063,14 +1063,9 @@ mod tests {
         let basis = vec![vec![1.0, 0.0]];
         let plan = DevelopmentResamplingPlan::new(3, 0x2701_0402).unwrap();
 
-        let reports = bootstrap_residual_geometries(
-            &positive,
-            &control,
-            &basis,
-            DEFAULT_TOLERANCE,
-            plan,
-        )
-        .unwrap();
+        let reports =
+            bootstrap_residual_geometries(&positive, &control, &basis, DEFAULT_TOLERANCE, plan)
+                .unwrap();
 
         for report in reports {
             close(report.residual().innovation_energy_ratio(), 0.0);
