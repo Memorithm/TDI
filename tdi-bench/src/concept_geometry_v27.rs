@@ -1809,11 +1809,7 @@ mod tests {
         let plan = DevelopmentResamplingPlan::new(4, 0x2701_0901).unwrap();
         let reports = label_shuffle_mean_contrasts(&positive, &control, plan).unwrap();
 
-        let pooled = positive
-            .iter()
-            .chain(&control)
-            .cloned()
-            .collect::<Vec<_>>();
+        let pooled = positive.iter().chain(&control).cloned().collect::<Vec<_>>();
 
         assert_eq!(reports.len(), 4);
         for report in reports {
@@ -1845,11 +1841,7 @@ mod tests {
         );
 
         assert_eq!(
-            label_shuffle_mean_contrasts(
-                &[vec![1.0, 2.0]],
-                &[vec![1.0, 2.0, 3.0]],
-                plan,
-            ),
+            label_shuffle_mean_contrasts(&[vec![1.0, 2.0]], &[vec![1.0, 2.0, 3.0]], plan,),
             Err(ConceptGeometryError::DimensionMismatch)
         );
     }
