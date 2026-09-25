@@ -555,6 +555,7 @@ fn subsample_without_replacement(
         indices.swap(offset, swap_with);
     }
     indices.truncate(sample_count);
+    indices.shrink_to_fit();
     Ok(indices)
 }
 
