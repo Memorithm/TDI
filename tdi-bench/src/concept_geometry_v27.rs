@@ -580,8 +580,10 @@ pub fn independent_group_subsample_indices(
         return Err(ConceptGeometryError::InvalidSubsampleSize);
     }
 
-    let mut positive_rng =
-        SplitMix64::new(domain_separated_seed(plan.seed(), POSITIVE_SUBSAMPLE_DOMAIN));
+    let mut positive_rng = SplitMix64::new(domain_separated_seed(
+        plan.seed(),
+        POSITIVE_SUBSAMPLE_DOMAIN,
+    ));
     let mut control_rng =
         SplitMix64::new(domain_separated_seed(plan.seed(), CONTROL_SUBSAMPLE_DOMAIN));
     let mut output = Vec::new();
