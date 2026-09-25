@@ -445,6 +445,77 @@ pub fn label_shuffle_mean_contrasts(
     Ok(output)
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct LabelShuffleResidualGeometry {
+    positive_indices: Vec<usize>,
+    control_indices: Vec<usize>,
+    contrast: Vec<f64>,
+    residual: Option<ResidualDirection>,
+}
+
+impl LabelShuffleResidualGeometry {
+    #[must_use]
+    pub fn positive_indices(&self) -> &[usize] {
+        &self.positive_indices
+    }
+
+    #[must_use]
+    pub fn control_indices(&self) -> &[usize] {
+        &self.control_indices
+    }
+
+    #[must_use]
+    pub fn contrast(&self) -> &[f64] {
+        &self.contrast
+    }
+
+    #[must_use]
+    pub fn residual(&self) -> Option<&ResidualDirection> {
+        self.residual.as_ref()
+    }
+}
+
+/// Residualize shuffled-label null contrasts against one declared basis.
+///
+/// An exactly/near-zero shuffled raw contrast is a valid null outcome and is
+/// retained as `residual = None`. It is never coerced to zero innovation
+/// energy and never removed from replicate accounting.
+pub fn label_shuffle_residual_geometries(
+    positive: &[Vec<f64>],
+    control: &[Vec<f64>],
+    basis_directions: &[Vec<f64>],
+    tolerance: f64,
+    plan: DevelopmentResamplingPlan,
+) -> Result<Vec<LabelShuffleResidualGeometry>, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    let contrasts = label_shuffle_mean_contrasts(positive, control, plan)?;
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(contrasts.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+
+    for report in contrasts {
+        let raw_norm = norm(report.contrast());
+        if !raw_norm.is_finite() {
+            return Err(ConceptGeometryError::NonFiniteValue);
+        }
+        let residual = if raw_norm <= tolerance {
+            None
+        } else {
+            Some(residualize(report.contrast(), basis_directions, tolerance)?)
+        };
+
+        output.push(LabelShuffleResidualGeometry {
+            positive_indices: report.positive_indices().to_vec(),
+            control_indices: report.control_indices().to_vec(),
+            contrast: report.contrast().to_vec(),
+            residual,
+        });
+    }
+
+    Ok(output)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConceptGeometryError {
     EmptyGroup,
@@ -1335,6 +1406,46 @@ mod tests {
             label_shuffle_mean_contrasts(&[vec![1.0, 2.0]], &[vec![1.0, 2.0, 3.0]], plan,),
             Err(ConceptGeometryError::DimensionMismatch)
         );
+    }
+
+    #[test]
+    fn shuffled_null_geometry_retains_zero_contrasts_as_undefined() {
+        let positive = vec![vec![1.0, 1.0], vec![1.0, 1.0]];
+        let control = vec![vec![1.0, 1.0], vec![1.0, 1.0]];
+        let plan = DevelopmentResamplingPlan::new(4, 0x2701_1001).unwrap();
+
+        let reports =
+            label_shuffle_residual_geometries(&positive, &control, &[], DEFAULT_TOLERANCE, plan)
+                .unwrap();
+
+        assert_eq!(reports.len(), 4);
+        for report in reports {
+            assert_eq!(report.contrast(), &[0.0, 0.0]);
+            assert!(report.residual().is_none());
+            assert_eq!(report.positive_indices().len(), 2);
+            assert_eq!(report.control_indices().len(), 2);
+        }
+    }
+
+    #[test]
+    fn shuffled_null_geometry_matches_direct_residualization_when_defined() {
+        let positive = vec![vec![0.0, 0.0], vec![2.0, 1.0], vec![4.0, 3.0]];
+        let control = vec![vec![1.0, 4.0], vec![3.0, 2.0], vec![5.0, 6.0]];
+        let basis = vec![vec![1.0, 0.0]];
+        let plan = DevelopmentResamplingPlan::new(5, 0x2701_1002).unwrap();
+
+        let reports =
+            label_shuffle_residual_geometries(&positive, &control, &basis, DEFAULT_TOLERANCE, plan)
+                .unwrap();
+
+        for report in reports {
+            if norm(report.contrast()) > DEFAULT_TOLERANCE {
+                let expected = residualize(report.contrast(), &basis, DEFAULT_TOLERANCE).unwrap();
+                assert_eq!(report.residual(), Some(&expected));
+            } else {
+                assert!(report.residual().is_none());
+            }
+        }
     }
 
     #[test]

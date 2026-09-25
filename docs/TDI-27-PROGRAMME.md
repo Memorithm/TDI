@@ -183,8 +183,14 @@ permutation stream is domain-separated from the bootstrap streams.
 Each shuffled partition is then mapped to an explicit signed null contrast
 `mean(P_shuffle) - mean(C_shuffle)`. The report retains the exact pooled
 indices assigned to both groups so every null contrast is reproducible and
-auditable. This mechanism defines the shuffled-label population only; it does
-not define a tail probability, rejection threshold, p-value, or verdict.
+auditable.
+
+Null contrasts are residualised against the same caller-declared basis used by
+the observed geometry. A shuffled contrast whose raw norm is at or below the
+declared tolerance is retained explicitly with undefined residual geometry; it
+is neither dropped nor assigned an artificial innovation-energy value. This
+mechanism defines the shuffled-label population only; it does not define a
+tail probability, rejection threshold, p-value, or verdict.
 
 These slices still define no statistical confidence interval, p-value,
 acceptance threshold, or scientific verdict.
