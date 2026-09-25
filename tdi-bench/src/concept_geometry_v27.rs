@@ -233,10 +233,7 @@ impl BootstrapMeanContrast {
     }
 }
 
-fn indexed_mean(
-    rows: &[Vec<f64>],
-    indices: &[usize],
-) -> Result<Vec<f64>, ConceptGeometryError> {
+fn indexed_mean(rows: &[Vec<f64>], indices: &[usize]) -> Result<Vec<f64>, ConceptGeometryError> {
     let width = validate_rows(rows)?;
     if indices.is_empty() {
         return Err(ConceptGeometryError::EmptyGroup);
@@ -798,11 +795,7 @@ mod tests {
 
     #[test]
     fn bootstrap_mean_contrasts_match_manual_index_reconstruction() {
-        let positive = vec![
-            vec![1.0, 2.0],
-            vec![3.0, 5.0],
-            vec![8.0, 13.0],
-        ];
+        let positive = vec![vec![1.0, 2.0], vec![3.0, 5.0], vec![8.0, 13.0]];
         let control = vec![
             vec![0.0, 1.0],
             vec![2.0, 3.0],
