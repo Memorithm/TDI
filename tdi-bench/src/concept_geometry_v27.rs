@@ -307,6 +307,64 @@ pub fn bootstrap_mean_contrasts(
     Ok(output)
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LabelShuffleIndices {
+    positive: Vec<usize>,
+    control: Vec<usize>,
+}
+
+impl LabelShuffleIndices {
+    #[must_use]
+    pub fn positive(&self) -> &[usize] {
+        &self.positive
+    }
+
+    #[must_use]
+    pub fn control(&self) -> &[usize] {
+        &self.control
+    }
+}
+
+const LABEL_SHUFFLE_DOMAIN: u64 = 0x5444_4932_374c_424c;
+
+/// Deterministically permute group labels while preserving P/C cardinalities.
+///
+/// Every replicate is a complete partition of the pooled sample indices.
+/// This Development primitive defines only the permutation mechanism. It does
+/// not define a null rejection threshold, tail rule, p-value, or verdict.
+pub fn label_shuffle_indices(
+    positive_count: usize,
+    control_count: usize,
+    plan: DevelopmentResamplingPlan,
+) -> Result<Vec<LabelShuffleIndices>, ConceptGeometryError> {
+    if positive_count == 0 || control_count == 0 {
+        return Err(ConceptGeometryError::EmptyGroup);
+    }
+    let total = positive_count
+        .checked_add(control_count)
+        .ok_or(ConceptGeometryError::SampleCountOverflow)?;
+
+    let mut rng = SplitMix64::new(domain_separated_seed(plan.seed(), LABEL_SHUFFLE_DOMAIN));
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(plan.replicates())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+
+    for _ in 0..plan.replicates() {
+        let mut permutation = (0..total).collect::<Vec<_>>();
+        for index in (1..total).rev() {
+            let swap_with = rng.bounded(index + 1)?;
+            permutation.swap(index, swap_with);
+        }
+
+        let positive = permutation[..positive_count].to_vec();
+        let control = permutation[positive_count..].to_vec();
+        output.push(LabelShuffleIndices { positive, control });
+    }
+
+    Ok(output)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConceptGeometryError {
     EmptyGroup,
@@ -324,6 +382,7 @@ pub enum ConceptGeometryError {
     EmptyScalarSample,
     InvalidOrderStatisticRank,
     InvalidOrderStatisticRanks,
+    SampleCountOverflow,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1111,6 +1170,48 @@ mod tests {
         assert_eq!(
             bootstrap_mean_contrasts(&positive, &control, plan),
             Err(ConceptGeometryError::NonFiniteValue)
+        );
+    }
+
+    #[test]
+    fn label_shuffle_is_deterministic_and_preserves_a_complete_partition() {
+        let plan = DevelopmentResamplingPlan::new(5, 0x2701_0801).unwrap();
+        let left = label_shuffle_indices(3, 4, plan).unwrap();
+        let right = label_shuffle_indices(3, 4, plan).unwrap();
+        assert_eq!(left, right);
+        assert_eq!(left.len(), 5);
+
+        for replicate in left {
+            assert_eq!(replicate.positive().len(), 3);
+            assert_eq!(replicate.control().len(), 4);
+
+            let mut pooled = replicate
+                .positive()
+                .iter()
+                .chain(replicate.control())
+                .copied()
+                .collect::<Vec<_>>();
+            pooled.sort_unstable();
+            assert_eq!(pooled, (0..7).collect::<Vec<_>>());
+        }
+    }
+
+    #[test]
+    fn label_shuffle_changes_with_seed_and_rejects_empty_groups() {
+        let left =
+            label_shuffle_indices(4, 4, DevelopmentResamplingPlan::new(3, 1).unwrap()).unwrap();
+        let right =
+            label_shuffle_indices(4, 4, DevelopmentResamplingPlan::new(3, 2).unwrap()).unwrap();
+        assert_ne!(left, right);
+
+        let plan = DevelopmentResamplingPlan::new(2, 9).unwrap();
+        assert_eq!(
+            label_shuffle_indices(0, 4, plan),
+            Err(ConceptGeometryError::EmptyGroup)
+        );
+        assert_eq!(
+            label_shuffle_indices(4, 0, plan),
+            Err(ConceptGeometryError::EmptyGroup)
         );
     }
 
