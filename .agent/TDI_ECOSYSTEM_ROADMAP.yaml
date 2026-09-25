@@ -955,3 +955,31 @@ frozen_workflow_retirement_2026_09_25:
   implementation_pull_request: https://github.com/Memorithm/TDI/pull/622
   authority: workflow_execution_state_only_no_change_to_frozen_scientific_evidence
 
+tdi27_stage0_progress_2026_09_25:
+  status: development_active
+  merged:
+    slice_01_deterministic_resampling_plan:
+      pull_request: https://github.com/Memorithm/TDI/pull/621
+      merge: bc5325948da7db4ef364294179424408bcfd466c
+  active:
+    slice_02_independent_P_C_bootstrap_streams:
+      pull_request: https://github.com/Memorithm/TDI/pull/623
+      semantics:
+        - preserve_each_group_original_cardinality_per_replicate
+        - separate_domain_separated_deterministic_streams
+        - changing_one_group_cardinality_does_not_perturb_other_group_draw_sequence
+        - no_interval_p_value_threshold_or_confirmatory_rule
+  prepared_not_yet_PR:
+    slice_03_innovation_energy_bootstrap:
+      branch: research/tdi27-03-innovation-bootstrap
+      semantics:
+        - recompute_signed_mean_contrast_per_independent_P_C_resample
+        - reuse_declared_nuisance_subspace
+        - explicitly_account_for_near_zero_contrast_replicates
+        - no_silent_drop_or_zero_coercion
+  batch_policy:
+    batch_size: 15
+    current_batch: 1
+    merge_rule: required_exact_head_CI_green_before_merge
+    frozen_series_workers_must_remain_retired: true
+
