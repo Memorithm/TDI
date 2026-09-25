@@ -516,6 +516,100 @@ pub fn label_shuffle_residual_geometries(
     Ok(output)
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IndependentGroupSubsampleIndices {
+    positive: Vec<usize>,
+    control: Vec<usize>,
+}
+
+impl IndependentGroupSubsampleIndices {
+    #[must_use]
+    pub fn positive(&self) -> &[usize] {
+        &self.positive
+    }
+
+    #[must_use]
+    pub fn control(&self) -> &[usize] {
+        &self.control
+    }
+}
+
+const POSITIVE_SUBSAMPLE_DOMAIN: u64 = 0x5444_4932_3753_5053;
+const CONTROL_SUBSAMPLE_DOMAIN: u64 = 0x5444_4932_3753_4354;
+
+fn subsample_without_replacement(
+    population_count: usize,
+    sample_count: usize,
+    rng: &mut SplitMix64,
+) -> Result<Vec<usize>, ConceptGeometryError> {
+    if sample_count == 0 || sample_count > population_count {
+        return Err(ConceptGeometryError::InvalidSubsampleSize);
+    }
+
+    let mut indices = (0..population_count).collect::<Vec<_>>();
+    for offset in 0..sample_count {
+        let remaining = population_count - offset;
+        let swap_with = offset
+            .checked_add(rng.bounded(remaining)?)
+            .ok_or(ConceptGeometryError::SampleCountOverflow)?;
+        indices.swap(offset, swap_with);
+    }
+    indices.truncate(sample_count);
+    indices.shrink_to_fit();
+    Ok(indices)
+}
+
+/// Draw deterministic P/C subsamples without replacement.
+///
+/// Positive and control streams are domain-separated so changing one group's
+/// requested sample size does not perturb the other group's RNG stream.
+pub fn independent_group_subsample_indices(
+    positive_count: usize,
+    control_count: usize,
+    positive_sample_count: usize,
+    control_sample_count: usize,
+    plan: DevelopmentResamplingPlan,
+) -> Result<Vec<IndependentGroupSubsampleIndices>, ConceptGeometryError> {
+    if positive_count == 0 || control_count == 0 {
+        return Err(ConceptGeometryError::EmptyGroup);
+    }
+    if positive_sample_count == 0
+        || positive_sample_count > positive_count
+        || control_sample_count == 0
+        || control_sample_count > control_count
+    {
+        return Err(ConceptGeometryError::InvalidSubsampleSize);
+    }
+
+    let mut positive_rng = SplitMix64::new(domain_separated_seed(
+        plan.seed(),
+        POSITIVE_SUBSAMPLE_DOMAIN,
+    ));
+    let mut control_rng =
+        SplitMix64::new(domain_separated_seed(plan.seed(), CONTROL_SUBSAMPLE_DOMAIN));
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(plan.replicates())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+
+    for _ in 0..plan.replicates() {
+        output.push(IndependentGroupSubsampleIndices {
+            positive: subsample_without_replacement(
+                positive_count,
+                positive_sample_count,
+                &mut positive_rng,
+            )?,
+            control: subsample_without_replacement(
+                control_count,
+                control_sample_count,
+                &mut control_rng,
+            )?,
+        });
+    }
+
+    Ok(output)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConceptGeometryError {
     EmptyGroup,
@@ -534,6 +628,7 @@ pub enum ConceptGeometryError {
     InvalidOrderStatisticRank,
     InvalidOrderStatisticRanks,
     SampleCountOverflow,
+    InvalidSubsampleSize,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1561,6 +1656,64 @@ mod tests {
                 assert!(report.residual().is_none());
             }
         }
+    }
+
+    #[test]
+    fn independent_subsamples_are_deterministic_unique_and_bounded() {
+        let plan = DevelopmentResamplingPlan::new(5, 0x2701_1201).unwrap();
+        let left = independent_group_subsample_indices(7, 9, 4, 5, plan).unwrap();
+        let right = independent_group_subsample_indices(7, 9, 4, 5, plan).unwrap();
+        assert_eq!(left, right);
+        assert_eq!(left.len(), 5);
+
+        for replicate in left {
+            assert_eq!(replicate.positive().len(), 4);
+            assert_eq!(replicate.control().len(), 5);
+            assert!(replicate.positive().iter().all(|index| *index < 7));
+            assert!(replicate.control().iter().all(|index| *index < 9));
+
+            let mut positive = replicate.positive().to_vec();
+            positive.sort_unstable();
+            positive.dedup();
+            assert_eq!(positive.len(), 4);
+
+            let mut control = replicate.control().to_vec();
+            control.sort_unstable();
+            control.dedup();
+            assert_eq!(control.len(), 5);
+        }
+    }
+
+    #[test]
+    fn subsample_group_streams_are_cardinality_isolated() {
+        let plan = DevelopmentResamplingPlan::new(4, 0x2701_1202).unwrap();
+        let baseline = independent_group_subsample_indices(8, 10, 4, 5, plan).unwrap();
+        let different_control = independent_group_subsample_indices(8, 10, 4, 7, plan).unwrap();
+        let different_positive = independent_group_subsample_indices(8, 10, 6, 5, plan).unwrap();
+
+        for (left, right) in baseline.iter().zip(&different_control) {
+            assert_eq!(left.positive(), right.positive());
+        }
+        for (left, right) in baseline.iter().zip(&different_positive) {
+            assert_eq!(left.control(), right.control());
+        }
+    }
+
+    #[test]
+    fn independent_subsamples_reject_invalid_sizes() {
+        let plan = DevelopmentResamplingPlan::new(2, 11).unwrap();
+        assert_eq!(
+            independent_group_subsample_indices(4, 5, 0, 3, plan),
+            Err(ConceptGeometryError::InvalidSubsampleSize)
+        );
+        assert_eq!(
+            independent_group_subsample_indices(4, 5, 5, 3, plan),
+            Err(ConceptGeometryError::InvalidSubsampleSize)
+        );
+        assert_eq!(
+            independent_group_subsample_indices(4, 5, 3, 6, plan),
+            Err(ConceptGeometryError::InvalidSubsampleSize)
+        );
     }
 
     #[test]

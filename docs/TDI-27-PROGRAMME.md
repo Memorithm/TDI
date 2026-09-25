@@ -197,6 +197,11 @@ greater than or equal to the observed value. No normalization or finite-sample
 correction is applied, so this is explicitly not a p-value and has no rejection
 threshold or verdict.
 
+Sample-size sensitivity starts from a separate deterministic subsampling
+primitive. P and C are sampled without replacement, with caller-supplied sample
+sizes and domain-separated RNG streams. The primitive chooses no sample-size
+grid and no adequacy threshold; it only provides reproducible bounded subsets.
+
 These slices still define no statistical confidence interval, p-value,
 acceptance threshold, or scientific verdict.
 
