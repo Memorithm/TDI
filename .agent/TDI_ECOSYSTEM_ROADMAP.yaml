@@ -953,6 +953,7 @@ frozen_workflow_retirement_2026_09_25:
   TDI_7_1_workflow_state_verified_disabled_manually: true
   queued_TDI_7_1_run_cancellation_observed: true
   implementation_pull_request: https://github.com/Memorithm/TDI/pull/622
+  implementation_merge: f6034617e7bb50b863555a80189846c620fb440f
   authority: workflow_execution_state_only_no_change_to_frozen_scientific_evidence
 
 tdi27_stage0_progress_2026_09_25:
