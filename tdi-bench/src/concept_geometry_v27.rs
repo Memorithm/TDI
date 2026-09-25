@@ -320,6 +320,10 @@ pub enum ConceptGeometryError {
     SampleCountTooLarge,
     ReplicateAccountingOverflow,
     InvalidBootstrapIndex,
+    UndefinedReferenceDirection,
+    EmptyScalarSample,
+    InvalidOrderStatisticRank,
+    InvalidOrderStatisticRanks,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -619,6 +623,159 @@ pub fn bootstrap_residual_geometries(
         });
     }
     Ok(output)
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct BootstrapDirectionStability {
+    reference_unit_direction: Vec<f64>,
+    replicate_cosines: Vec<Option<f64>>,
+}
+
+impl BootstrapDirectionStability {
+    #[must_use]
+    pub fn reference_unit_direction(&self) -> &[f64] {
+        &self.reference_unit_direction
+    }
+
+    #[must_use]
+    pub fn replicate_cosines(&self) -> &[Option<f64>] {
+        &self.replicate_cosines
+    }
+}
+
+/// Compare every bootstrap residual direction with the signed full-sample residual.
+///
+/// The positive-minus-control sign convention is preserved. Replicates whose
+/// non-zero raw contrast is fully explained by the declared basis remain in the
+/// result as `None` rather than being dropped. A full-sample residual with no
+/// defined unit direction is a typed blocker for directional-stability analysis.
+pub fn bootstrap_direction_stability(
+    positive: &[Vec<f64>],
+    control: &[Vec<f64>],
+    basis_directions: &[Vec<f64>],
+    tolerance: f64,
+    plan: DevelopmentResamplingPlan,
+) -> Result<BootstrapDirectionStability, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    let reference_contrast = mean_difference(positive, control)?;
+    let reference_residual = residualize(&reference_contrast, basis_directions, tolerance)?;
+    let reference_unit_direction = reference_residual
+        .unit_direction()
+        .ok_or(ConceptGeometryError::UndefinedReferenceDirection)?
+        .to_vec();
+
+    let bootstrap =
+        bootstrap_residual_geometries(positive, control, basis_directions, tolerance, plan)?;
+    let mut replicate_cosines = Vec::new();
+    replicate_cosines
+        .try_reserve_exact(bootstrap.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+
+    for replicate in bootstrap {
+        let cosine = match replicate.residual().unit_direction() {
+            Some(unit) => Some(cosine_similarity(
+                &reference_unit_direction,
+                unit,
+                tolerance,
+            )?),
+            None => None,
+        };
+        replicate_cosines.push(cosine);
+    }
+
+    Ok(BootstrapDirectionStability {
+        reference_unit_direction,
+        replicate_cosines,
+    })
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DevelopmentOrderInterval {
+    lower_rank: usize,
+    upper_rank: usize,
+    lower_value: f64,
+    upper_value: f64,
+}
+
+impl DevelopmentOrderInterval {
+    #[must_use]
+    pub const fn lower_rank(self) -> usize {
+        self.lower_rank
+    }
+
+    #[must_use]
+    pub const fn upper_rank(self) -> usize {
+        self.upper_rank
+    }
+
+    #[must_use]
+    pub const fn lower_value(self) -> f64 {
+        self.lower_value
+    }
+
+    #[must_use]
+    pub const fn upper_value(self) -> f64 {
+        self.upper_value
+    }
+}
+
+fn sorted_finite_scalars(values: &[f64]) -> Result<Vec<f64>, ConceptGeometryError> {
+    if values.is_empty() {
+        return Err(ConceptGeometryError::EmptyScalarSample);
+    }
+    if values.iter().any(|value| !value.is_finite()) {
+        return Err(ConceptGeometryError::NonFiniteValue);
+    }
+
+    let mut sorted = values.to_vec();
+    sorted.sort_by(f64::total_cmp);
+    Ok(sorted)
+}
+
+/// Select one zero-based order statistic from finite Development values.
+///
+/// The caller supplies the rank directly. This primitive deliberately does not
+/// choose a probability-to-rank convention or attach confidence semantics.
+pub fn development_order_statistic(
+    values: &[f64],
+    rank: usize,
+) -> Result<f64, ConceptGeometryError> {
+    let sorted = sorted_finite_scalars(values)?;
+    sorted
+        .get(rank)
+        .copied()
+        .ok_or(ConceptGeometryError::InvalidOrderStatisticRank)
+}
+
+/// Select a closed interval between two caller-supplied zero-based ranks.
+///
+/// This is an order-statistic container only. It does not define a confidence
+/// level, bootstrap coverage rule, interpolation method, or scientific verdict.
+pub fn development_order_interval(
+    values: &[f64],
+    lower_rank: usize,
+    upper_rank: usize,
+) -> Result<DevelopmentOrderInterval, ConceptGeometryError> {
+    if lower_rank > upper_rank {
+        return Err(ConceptGeometryError::InvalidOrderStatisticRanks);
+    }
+
+    let sorted = sorted_finite_scalars(values)?;
+    let lower_value = sorted
+        .get(lower_rank)
+        .copied()
+        .ok_or(ConceptGeometryError::InvalidOrderStatisticRank)?;
+    let upper_value = sorted
+        .get(upper_rank)
+        .copied()
+        .ok_or(ConceptGeometryError::InvalidOrderStatisticRank)?;
+
+    Ok(DevelopmentOrderInterval {
+        lower_rank,
+        upper_rank,
+        lower_value,
+        upper_value,
+    })
 }
 
 pub fn cosine_similarity(
@@ -1017,6 +1174,84 @@ mod tests {
         assert_eq!(
             bootstrap_residual_geometries(&positive, &control, &[], DEFAULT_TOLERANCE, plan,),
             Err(ConceptGeometryError::ZeroNorm)
+        );
+    }
+
+    #[test]
+    fn bootstrap_direction_stability_is_signed_and_complete() {
+        let positive = vec![
+            vec![3.0, 4.0, 1.0],
+            vec![3.0, 4.0, 1.0],
+            vec![3.0, 4.0, 1.0],
+        ];
+        let control = vec![
+            vec![1.0, 1.0, 1.0],
+            vec![1.0, 1.0, 1.0],
+            vec![1.0, 1.0, 1.0],
+        ];
+        let basis = vec![vec![1.0, 0.0, 0.0]];
+        let plan = DevelopmentResamplingPlan::new(5, 0x2701_0501).unwrap();
+
+        let report =
+            bootstrap_direction_stability(&positive, &control, &basis, DEFAULT_TOLERANCE, plan)
+                .unwrap();
+
+        assert_eq!(report.reference_unit_direction(), &[0.0, 1.0, 0.0]);
+        assert_eq!(report.replicate_cosines().len(), 5);
+        for cosine in report.replicate_cosines() {
+            close(cosine.unwrap(), 1.0);
+        }
+    }
+
+    #[test]
+    fn bootstrap_direction_stability_blocks_undefined_reference_direction() {
+        let positive = vec![vec![2.0, 0.0], vec![2.0, 0.0]];
+        let control = vec![vec![0.0, 0.0], vec![0.0, 0.0]];
+        let basis = vec![vec![1.0, 0.0]];
+        let plan = DevelopmentResamplingPlan::new(2, 0x2701_0502).unwrap();
+
+        assert_eq!(
+            bootstrap_direction_stability(&positive, &control, &basis, DEFAULT_TOLERANCE, plan,),
+            Err(ConceptGeometryError::UndefinedReferenceDirection)
+        );
+    }
+
+    #[test]
+    fn development_order_statistics_use_exact_caller_supplied_ranks() {
+        let values = [4.0, 1.0, 3.0, 3.0, 9.0];
+
+        close(development_order_statistic(&values, 0).unwrap(), 1.0);
+        close(development_order_statistic(&values, 2).unwrap(), 3.0);
+        close(development_order_statistic(&values, 4).unwrap(), 9.0);
+
+        let interval = development_order_interval(&values, 1, 3).unwrap();
+        assert_eq!(interval.lower_rank(), 1);
+        assert_eq!(interval.upper_rank(), 3);
+        close(interval.lower_value(), 3.0);
+        close(interval.upper_value(), 4.0);
+    }
+
+    #[test]
+    fn development_order_statistics_fail_closed_on_invalid_inputs() {
+        assert_eq!(
+            development_order_statistic(&[], 0),
+            Err(ConceptGeometryError::EmptyScalarSample)
+        );
+        assert_eq!(
+            development_order_statistic(&[1.0, f64::NAN], 0),
+            Err(ConceptGeometryError::NonFiniteValue)
+        );
+        assert_eq!(
+            development_order_statistic(&[1.0, 2.0], 2),
+            Err(ConceptGeometryError::InvalidOrderStatisticRank)
+        );
+        assert_eq!(
+            development_order_interval(&[1.0, 2.0], 1, 0),
+            Err(ConceptGeometryError::InvalidOrderStatisticRanks)
+        );
+        assert_eq!(
+            development_order_interval(&[1.0, 2.0], 0, 2),
+            Err(ConceptGeometryError::InvalidOrderStatisticRank)
         );
     }
 
