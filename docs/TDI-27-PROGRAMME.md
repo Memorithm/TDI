@@ -199,8 +199,13 @@ threshold or verdict.
 
 Sample-size sensitivity starts from a separate deterministic subsampling
 primitive. P and C are sampled without replacement, with caller-supplied sample
-sizes and domain-separated RNG streams. The primitive chooses no sample-size
-grid and no adequacy threshold; it only provides reproducible bounded subsets.
+sizes and domain-separated RNG streams.
+
+A sensitivity grid can then be evaluated at an explicit ordered list of
+caller-supplied `(n_P, n_C)` points. Every point retains all Development
+replicate innovation-energy values, including explicit undefined entries for
+zero raw contrasts. The code does not generate grid points, optimize sample
+size, interpolate between points, or define an adequacy threshold.
 
 These slices still define no statistical confidence interval, p-value,
 acceptance threshold, or scientific verdict.
