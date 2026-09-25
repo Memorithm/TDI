@@ -629,6 +629,7 @@ pub enum ConceptGeometryError {
     InvalidOrderStatisticRanks,
     SampleCountOverflow,
     InvalidSubsampleSize,
+    EmptySampleSizeGrid,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1255,6 +1256,129 @@ pub fn compare_innovation_energy_to_shuffled_null(
         .collect::<Vec<_>>();
 
     summarize_null_innovation_energy(observed_value, &null_values)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DevelopmentSampleSizePoint {
+    positive_sample_count: usize,
+    control_sample_count: usize,
+}
+
+impl DevelopmentSampleSizePoint {
+    pub fn new(
+        positive_sample_count: usize,
+        control_sample_count: usize,
+    ) -> Result<Self, ConceptGeometryError> {
+        if positive_sample_count == 0 || control_sample_count == 0 {
+            return Err(ConceptGeometryError::InvalidSubsampleSize);
+        }
+        Ok(Self {
+            positive_sample_count,
+            control_sample_count,
+        })
+    }
+
+    #[must_use]
+    pub const fn positive_sample_count(self) -> usize {
+        self.positive_sample_count
+    }
+
+    #[must_use]
+    pub const fn control_sample_count(self) -> usize {
+        self.control_sample_count
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct SampleSizeSensitivityCell {
+    sample_size: DevelopmentSampleSizePoint,
+    replicate_innovation_values: Vec<Option<f64>>,
+}
+
+impl SampleSizeSensitivityCell {
+    #[must_use]
+    pub const fn sample_size(&self) -> DevelopmentSampleSizePoint {
+        self.sample_size
+    }
+
+    #[must_use]
+    pub fn replicate_innovation_values(&self) -> &[Option<f64>] {
+        &self.replicate_innovation_values
+    }
+}
+
+/// Evaluate caller-declared sample-size points under deterministic subsampling.
+///
+/// The grid order is preserved exactly. No sample-size point is generated,
+/// selected, optimized, or classified by this function.
+pub fn sample_size_sensitivity_grid(
+    positive: &[Vec<f64>],
+    control: &[Vec<f64>],
+    basis_directions: &[Vec<f64>],
+    tolerance: f64,
+    plan: DevelopmentResamplingPlan,
+    sample_sizes: &[DevelopmentSampleSizePoint],
+) -> Result<Vec<SampleSizeSensitivityCell>, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    let positive_width = validate_rows(positive)?;
+    let control_width = validate_rows(control)?;
+    if positive_width != control_width {
+        return Err(ConceptGeometryError::DimensionMismatch);
+    }
+    if sample_sizes.is_empty() {
+        return Err(ConceptGeometryError::EmptySampleSizeGrid);
+    }
+    let _validated_basis = orthonormalize(basis_directions, positive_width, tolerance)?;
+
+    let mut cells = Vec::new();
+    cells
+        .try_reserve_exact(sample_sizes.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+
+    for &sample_size in sample_sizes {
+        let subsets = independent_group_subsample_indices(
+            positive.len(),
+            control.len(),
+            sample_size.positive_sample_count(),
+            sample_size.control_sample_count(),
+            plan,
+        )?;
+        let mut replicate_innovation_values = Vec::new();
+        replicate_innovation_values
+            .try_reserve_exact(subsets.len())
+            .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+
+        for subset in subsets {
+            let positive_rows = subset
+                .positive()
+                .iter()
+                .map(|&index| positive[index].clone())
+                .collect::<Vec<_>>();
+            let control_rows = subset
+                .control()
+                .iter()
+                .map(|&index| control[index].clone())
+                .collect::<Vec<_>>();
+            let contrast = mean_difference(&positive_rows, &control_rows)?;
+            let raw_norm = norm(&contrast);
+            if !raw_norm.is_finite() {
+                return Err(ConceptGeometryError::NonFiniteValue);
+            }
+            let value = if raw_norm <= tolerance {
+                None
+            } else {
+                Some(residualize(&contrast, basis_directions, tolerance)?.innovation_energy_ratio())
+            };
+            replicate_innovation_values.push(value);
+        }
+
+        cells.push(SampleSizeSensitivityCell {
+            sample_size,
+            replicate_innovation_values,
+        });
+    }
+
+    Ok(cells)
 }
 
 pub fn cosine_similarity(
@@ -2019,6 +2143,79 @@ mod tests {
             8
         );
         assert!(left.greater_or_equal_count() <= left.defined_null_values().len());
+    }
+
+    #[test]
+    fn sample_size_sensitivity_preserves_caller_grid_and_replicates() {
+        let positive = vec![
+            vec![3.0, 4.0, 1.0],
+            vec![3.0, 4.0, 1.0],
+            vec![3.0, 4.0, 1.0],
+            vec![3.0, 4.0, 1.0],
+        ];
+        let control = vec![
+            vec![1.0, 1.0, 1.0],
+            vec![1.0, 1.0, 1.0],
+            vec![1.0, 1.0, 1.0],
+            vec![1.0, 1.0, 1.0],
+            vec![1.0, 1.0, 1.0],
+        ];
+        let basis = vec![vec![1.0, 0.0, 0.0]];
+        let plan = DevelopmentResamplingPlan::new(4, 0x2701_1301).unwrap();
+        let grid = [
+            DevelopmentSampleSizePoint::new(2, 2).unwrap(),
+            DevelopmentSampleSizePoint::new(3, 4).unwrap(),
+        ];
+
+        let cells = sample_size_sensitivity_grid(
+            &positive,
+            &control,
+            &basis,
+            DEFAULT_TOLERANCE,
+            plan,
+            &grid,
+        )
+        .unwrap();
+
+        assert_eq!(cells.len(), 2);
+        assert_eq!(cells[0].sample_size(), grid[0]);
+        assert_eq!(cells[1].sample_size(), grid[1]);
+        for cell in cells {
+            assert_eq!(cell.replicate_innovation_values().len(), 4);
+            for value in cell.replicate_innovation_values() {
+                close(value.unwrap(), 9.0 / 13.0);
+            }
+        }
+    }
+
+    #[test]
+    fn sample_size_sensitivity_retains_zero_contrast_subsets_as_undefined() {
+        let positive = vec![vec![1.0, 1.0], vec![1.0, 1.0]];
+        let control = vec![vec![1.0, 1.0], vec![1.0, 1.0]];
+        let plan = DevelopmentResamplingPlan::new(3, 0x2701_1302).unwrap();
+        let grid = [DevelopmentSampleSizePoint::new(1, 1).unwrap()];
+
+        let cells =
+            sample_size_sensitivity_grid(&positive, &control, &[], DEFAULT_TOLERANCE, plan, &grid)
+                .unwrap();
+
+        assert_eq!(cells[0].replicate_innovation_values(), &[None, None, None]);
+    }
+
+    #[test]
+    fn sample_size_sensitivity_rejects_empty_grid() {
+        let plan = DevelopmentResamplingPlan::new(2, 0x2701_1303).unwrap();
+        assert_eq!(
+            sample_size_sensitivity_grid(
+                &[vec![1.0]],
+                &[vec![0.0]],
+                &[],
+                DEFAULT_TOLERANCE,
+                plan,
+                &[],
+            ),
+            Err(ConceptGeometryError::EmptySampleSizeGrid)
+        );
     }
 
     #[test]
