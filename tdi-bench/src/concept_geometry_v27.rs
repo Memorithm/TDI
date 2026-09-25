@@ -844,6 +844,18 @@ mod tests {
     }
 
     #[test]
+    fn bootstrap_mean_contrasts_fail_closed_on_derived_overflow() {
+        let positive = vec![vec![f64::MAX], vec![f64::MAX]];
+        let control = vec![vec![0.0], vec![0.0]];
+        let plan = DevelopmentResamplingPlan::new(2, 0x2701_0305).unwrap();
+
+        assert_eq!(
+            bootstrap_mean_contrasts(&positive, &control, plan),
+            Err(ConceptGeometryError::NonFiniteValue)
+        );
+    }
+
+    #[test]
     fn mean_contrast_preserves_declared_sign() {
         let control = vec![vec![0.0, 1.0], vec![2.0, 3.0]];
         let positive = vec![vec![3.0, 5.0], vec![5.0, 7.0]];
