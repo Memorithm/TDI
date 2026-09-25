@@ -1,8 +1,11 @@
 //! Synthetic Development launch for TDI-27 concept geometry.
 
 use tdi_bench::concept_geometry_v27::{
-    ConceptGeometryError, DEFAULT_TOLERANCE, causal_novelty_gap, interaction_residual,
-    mean_difference, residualize, sequential_innovations,
+    ConceptGeometryError, DEFAULT_TOLERANCE, DevelopmentResamplingPlan,
+    DevelopmentSampleSizePoint, bootstrap_innovation_energy_summary, causal_novelty_gap,
+    compare_innovation_energy_to_shuffled_null, interaction_residual, mean_difference,
+    residualize, sample_size_sensitivity_grid, sequential_accepted_rank_summary,
+    sequential_innovations,
 };
 
 fn response(state: &[f64]) -> f64 {
@@ -56,7 +59,59 @@ fn run() -> Result<(), ConceptGeometryError> {
     )?;
     let accepted_rank = sequence.iter().filter(|step| step.accepted()).count();
 
-    println!("schema=tdi27-concept-geometry-development/v1");
+    let resampling_positive = vec![vec![3.0, 4.0, 0.0]; 4];
+    let resampling_control = vec![vec![0.0, 0.0, 0.0]; 4];
+    let resampling_plan = DevelopmentResamplingPlan::new(8, 0x2701_1501)?;
+    let bootstrap_summary = bootstrap_innovation_energy_summary(
+        &resampling_positive,
+        &resampling_control,
+        &known_basis,
+        DEFAULT_TOLERANCE,
+        resampling_plan,
+        1,
+        6,
+    )?;
+    let null_summary = compare_innovation_energy_to_shuffled_null(
+        &resampling_positive,
+        &resampling_control,
+        &known_basis,
+        DEFAULT_TOLERANCE,
+        resampling_plan,
+    )?;
+    let sample_size_grid = [
+        DevelopmentSampleSizePoint::new(2, 2)?,
+        DevelopmentSampleSizePoint::new(3, 3)?,
+    ];
+    let sample_size_cells = sample_size_sensitivity_grid(
+        &resampling_positive,
+        &resampling_control,
+        &known_basis,
+        DEFAULT_TOLERANCE,
+        resampling_plan,
+        &sample_size_grid,
+    )?;
+    let rank_replicates = vec![
+        vec![vec![1.0, 0.0, 0.0], vec![2.0, 0.0, 0.0]],
+        vec![vec![1.0, 0.0, 0.0], vec![1.0, 1.0, 0.0]],
+        vec![
+            vec![1.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0],
+            vec![0.0, 0.0, 1.0],
+        ],
+    ];
+    let rank_summary = sequential_accepted_rank_summary(
+        &[
+            vec![1.0, 0.0, 0.0],
+            vec![1.0, 1.0, 0.0],
+            vec![1.0, 1.0, 1.0],
+        ],
+        &rank_replicates,
+        DEFAULT_TOLERANCE,
+        0,
+        2,
+    )?;
+
+    println!("schema=tdi27-concept-geometry-development/v2");
     println!("scope=synthetic_development_only");
     println!(
         "mean_contrast={:.12},{:.12},{:.12}",
@@ -82,6 +137,37 @@ fn run() -> Result<(), ConceptGeometryError> {
         sequence[2].innovation_energy_ratio()
     );
     println!("sequential_accepted_rank={accepted_rank}");
+    println!("resampling_replicates={}", resampling_plan.replicates());
+    println!(
+        "bootstrap_innovation_full={:.12}",
+        bootstrap_summary.full_sample_value()
+    );
+    println!(
+        "bootstrap_innovation_order_bounds={:.12},{:.12}",
+        bootstrap_summary.order_interval().lower_value(),
+        bootstrap_summary.order_interval().upper_value()
+    );
+    println!("null_total_replicates={}", null_summary.total_replicates());
+    println!(
+        "null_defined_replicates={}",
+        null_summary.defined_null_values().len()
+    );
+    println!(
+        "null_undefined_replicates={}",
+        null_summary.undefined_replicates()
+    );
+    println!(
+        "null_greater_or_equal_count={}",
+        null_summary.greater_or_equal_count()
+    );
+    println!("sample_size_cells={}", sample_size_cells.len());
+    println!("sequential_rank_full={}", rank_summary.full_sample_rank());
+    println!(
+        "sequential_rank_order_bounds={},{}",
+        rank_summary.lower_value(),
+        rank_summary.upper_value()
+    );
+    println!("statistical_decision_pinned=false");
     println!("confirmatory_result=false");
     Ok(())
 }
