@@ -1,11 +1,10 @@
 //! Synthetic Development launch for TDI-27 concept geometry.
 
 use tdi_bench::concept_geometry_v27::{
-    ConceptGeometryError, DEFAULT_TOLERANCE, DevelopmentResamplingPlan,
-    DevelopmentSampleSizePoint, bootstrap_innovation_energy_summary, causal_novelty_gap,
-    compare_innovation_energy_to_shuffled_null, interaction_residual, mean_difference,
-    residualize, sample_size_sensitivity_grid, sequential_accepted_rank_summary,
-    sequential_innovations,
+    ConceptGeometryError, DEFAULT_TOLERANCE, DevelopmentResamplingPlan, DevelopmentSampleSizePoint,
+    bootstrap_innovation_energy_summary, causal_novelty_gap,
+    compare_innovation_energy_to_shuffled_null, interaction_residual, mean_difference, residualize,
+    sample_size_sensitivity_grid, sequential_accepted_rank_summary, sequential_innovations,
 };
 
 fn response(state: &[f64]) -> f64 {
