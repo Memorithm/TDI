@@ -2,7 +2,7 @@
 
 use tdi_bench::concept_geometry_v27::{
     ConceptGeometryError, DEFAULT_TOLERANCE, DevelopmentResamplingPlan, DevelopmentSampleSizePoint,
-    bootstrap_innovation_energy_summary, causal_novelty_gap,
+    bootstrap_direction_stability, bootstrap_innovation_energy_summary, causal_novelty_gap,
     compare_innovation_energy_to_shuffled_null, interaction_residual, mean_difference, residualize,
     sample_size_sensitivity_grid, sequential_accepted_rank_summary, sequential_innovations,
 };
@@ -69,6 +69,13 @@ fn run() -> Result<(), ConceptGeometryError> {
         resampling_plan,
         1,
         6,
+    )?;
+    let direction_stability = bootstrap_direction_stability(
+        &resampling_positive,
+        &resampling_control,
+        &known_basis,
+        DEFAULT_TOLERANCE,
+        resampling_plan,
     )?;
     let null_summary = compare_innovation_energy_to_shuffled_null(
         &resampling_positive,
@@ -145,6 +152,24 @@ fn run() -> Result<(), ConceptGeometryError> {
         "bootstrap_innovation_order_bounds={:.12},{:.12}",
         bootstrap_summary.order_interval().lower_value(),
         bootstrap_summary.order_interval().upper_value()
+    );
+    let direction_stability_values = direction_stability
+        .replicate_cosines()
+        .iter()
+        .map(|value| match value {
+            Some(value) => format!("{value:.12}"),
+            None => "undefined".to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    println!("bootstrap_direction_stability={direction_stability_values}");
+    println!(
+        "bootstrap_direction_stability_undefined={}",
+        direction_stability
+            .replicate_cosines()
+            .iter()
+            .filter(|value| value.is_none())
+            .count()
     );
     println!("null_total_replicates={}", null_summary.total_replicates());
     println!(
