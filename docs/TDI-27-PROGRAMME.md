@@ -207,6 +207,13 @@ replicate innovation-energy values, including explicit undefined entries for
 zero raw contrasts. The code does not generate grid points, optimize sample
 size, interpolate between points, or define an adequacy threshold.
 
+Sequential latent rank now has a non-pinning Development summary. Given the
+full-sample direction sequence and caller-provided replicate direction
+sequences, TDI reports the exact accepted rank for the full sample, every
+replicate rank, and integer lower/upper values at caller-supplied order ranks.
+The primitive does not generate replicate direction sets or attach confidence
+semantics to those integer bounds.
+
 These slices still define no statistical confidence interval, p-value,
 acceptance threshold, or scientific verdict.
 

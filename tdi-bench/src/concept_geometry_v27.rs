@@ -1381,6 +1381,132 @@ pub fn sample_size_sensitivity_grid(
     Ok(cells)
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SequentialAcceptedRankSummary {
+    full_sample_rank: usize,
+    replicate_ranks: Vec<usize>,
+    lower_order_rank: usize,
+    upper_order_rank: usize,
+    lower_value: usize,
+    upper_value: usize,
+}
+
+impl SequentialAcceptedRankSummary {
+    #[must_use]
+    pub const fn full_sample_rank(&self) -> usize {
+        self.full_sample_rank
+    }
+
+    #[must_use]
+    pub fn replicate_ranks(&self) -> &[usize] {
+        &self.replicate_ranks
+    }
+
+    #[must_use]
+    pub const fn lower_order_rank(&self) -> usize {
+        self.lower_order_rank
+    }
+
+    #[must_use]
+    pub const fn upper_order_rank(&self) -> usize {
+        self.upper_order_rank
+    }
+
+    #[must_use]
+    pub const fn lower_value(&self) -> usize {
+        self.lower_value
+    }
+
+    #[must_use]
+    pub const fn upper_value(&self) -> usize {
+        self.upper_value
+    }
+}
+
+fn accepted_sequential_rank(
+    directions: &[Vec<f64>],
+    tolerance: f64,
+) -> Result<usize, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    let first = directions.first().ok_or(ConceptGeometryError::EmptyGroup)?;
+    validate_vector(first)?;
+    let width = first.len();
+    let mut basis = Vec::<Vec<f64>>::new();
+    let mut accepted_rank = 0usize;
+
+    for direction in directions {
+        validate_vector(direction)?;
+        if direction.len() != width {
+            return Err(ConceptGeometryError::DimensionMismatch);
+        }
+        let raw_norm = norm(direction);
+        if !raw_norm.is_finite() {
+            return Err(ConceptGeometryError::NonFiniteValue);
+        }
+        if raw_norm <= tolerance {
+            continue;
+        }
+        let report = residualize(direction, &basis, tolerance)?;
+        if let Some(unit) = report.unit_direction() {
+            basis.push(unit.to_vec());
+            accepted_rank = accepted_rank
+                .checked_add(1)
+                .ok_or(ConceptGeometryError::SampleCountOverflow)?;
+        }
+    }
+
+    Ok(accepted_rank)
+}
+
+/// Summarize accepted sequential rank across caller-provided replicate sets.
+///
+/// The caller supplies the replicate direction sets and the two order-statistic
+/// ranks. The function does not generate resamples or attach confidence
+/// semantics to the returned integer bounds.
+pub fn sequential_accepted_rank_summary(
+    full_sample_directions: &[Vec<f64>],
+    replicate_direction_sets: &[Vec<Vec<f64>>],
+    tolerance: f64,
+    lower_order_rank: usize,
+    upper_order_rank: usize,
+) -> Result<SequentialAcceptedRankSummary, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    if replicate_direction_sets.is_empty() {
+        return Err(ConceptGeometryError::EmptyScalarSample);
+    }
+    if lower_order_rank > upper_order_rank {
+        return Err(ConceptGeometryError::InvalidOrderStatisticRanks);
+    }
+
+    let full_sample_rank = accepted_sequential_rank(full_sample_directions, tolerance)?;
+    let mut replicate_ranks = Vec::new();
+    replicate_ranks
+        .try_reserve_exact(replicate_direction_sets.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+
+    for directions in replicate_direction_sets {
+        replicate_ranks.push(accepted_sequential_rank(directions, tolerance)?);
+    }
+
+    let mut sorted = replicate_ranks.clone();
+    sorted.sort_unstable();
+    let lower_value = *sorted
+        .get(lower_order_rank)
+        .ok_or(ConceptGeometryError::InvalidOrderStatisticRank)?;
+    let upper_value = *sorted
+        .get(upper_order_rank)
+        .ok_or(ConceptGeometryError::InvalidOrderStatisticRank)?;
+
+    Ok(SequentialAcceptedRankSummary {
+        full_sample_rank,
+        replicate_ranks,
+        lower_order_rank,
+        upper_order_rank,
+        lower_value,
+        upper_value,
+    })
+}
+
 pub fn cosine_similarity(
     left: &[f64],
     right: &[f64],
@@ -2216,6 +2342,69 @@ mod tests {
             ),
             Err(ConceptGeometryError::EmptySampleSizeGrid)
         );
+    }
+
+    #[test]
+    fn sequential_rank_summary_preserves_integer_rank_distribution() {
+        let full = vec![
+            vec![1.0, 0.0, 0.0],
+            vec![1.0, 1.0, 0.0],
+            vec![1.0, 1.0, 1.0],
+        ];
+        let replicates = vec![
+            vec![vec![1.0, 0.0, 0.0], vec![2.0, 0.0, 0.0]],
+            vec![vec![1.0, 0.0, 0.0], vec![1.0, 1.0, 0.0]],
+            vec![
+                vec![1.0, 0.0, 0.0],
+                vec![0.0, 1.0, 0.0],
+                vec![0.0, 0.0, 1.0],
+            ],
+        ];
+
+        let summary =
+            sequential_accepted_rank_summary(&full, &replicates, DEFAULT_TOLERANCE, 0, 2).unwrap();
+
+        assert_eq!(summary.full_sample_rank(), 3);
+        assert_eq!(summary.replicate_ranks(), &[1, 2, 3]);
+        assert_eq!(summary.lower_order_rank(), 0);
+        assert_eq!(summary.upper_order_rank(), 2);
+        assert_eq!(summary.lower_value(), 1);
+        assert_eq!(summary.upper_value(), 3);
+    }
+
+    #[test]
+    fn sequential_rank_summary_rejects_empty_or_invalid_order_bounds() {
+        let full = vec![vec![1.0, 0.0]];
+        assert_eq!(
+            sequential_accepted_rank_summary(&full, &[], DEFAULT_TOLERANCE, 0, 0),
+            Err(ConceptGeometryError::EmptyScalarSample)
+        );
+        let replicates = vec![vec![vec![1.0, 0.0]]];
+        assert_eq!(
+            sequential_accepted_rank_summary(&full, &replicates, DEFAULT_TOLERANCE, 1, 0),
+            Err(ConceptGeometryError::InvalidOrderStatisticRanks)
+        );
+        assert_eq!(
+            sequential_accepted_rank_summary(&full, &replicates, DEFAULT_TOLERANCE, 0, 1),
+            Err(ConceptGeometryError::InvalidOrderStatisticRank)
+        );
+    }
+
+    #[test]
+    fn sequential_rank_summary_retains_zero_directions_as_rejected() {
+        let full = vec![vec![0.0, 0.0], vec![1.0, 0.0], vec![0.0, 1.0]];
+        let replicates = vec![
+            vec![vec![0.0, 0.0], vec![1.0, 0.0]],
+            vec![vec![0.0, 0.0], vec![0.0, 0.0]],
+        ];
+
+        let summary =
+            sequential_accepted_rank_summary(&full, &replicates, DEFAULT_TOLERANCE, 0, 1).unwrap();
+
+        assert_eq!(summary.full_sample_rank(), 2);
+        assert_eq!(summary.replicate_ranks(), &[1, 0]);
+        assert_eq!(summary.lower_value(), 0);
+        assert_eq!(summary.upper_value(), 1);
     }
 
     #[test]
