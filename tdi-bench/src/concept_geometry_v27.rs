@@ -502,11 +502,7 @@ pub fn label_shuffle_residual_geometries(
         let residual = if raw_norm <= tolerance {
             None
         } else {
-            Some(residualize(
-                report.contrast(),
-                basis_directions,
-                tolerance,
-            )?)
+            Some(residualize(report.contrast(), basis_directions, tolerance)?)
         };
 
         output.push(LabelShuffleResidualGeometry {
@@ -1418,14 +1414,9 @@ mod tests {
         let control = vec![vec![1.0, 1.0], vec![1.0, 1.0]];
         let plan = DevelopmentResamplingPlan::new(4, 0x2701_1001).unwrap();
 
-        let reports = label_shuffle_residual_geometries(
-            &positive,
-            &control,
-            &[],
-            DEFAULT_TOLERANCE,
-            plan,
-        )
-        .unwrap();
+        let reports =
+            label_shuffle_residual_geometries(&positive, &control, &[], DEFAULT_TOLERANCE, plan)
+                .unwrap();
 
         assert_eq!(reports.len(), 4);
         for report in reports {
@@ -1438,27 +1429,14 @@ mod tests {
 
     #[test]
     fn shuffled_null_geometry_matches_direct_residualization_when_defined() {
-        let positive = vec![
-            vec![0.0, 0.0],
-            vec![2.0, 1.0],
-            vec![4.0, 3.0],
-        ];
-        let control = vec![
-            vec![1.0, 4.0],
-            vec![3.0, 2.0],
-            vec![5.0, 6.0],
-        ];
+        let positive = vec![vec![0.0, 0.0], vec![2.0, 1.0], vec![4.0, 3.0]];
+        let control = vec![vec![1.0, 4.0], vec![3.0, 2.0], vec![5.0, 6.0]];
         let basis = vec![vec![1.0, 0.0]];
         let plan = DevelopmentResamplingPlan::new(5, 0x2701_1002).unwrap();
 
-        let reports = label_shuffle_residual_geometries(
-            &positive,
-            &control,
-            &basis,
-            DEFAULT_TOLERANCE,
-            plan,
-        )
-        .unwrap();
+        let reports =
+            label_shuffle_residual_geometries(&positive, &control, &basis, DEFAULT_TOLERANCE, plan)
+                .unwrap();
 
         for report in reports {
             if norm(report.contrast()) > DEFAULT_TOLERANCE {
