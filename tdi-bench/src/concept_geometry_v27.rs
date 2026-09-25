@@ -320,6 +320,7 @@ pub enum ConceptGeometryError {
     SampleCountTooLarge,
     ReplicateAccountingOverflow,
     InvalidBootstrapIndex,
+    UndefinedReferenceDirection,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -619,6 +620,70 @@ pub fn bootstrap_residual_geometries(
         });
     }
     Ok(output)
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct BootstrapDirectionStability {
+    reference_unit_direction: Vec<f64>,
+    replicate_cosines: Vec<Option<f64>>,
+}
+
+impl BootstrapDirectionStability {
+    #[must_use]
+    pub fn reference_unit_direction(&self) -> &[f64] {
+        &self.reference_unit_direction
+    }
+
+    #[must_use]
+    pub fn replicate_cosines(&self) -> &[Option<f64>] {
+        &self.replicate_cosines
+    }
+}
+
+/// Compare every bootstrap residual direction with the signed full-sample residual.
+///
+/// The positive-minus-control sign convention is preserved. Replicates whose
+/// non-zero raw contrast is fully explained by the declared basis remain in the
+/// result as `None` rather than being dropped. A full-sample residual with no
+/// defined unit direction is a typed blocker for directional-stability analysis.
+pub fn bootstrap_direction_stability(
+    positive: &[Vec<f64>],
+    control: &[Vec<f64>],
+    basis_directions: &[Vec<f64>],
+    tolerance: f64,
+    plan: DevelopmentResamplingPlan,
+) -> Result<BootstrapDirectionStability, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    let reference_contrast = mean_difference(positive, control)?;
+    let reference_residual = residualize(&reference_contrast, basis_directions, tolerance)?;
+    let reference_unit_direction = reference_residual
+        .unit_direction()
+        .ok_or(ConceptGeometryError::UndefinedReferenceDirection)?
+        .to_vec();
+
+    let bootstrap =
+        bootstrap_residual_geometries(positive, control, basis_directions, tolerance, plan)?;
+    let mut replicate_cosines = Vec::new();
+    replicate_cosines
+        .try_reserve_exact(bootstrap.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+
+    for replicate in bootstrap {
+        let cosine = match replicate.residual().unit_direction() {
+            Some(unit) => Some(cosine_similarity(
+                &reference_unit_direction,
+                unit,
+                tolerance,
+            )?),
+            None => None,
+        };
+        replicate_cosines.push(cosine);
+    }
+
+    Ok(BootstrapDirectionStability {
+        reference_unit_direction,
+        replicate_cosines,
+    })
 }
 
 pub fn cosine_similarity(
@@ -1033,6 +1098,56 @@ mod tests {
                 plan,
             ),
             Err(ConceptGeometryError::ZeroNorm)
+        );
+    }
+
+    #[test]
+    fn bootstrap_direction_stability_is_signed_and_complete() {
+        let positive = vec![
+            vec![3.0, 4.0, 1.0],
+            vec![3.0, 4.0, 1.0],
+            vec![3.0, 4.0, 1.0],
+        ];
+        let control = vec![
+            vec![1.0, 1.0, 1.0],
+            vec![1.0, 1.0, 1.0],
+            vec![1.0, 1.0, 1.0],
+        ];
+        let basis = vec![vec![1.0, 0.0, 0.0]];
+        let plan = DevelopmentResamplingPlan::new(5, 0x2701_0501).unwrap();
+
+        let report = bootstrap_direction_stability(
+            &positive,
+            &control,
+            &basis,
+            DEFAULT_TOLERANCE,
+            plan,
+        )
+        .unwrap();
+
+        assert_eq!(report.reference_unit_direction(), &[0.0, 1.0, 0.0]);
+        assert_eq!(report.replicate_cosines().len(), 5);
+        for cosine in report.replicate_cosines() {
+            close(cosine.unwrap(), 1.0);
+        }
+    }
+
+    #[test]
+    fn bootstrap_direction_stability_blocks_undefined_reference_direction() {
+        let positive = vec![vec![2.0, 0.0], vec![2.0, 0.0]];
+        let control = vec![vec![0.0, 0.0], vec![0.0, 0.0]];
+        let basis = vec![vec![1.0, 0.0]];
+        let plan = DevelopmentResamplingPlan::new(2, 0x2701_0502).unwrap();
+
+        assert_eq!(
+            bootstrap_direction_stability(
+                &positive,
+                &control,
+                &basis,
+                DEFAULT_TOLERANCE,
+                plan,
+            ),
+            Err(ConceptGeometryError::UndefinedReferenceDirection)
         );
     }
 
