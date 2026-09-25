@@ -162,8 +162,15 @@ Bootstrap replicates with an undefined residual direction remain explicit
 undefined entries; they are not silently removed. If the full-sample residual
 direction itself is undefined, directional-stability analysis fails closed.
 
-These slices still define no interval, p-value, acceptance threshold, or
-scientific verdict.
+A generic deterministic order-statistic primitive is also available for later
+Development summaries. It accepts zero-based ranks supplied directly by the
+caller, sorts finite scalar values deterministically, and returns either one
+order statistic or a closed rank interval. It deliberately does not choose a
+probability-to-rank conversion, interpolation convention, confidence level,
+coverage interpretation, or decision threshold.
+
+These slices still define no statistical confidence interval, p-value,
+acceptance threshold, or scientific verdict.
 
 ### TDI-27.2 — projection-method differential
 
