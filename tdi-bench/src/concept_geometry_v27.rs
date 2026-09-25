@@ -580,8 +580,10 @@ pub fn independent_group_subsample_indices(
         return Err(ConceptGeometryError::InvalidSubsampleSize);
     }
 
-    let mut positive_rng =
-        SplitMix64::new(domain_separated_seed(plan.seed(), POSITIVE_SUBSAMPLE_DOMAIN));
+    let mut positive_rng = SplitMix64::new(domain_separated_seed(
+        plan.seed(),
+        POSITIVE_SUBSAMPLE_DOMAIN,
+    ));
     let mut control_rng =
         SplitMix64::new(domain_separated_seed(plan.seed(), CONTROL_SUBSAMPLE_DOMAIN));
     let mut output = Vec::new();
@@ -2194,15 +2196,9 @@ mod tests {
         let plan = DevelopmentResamplingPlan::new(3, 0x2701_1302).unwrap();
         let grid = [DevelopmentSampleSizePoint::new(1, 1).unwrap()];
 
-        let cells = sample_size_sensitivity_grid(
-            &positive,
-            &control,
-            &[],
-            DEFAULT_TOLERANCE,
-            plan,
-            &grid,
-        )
-        .unwrap();
+        let cells =
+            sample_size_sensitivity_grid(&positive, &control, &[], DEFAULT_TOLERANCE, plan, &grid)
+                .unwrap();
 
         assert_eq!(cells[0].replicate_innovation_values(), &[None, None, None]);
     }
