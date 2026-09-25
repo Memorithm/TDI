@@ -144,6 +144,13 @@ so changing the cardinality of one group does not perturb the other group's
 draw sequence. This is a reproducibility and coupling-control property, not a
 claim that a deterministic PRNG provides physical randomness.
 
+The next Development layer converts each paired bootstrap index replicate into
+explicit positive/control means and the signed mean contrast
+`mean(P*) - mean(C*)`. The implementation validates group dimensions before
+sampling, preserves the declared P-minus-C sign, and fails closed if a derived
+sum or mean becomes non-finite. This slice still defines no interval, p-value,
+acceptance threshold, or scientific verdict.
+
 ### TDI-27.2 — projection-method differential
 
 Compare the current two-pass modified Gram-Schmidt reference against an

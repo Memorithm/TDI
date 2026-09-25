@@ -209,6 +209,104 @@ pub fn independent_group_bootstrap_indices(
     Ok(output)
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct BootstrapMeanContrast {
+    positive_mean: Vec<f64>,
+    control_mean: Vec<f64>,
+    contrast: Vec<f64>,
+}
+
+impl BootstrapMeanContrast {
+    #[must_use]
+    pub fn positive_mean(&self) -> &[f64] {
+        &self.positive_mean
+    }
+
+    #[must_use]
+    pub fn control_mean(&self) -> &[f64] {
+        &self.control_mean
+    }
+
+    #[must_use]
+    pub fn contrast(&self) -> &[f64] {
+        &self.contrast
+    }
+}
+
+fn indexed_mean(rows: &[Vec<f64>], indices: &[usize]) -> Result<Vec<f64>, ConceptGeometryError> {
+    let width = validate_rows(rows)?;
+    if indices.is_empty() {
+        return Err(ConceptGeometryError::EmptyGroup);
+    }
+
+    let mut result = vec![0.0; width];
+    for &index in indices {
+        let row = rows
+            .get(index)
+            .ok_or(ConceptGeometryError::InvalidBootstrapIndex)?;
+        for (target, value) in result.iter_mut().zip(row) {
+            *target += value;
+            if !target.is_finite() {
+                return Err(ConceptGeometryError::NonFiniteValue);
+            }
+        }
+    }
+
+    let scale = 1.0 / indices.len() as f64;
+    for value in &mut result {
+        *value *= scale;
+        if !value.is_finite() {
+            return Err(ConceptGeometryError::NonFiniteValue);
+        }
+    }
+    Ok(result)
+}
+
+/// Compute deterministic bootstrap mean contrasts for the positive/control groups.
+///
+/// Every replicate reuses the domain-separated group index streams, preserves
+/// each original group cardinality, and returns the signed contrast
+/// `mean(positive) - mean(control)`. This Development primitive intentionally
+/// does not define confidence intervals, p-values, thresholds, or verdicts.
+pub fn bootstrap_mean_contrasts(
+    positive: &[Vec<f64>],
+    control: &[Vec<f64>],
+    plan: DevelopmentResamplingPlan,
+) -> Result<Vec<BootstrapMeanContrast>, ConceptGeometryError> {
+    let positive_width = validate_rows(positive)?;
+    let control_width = validate_rows(control)?;
+    if positive_width != control_width {
+        return Err(ConceptGeometryError::DimensionMismatch);
+    }
+
+    let replicates = independent_group_bootstrap_indices(positive.len(), control.len(), plan)?;
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(plan.replicates())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+
+    for replicate in replicates {
+        let positive_mean = indexed_mean(positive, replicate.positive())?;
+        let control_mean = indexed_mean(control, replicate.control())?;
+        let contrast = positive_mean
+            .iter()
+            .zip(&control_mean)
+            .map(|(left, right)| left - right)
+            .collect::<Vec<_>>();
+        if contrast.iter().any(|value| !value.is_finite()) {
+            return Err(ConceptGeometryError::NonFiniteValue);
+        }
+
+        output.push(BootstrapMeanContrast {
+            positive_mean,
+            control_mean,
+            contrast,
+        });
+    }
+
+    Ok(output)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConceptGeometryError {
     EmptyGroup,
@@ -221,6 +319,7 @@ pub enum ConceptGeometryError {
     InvalidReplicateCount,
     SampleCountTooLarge,
     ReplicateAccountingOverflow,
+    InvalidBootstrapIndex,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -664,6 +763,88 @@ mod tests {
         assert_eq!(
             independent_group_bootstrap_indices(4, 0, plan),
             Err(ConceptGeometryError::EmptyGroup)
+        );
+    }
+
+    #[test]
+    fn bootstrap_mean_contrasts_preserve_sign_and_group_means() {
+        let positive = vec![
+            vec![3.0, 4.0, 1.0],
+            vec![3.0, 4.0, 1.0],
+            vec![3.0, 4.0, 1.0],
+        ];
+        let control = vec![
+            vec![1.0, 1.0, 1.0],
+            vec![1.0, 1.0, 1.0],
+            vec![1.0, 1.0, 1.0],
+            vec![1.0, 1.0, 1.0],
+        ];
+        let plan = DevelopmentResamplingPlan::new(5, 0x2701_0003).unwrap();
+
+        let left = bootstrap_mean_contrasts(&positive, &control, plan).unwrap();
+        let right = bootstrap_mean_contrasts(&positive, &control, plan).unwrap();
+        assert_eq!(left, right);
+        assert_eq!(left.len(), 5);
+
+        for replicate in left {
+            assert_eq!(replicate.positive_mean(), &[3.0, 4.0, 1.0]);
+            assert_eq!(replicate.control_mean(), &[1.0, 1.0, 1.0]);
+            assert_eq!(replicate.contrast(), &[2.0, 3.0, 0.0]);
+        }
+    }
+
+    #[test]
+    fn bootstrap_mean_contrasts_match_manual_index_reconstruction() {
+        let positive = vec![vec![1.0, 2.0], vec![3.0, 5.0], vec![8.0, 13.0]];
+        let control = vec![
+            vec![0.0, 1.0],
+            vec![2.0, 3.0],
+            vec![5.0, 8.0],
+            vec![13.0, 21.0],
+        ];
+        let plan = DevelopmentResamplingPlan::new(4, 0x2701_0303).unwrap();
+
+        let indices =
+            independent_group_bootstrap_indices(positive.len(), control.len(), plan).unwrap();
+        let reports = bootstrap_mean_contrasts(&positive, &control, plan).unwrap();
+
+        for (replicate, report) in indices.iter().zip(&reports) {
+            let positive_rows = replicate
+                .positive()
+                .iter()
+                .map(|&index| positive[index].clone())
+                .collect::<Vec<_>>();
+            let control_rows = replicate
+                .control()
+                .iter()
+                .map(|&index| control[index].clone())
+                .collect::<Vec<_>>();
+            let expected = mean_difference(&positive_rows, &control_rows).unwrap();
+            assert_eq!(report.contrast(), expected);
+        }
+    }
+
+    #[test]
+    fn bootstrap_mean_contrasts_reject_dimension_mismatch() {
+        let positive = vec![vec![1.0, 2.0]];
+        let control = vec![vec![1.0, 2.0, 3.0]];
+        let plan = DevelopmentResamplingPlan::new(2, 0x2701_0304).unwrap();
+
+        assert_eq!(
+            bootstrap_mean_contrasts(&positive, &control, plan),
+            Err(ConceptGeometryError::DimensionMismatch)
+        );
+    }
+
+    #[test]
+    fn bootstrap_mean_contrasts_fail_closed_on_derived_overflow() {
+        let positive = vec![vec![f64::MAX], vec![f64::MAX]];
+        let control = vec![vec![0.0], vec![0.0]];
+        let plan = DevelopmentResamplingPlan::new(2, 0x2701_0305).unwrap();
+
+        assert_eq!(
+            bootstrap_mean_contrasts(&positive, &control, plan),
+            Err(ConceptGeometryError::NonFiniteValue)
         );
     }
 
