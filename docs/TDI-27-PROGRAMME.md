@@ -169,6 +169,60 @@ order statistic or a closed rank interval. It deliberately does not choose a
 probability-to-rank conversion, interpolation convention, confidence level,
 coverage interpretation, or decision threshold.
 
+Innovation energy can now be summarized without discarding the underlying
+bootstrap evidence: the Development report keeps the full-sample
+`I = ||r||^2 / ||v||^2`, every bootstrap replicate value, and one closed
+order-statistic interval at caller-supplied ranks. The interval remains an
+ordered-value summary only and has no confidence interpretation at this stage.
+
+The null-control substrate now includes deterministic label permutations over
+the pooled P/C samples. Every replicate preserves the original group
+cardinalities and forms a complete partition of the pooled indices. The
+permutation stream is domain-separated from the bootstrap streams.
+
+Each shuffled partition is then mapped to an explicit signed null contrast
+`mean(P_shuffle) - mean(C_shuffle)`. The report retains the exact pooled
+indices assigned to both groups so every null contrast is reproducible and
+auditable.
+
+Null contrasts are residualised against the same caller-declared basis used by
+the observed geometry. A shuffled contrast whose raw norm is at or below the
+declared tolerance is retained explicitly with undefined residual geometry; it
+is neither dropped nor assigned an artificial innovation-energy value.
+
+A descriptive null comparison now reports the observed innovation energy, all
+defined shuffled-label innovation energies, the count of undefined null
+replicates, the total replicate count, and the count of defined null values
+greater than or equal to the observed value. No normalization or finite-sample
+correction is applied, so this is explicitly not a p-value and has no rejection
+threshold or verdict.
+
+Sample-size sensitivity starts from a separate deterministic subsampling
+primitive. P and C are sampled without replacement, with caller-supplied sample
+sizes and domain-separated RNG streams.
+
+A sensitivity grid can then be evaluated at an explicit ordered list of
+caller-supplied `(n_P, n_C)` points. Every point retains all Development
+replicate innovation-energy values, including explicit undefined entries for
+zero raw contrasts. The code does not generate grid points, optimize sample
+size, interpolate between points, or define an adequacy threshold.
+
+Sequential latent rank now has a non-pinning Development summary. Given the
+full-sample direction sequence and caller-provided replicate direction
+sequences, TDI reports the exact accepted rank for the full sample, every
+replicate rank, and integer lower/upper values at caller-supplied order ranks.
+The primitive does not generate replicate direction sets or attach confidence
+semantics to those integer bounds.
+
+The first 15-slice TDI-27.1 Development batch is now represented end to end:
+deterministic resampling plans, independent P/C bootstrap streams, bootstrap
+contrasts, residual geometry, signed direction stability, caller-ranked order
+statistics, innovation-energy summaries, label-shuffle null partitions and
+contrasts, explicit undefined null geometry, descriptive null exceedance
+counts, without-replacement sample-size sensitivity, and sequential accepted
+rank summaries. The synthetic runner exercises these surfaces together and
+emits machine-readable non-pinning/non-confirmatory markers.
+
 These slices still define no statistical confidence interval, p-value,
 acceptance threshold, or scientific verdict.
 
