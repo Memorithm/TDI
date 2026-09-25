@@ -112,6 +112,103 @@ pub fn bootstrap_index_replicates(
     Ok(output)
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IndependentGroupBootstrapIndices {
+    positive: Vec<usize>,
+    control: Vec<usize>,
+}
+
+impl IndependentGroupBootstrapIndices {
+    #[must_use]
+    pub fn positive(&self) -> &[usize] {
+        &self.positive
+    }
+
+    #[must_use]
+    pub fn control(&self) -> &[usize] {
+        &self.control
+    }
+}
+
+const POSITIVE_BOOTSTRAP_DOMAIN: u64 = 0x5444_4932_3750_4f53;
+const CONTROL_BOOTSTRAP_DOMAIN: u64 = 0x5444_4932_3743_5452;
+
+fn domain_separated_seed(seed: u64, domain: u64) -> u64 {
+    let mut rng = SplitMix64::new(seed ^ domain);
+    rng.next_u64()
+}
+
+/// Draw independent bootstrap indices for the positive and control groups.
+///
+/// The two groups use domain-separated deterministic RNG streams. Changing the
+/// size of one group therefore does not perturb the draw sequence of the other
+/// group. Each replicate preserves the original cardinality of each group and
+/// samples with replacement inside that group only.
+pub fn independent_group_bootstrap_indices(
+    positive_count: usize,
+    control_count: usize,
+    plan: DevelopmentResamplingPlan,
+) -> Result<Vec<IndependentGroupBootstrapIndices>, ConceptGeometryError> {
+    if positive_count == 0 || control_count == 0 {
+        return Err(ConceptGeometryError::EmptyGroup);
+    }
+
+    let positive_draws = plan
+        .replicates()
+        .checked_mul(positive_count)
+        .ok_or(ConceptGeometryError::ReplicateAccountingOverflow)?;
+    let control_draws = plan
+        .replicates()
+        .checked_mul(control_count)
+        .ok_or(ConceptGeometryError::ReplicateAccountingOverflow)?;
+
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(plan.replicates())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+
+    let mut positive_rng = SplitMix64::new(domain_separated_seed(
+        plan.seed(),
+        POSITIVE_BOOTSTRAP_DOMAIN,
+    ));
+    let mut control_rng =
+        SplitMix64::new(domain_separated_seed(plan.seed(), CONTROL_BOOTSTRAP_DOMAIN));
+    let mut positive_drawn = 0usize;
+    let mut control_drawn = 0usize;
+
+    for _ in 0..plan.replicates() {
+        let mut positive = Vec::new();
+        positive
+            .try_reserve_exact(positive_count)
+            .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+        for _ in 0..positive_count {
+            positive.push(positive_rng.bounded(positive_count)?);
+            positive_drawn = positive_drawn
+                .checked_add(1)
+                .ok_or(ConceptGeometryError::ReplicateAccountingOverflow)?;
+        }
+
+        let mut control = Vec::new();
+        control
+            .try_reserve_exact(control_count)
+            .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+        for _ in 0..control_count {
+            control.push(control_rng.bounded(control_count)?);
+            control_drawn = control_drawn
+                .checked_add(1)
+                .ok_or(ConceptGeometryError::ReplicateAccountingOverflow)?;
+        }
+
+        output.push(IndependentGroupBootstrapIndices { positive, control });
+    }
+
+    if positive_drawn != positive_draws || control_drawn != control_draws {
+        return Err(ConceptGeometryError::ReplicateAccountingOverflow);
+    }
+
+    Ok(output)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConceptGeometryError {
     EmptyGroup,
@@ -503,6 +600,71 @@ mod tests {
         let right =
             bootstrap_index_replicates(8, DevelopmentResamplingPlan::new(4, 2).unwrap()).unwrap();
         assert_ne!(left, right);
+    }
+
+    #[test]
+    fn independent_group_bootstrap_preserves_group_sizes_and_bounds() {
+        let plan = DevelopmentResamplingPlan::new(6, 0x27_02).unwrap();
+        let replicates = independent_group_bootstrap_indices(4, 7, plan).unwrap();
+        assert_eq!(replicates.len(), 6);
+        assert!(
+            replicates
+                .iter()
+                .all(|replicate| replicate.positive().len() == 4)
+        );
+        assert!(
+            replicates
+                .iter()
+                .all(|replicate| replicate.control().len() == 7)
+        );
+        assert!(
+            replicates
+                .iter()
+                .flat_map(IndependentGroupBootstrapIndices::positive)
+                .all(|index| *index < 4)
+        );
+        assert!(
+            replicates
+                .iter()
+                .flat_map(IndependentGroupBootstrapIndices::control)
+                .all(|index| *index < 7)
+        );
+    }
+
+    #[test]
+    fn independent_group_bootstrap_is_deterministic() {
+        let plan = DevelopmentResamplingPlan::new(5, 0xfeed_2702).unwrap();
+        let left = independent_group_bootstrap_indices(5, 9, plan).unwrap();
+        let right = independent_group_bootstrap_indices(5, 9, plan).unwrap();
+        assert_eq!(left, right);
+    }
+
+    #[test]
+    fn group_streams_are_cardinality_isolated() {
+        let plan = DevelopmentResamplingPlan::new(4, 0xabc0_2702).unwrap();
+        let baseline = independent_group_bootstrap_indices(5, 7, plan).unwrap();
+        let wider_control = independent_group_bootstrap_indices(5, 11, plan).unwrap();
+        let wider_positive = independent_group_bootstrap_indices(9, 7, plan).unwrap();
+
+        for (left, right) in baseline.iter().zip(&wider_control) {
+            assert_eq!(left.positive(), right.positive());
+        }
+        for (left, right) in baseline.iter().zip(&wider_positive) {
+            assert_eq!(left.control(), right.control());
+        }
+    }
+
+    #[test]
+    fn independent_group_bootstrap_rejects_empty_groups() {
+        let plan = DevelopmentResamplingPlan::new(2, 17).unwrap();
+        assert_eq!(
+            independent_group_bootstrap_indices(0, 4, plan),
+            Err(ConceptGeometryError::EmptyGroup)
+        );
+        assert_eq!(
+            independent_group_bootstrap_indices(4, 0, plan),
+            Err(ConceptGeometryError::EmptyGroup)
+        );
     }
 
     #[test]

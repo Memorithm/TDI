@@ -138,6 +138,12 @@ unbiased bounded integer draws; every requested draw must be accounted for.
 The first slice establishes only this deterministic sampling substrate and does
 not define an interval, p-value, acceptance threshold, or confirmatory rule.
 
+Positive and control groups are resampled separately at their original
+cardinalities. Their deterministic pseudo-random streams are domain-separated,
+so changing the cardinality of one group does not perturb the other group's
+draw sequence. This is a reproducibility and coupling-control property, not a
+claim that a deterministic PRNG provides physical randomness.
+
 ### TDI-27.2 — projection-method differential
 
 Compare the current two-pass modified Gram-Schmidt reference against an
