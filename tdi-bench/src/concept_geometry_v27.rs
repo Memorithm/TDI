@@ -878,8 +878,7 @@ pub fn bootstrap_innovation_energy_summary(
     valid_tolerance(tolerance)?;
 
     let full_sample_contrast = mean_difference(positive, control)?;
-    let full_sample_residual =
-        residualize(&full_sample_contrast, basis_directions, tolerance)?;
+    let full_sample_residual = residualize(&full_sample_contrast, basis_directions, tolerance)?;
     let full_sample_value = full_sample_residual.innovation_energy_ratio();
 
     let bootstrap =
@@ -888,8 +887,7 @@ pub fn bootstrap_innovation_energy_summary(
         .iter()
         .map(|report| report.residual().innovation_energy_ratio())
         .collect::<Vec<_>>();
-    let order_interval =
-        development_order_interval(&replicate_values, lower_rank, upper_rank)?;
+    let order_interval = development_order_interval(&replicate_values, lower_rank, upper_rank)?;
 
     Ok(BootstrapInnovationEnergySummary {
         full_sample_value,
