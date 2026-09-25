@@ -1328,6 +1328,7 @@ pub fn sample_size_sensitivity_grid(
     if sample_sizes.is_empty() {
         return Err(ConceptGeometryError::EmptySampleSizeGrid);
     }
+    let _validated_basis = orthonormalize(basis_directions, positive_width, tolerance)?;
 
     let mut cells = Vec::new();
     cells
