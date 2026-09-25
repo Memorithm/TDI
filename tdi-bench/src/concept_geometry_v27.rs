@@ -1047,6 +1047,121 @@ pub fn bootstrap_innovation_energy_summary(
     })
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct NullInnovationEnergyComparison {
+    observed_value: f64,
+    defined_null_values: Vec<f64>,
+    undefined_replicates: usize,
+    greater_or_equal_count: usize,
+    total_replicates: usize,
+}
+
+impl NullInnovationEnergyComparison {
+    #[must_use]
+    pub const fn observed_value(&self) -> f64 {
+        self.observed_value
+    }
+
+    #[must_use]
+    pub fn defined_null_values(&self) -> &[f64] {
+        &self.defined_null_values
+    }
+
+    #[must_use]
+    pub const fn undefined_replicates(&self) -> usize {
+        self.undefined_replicates
+    }
+
+    #[must_use]
+    pub const fn greater_or_equal_count(&self) -> usize {
+        self.greater_or_equal_count
+    }
+
+    #[must_use]
+    pub const fn total_replicates(&self) -> usize {
+        self.total_replicates
+    }
+}
+
+/// Descriptively compare one observed scalar with an optional null sample.
+///
+/// No normalization is performed: the output is counts plus the exact defined
+/// null values. In particular, this is not a p-value and has no rejection rule.
+pub fn summarize_null_innovation_energy(
+    observed_value: f64,
+    null_values: &[Option<f64>],
+) -> Result<NullInnovationEnergyComparison, ConceptGeometryError> {
+    if !observed_value.is_finite() {
+        return Err(ConceptGeometryError::NonFiniteValue);
+    }
+    if null_values.is_empty() {
+        return Err(ConceptGeometryError::EmptyScalarSample);
+    }
+
+    let mut defined_null_values = Vec::new();
+    defined_null_values
+        .try_reserve_exact(null_values.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    let mut undefined_replicates = 0usize;
+    let mut greater_or_equal_count = 0usize;
+
+    for value in null_values {
+        match value {
+            Some(value) => {
+                if !value.is_finite() {
+                    return Err(ConceptGeometryError::NonFiniteValue);
+                }
+                if *value >= observed_value {
+                    greater_or_equal_count = greater_or_equal_count
+                        .checked_add(1)
+                        .ok_or(ConceptGeometryError::ReplicateAccountingOverflow)?;
+                }
+                defined_null_values.push(*value);
+            }
+            None => {
+                undefined_replicates = undefined_replicates
+                    .checked_add(1)
+                    .ok_or(ConceptGeometryError::ReplicateAccountingOverflow)?;
+            }
+        }
+    }
+
+    Ok(NullInnovationEnergyComparison {
+        observed_value,
+        defined_null_values,
+        undefined_replicates,
+        greater_or_equal_count,
+        total_replicates: null_values.len(),
+    })
+}
+
+/// Build a descriptive shuffled-label null comparison for innovation energy.
+pub fn compare_innovation_energy_to_shuffled_null(
+    positive: &[Vec<f64>],
+    control: &[Vec<f64>],
+    basis_directions: &[Vec<f64>],
+    tolerance: f64,
+    plan: DevelopmentResamplingPlan,
+) -> Result<NullInnovationEnergyComparison, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    let observed_contrast = mean_difference(positive, control)?;
+    let observed_residual = residualize(&observed_contrast, basis_directions, tolerance)?;
+    let observed_value = observed_residual.innovation_energy_ratio();
+
+    let null_geometries =
+        label_shuffle_residual_geometries(positive, control, basis_directions, tolerance, plan)?;
+    let null_values = null_geometries
+        .iter()
+        .map(|report| {
+            report
+                .residual()
+                .map(ResidualDirection::innovation_energy_ratio)
+        })
+        .collect::<Vec<_>>();
+
+    summarize_null_innovation_energy(observed_value, &null_values)
+}
+
 pub fn cosine_similarity(
     left: &[f64],
     right: &[f64],
@@ -1705,6 +1820,52 @@ mod tests {
             ),
             Err(ConceptGeometryError::InvalidOrderStatisticRank)
         );
+    }
+
+    #[test]
+    fn null_innovation_summary_preserves_defined_and_undefined_accounting() {
+        let summary =
+            summarize_null_innovation_energy(0.5, &[Some(0.1), None, Some(0.5), Some(0.9)])
+                .unwrap();
+
+        close(summary.observed_value(), 0.5);
+        assert_eq!(summary.defined_null_values(), &[0.1, 0.5, 0.9]);
+        assert_eq!(summary.undefined_replicates(), 1);
+        assert_eq!(summary.greater_or_equal_count(), 2);
+        assert_eq!(summary.total_replicates(), 4);
+    }
+
+    #[test]
+    fn shuffled_null_innovation_comparison_is_deterministic_and_complete() {
+        let positive = vec![vec![2.0, 1.0], vec![3.0, 2.0], vec![4.0, 4.0]];
+        let control = vec![vec![0.0, 0.0], vec![1.0, 2.0], vec![2.0, 3.0]];
+        let basis = vec![vec![1.0, 0.0]];
+        let plan = DevelopmentResamplingPlan::new(8, 0x2701_1101).unwrap();
+
+        let left = compare_innovation_energy_to_shuffled_null(
+            &positive,
+            &control,
+            &basis,
+            DEFAULT_TOLERANCE,
+            plan,
+        )
+        .unwrap();
+        let right = compare_innovation_energy_to_shuffled_null(
+            &positive,
+            &control,
+            &basis,
+            DEFAULT_TOLERANCE,
+            plan,
+        )
+        .unwrap();
+
+        assert_eq!(left, right);
+        assert_eq!(left.total_replicates(), 8);
+        assert_eq!(
+            left.defined_null_values().len() + left.undefined_replicates(),
+            8
+        );
+        assert!(left.greater_or_equal_count() <= left.defined_null_values().len());
     }
 
     #[test]

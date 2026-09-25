@@ -188,9 +188,14 @@ auditable.
 Null contrasts are residualised against the same caller-declared basis used by
 the observed geometry. A shuffled contrast whose raw norm is at or below the
 declared tolerance is retained explicitly with undefined residual geometry; it
-is neither dropped nor assigned an artificial innovation-energy value. This
-mechanism defines the shuffled-label population only; it does not define a
-tail probability, rejection threshold, p-value, or verdict.
+is neither dropped nor assigned an artificial innovation-energy value.
+
+A descriptive null comparison now reports the observed innovation energy, all
+defined shuffled-label innovation energies, the count of undefined null
+replicates, the total replicate count, and the count of defined null values
+greater than or equal to the observed value. No normalization or finite-sample
+correction is applied, so this is explicitly not a p-value and has no rejection
+threshold or verdict.
 
 These slices still define no statistical confidence interval, p-value,
 acceptance threshold, or scientific verdict.
