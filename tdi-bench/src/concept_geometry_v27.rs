@@ -1328,6 +1328,7 @@ pub fn sample_size_sensitivity_grid(
     if sample_sizes.is_empty() {
         return Err(ConceptGeometryError::EmptySampleSizeGrid);
     }
+    let _validated_basis = orthonormalize(basis_directions, positive_width, tolerance)?;
 
     let mut cells = Vec::new();
     cells
@@ -1426,10 +1427,35 @@ fn accepted_sequential_rank(
     directions: &[Vec<f64>],
     tolerance: f64,
 ) -> Result<usize, ConceptGeometryError> {
-    Ok(sequential_innovations(directions, tolerance)?
-        .iter()
-        .filter(|step| step.accepted())
-        .count())
+    valid_tolerance(tolerance)?;
+    let first = directions.first().ok_or(ConceptGeometryError::EmptyGroup)?;
+    validate_vector(first)?;
+    let width = first.len();
+    let mut basis = Vec::<Vec<f64>>::new();
+    let mut accepted_rank = 0usize;
+
+    for direction in directions {
+        validate_vector(direction)?;
+        if direction.len() != width {
+            return Err(ConceptGeometryError::DimensionMismatch);
+        }
+        let raw_norm = norm(direction);
+        if !raw_norm.is_finite() {
+            return Err(ConceptGeometryError::NonFiniteValue);
+        }
+        if raw_norm <= tolerance {
+            continue;
+        }
+        let report = residualize(direction, &basis, tolerance)?;
+        if let Some(unit) = report.unit_direction() {
+            basis.push(unit.to_vec());
+            accepted_rank = accepted_rank
+                .checked_add(1)
+                .ok_or(ConceptGeometryError::SampleCountOverflow)?;
+        }
+    }
+
+    Ok(accepted_rank)
 }
 
 /// Summarize accepted sequential rank across caller-provided replicate sets.
