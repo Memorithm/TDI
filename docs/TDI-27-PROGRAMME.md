@@ -148,8 +148,16 @@ The next Development layer converts each paired bootstrap index replicate into
 explicit positive/control means and the signed mean contrast
 `mean(P*) - mean(C*)`. The implementation validates group dimensions before
 sampling, preserves the declared P-minus-C sign, and fails closed if a derived
-sum or mean becomes non-finite. This slice still defines no interval, p-value,
-acceptance threshold, or scientific verdict.
+sum or mean becomes non-finite.
+
+Each bootstrap contrast can then be residualised against one caller-declared
+known/nuisance subspace using the same tolerance for every replicate. This
+produces a Development distribution of residual geometry and innovation energy
+without silently dropping zero-contrast replicates. Fully explained non-zero
+contrasts remain explicit zero-residual cases with no unit residual direction.
+
+These slices still define no interval, p-value, acceptance threshold, or
+scientific verdict.
 
 ### TDI-27.2 — projection-method differential
 
