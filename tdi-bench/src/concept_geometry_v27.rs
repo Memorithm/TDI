@@ -1105,14 +1105,9 @@ mod tests {
         let basis = vec![vec![1.0, 0.0, 0.0]];
         let plan = DevelopmentResamplingPlan::new(5, 0x2701_0501).unwrap();
 
-        let report = bootstrap_direction_stability(
-            &positive,
-            &control,
-            &basis,
-            DEFAULT_TOLERANCE,
-            plan,
-        )
-        .unwrap();
+        let report =
+            bootstrap_direction_stability(&positive, &control, &basis, DEFAULT_TOLERANCE, plan)
+                .unwrap();
 
         assert_eq!(report.reference_unit_direction(), &[0.0, 1.0, 0.0]);
         assert_eq!(report.replicate_cosines().len(), 5);
@@ -1129,13 +1124,7 @@ mod tests {
         let plan = DevelopmentResamplingPlan::new(2, 0x2701_0502).unwrap();
 
         assert_eq!(
-            bootstrap_direction_stability(
-                &positive,
-                &control,
-                &basis,
-                DEFAULT_TOLERANCE,
-                plan,
-            ),
+            bootstrap_direction_stability(&positive, &control, &basis, DEFAULT_TOLERANCE, plan,),
             Err(ConceptGeometryError::UndefinedReferenceDirection)
         );
     }
