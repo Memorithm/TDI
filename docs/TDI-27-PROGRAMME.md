@@ -214,6 +214,15 @@ replicate rank, and integer lower/upper values at caller-supplied order ranks.
 The primitive does not generate replicate direction sets or attach confidence
 semantics to those integer bounds.
 
+The first 15-slice TDI-27.1 Development batch is now represented end to end:
+deterministic resampling plans, independent P/C bootstrap streams, bootstrap
+contrasts, residual geometry, signed direction stability, caller-ranked order
+statistics, innovation-energy summaries, label-shuffle null partitions and
+contrasts, explicit undefined null geometry, descriptive null exceedance
+counts, without-replacement sample-size sensitivity, and sequential accepted
+rank summaries. The synthetic runner exercises these surfaces together and
+emits machine-readable non-pinning/non-confirmatory markers.
+
 These slices still define no statistical confidence interval, p-value,
 acceptance threshold, or scientific verdict.
 
