@@ -209,6 +209,58 @@ pub fn independent_group_bootstrap_indices(
     Ok(output)
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct InnovationBootstrapReplicates {
+    point: ResidualDirection,
+    innovation_energy_ratios: Vec<f64>,
+    undefined_contrast_replicates: usize,
+    requested_replicates: usize,
+    seed: u64,
+}
+
+impl InnovationBootstrapReplicates {
+    #[must_use]
+    pub fn point(&self) -> &ResidualDirection {
+        &self.point
+    }
+
+    #[must_use]
+    pub fn innovation_energy_ratios(&self) -> &[f64] {
+        &self.innovation_energy_ratios
+    }
+
+    #[must_use]
+    pub const fn undefined_contrast_replicates(&self) -> usize {
+        self.undefined_contrast_replicates
+    }
+
+    #[must_use]
+    pub fn defined_replicates(&self) -> usize {
+        self.innovation_energy_ratios.len()
+    }
+
+    #[must_use]
+    pub const fn requested_replicates(&self) -> usize {
+        self.requested_replicates
+    }
+
+    #[must_use]
+    pub const fn seed(&self) -> u64 {
+        self.seed
+    }
+
+    pub fn validate_complete_accounting(&self) -> Result<(), ConceptGeometryError> {
+        let accounted = self
+            .defined_replicates()
+            .checked_add(self.undefined_contrast_replicates)
+            .ok_or(ConceptGeometryError::ReplicateAccountingOverflow)?;
+        if accounted != self.requested_replicates {
+            return Err(ConceptGeometryError::ReplicateAccountingMismatch);
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConceptGeometryError {
     EmptyGroup,
@@ -221,6 +273,7 @@ pub enum ConceptGeometryError {
     InvalidReplicateCount,
     SampleCountTooLarge,
     ReplicateAccountingOverflow,
+    ReplicateAccountingMismatch,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -351,6 +404,31 @@ fn validate_rows(rows: &[Vec<f64>]) -> Result<usize, ConceptGeometryError> {
     Ok(width)
 }
 
+fn mean_from_indices(
+    rows: &[Vec<f64>],
+    indices: &[usize],
+) -> Result<Vec<f64>, ConceptGeometryError> {
+    let width = validate_rows(rows)?;
+    if indices.is_empty() {
+        return Err(ConceptGeometryError::EmptyGroup);
+    }
+
+    let mut result = vec![0.0; width];
+    for &index in indices {
+        let row = rows
+            .get(index)
+            .ok_or(ConceptGeometryError::SampleCountTooLarge)?;
+        for (target, value) in result.iter_mut().zip(row) {
+            *target += value;
+        }
+    }
+    let scale = 1.0 / indices.len() as f64;
+    for value in &mut result {
+        *value *= scale;
+    }
+    Ok(result)
+}
+
 fn mean(rows: &[Vec<f64>]) -> Result<Vec<f64>, ConceptGeometryError> {
     let width = validate_rows(rows)?;
     let mut result = vec![0.0; width];
@@ -472,6 +550,71 @@ pub fn residualize(
         innovation_energy_ratio,
         basis_rank: basis.len(),
     })
+}
+
+/// Bootstrap the TDI-27 innovation-energy ratio using separate P/C resampling.
+///
+/// A replicate whose resampled mean contrast has norm at or below `tolerance`
+/// is reported explicitly as undefined because the innovation-energy ratio has
+/// a zero denominator. Such replicates are never silently dropped from
+/// accounting or coerced to a finite value.
+pub fn bootstrap_innovation_energy_replicates(
+    positive: &[Vec<f64>],
+    control: &[Vec<f64>],
+    basis_directions: &[Vec<f64>],
+    plan: DevelopmentResamplingPlan,
+    tolerance: f64,
+) -> Result<InnovationBootstrapReplicates, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    let positive_width = validate_rows(positive)?;
+    let control_width = validate_rows(control)?;
+    if positive_width != control_width {
+        return Err(ConceptGeometryError::DimensionMismatch);
+    }
+
+    let point_contrast = mean_difference(positive, control)?;
+    let point = residualize(&point_contrast, basis_directions, tolerance)?;
+    let index_replicates =
+        independent_group_bootstrap_indices(positive.len(), control.len(), plan)?;
+
+    let mut innovation_energy_ratios = Vec::new();
+    innovation_energy_ratios
+        .try_reserve_exact(plan.replicates())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    let mut undefined_contrast_replicates = 0usize;
+
+    for indices in &index_replicates {
+        let positive_mean = mean_from_indices(positive, indices.positive())?;
+        let control_mean = mean_from_indices(control, indices.control())?;
+        let contrast = positive_mean
+            .iter()
+            .zip(control_mean)
+            .map(|(left, right)| left - right)
+            .collect::<Vec<_>>();
+        let contrast_norm = norm(&contrast);
+        if !contrast_norm.is_finite() {
+            return Err(ConceptGeometryError::NonFiniteValue);
+        }
+        if contrast_norm <= tolerance {
+            undefined_contrast_replicates = undefined_contrast_replicates
+                .checked_add(1)
+                .ok_or(ConceptGeometryError::ReplicateAccountingOverflow)?;
+            continue;
+        }
+
+        let report = residualize(&contrast, basis_directions, tolerance)?;
+        innovation_energy_ratios.push(report.innovation_energy_ratio());
+    }
+
+    let output = InnovationBootstrapReplicates {
+        point,
+        innovation_energy_ratios,
+        undefined_contrast_replicates,
+        requested_replicates: plan.replicates(),
+        seed: plan.seed(),
+    };
+    output.validate_complete_accounting()?;
+    Ok(output)
 }
 
 pub fn cosine_similarity(
@@ -665,6 +808,61 @@ mod tests {
             independent_group_bootstrap_indices(4, 0, plan),
             Err(ConceptGeometryError::EmptyGroup)
         );
+    }
+
+    #[test]
+    fn innovation_bootstrap_recovers_constant_shift_ratio() {
+        let control = vec![vec![0.0, 0.0, 0.0]; 6];
+        let positive = vec![vec![3.0, 4.0, 0.0]; 6];
+        let basis = vec![vec![1.0, 0.0, 0.0]];
+        let plan = DevelopmentResamplingPlan::new(12, 0x27_03).unwrap();
+        let output = bootstrap_innovation_energy_replicates(
+            &positive,
+            &control,
+            &basis,
+            plan,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+
+        close(output.point().innovation_energy_ratio(), 16.0 / 25.0);
+        assert_eq!(output.requested_replicates(), 12);
+        assert_eq!(output.defined_replicates(), 12);
+        assert_eq!(output.undefined_contrast_replicates(), 0);
+        assert_eq!(output.seed(), 0x27_03);
+        for value in output.innovation_energy_ratios() {
+            close(*value, 16.0 / 25.0);
+        }
+        output.validate_complete_accounting().unwrap();
+    }
+
+    #[test]
+    fn innovation_bootstrap_accounts_for_undefined_zero_contrasts() {
+        let positive = vec![vec![1.0, 0.0], vec![0.0, 0.0]];
+        let control = vec![vec![0.0, 0.0], vec![0.0, 0.0]];
+        let plan = DevelopmentResamplingPlan::new(8, 0x27_03).unwrap();
+        let output = bootstrap_innovation_energy_replicates(
+            &positive,
+            &control,
+            &[],
+            plan,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+
+        assert!(output.defined_replicates() > 0);
+        assert!(output.undefined_contrast_replicates() > 0);
+        assert_eq!(
+            output.defined_replicates() + output.undefined_contrast_replicates(),
+            output.requested_replicates()
+        );
+        assert!(
+            output
+                .innovation_energy_ratios()
+                .iter()
+                .all(|value| (*value - 1.0).abs() < 1.0e-12)
+        );
+        output.validate_complete_accounting().unwrap();
     }
 
     #[test]
