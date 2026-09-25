@@ -144,6 +144,13 @@ so changing the cardinality of one group does not perturb the other group's
 draw sequence. This is a reproducibility and coupling-control property, not a
 claim that a deterministic PRNG provides physical randomness.
 
+Innovation-energy bootstrap replicates reuse the declared nuisance subspace and
+recompute the signed mean contrast from each independently resampled P/C pair.
+If a replicate contrast norm is at or below the declared numerical tolerance,
+the ratio is undefined because its denominator vanishes; such replicates are
+counted explicitly and are never silently dropped or coerced to zero. Interval
+construction and statistical acceptance thresholds remain later slices.
+
 ### TDI-27.2 — projection-method differential
 
 Compare the current two-pass modified Gram-Schmidt reference against an
