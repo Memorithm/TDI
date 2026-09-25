@@ -1039,14 +1039,9 @@ mod tests {
         let basis = vec![vec![1.0, 0.0, 0.0]];
         let plan = DevelopmentResamplingPlan::new(4, 0x2701_0401).unwrap();
 
-        let reports = bootstrap_residual_geometries(
-            &positive,
-            &control,
-            &basis,
-            DEFAULT_TOLERANCE,
-            plan,
-        )
-        .unwrap();
+        let reports =
+            bootstrap_residual_geometries(&positive, &control, &basis, DEFAULT_TOLERANCE, plan)
+                .unwrap();
 
         assert_eq!(reports.len(), 4);
         for report in reports {
@@ -1090,13 +1085,7 @@ mod tests {
         let plan = DevelopmentResamplingPlan::new(2, 0x2701_0403).unwrap();
 
         assert_eq!(
-            bootstrap_residual_geometries(
-                &positive,
-                &control,
-                &[],
-                DEFAULT_TOLERANCE,
-                plan,
-            ),
+            bootstrap_residual_geometries(&positive, &control, &[], DEFAULT_TOLERANCE, plan,),
             Err(ConceptGeometryError::ZeroNorm)
         );
     }
