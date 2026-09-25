@@ -38,7 +38,8 @@ The core rules are simple:
 | **Attention recovery** | [TDI-7.x](docs/TDI-7.0-ATTENTION-RECOVERY-PREREGISTRATION.md) | Do early intervention-conditioned recovery descriptors add predictive value beyond static attention diagnostics? | Active |
 | **Recurrent associative architectures** | [TDI-8.x](docs/TDI-8-PROGRAMME.md) | Under matched memory budgets, what is gained by recurrence, associative memory and a bounded VSA workspace? | Active bounded evaluator programme |
 | **Adaptive inference dynamics** | [TDI-9.x](docs/TDI-9-PROGRAMME.md) | When should an inference process continue, stop, verify or recover under an explicit compute envelope? | Active |
-| **Operators, resolvents & ordinal transport** | [TDI-10.x](docs/TDI-10-PROGRAMME.md), [TDI-11.x](docs/TDI-11-PROGRAMME.md), [TDI-12.x](docs/TDI-12-PROGRAMME.md) | What exact operator laws hold, what prospective signals precede unsupported generation, and what ordinal structure transports more robustly than absolute calibration? | Active |
+| **Operators, resolvents & ordinal transport** | [TDI-10.x](docs/TDI-10-PROGRAMME.md), [TDI-12.x](docs/TDI-12-PROGRAMME.md) | Which operator identities hold exactly, and does ordinal structure transport more robustly than absolute calibration? | Active |
+| **Hallucination dynamics & control** | [TDI-11.x](docs/TDI-11-PROGRAMME.md) | Can prospective trajectory signals support bounded verification, recovery or abstention before unsupported generation is emitted? | Active pre-arm / Development |
 | **Boolean & formal representation systems** | [TDI-21.x](docs/TDI-21-PROGRAMME.md), [TDI-22.x](docs/TDI-22-PROGRAMME.md), [TDI-23.x](docs/TDI-23-PROGRAMME.md) | Can Boolean routing, torsor geometry and typed categorical rewrites reproduce useful structure while preserving explicit semantics and budgets? | Active Stage-0 / Development |
 | **Matched representation campaigns** | [TDI-24.x](docs/TDI-24-PROGRAMME.md), [TDI-25.x](docs/TDI-25-PROGRAMME.md) | Under matched capacity and evaluation budgets, how do vector, chiral and torsor representations differ? | Active |
 | **Sparse recurrent topology** | [TDI-26.x](docs/V888_CONNECTOME_BOOTSTRAP.md) | Does V888-derived sparse structure add predictive or computational value beyond progressively stronger matched graph controls? | Stage-0 |
@@ -106,6 +107,10 @@ a_t=F_{\mathrm{bool}}(p_t),
 $$
 
 where the policy can select only actions allowed by the declared C0/C1/C2/C3 resource envelope.
+
+### Hallucination dynamics and control — TDI-11
+
+TDI-11 separates detection, localization, diagnosis, intervention and decision. Its bounded action vocabulary includes `CONTINUE`, `VERIFY`, `BACKTRACK` / `RECOVER`, `EMIT` and `ABSTAIN`; controller evidence must remain prospective and must not receive hidden evaluator truth.
 
 ### Operator and ordinal research — TDI-10 / TDI-12
 
