@@ -1365,10 +1365,7 @@ pub fn sample_size_sensitivity_grid(
             let value = if raw_norm <= tolerance {
                 None
             } else {
-                Some(
-                    residualize(&contrast, basis_directions, tolerance)?
-                        .innovation_energy_ratio(),
-                )
+                Some(residualize(&contrast, basis_directions, tolerance)?.innovation_energy_ratio())
             };
             replicate_innovation_values.push(value);
         }
