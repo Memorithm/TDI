@@ -2391,6 +2391,23 @@ mod tests {
     }
 
     #[test]
+    fn sequential_rank_summary_retains_zero_directions_as_rejected() {
+        let full = vec![vec![0.0, 0.0], vec![1.0, 0.0], vec![0.0, 1.0]];
+        let replicates = vec![
+            vec![vec![0.0, 0.0], vec![1.0, 0.0]],
+            vec![vec![0.0, 0.0], vec![0.0, 0.0]],
+        ];
+
+        let summary =
+            sequential_accepted_rank_summary(&full, &replicates, DEFAULT_TOLERANCE, 0, 1).unwrap();
+
+        assert_eq!(summary.full_sample_rank(), 2);
+        assert_eq!(summary.replicate_ranks(), &[1, 0]);
+        assert_eq!(summary.lower_value(), 0);
+        assert_eq!(summary.upper_value(), 1);
+    }
+
+    #[test]
     fn causal_and_interaction_helpers_keep_semantics_separate() {
         close(causal_novelty_gap(0.75, &[0.0, 0.25]).unwrap(), 0.625);
         close(interaction_residual(1.0, 1.0, 2.5).unwrap(), 0.5);
