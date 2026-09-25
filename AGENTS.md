@@ -170,6 +170,31 @@ TDI-26 is independent from TDI-22 torsor-attention and must not read, modify, re
 
 Before a TDI-26 PR or merge decision, re-read the V888 bootstrap and require the ordinary exact-head CI gates. A later confirmation stage requires a separately frozen and explicitly authorized protocol.
 
+## Frozen-series workflow retirement policy
+
+TDI-1 through TDI-6.x are frozen historical evidence. Their historical workflow
+files are part of that evidence and must not be edited merely to keep current
+PR CI green. Repository Actions state must keep TDI-5.x/TDI-6.x execution
+workflows disabled after retirement. TDI-7.1 is also complete and its dedicated
+bounded-preflight worker must remain disabled; the TDI-7 post-holdout integrity
+gate remains the read-only replacement.
+
+For a frozen series:
+
+- do not rerun scientific evaluators, benchmarks, population generation, or
+  confirmatory/reproduction workers on ordinary pull requests;
+- preserve historical workflow files and scientific-code manifests unchanged;
+- retain only contemporary read-only integrity checks outside the frozen
+  surfaces when ongoing verification is needed;
+- never "repair" a red current PR by rewriting a historical manifest or a
+  workflow covered by that manifest.
+
+The repository-level retirement workflow
+`.github/workflows/retire-frozen-tdi5-6-workflows.yml` disables the historical
+TDI-5.x/TDI-6.x definitions and completed TDI-7.1 worker through GitHub's
+workflow-state API without
+changing their checked-in contents.
+
 ## TDI-27.x latent orthogonal innovation / concept-geometry bootstrap
 
 TDI-27.x is the Development-first latent concept-geometry research line. Before

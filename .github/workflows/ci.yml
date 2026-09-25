@@ -54,7 +54,11 @@ jobs:
         with:
           toolchain: ${{ env.TDI_CI_RUST }}
       - name: Run tests
-        run: cargo test --workspace --locked
+        run: |
+          # Frozen historical tdi-bench binary targets are preserved as evidence
+          # and are not re-executed by ordinary repository CI.
+          cargo test --workspace --exclude tdi-bench --locked
+          cargo test -p tdi-bench --lib --tests --locked
 
   clippy:
     name: Clippy
