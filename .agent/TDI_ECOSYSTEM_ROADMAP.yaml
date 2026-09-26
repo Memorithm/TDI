@@ -993,16 +993,17 @@ tdi27_stage0_progress_2026_09_25:
         pull_request: https://github.com/Memorithm/TDI/pull/641
         qualified_head: 57a8654b310832383f9d963fb0703f124207229e
         merge: 769d14f025ad040febc7c295c4bd4a6501b838e4
-    candidate:
       slice_03:
         pull_request: https://github.com/Memorithm/TDI/pull/642
-        head: 8e62e8f18487e4dfc354a63865cc3fb155223a1b
-        status: exact_head_CI_and_review_pending
+        qualified_head: 8e62e8f18487e4dfc354a63865cc3fb155223a1b
+        merge: a7093ddb0e7b141cc13a7181c6b8761c8ee49c9b
+        qualification: 57_exact_head_workflows_success_and_exact_head_review_no_major_issue
         semantics:
           - require_MGS_and_Householder_agreement_on_normalized_direction_definedness
           - separate_caller_declared_residual_and_direction_coordinate_bounds
           - reject_any_semantic_or_coordinate_disagreement_fail_closed
           - preserve_full_and_bootstrap_diagnostics_without_tolerance_selection
+    candidate: none
   next_after_qualified_TDI_27_2:
     - TDI_27_3_causal_intervention_harness
   batch_policy:
