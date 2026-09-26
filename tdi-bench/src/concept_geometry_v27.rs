@@ -1886,23 +1886,87 @@ fn positive_finite_parts(value: f64) -> (u64, i32) {
     }
 }
 
-fn positive_product_at_most(left: f64, right: f64, limit: f64) -> bool {
-    let (left_significand, left_exponent) = positive_finite_parts(left);
-    let (right_significand, right_exponent) = positive_finite_parts(right);
-    let (limit_significand, limit_exponent) = positive_finite_parts(limit);
-    let product_significand = u128::from(left_significand) * u128::from(right_significand);
-    let product_exponent = left_exponent + right_exponent;
-    let product_bits = u128::BITS - product_significand.leading_zeros();
-    let limit_bits = u64::BITS - limit_significand.leading_zeros();
-    let product_top_exponent = product_exponent + product_bits as i32 - 1;
-    let limit_top_exponent = limit_exponent + limit_bits as i32 - 1;
-    if product_top_exponent != limit_top_exponent {
-        return product_top_exponent < limit_top_exponent;
+const EXACT_SQUARE_MIN_EXPONENT: i32 = -2148;
+const EXACT_SQUARE_LIMBS: usize = 68;
+
+struct ExactNonnegativeSum {
+    limbs: [u64; EXACT_SQUARE_LIMBS],
+    overflow: bool,
+}
+
+impl ExactNonnegativeSum {
+    fn zero() -> Self {
+        Self {
+            limbs: [0; EXACT_SQUARE_LIMBS],
+            overflow: false,
+        }
     }
-    let common_exponent = product_exponent.min(limit_exponent);
-    let product = product_significand << (product_exponent - common_exponent) as u32;
-    let limit = u128::from(limit_significand) << (limit_exponent - common_exponent) as u32;
-    product <= limit
+
+    fn add_to_limb(&mut self, mut index: usize, value: u64) {
+        if value == 0 {
+            return;
+        }
+        if index >= self.limbs.len() {
+            self.overflow = true;
+            return;
+        }
+        let (sum, mut carry) = self.limbs[index].overflowing_add(value);
+        self.limbs[index] = sum;
+        while carry {
+            index += 1;
+            if index >= self.limbs.len() {
+                self.overflow = true;
+                return;
+            }
+            let (sum, next_carry) = self.limbs[index].overflowing_add(1);
+            self.limbs[index] = sum;
+            carry = next_carry;
+        }
+    }
+
+    fn add_word(&mut self, word: u64, bit_offset: usize) {
+        let index = bit_offset / u64::BITS as usize;
+        let shift = (bit_offset % u64::BITS as usize) as u32;
+        if shift == 0 {
+            self.add_to_limb(index, word);
+        } else {
+            self.add_to_limb(index, word << shift);
+            self.add_to_limb(index + 1, word >> (u64::BITS - shift));
+        }
+    }
+
+    fn add_square(&mut self, value: f64) {
+        if value == 0.0 {
+            return;
+        }
+        let (significand, exponent) = positive_finite_parts(value.abs());
+        let square = u128::from(significand) * u128::from(significand);
+        let bit_offset = (2 * exponent - EXACT_SQUARE_MIN_EXPONENT) as usize;
+        self.add_word(square as u64, bit_offset);
+        self.add_word((square >> u64::BITS) as u64, bit_offset + u64::BITS as usize);
+    }
+
+    fn at_most(&self, other: &Self) -> bool {
+        if self.overflow != other.overflow {
+            return !self.overflow;
+        }
+        for index in (0..self.limbs.len()).rev() {
+            if self.limbs[index] != other.limbs[index] {
+                return self.limbs[index] < other.limbs[index];
+            }
+        }
+        true
+    }
+}
+
+fn exact_squared_norm_at_most(values: &[f64], tolerance: f64) -> bool {
+    let mut squared_norm = ExactNonnegativeSum::zero();
+    for value in values {
+        squared_norm.add_square(*value);
+    }
+    let mut squared_tolerance = ExactNonnegativeSum::zero();
+    squared_tolerance.add_square(tolerance);
+    squared_norm.at_most(&squared_tolerance)
 }
 
 fn compensated_dot_with_roundoff_bound(left: &[f64], right: &[f64]) -> (f64, f64) {
@@ -1970,12 +2034,10 @@ fn normalized_intervention_direction(
     if direction.len() != width {
         return Err(ConceptGeometryError::DimensionMismatch);
     }
-    let (direction_scale, scaled_direction_norm) = scaled_euclidean_norm_parts(direction);
-    if direction_scale == 0.0
-        || positive_product_at_most(direction_scale, scaled_direction_norm, tolerance)
-    {
+    if exact_squared_norm_at_most(direction, tolerance) {
         return Err(ConceptGeometryError::ZeroNorm);
     }
+    let (direction_scale, scaled_direction_norm) = scaled_euclidean_norm_parts(direction);
     Ok(direction
         .iter()
         .map(|value| (value / direction_scale) / scaled_direction_norm)
@@ -3316,6 +3378,19 @@ mod tests {
         )
         .unwrap();
         assert_eq!(subnormal_direction.len(), 1);
+
+        let threshold = 1.0e-12;
+        let small_component = threshold * 2.0_f64.powi(-27);
+        let complete_norm_direction = matched_intervention_dose_states(
+            &[0.0, 0.0],
+            &[threshold, small_component],
+            &[vec![-small_component, threshold]],
+            &[0.0],
+            threshold,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+        assert_eq!(complete_norm_direction.len(), 1);
 
         let large_direction = matched_intervention_dose_states(
             &[0.0, 0.0],
