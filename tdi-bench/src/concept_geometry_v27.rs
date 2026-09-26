@@ -2388,10 +2388,7 @@ mod tests {
             compare_unit_directions(Some(&[1.0, 0.0]), Some(&[0.0, 1.0]), 1.0e-8),
             Err(ConceptGeometryError::ProjectionMethodDisagreement)
         );
-        assert_eq!(
-            compare_unit_directions(None, None, 1.0e-8),
-            Ok(None)
-        );
+        assert_eq!(compare_unit_directions(None, None, 1.0e-8), Ok(None));
     }
 
     #[test]
