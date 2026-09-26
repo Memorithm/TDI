@@ -188,7 +188,7 @@ fn run() -> Result<(), ConceptGeometryError> {
             .count()
     );
     println!(
-        "projection_method_max_abs_residual_difference={:.12}",
+        "projection_method_max_abs_residual_difference={:.17e}",
         projection_differential.max_abs_residual_difference()
     );
     println!(
@@ -196,7 +196,7 @@ fn run() -> Result<(), ConceptGeometryError> {
         bootstrap_projection_differentials.len()
     );
     println!(
-        "projection_method_bootstrap_max_abs_residual_difference={:.12}",
+        "projection_method_bootstrap_max_abs_residual_difference={:.17e}",
         bootstrap_projection_differentials
             .iter()
             .map(|report| report.differential().max_abs_residual_difference())
