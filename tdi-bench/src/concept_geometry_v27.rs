@@ -1874,6 +1874,26 @@ fn scaled_euclidean_norm_parts(values: &[f64]) -> (f64, f64) {
     (scale, scaled_sum.sqrt())
 }
 
+fn compensated_dot_with_roundoff_bound(left: &[f64], right: &[f64]) -> (f64, f64) {
+    let mut sum = 0.0_f64;
+    let mut correction = 0.0_f64;
+    let mut absolute_product_sum = 0.0_f64;
+    for (left, right) in left.iter().zip(right) {
+        let product = left * right;
+        absolute_product_sum += product.abs();
+        let next = sum + product;
+        if sum.abs() >= product.abs() {
+            correction += (sum - next) + product;
+        } else {
+            correction += (product - next) + sum;
+        }
+        sum = next;
+    }
+    let value = sum + correction;
+    let roundoff_bound = 4.0 * f64::EPSILON * (left.len() as f64 + 1.0) * absolute_product_sum;
+    (value, roundoff_bound)
+}
+
 /// One signed, predeclared intervention dose applied to a target direction and
 /// every matched orthogonal control direction.
 ///
@@ -2018,8 +2038,13 @@ pub fn matched_intervention_dose_states(
         .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
     for control in matched_control_directions {
         let control = normalized_intervention_direction(control, baseline.len(), tolerance)?;
-        let overlap = dot(&target, &control).abs();
-        if !overlap.is_finite() || overlap > orthogonality_tolerance {
+        let (overlap, overlap_roundoff_bound) =
+            compensated_dot_with_roundoff_bound(&target, &control);
+        let overlap = overlap.abs();
+        if !overlap.is_finite()
+            || !overlap_roundoff_bound.is_finite()
+            || overlap + overlap_roundoff_bound > orthogonality_tolerance
+        {
             return Err(ConceptGeometryError::NonOrthogonalControl);
         }
         controls.push(control);
@@ -3151,6 +3176,23 @@ mod tests {
                 &[-1.0, 0.0, 1.0],
                 DEFAULT_TOLERANCE,
                 DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::NonOrthogonalControl)
+        );
+        let small_component = 10.0_f64.powf(-8.5);
+        let cancelling_component = ((1.0 - small_component * small_component) / 2.0).sqrt();
+        assert_eq!(
+            matched_intervention_dose_states(
+                &[0.0, 0.0, 0.0],
+                &[cancelling_component, small_component, cancelling_component],
+                &[vec![
+                    cancelling_component,
+                    small_component,
+                    -cancelling_component,
+                ]],
+                &[1.0],
+                DEFAULT_TOLERANCE,
+                1.0e-18,
             ),
             Err(ConceptGeometryError::NonOrthogonalControl)
         );
