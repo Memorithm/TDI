@@ -649,6 +649,8 @@ pub enum ConceptGeometryError {
     InvalidInterventionAlphaGrid,
     NonOrthogonalControl,
     UnrepresentableInterventionDose,
+    InvalidTargetOutcomeIndex,
+    InvalidNonTargetOutcomeIndices,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -2072,6 +2074,83 @@ pub struct MatchedInterventionDoseState {
     matched_control_states: Vec<Vec<f64>>,
 }
 
+/// Evaluated outcomes and signed baseline-relative effects for one declared
+/// intervention dose.
+///
+/// The target-state and every matched-control vector retain the evaluator's
+/// complete outcome ordering. Scientific roles are declared once on the parent
+/// curve rather than inferred from values.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MatchedInterventionDoseResponsePoint {
+    alpha: f64,
+    target_state_outcomes: Vec<f64>,
+    target_state_effects: Vec<f64>,
+    matched_control_outcomes: Vec<Vec<f64>>,
+    matched_control_effects: Vec<Vec<f64>>,
+}
+
+impl MatchedInterventionDoseResponsePoint {
+    #[must_use]
+    pub const fn alpha(&self) -> f64 {
+        self.alpha
+    }
+
+    #[must_use]
+    pub fn target_state_outcomes(&self) -> &[f64] {
+        &self.target_state_outcomes
+    }
+
+    #[must_use]
+    pub fn target_state_effects(&self) -> &[f64] {
+        &self.target_state_effects
+    }
+
+    #[must_use]
+    pub fn matched_control_outcomes(&self) -> &[Vec<f64>] {
+        &self.matched_control_outcomes
+    }
+
+    #[must_use]
+    pub fn matched_control_effects(&self) -> &[Vec<f64>] {
+        &self.matched_control_effects
+    }
+}
+
+/// Development-only signed dose-response record with explicit outcome roles.
+///
+/// This record preserves the baseline, every raw evaluated outcome, and every
+/// signed baseline-relative effect. It does not aggregate the curve into a
+/// causal verdict, choose doses or controls, or authorize another stage.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MatchedInterventionDoseResponseCurve {
+    baseline_outcomes: Vec<f64>,
+    target_outcome_index: usize,
+    non_target_outcome_indices: Vec<usize>,
+    points: Vec<MatchedInterventionDoseResponsePoint>,
+}
+
+impl MatchedInterventionDoseResponseCurve {
+    #[must_use]
+    pub fn baseline_outcomes(&self) -> &[f64] {
+        &self.baseline_outcomes
+    }
+
+    #[must_use]
+    pub const fn target_outcome_index(&self) -> usize {
+        self.target_outcome_index
+    }
+
+    #[must_use]
+    pub fn non_target_outcome_indices(&self) -> &[usize] {
+        &self.non_target_outcome_indices
+    }
+
+    #[must_use]
+    pub fn points(&self) -> &[MatchedInterventionDoseResponsePoint] {
+        &self.points
+    }
+}
+
 impl MatchedInterventionDoseState {
     #[must_use]
     pub const fn alpha(&self) -> f64 {
@@ -2255,6 +2334,116 @@ pub fn matched_intervention_dose_states(
         });
     }
     Ok(doses)
+}
+
+fn evaluated_outcome_effects(
+    state: &[f64],
+    baseline_outcomes: &[f64],
+    evaluate: &mut impl FnMut(&[f64]) -> Result<Vec<f64>, ConceptGeometryError>,
+) -> Result<(Vec<f64>, Vec<f64>), ConceptGeometryError> {
+    let outcomes = evaluate(state)?;
+    validate_vector(&outcomes)?;
+    if outcomes.len() != baseline_outcomes.len() {
+        return Err(ConceptGeometryError::DimensionMismatch);
+    }
+    let effects = outcomes
+        .iter()
+        .zip(baseline_outcomes)
+        .map(|(outcome, baseline)| {
+            let effect = outcome - baseline;
+            if effect.is_finite() {
+                Ok(effect)
+            } else {
+                Err(ConceptGeometryError::NonFiniteValue)
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok((outcomes, effects))
+}
+
+/// Construct and evaluate matched signed intervention dose-response curves.
+///
+/// The evaluator is called once for the baseline and then once for the target
+/// state and each matched-control state at every predeclared alpha. It must
+/// return a non-empty, finite outcome vector with invariant width. The target
+/// outcome is one explicit index; non-target indices must be non-empty,
+/// strictly increasing, in range, and distinct from the target index.
+///
+/// Returned effects are raw signed `outcome - baseline` values. This
+/// Development primitive retains all evaluated values and makes no causal
+/// decision, threshold choice, stage authorization, or scientific claim.
+#[allow(clippy::too_many_arguments)]
+pub fn matched_intervention_dose_response_curve(
+    baseline: &[f64],
+    target_direction: &[f64],
+    matched_control_directions: &[Vec<f64>],
+    alphas: &[f64],
+    target_outcome_index: usize,
+    non_target_outcome_indices: &[usize],
+    tolerance: f64,
+    orthogonality_tolerance: f64,
+    mut evaluate: impl FnMut(&[f64]) -> Result<Vec<f64>, ConceptGeometryError>,
+) -> Result<MatchedInterventionDoseResponseCurve, ConceptGeometryError> {
+    let states = matched_intervention_dose_states(
+        baseline,
+        target_direction,
+        matched_control_directions,
+        alphas,
+        tolerance,
+        orthogonality_tolerance,
+    )?;
+    let baseline_outcomes = evaluate(baseline)?;
+    validate_vector(&baseline_outcomes)?;
+    if target_outcome_index >= baseline_outcomes.len() {
+        return Err(ConceptGeometryError::InvalidTargetOutcomeIndex);
+    }
+    if non_target_outcome_indices.is_empty()
+        || non_target_outcome_indices
+            .iter()
+            .any(|index| *index >= baseline_outcomes.len() || *index == target_outcome_index)
+        || non_target_outcome_indices
+            .windows(2)
+            .any(|pair| pair[0] >= pair[1])
+    {
+        return Err(ConceptGeometryError::InvalidNonTargetOutcomeIndices);
+    }
+
+    let mut points = Vec::new();
+    points
+        .try_reserve_exact(states.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    for state in states {
+        let (target_state_outcomes, target_state_effects) =
+            evaluated_outcome_effects(state.target_state(), &baseline_outcomes, &mut evaluate)?;
+        let mut matched_control_outcomes = Vec::new();
+        let mut matched_control_effects = Vec::new();
+        matched_control_outcomes
+            .try_reserve_exact(state.matched_control_states().len())
+            .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+        matched_control_effects
+            .try_reserve_exact(state.matched_control_states().len())
+            .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+        for control_state in state.matched_control_states() {
+            let (outcomes, effects) =
+                evaluated_outcome_effects(control_state, &baseline_outcomes, &mut evaluate)?;
+            matched_control_outcomes.push(outcomes);
+            matched_control_effects.push(effects);
+        }
+        points.push(MatchedInterventionDoseResponsePoint {
+            alpha: state.alpha(),
+            target_state_outcomes,
+            target_state_effects,
+            matched_control_outcomes,
+            matched_control_effects,
+        });
+    }
+
+    Ok(MatchedInterventionDoseResponseCurve {
+        baseline_outcomes,
+        target_outcome_index,
+        non_target_outcome_indices: non_target_outcome_indices.to_vec(),
+        points,
+    })
 }
 
 /// Target intervention effect minus the mean matched-control effect.
@@ -3312,6 +3501,135 @@ mod tests {
                 close(norm(&control_delta), dose.alpha().abs());
             }
         }
+    }
+
+    #[test]
+    fn matched_intervention_response_curve_preserves_raw_signed_outcomes() {
+        let curve = matched_intervention_dose_response_curve(
+            &[2.0, 3.0],
+            &[1.0, 0.0],
+            &[vec![0.0, 1.0]],
+            &[-1.0, 0.0, 1.0],
+            0,
+            &[1],
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+            |state| Ok(vec![state[0] + state[1], state[0] - state[1]]),
+        )
+        .unwrap();
+
+        assert_eq!(curve.baseline_outcomes(), &[5.0, -1.0]);
+        assert_eq!(curve.target_outcome_index(), 0);
+        assert_eq!(curve.non_target_outcome_indices(), &[1]);
+        assert_eq!(curve.points().len(), 3);
+        assert_eq!(curve.points()[0].alpha(), -1.0);
+        assert_eq!(curve.points()[0].target_state_outcomes(), &[4.0, -2.0]);
+        assert_eq!(curve.points()[0].target_state_effects(), &[-1.0, -1.0]);
+        assert_eq!(
+            curve.points()[0].matched_control_outcomes(),
+            &[vec![4.0, 0.0]]
+        );
+        assert_eq!(
+            curve.points()[0].matched_control_effects(),
+            &[vec![-1.0, 1.0]]
+        );
+        assert_eq!(curve.points()[1].target_state_effects(), &[0.0, 0.0]);
+        assert_eq!(curve.points()[2].target_state_effects(), &[1.0, 1.0]);
+        assert_eq!(
+            curve.points()[2].matched_control_effects(),
+            &[vec![1.0, -1.0]]
+        );
+    }
+
+    #[test]
+    fn matched_intervention_response_curve_evaluates_each_state_once() {
+        let mut calls = 0_usize;
+        let curve = matched_intervention_dose_response_curve(
+            &[0.0, 0.0, 0.0],
+            &[1.0, 0.0, 0.0],
+            &[vec![0.0, 1.0, 0.0], vec![0.0, 0.0, 1.0]],
+            &[-1.0, 1.0],
+            0,
+            &[1],
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+            |state| {
+                calls += 1;
+                Ok(vec![state.iter().sum(), state[0] - state[1]])
+            },
+        )
+        .unwrap();
+
+        assert_eq!(calls, 1 + 2 * (1 + 2));
+        assert_eq!(curve.points().len(), 2);
+        assert!(curve.points().iter().all(|point| {
+            point.matched_control_outcomes().len() == 2
+                && point.matched_control_effects().len() == 2
+        }));
+    }
+
+    #[test]
+    fn matched_intervention_response_curve_rejects_invalid_outcome_contracts() {
+        let common = |target_outcome_index, non_target_outcome_indices: &[usize]| {
+            matched_intervention_dose_response_curve(
+                &[0.0, 0.0],
+                &[1.0, 0.0],
+                &[vec![0.0, 1.0]],
+                &[1.0],
+                target_outcome_index,
+                non_target_outcome_indices,
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+                |state| Ok(vec![state[0], state[1]]),
+            )
+        };
+        assert_eq!(
+            common(2, &[0]),
+            Err(ConceptGeometryError::InvalidTargetOutcomeIndex)
+        );
+        for invalid in [vec![], vec![0], vec![2], vec![1, 1], vec![1, 0]] {
+            assert_eq!(
+                common(0, &invalid),
+                Err(ConceptGeometryError::InvalidNonTargetOutcomeIndices)
+            );
+        }
+
+        let mut calls = 0_usize;
+        assert_eq!(
+            matched_intervention_dose_response_curve(
+                &[0.0, 0.0],
+                &[1.0, 0.0],
+                &[vec![0.0, 1.0]],
+                &[1.0],
+                0,
+                &[1],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+                |_| {
+                    calls += 1;
+                    if calls == 1 {
+                        Ok(vec![0.0, 0.0])
+                    } else {
+                        Ok(vec![0.0])
+                    }
+                },
+            ),
+            Err(ConceptGeometryError::DimensionMismatch)
+        );
+        assert_eq!(
+            matched_intervention_dose_response_curve(
+                &[0.0, 0.0],
+                &[1.0, 0.0],
+                &[vec![0.0, 1.0]],
+                &[1.0],
+                0,
+                &[1],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+                |_| Ok(vec![0.0, f64::NAN]),
+            ),
+            Err(ConceptGeometryError::NonFiniteValue)
+        );
     }
 
     #[test]
