@@ -1854,6 +1854,30 @@ pub fn cosine_similarity(
     Ok(dot(left, right) / (left_norm * right_norm))
 }
 
+fn stable_euclidean_norm(values: &[f64]) -> f64 {
+    let mut scale = 0.0_f64;
+    let mut scaled_sum = 1.0_f64;
+    for value in values {
+        let magnitude = value.abs();
+        if magnitude == 0.0 {
+            continue;
+        }
+        if scale < magnitude {
+            let ratio = scale / magnitude;
+            scaled_sum = 1.0 + scaled_sum * ratio * ratio;
+            scale = magnitude;
+        } else {
+            let ratio = magnitude / scale;
+            scaled_sum += ratio * ratio;
+        }
+    }
+    if scale == 0.0 {
+        0.0
+    } else {
+        scale * scaled_sum.sqrt()
+    }
+}
+
 /// One signed, predeclared intervention dose applied to a target direction and
 /// every matched orthogonal control direction.
 ///
@@ -1892,7 +1916,7 @@ fn normalized_intervention_direction(
     if direction.len() != width {
         return Err(ConceptGeometryError::DimensionMismatch);
     }
-    let direction_norm = norm(direction);
+    let direction_norm = stable_euclidean_norm(direction);
     if !direction_norm.is_finite() {
         return Err(ConceptGeometryError::NonFiniteValue);
     }
@@ -1940,7 +1964,7 @@ fn intervention_state(
             }
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let achieved_norm = norm(&achieved_displacement);
+    let achieved_norm = stable_euclidean_norm(&achieved_displacement);
     let requested_norm = alpha.abs();
     let relative_roundoff_bound =
         64.0 * f64::EPSILON * (baseline.len() as f64 + 1.0) * requested_norm;
@@ -3160,6 +3184,35 @@ mod tests {
                 DEFAULT_TOLERANCE,
             ),
             Err(ConceptGeometryError::UnrepresentableInterventionDose)
+        );
+    }
+
+    #[test]
+    fn matched_intervention_doses_accept_representable_large_finite_magnitudes() {
+        let large_direction = matched_intervention_dose_states(
+            &[0.0, 0.0],
+            &[1.0e200, 0.0],
+            &[vec![0.0, 1.0]],
+            &[1.0],
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+        assert_eq!(large_direction[0].target_state(), &[1.0, 0.0]);
+
+        let large_dose = matched_intervention_dose_states(
+            &[0.0, 0.0],
+            &[1.0, 0.0],
+            &[vec![0.0, 1.0]],
+            &[1.0e200],
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+        assert_eq!(large_dose[0].target_state(), &[1.0e200, 0.0]);
+        assert_eq!(
+            large_dose[0].matched_control_states(),
+            &[vec![0.0, 1.0e200]]
         );
     }
 
