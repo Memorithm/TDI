@@ -668,6 +668,7 @@ pub struct ProjectionMethodDifferential {
     modified_gram_schmidt: ResidualDirection,
     householder_qr: ResidualDirection,
     max_abs_residual_difference: f64,
+    max_abs_unit_direction_difference: Option<f64>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -702,6 +703,14 @@ impl ProjectionMethodDifferential {
     #[must_use]
     pub const fn max_abs_residual_difference(&self) -> f64 {
         self.max_abs_residual_difference
+    }
+
+    /// Maximum absolute coordinate difference between normalized residual
+    /// directions, or `None` when both methods classify the residual direction
+    /// as undefined at the caller-declared numerical tolerance.
+    #[must_use]
+    pub const fn max_abs_unit_direction_difference(&self) -> Option<f64> {
+        self.max_abs_unit_direction_difference
     }
 }
 
@@ -1090,15 +1099,45 @@ pub fn residualize_householder_qr(
     })
 }
 
+fn compare_unit_directions(
+    left: Option<&[f64]>,
+    right: Option<&[f64]>,
+    agreement_tolerance: f64,
+) -> Result<Option<f64>, ConceptGeometryError> {
+    valid_tolerance(agreement_tolerance)?;
+    match (left, right) {
+        (None, None) => Ok(None),
+        (Some(left), Some(right)) if left.len() == right.len() => {
+            let difference = left
+                .iter()
+                .zip(right)
+                .map(|(left, right)| (left - right).abs())
+                .fold(0.0, f64::max);
+            if !difference.is_finite() || difference > agreement_tolerance {
+                return Err(ConceptGeometryError::ProjectionMethodDisagreement);
+            }
+            Ok(Some(difference))
+        }
+        _ => Err(ConceptGeometryError::ProjectionMethodDisagreement),
+    }
+}
+
 /// Require agreement between the reference MGS and independent Householder QR
-/// residuals under one caller-declared absolute comparison bound.
+/// residuals under separate caller-declared absolute residual-coordinate and
+/// normalized-direction-coordinate bounds.
+///
+/// The methods must also agree on whether a normalized residual direction is
+/// defined at `tolerance`. A disagreement fails closed even when the raw
+/// residual coordinates happen to satisfy their looser absolute bound.
 pub fn projection_method_differential(
     vector: &[f64],
     basis_directions: &[Vec<f64>],
     tolerance: f64,
-    agreement_tolerance: f64,
+    residual_agreement_tolerance: f64,
+    direction_agreement_tolerance: f64,
 ) -> Result<ProjectionMethodDifferential, ConceptGeometryError> {
-    valid_tolerance(agreement_tolerance)?;
+    valid_tolerance(residual_agreement_tolerance)?;
+    valid_tolerance(direction_agreement_tolerance)?;
     let modified_gram_schmidt = residualize(vector, basis_directions, tolerance)?;
     let householder_qr = residualize_householder_qr(vector, basis_directions, tolerance)?;
     if modified_gram_schmidt.basis_rank() != householder_qr.basis_rank() {
@@ -1110,15 +1149,22 @@ pub fn projection_method_differential(
         .zip(householder_qr.residual())
         .map(|(left, right)| (left - right).abs())
         .fold(0.0, f64::max);
-    if !max_abs_residual_difference.is_finite() || max_abs_residual_difference > agreement_tolerance
+    if !max_abs_residual_difference.is_finite()
+        || max_abs_residual_difference > residual_agreement_tolerance
     {
         return Err(ConceptGeometryError::ProjectionMethodDisagreement);
     }
+    let max_abs_unit_direction_difference = compare_unit_directions(
+        modified_gram_schmidt.unit_direction(),
+        householder_qr.unit_direction(),
+        direction_agreement_tolerance,
+    )?;
 
     Ok(ProjectionMethodDifferential {
         modified_gram_schmidt,
         householder_qr,
         max_abs_residual_difference,
+        max_abs_unit_direction_difference,
     })
 }
 
@@ -1180,11 +1226,13 @@ pub fn bootstrap_projection_method_differentials(
     control: &[Vec<f64>],
     basis_directions: &[Vec<f64>],
     tolerance: f64,
-    agreement_tolerance: f64,
+    residual_agreement_tolerance: f64,
+    direction_agreement_tolerance: f64,
     plan: DevelopmentResamplingPlan,
 ) -> Result<Vec<BootstrapProjectionMethodDifferential>, ConceptGeometryError> {
     valid_tolerance(tolerance)?;
-    valid_tolerance(agreement_tolerance)?;
+    valid_tolerance(residual_agreement_tolerance)?;
+    valid_tolerance(direction_agreement_tolerance)?;
     let contrasts = bootstrap_mean_contrasts(positive, control, plan)?;
     let mut output = Vec::new();
     output
@@ -1196,7 +1244,8 @@ pub fn bootstrap_projection_method_differentials(
             mean_contrast.contrast(),
             basis_directions,
             tolerance,
-            agreement_tolerance,
+            residual_agreement_tolerance,
+            direction_agreement_tolerance,
         )?;
         output.push(BootstrapProjectionMethodDifferential {
             mean_contrast,
@@ -2315,12 +2364,31 @@ mod tests {
             ],
             1.0e-12,
             1.0e-8,
+            1.0e-8,
         )
         .unwrap();
 
         assert_eq!(report.modified_gram_schmidt().basis_rank(), 3);
         assert_eq!(report.householder_qr().basis_rank(), 3);
         assert!(report.max_abs_residual_difference() <= 1.0e-8);
+        assert!(
+            report
+                .max_abs_unit_direction_difference()
+                .is_some_and(|difference| difference <= 1.0e-8)
+        );
+    }
+
+    #[test]
+    fn unit_direction_comparison_rejects_semantic_or_coordinate_disagreement() {
+        assert_eq!(
+            compare_unit_directions(Some(&[1.0, 0.0]), None, 1.0e-8),
+            Err(ConceptGeometryError::ProjectionMethodDisagreement)
+        );
+        assert_eq!(
+            compare_unit_directions(Some(&[1.0, 0.0]), Some(&[0.0, 1.0]), 1.0e-8),
+            Err(ConceptGeometryError::ProjectionMethodDisagreement)
+        );
+        assert_eq!(compare_unit_directions(None, None, 1.0e-8), Ok(None));
     }
 
     #[test]
@@ -2335,6 +2403,7 @@ mod tests {
                     vec![1.0, 1.0, 1.0, 1.000_000_000_000_001],
                 ],
                 1.0e-15,
+                1.0e-9,
                 1.0e-9,
             ),
             Err(ConceptGeometryError::ProjectionMethodDisagreement)
@@ -2428,7 +2497,7 @@ mod tests {
         let plan = DevelopmentResamplingPlan::new(5, 0x2702_0201).unwrap();
 
         let reports = bootstrap_projection_method_differentials(
-            &positive, &control, &basis, 1.0e-12, 1.0e-8, plan,
+            &positive, &control, &basis, 1.0e-12, 1.0e-8, 1.0e-8, plan,
         )
         .unwrap();
 
@@ -2443,6 +2512,12 @@ mod tests {
             );
             assert_eq!(report.differential().householder_qr().basis_rank(), 2);
             assert!(report.differential().max_abs_residual_difference() <= 1.0e-8);
+            assert!(
+                report
+                    .differential()
+                    .max_abs_unit_direction_difference()
+                    .is_some_and(|difference| difference <= 1.0e-8)
+            );
         }
     }
 
@@ -2460,7 +2535,7 @@ mod tests {
 
         assert_eq!(
             bootstrap_projection_method_differentials(
-                &positive, &control, &basis, 1.0e-15, 1.0e-9, plan,
+                &positive, &control, &basis, 1.0e-15, 1.0e-9, 1.0e-9, plan,
             ),
             Err(ConceptGeometryError::ProjectionMethodDisagreement)
         );
