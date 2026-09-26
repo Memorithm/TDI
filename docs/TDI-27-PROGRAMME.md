@@ -266,6 +266,19 @@ Introduce a model-agnostic intervention adapter with fixed intervention norms,
 matched controls, target and non-target outcomes, and signed dose-response
 curves over predeclared alpha values.
 
+The first Development slice is intentionally limited to deterministic state
+construction. It requires a non-empty, finite, strictly increasing signed
+alpha grid; normalizes the target and every caller-declared control direction;
+rejects controls that are not orthogonal to the target within a separate
+caller-declared bound; and constructs target/control displacements with equal
+norm `abs(alpha)`. Every achieved state-minus-baseline coordinate is checked
+against `alpha * direction` and its norm is checked against the requested norm,
+both under dimension-scaled machine-roundoff bounds. A dose lost against a
+baseline coordinate's ULP, or rotated by heterogeneous coordinate ULPs, thus
+fails closed rather than silently breaking target/control matching. It does
+not run a model, inspect outcomes, choose controls or doses, authorize
+actuation, or infer a causal or scientific result.
+
 ### TDI-27.4 — cross-layer transport
 
 Measure whether residual directions persist after a declared alignment

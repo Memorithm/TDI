@@ -4,9 +4,9 @@ use tdi_bench::concept_geometry_v27::{
     ConceptGeometryError, DEFAULT_TOLERANCE, DevelopmentResamplingPlan, DevelopmentSampleSizePoint,
     bootstrap_direction_stability, bootstrap_innovation_energy_summary,
     bootstrap_projection_method_differentials, causal_novelty_gap,
-    compare_innovation_energy_to_shuffled_null, interaction_residual, mean_difference,
-    projection_method_differential, residualize, sample_size_sensitivity_grid,
-    sequential_accepted_rank_summary, sequential_innovations,
+    compare_innovation_energy_to_shuffled_null, interaction_residual,
+    matched_intervention_dose_states, mean_difference, projection_method_differential, residualize,
+    sample_size_sensitivity_grid, sequential_accepted_rank_summary, sequential_innovations,
 };
 
 fn response(state: &[f64]) -> f64 {
@@ -44,6 +44,14 @@ fn run() -> Result<(), ConceptGeometryError> {
     let target_effect = intervention_effect(&base, unit, 1.0);
     let control_effect = intervention_effect(&base, &[0.0, 0.0, 1.0], 1.0);
     let causal_gap = causal_novelty_gap(target_effect, &[control_effect])?;
+    let intervention_doses = matched_intervention_dose_states(
+        &base,
+        unit,
+        &[vec![0.0, 0.0, 1.0]],
+        &[-1.0, 0.0, 1.0],
+        DEFAULT_TOLERANCE,
+        DEFAULT_TOLERANCE,
+    )?;
 
     let effect_a = intervention_effect(&base, &[1.0, 0.0, 0.0], 1.0);
     let effect_b = intervention_effect(&base, &[0.0, 1.0, 0.0], 1.0);
@@ -157,6 +165,12 @@ fn run() -> Result<(), ConceptGeometryError> {
     println!("target_effect={target_effect:.12}");
     println!("matched_control_effect={control_effect:.12}");
     println!("causal_novelty_gap={causal_gap:.12}");
+    println!("intervention_dose_count={}", intervention_doses.len());
+    println!(
+        "intervention_control_count={}",
+        intervention_doses[0].matched_control_states().len()
+    );
+    println!("intervention_alpha_grid=-1.000000000000,0.000000000000,1.000000000000");
     println!("orthogonal_interaction_residual={interaction:.12}");
     println!(
         "sequential_innovation_ratios={:.12},{:.12},{:.12}",

@@ -645,6 +645,10 @@ pub enum ConceptGeometryError {
     InvalidSubsampleSize,
     EmptySampleSizeGrid,
     ProjectionMethodDisagreement,
+    EmptyInterventionAlphaGrid,
+    InvalidInterventionAlphaGrid,
+    NonOrthogonalControl,
+    UnrepresentableInterventionDose,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1850,6 +1854,173 @@ pub fn cosine_similarity(
     Ok(dot(left, right) / (left_norm * right_norm))
 }
 
+/// One signed, predeclared intervention dose applied to a target direction and
+/// every matched orthogonal control direction.
+///
+/// This is a state-construction record only. It contains no model outcome,
+/// causal verdict, acceptance threshold, or execution authorization.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MatchedInterventionDoseState {
+    alpha: f64,
+    target_state: Vec<f64>,
+    matched_control_states: Vec<Vec<f64>>,
+}
+
+impl MatchedInterventionDoseState {
+    #[must_use]
+    pub const fn alpha(&self) -> f64 {
+        self.alpha
+    }
+
+    #[must_use]
+    pub fn target_state(&self) -> &[f64] {
+        &self.target_state
+    }
+
+    #[must_use]
+    pub fn matched_control_states(&self) -> &[Vec<f64>] {
+        &self.matched_control_states
+    }
+}
+
+fn normalized_intervention_direction(
+    direction: &[f64],
+    width: usize,
+    tolerance: f64,
+) -> Result<Vec<f64>, ConceptGeometryError> {
+    validate_vector(direction)?;
+    if direction.len() != width {
+        return Err(ConceptGeometryError::DimensionMismatch);
+    }
+    let direction_norm = norm(direction);
+    if !direction_norm.is_finite() {
+        return Err(ConceptGeometryError::NonFiniteValue);
+    }
+    if direction_norm <= tolerance {
+        return Err(ConceptGeometryError::ZeroNorm);
+    }
+    Ok(direction
+        .iter()
+        .map(|value| value / direction_norm)
+        .collect())
+}
+
+fn intervention_state(
+    baseline: &[f64],
+    direction: &[f64],
+    alpha: f64,
+) -> Result<Vec<f64>, ConceptGeometryError> {
+    let mut state = Vec::new();
+    state
+        .try_reserve_exact(baseline.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    for (value, direction) in baseline.iter().zip(direction) {
+        let intervened = value + alpha * direction;
+        if !intervened.is_finite() {
+            return Err(ConceptGeometryError::NonFiniteValue);
+        }
+        state.push(intervened);
+    }
+    let achieved_displacement = state
+        .iter()
+        .zip(baseline)
+        .zip(direction)
+        .map(|((intervened, original), direction)| {
+            let achieved = intervened - original;
+            let requested = alpha * direction;
+            let coordinate_roundoff_bound =
+                64.0 * f64::EPSILON * (baseline.len() as f64 + 1.0) * requested.abs();
+            if !achieved.is_finite()
+                || !requested.is_finite()
+                || (achieved - requested).abs() > coordinate_roundoff_bound
+            {
+                Err(ConceptGeometryError::UnrepresentableInterventionDose)
+            } else {
+                Ok(achieved)
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let achieved_norm = norm(&achieved_displacement);
+    let requested_norm = alpha.abs();
+    let relative_roundoff_bound =
+        64.0 * f64::EPSILON * (baseline.len() as f64 + 1.0) * requested_norm;
+    if !achieved_norm.is_finite()
+        || (achieved_norm - requested_norm).abs() > relative_roundoff_bound
+    {
+        return Err(ConceptGeometryError::UnrepresentableInterventionDose);
+    }
+    Ok(state)
+}
+
+/// Construct equal-norm target/control intervention states for signed doses.
+///
+/// Alpha values must be finite and strictly increasing in the exact order
+/// supplied by the caller. Every direction is normalized before applying the
+/// dose, so each target/control displacement has norm `abs(alpha)` up to
+/// floating-point arithmetic. Controls must be orthogonal to the target within
+/// the separately declared absolute dot-product bound.
+///
+/// This Development primitive does not evaluate the states, choose an alpha
+/// grid, select tolerances, or infer a causal result.
+pub fn matched_intervention_dose_states(
+    baseline: &[f64],
+    target_direction: &[f64],
+    matched_control_directions: &[Vec<f64>],
+    alphas: &[f64],
+    tolerance: f64,
+    orthogonality_tolerance: f64,
+) -> Result<Vec<MatchedInterventionDoseState>, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    valid_tolerance(orthogonality_tolerance)?;
+    validate_vector(baseline)?;
+    if matched_control_directions.is_empty() {
+        return Err(ConceptGeometryError::EmptyControls);
+    }
+    if alphas.is_empty() {
+        return Err(ConceptGeometryError::EmptyInterventionAlphaGrid);
+    }
+    if alphas.iter().any(|alpha| !alpha.is_finite())
+        || alphas.windows(2).any(|pair| pair[0] >= pair[1])
+    {
+        return Err(ConceptGeometryError::InvalidInterventionAlphaGrid);
+    }
+
+    let target = normalized_intervention_direction(target_direction, baseline.len(), tolerance)?;
+    let mut controls = Vec::new();
+    controls
+        .try_reserve_exact(matched_control_directions.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    for control in matched_control_directions {
+        let control = normalized_intervention_direction(control, baseline.len(), tolerance)?;
+        let overlap = dot(&target, &control).abs();
+        if !overlap.is_finite() || overlap > orthogonality_tolerance {
+            return Err(ConceptGeometryError::NonOrthogonalControl);
+        }
+        controls.push(control);
+    }
+
+    let mut doses = Vec::new();
+    doses
+        .try_reserve_exact(alphas.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    for &alpha in alphas {
+        let target_state = intervention_state(baseline, &target, alpha)?;
+        let mut matched_control_states = Vec::new();
+        matched_control_states
+            .try_reserve_exact(controls.len())
+            .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+        for control in &controls {
+            matched_control_states.push(intervention_state(baseline, control, alpha)?);
+        }
+        doses.push(MatchedInterventionDoseState {
+            alpha,
+            target_state,
+            matched_control_states,
+        });
+    }
+    Ok(doses)
+}
+
 /// Target intervention effect minus the mean matched-control effect.
 pub fn causal_novelty_gap(
     target_effect: f64,
@@ -2862,6 +3033,134 @@ mod tests {
     fn causal_and_interaction_helpers_keep_semantics_separate() {
         close(causal_novelty_gap(0.75, &[0.0, 0.25]).unwrap(), 0.625);
         close(interaction_residual(1.0, 1.0, 2.5).unwrap(), 0.5);
+    }
+
+    #[test]
+    fn matched_intervention_doses_preserve_signed_equal_norm_displacements() {
+        let baseline = [10.0, 20.0, 30.0];
+        let controls = vec![vec![0.0, 3.0, 0.0], vec![0.0, 0.0, -4.0]];
+        let doses = matched_intervention_dose_states(
+            &baseline,
+            &[2.0, 0.0, 0.0],
+            &controls,
+            &[-1.0, 0.0, 2.0],
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+
+        assert_eq!(doses.len(), 3);
+        assert_eq!(doses[0].alpha(), -1.0);
+        assert_eq!(doses[0].target_state(), &[9.0, 20.0, 30.0]);
+        assert_eq!(
+            doses[0].matched_control_states(),
+            &[vec![10.0, 19.0, 30.0], vec![10.0, 20.0, 31.0]]
+        );
+        assert_eq!(doses[1].target_state(), &baseline);
+        assert_eq!(doses[2].target_state(), &[12.0, 20.0, 30.0]);
+
+        for dose in doses {
+            let target_delta = dose
+                .target_state()
+                .iter()
+                .zip(baseline)
+                .map(|(state, base)| state - base)
+                .collect::<Vec<_>>();
+            close(norm(&target_delta), dose.alpha().abs());
+            for control_state in dose.matched_control_states() {
+                let control_delta = control_state
+                    .iter()
+                    .zip(baseline)
+                    .map(|(state, base)| state - base)
+                    .collect::<Vec<_>>();
+                close(norm(&control_delta), dose.alpha().abs());
+            }
+        }
+    }
+
+    #[test]
+    fn matched_intervention_doses_reject_invalid_plans() {
+        let baseline = [0.0, 0.0];
+        let controls = vec![vec![0.0, 1.0]];
+        assert_eq!(
+            matched_intervention_dose_states(
+                &baseline,
+                &[1.0, 0.0],
+                &controls,
+                &[],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::EmptyInterventionAlphaGrid)
+        );
+        for invalid_alphas in [vec![0.0, 0.0], vec![1.0, -1.0], vec![0.0, f64::INFINITY]] {
+            assert_eq!(
+                matched_intervention_dose_states(
+                    &baseline,
+                    &[1.0, 0.0],
+                    &controls,
+                    &invalid_alphas,
+                    DEFAULT_TOLERANCE,
+                    DEFAULT_TOLERANCE,
+                ),
+                Err(ConceptGeometryError::InvalidInterventionAlphaGrid)
+            );
+        }
+        assert_eq!(
+            matched_intervention_dose_states(
+                &baseline,
+                &[1.0, 0.0],
+                &[],
+                &[-1.0, 0.0, 1.0],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::EmptyControls)
+        );
+        assert_eq!(
+            matched_intervention_dose_states(
+                &baseline,
+                &[1.0, 0.0],
+                &[vec![1.0, 1.0]],
+                &[-1.0, 0.0, 1.0],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::NonOrthogonalControl)
+        );
+        assert_eq!(
+            matched_intervention_dose_states(
+                &[f64::MAX, 0.0],
+                &[1.0, 0.0],
+                &controls,
+                &[f64::MAX],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::NonFiniteValue)
+        );
+        assert_eq!(
+            matched_intervention_dose_states(
+                &[1.0, 0.0],
+                &[1.0, 0.0],
+                &controls,
+                &[1.0e-16],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::UnrepresentableInterventionDose)
+        );
+        assert_eq!(
+            matched_intervention_dose_states(
+                &[9_007_199_254_740_992.0, 2_251_799_813_685_248.0, 0.0],
+                &[0.6, 0.8, 0.0],
+                &[vec![0.0, 0.0, 1.0]],
+                &[1.0],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::UnrepresentableInterventionDose)
+        );
     }
 
     #[test]
