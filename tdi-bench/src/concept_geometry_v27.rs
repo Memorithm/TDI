@@ -1854,7 +1854,7 @@ pub fn cosine_similarity(
     Ok(dot(left, right) / (left_norm * right_norm))
 }
 
-fn stable_euclidean_norm(values: &[f64]) -> f64 {
+fn scaled_euclidean_norm_parts(values: &[f64]) -> (f64, f64) {
     let mut scale = 0.0_f64;
     let mut scaled_sum = 1.0_f64;
     for value in values {
@@ -1871,11 +1871,12 @@ fn stable_euclidean_norm(values: &[f64]) -> f64 {
             scaled_sum += ratio * ratio;
         }
     }
-    if scale == 0.0 {
-        0.0
-    } else {
-        scale * scaled_sum.sqrt()
-    }
+    (scale, scaled_sum.sqrt())
+}
+
+fn stable_euclidean_norm(values: &[f64]) -> f64 {
+    let (scale, scaled_norm) = scaled_euclidean_norm_parts(values);
+    scale * scaled_norm
 }
 
 /// One signed, predeclared intervention dose applied to a target direction and
@@ -1916,16 +1917,13 @@ fn normalized_intervention_direction(
     if direction.len() != width {
         return Err(ConceptGeometryError::DimensionMismatch);
     }
-    let direction_norm = stable_euclidean_norm(direction);
-    if !direction_norm.is_finite() {
-        return Err(ConceptGeometryError::NonFiniteValue);
-    }
-    if direction_norm <= tolerance {
+    let (direction_scale, scaled_direction_norm) = scaled_euclidean_norm_parts(direction);
+    if direction_scale == 0.0 || direction_scale <= tolerance / scaled_direction_norm {
         return Err(ConceptGeometryError::ZeroNorm);
     }
     Ok(direction
         .iter()
-        .map(|value| value / direction_norm)
+        .map(|value| (value / direction_scale) / scaled_direction_norm)
         .collect())
 }
 
@@ -3213,6 +3211,27 @@ mod tests {
         assert_eq!(
             large_dose[0].matched_control_states(),
             &[vec![0.0, 1.0e200]]
+        );
+
+        let maximal_directions = matched_intervention_dose_states(
+            &[0.0, 0.0],
+            &[f64::MAX, f64::MAX],
+            &[vec![f64::MAX, -f64::MAX]],
+            &[1.0],
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+        let coordinate = 1.0 / 2.0_f64.sqrt();
+        close(maximal_directions[0].target_state()[0], coordinate);
+        close(maximal_directions[0].target_state()[1], coordinate);
+        close(
+            maximal_directions[0].matched_control_states()[0][0],
+            coordinate,
+        );
+        close(
+            maximal_directions[0].matched_control_states()[0][1],
+            -coordinate,
         );
     }
 
