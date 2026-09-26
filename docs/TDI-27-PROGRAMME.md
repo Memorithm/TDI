@@ -251,6 +251,15 @@ difference under caller-declared numerical bounds. It does not convert those
 observations into a calibrated tolerance, statistical interval, performance
 claim, or scientific decision.
 
+The third Development slice extends the comparison to normalized-direction
+semantics. The two methods must agree on whether a residual direction is
+defined at the caller-declared numerical tolerance; when both are defined,
+their direction coordinates must satisfy a separate caller-declared absolute
+bound. The bound is recorded independently from the residual-coordinate bound.
+This prevents small absolute residual differences near zero from hiding
+different downstream direction semantics. It does not calibrate either bound,
+select a tolerance from observed data, or authorize a scientific decision.
+
 ### TDI-27.3 — causal intervention harness
 
 Introduce a model-agnostic intervention adapter with fixed intervention norms,
