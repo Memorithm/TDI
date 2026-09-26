@@ -242,6 +242,15 @@ agreement bound. The slice includes analytic and near-degenerate controls. It
 does not choose either tolerance, define a scientific threshold, or authorize
 real-model, confirmatory, or final execution.
 
+The second Development slice applies the same fail-closed differential to every
+replicate of an explicit bootstrap plan. Replicate population indices and mean
+contrasts remain attached to each comparison, and any rank or residual mismatch
+blocks the complete batch instead of silently excluding a replicate. The
+synthetic runner exposes only the replicate count and maximum observed method
+difference under caller-declared numerical bounds. It does not convert those
+observations into a calibrated tolerance, statistical interval, performance
+claim, or scientific decision.
+
 ### TDI-27.3 — causal intervention harness
 
 Introduce a model-agnostic intervention adapter with fixed intervention norms,
