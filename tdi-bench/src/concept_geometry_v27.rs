@@ -2070,10 +2070,17 @@ fn normalized_intervention_direction(
         return Err(ConceptGeometryError::ZeroNorm);
     }
     let (direction_scale, scaled_direction_norm) = scaled_euclidean_norm_parts(direction);
-    Ok(direction
+    direction
         .iter()
-        .map(|value| (value / direction_scale) / scaled_direction_norm)
-        .collect())
+        .map(|value| {
+            let normalized = (value / direction_scale) / scaled_direction_norm;
+            if *value != 0.0 && normalized == 0.0 {
+                Err(ConceptGeometryError::UnrepresentableInterventionDose)
+            } else {
+                Ok(normalized)
+            }
+        })
+        .collect()
 }
 
 fn intervention_state(
@@ -3371,6 +3378,21 @@ mod tests {
                 &[1.0e-16],
                 DEFAULT_TOLERANCE,
                 DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::UnrepresentableInterventionDose)
+        );
+        let mut high_dynamic_range_target = vec![4.0e-16; 10];
+        high_dynamic_range_target[0] = f64::MAX;
+        let mut high_dynamic_range_control = vec![1.0; 10];
+        high_dynamic_range_control[0] = 0.0;
+        assert_eq!(
+            matched_intervention_dose_states(
+                &[0.0; 10],
+                &high_dynamic_range_target,
+                &[high_dynamic_range_control],
+                &[1.0],
+                DEFAULT_TOLERANCE,
+                f64::from_bits(1),
             ),
             Err(ConceptGeometryError::UnrepresentableInterventionDose)
         );
