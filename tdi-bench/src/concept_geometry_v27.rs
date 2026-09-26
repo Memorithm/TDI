@@ -1078,8 +1078,7 @@ pub fn projection_method_differential(
         .zip(householder_qr.residual())
         .map(|(left, right)| (left - right).abs())
         .fold(0.0, f64::max);
-    if !max_abs_residual_difference.is_finite()
-        || max_abs_residual_difference > agreement_tolerance
+    if !max_abs_residual_difference.is_finite() || max_abs_residual_difference > agreement_tolerance
     {
         return Err(ConceptGeometryError::ProjectionMethodDisagreement);
     }
