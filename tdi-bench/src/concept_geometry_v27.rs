@@ -630,6 +630,7 @@ pub enum ConceptGeometryError {
     SampleCountOverflow,
     InvalidSubsampleSize,
     EmptySampleSizeGrid,
+    ProjectionMethodDisagreement,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -641,6 +642,35 @@ pub struct ResidualDirection {
     residual_norm: f64,
     innovation_energy_ratio: f64,
     basis_rank: usize,
+}
+
+/// Development-only comparison between the reference two-pass MGS projection
+/// and an independently implemented, column-pivoted Householder QR projection.
+///
+/// Construction succeeds only when both methods retain the same numerical
+/// rank and their residuals agree within the caller-declared absolute bound.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProjectionMethodDifferential {
+    modified_gram_schmidt: ResidualDirection,
+    householder_qr: ResidualDirection,
+    max_abs_residual_difference: f64,
+}
+
+impl ProjectionMethodDifferential {
+    #[must_use]
+    pub fn modified_gram_schmidt(&self) -> &ResidualDirection {
+        &self.modified_gram_schmidt
+    }
+
+    #[must_use]
+    pub fn householder_qr(&self) -> &ResidualDirection {
+        &self.householder_qr
+    }
+
+    #[must_use]
+    pub const fn max_abs_residual_difference(&self) -> f64 {
+        self.max_abs_residual_difference
+    }
 }
 
 impl ResidualDirection {
@@ -880,6 +910,184 @@ pub fn residualize(
         residual_norm,
         innovation_energy_ratio,
         basis_rank: basis.len(),
+    })
+}
+
+#[derive(Clone, Debug)]
+struct HouseholderReflector {
+    offset: usize,
+    vector: Vec<f64>,
+    scale: f64,
+}
+
+fn apply_reflector(values: &mut [f64], reflector: &HouseholderReflector) {
+    let tail = &mut values[reflector.offset..];
+    let coefficient = reflector.scale * dot(tail, &reflector.vector);
+    for (value, direction) in tail.iter_mut().zip(&reflector.vector) {
+        *value -= coefficient * direction;
+    }
+}
+
+/// Remove a declared span with deterministic column-pivoted Householder QR.
+///
+/// This is an independent Development oracle for `residualize`; it is not a
+/// replacement for the reference method and does not select a tolerance.
+pub fn residualize_householder_qr(
+    vector: &[f64],
+    basis_directions: &[Vec<f64>],
+    tolerance: f64,
+) -> Result<ResidualDirection, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    validate_vector(vector)?;
+    let raw_norm = norm(vector);
+    if !raw_norm.is_finite() {
+        return Err(ConceptGeometryError::NonFiniteValue);
+    }
+    if raw_norm <= tolerance {
+        return Err(ConceptGeometryError::ZeroNorm);
+    }
+
+    let width = vector.len();
+    for direction in basis_directions {
+        validate_vector(direction)?;
+        if direction.len() != width {
+            return Err(ConceptGeometryError::DimensionMismatch);
+        }
+    }
+
+    let column_count = basis_directions.len();
+    let mut matrix = vec![vec![0.0; column_count]; width];
+    for (column, direction) in basis_directions.iter().enumerate() {
+        for (row, value) in direction.iter().enumerate() {
+            matrix[row][column] = *value;
+        }
+    }
+
+    let mut reflectors = Vec::new();
+    for offset in 0..width.min(column_count) {
+        let mut pivot = offset;
+        let mut pivot_norm = 0.0;
+        for column in offset..column_count {
+            let candidate_norm = matrix[offset..]
+                .iter()
+                .map(|row| row[column] * row[column])
+                .sum::<f64>()
+                .sqrt();
+            if !candidate_norm.is_finite() {
+                return Err(ConceptGeometryError::NonFiniteValue);
+            }
+            if candidate_norm > pivot_norm {
+                pivot = column;
+                pivot_norm = candidate_norm;
+            }
+        }
+        if pivot_norm <= tolerance {
+            break;
+        }
+        if pivot != offset {
+            for row in &mut matrix {
+                row.swap(offset, pivot);
+            }
+        }
+
+        let mut reflector_vector = matrix[offset..]
+            .iter()
+            .map(|row| row[offset])
+            .collect::<Vec<_>>();
+        let column_norm = norm(&reflector_vector);
+        let signed_norm = if reflector_vector[0].is_sign_negative() {
+            column_norm
+        } else {
+            -column_norm
+        };
+        reflector_vector[0] -= signed_norm;
+        let denominator = dot(&reflector_vector, &reflector_vector);
+        if !denominator.is_finite() || denominator <= 0.0 {
+            return Err(ConceptGeometryError::NonFiniteValue);
+        }
+        let scale = 2.0 / denominator;
+        let reflector = HouseholderReflector {
+            offset,
+            vector: reflector_vector,
+            scale,
+        };
+
+        for column in offset..column_count {
+            let coefficient = reflector.scale
+                * matrix[offset..]
+                    .iter()
+                    .zip(&reflector.vector)
+                    .map(|(row, direction)| row[column] * direction)
+                    .sum::<f64>();
+            for (row, direction) in matrix[offset..].iter_mut().zip(&reflector.vector) {
+                row[column] -= coefficient * direction;
+            }
+        }
+        reflectors.push(reflector);
+    }
+
+    let basis_rank = reflectors.len();
+    let mut residual = vector.to_vec();
+    for reflector in &reflectors {
+        apply_reflector(&mut residual, reflector);
+    }
+    residual[..basis_rank].fill(0.0);
+    for reflector in reflectors.iter().rev() {
+        apply_reflector(&mut residual, reflector);
+    }
+
+    let residual_norm = norm(&residual);
+    if !residual_norm.is_finite() {
+        return Err(ConceptGeometryError::NonFiniteValue);
+    }
+    let innovation_energy_ratio = (residual_norm * residual_norm) / (raw_norm * raw_norm);
+    let unit_direction = if residual_norm > tolerance {
+        Some(residual.iter().map(|value| value / residual_norm).collect())
+    } else {
+        None
+    };
+
+    Ok(ResidualDirection {
+        raw: vector.to_vec(),
+        residual,
+        unit_direction,
+        raw_norm,
+        residual_norm,
+        innovation_energy_ratio,
+        basis_rank,
+    })
+}
+
+/// Require agreement between the reference MGS and independent Householder QR
+/// residuals under one caller-declared absolute comparison bound.
+pub fn projection_method_differential(
+    vector: &[f64],
+    basis_directions: &[Vec<f64>],
+    tolerance: f64,
+    agreement_tolerance: f64,
+) -> Result<ProjectionMethodDifferential, ConceptGeometryError> {
+    valid_tolerance(agreement_tolerance)?;
+    let modified_gram_schmidt = residualize(vector, basis_directions, tolerance)?;
+    let householder_qr = residualize_householder_qr(vector, basis_directions, tolerance)?;
+    if modified_gram_schmidt.basis_rank() != householder_qr.basis_rank() {
+        return Err(ConceptGeometryError::ProjectionMethodDisagreement);
+    }
+    let max_abs_residual_difference = modified_gram_schmidt
+        .residual()
+        .iter()
+        .zip(householder_qr.residual())
+        .map(|(left, right)| (left - right).abs())
+        .fold(0.0, f64::max);
+    if !max_abs_residual_difference.is_finite()
+        || max_abs_residual_difference > agreement_tolerance
+    {
+        return Err(ConceptGeometryError::ProjectionMethodDisagreement);
+    }
+
+    Ok(ProjectionMethodDifferential {
+        modified_gram_schmidt,
+        householder_qr,
+        max_abs_residual_difference,
     })
 }
 
@@ -2009,6 +2217,59 @@ mod tests {
         close(dot(&basis[0], &basis[1]), 0.0);
         close(norm(&basis[0]), 1.0);
         close(norm(&basis[1]), 1.0);
+    }
+
+    #[test]
+    fn householder_projection_matches_analytic_residual() {
+        let report = residualize_householder_qr(
+            &[3.0, 4.0, 5.0],
+            &[vec![2.0, 0.0, 0.0], vec![1.0, 1.0, 0.0]],
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+
+        assert_eq!(report.basis_rank(), 2);
+        close(report.residual()[0], 0.0);
+        close(report.residual()[1], 0.0);
+        close(report.residual()[2], 5.0);
+        close(report.innovation_energy_ratio(), 0.5);
+    }
+
+    #[test]
+    fn projection_differential_agrees_for_near_degenerate_basis() {
+        let report = projection_method_differential(
+            &[0.25, -0.5, 2.0, 1.0],
+            &[
+                vec![1.0, 1.0, 0.0, 0.0],
+                vec![1.0, 1.0 + 1.0e-10, 0.0, 0.0],
+                vec![0.0, 0.0, 1.0, 0.0],
+            ],
+            1.0e-12,
+            1.0e-8,
+        )
+        .unwrap();
+
+        assert_eq!(report.modified_gram_schmidt().basis_rank(), 3);
+        assert_eq!(report.householder_qr().basis_rank(), 3);
+        assert!(report.max_abs_residual_difference() <= 1.0e-8);
+    }
+
+    #[test]
+    fn projection_differential_rejects_rank_disagreement() {
+        assert_eq!(
+            projection_method_differential(
+                &[1.0, 2.0, 3.0, 4.0],
+                &[
+                    vec![1.0, 1.0, 1.0, 1.0],
+                    vec![1.0, 1.000_000_000_000_001, 1.0, 1.0],
+                    vec![1.0, 1.0, 1.000_000_000_000_001, 1.0],
+                    vec![1.0, 1.0, 1.0, 1.000_000_000_000_001],
+                ],
+                1.0e-15,
+                1.0e-9,
+            ),
+            Err(ConceptGeometryError::ProjectionMethodDisagreement)
+        );
     }
 
     #[test]
