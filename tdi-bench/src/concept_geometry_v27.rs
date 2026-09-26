@@ -211,12 +211,24 @@ pub fn independent_group_bootstrap_indices(
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BootstrapMeanContrast {
+    positive_indices: Vec<usize>,
+    control_indices: Vec<usize>,
     positive_mean: Vec<f64>,
     control_mean: Vec<f64>,
     contrast: Vec<f64>,
 }
 
 impl BootstrapMeanContrast {
+    #[must_use]
+    pub fn positive_indices(&self) -> &[usize] {
+        &self.positive_indices
+    }
+
+    #[must_use]
+    pub fn control_indices(&self) -> &[usize] {
+        &self.control_indices
+    }
+
     #[must_use]
     pub fn positive_mean(&self) -> &[f64] {
         &self.positive_mean
@@ -298,6 +310,8 @@ pub fn bootstrap_mean_contrasts(
         }
 
         output.push(BootstrapMeanContrast {
+            positive_indices: replicate.positive().to_vec(),
+            control_indices: replicate.control().to_vec(),
             positive_mean,
             control_mean,
             contrast,
@@ -654,6 +668,24 @@ pub struct ProjectionMethodDifferential {
     modified_gram_schmidt: ResidualDirection,
     householder_qr: ResidualDirection,
     max_abs_residual_difference: f64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct BootstrapProjectionMethodDifferential {
+    mean_contrast: BootstrapMeanContrast,
+    differential: ProjectionMethodDifferential,
+}
+
+impl BootstrapProjectionMethodDifferential {
+    #[must_use]
+    pub fn mean_contrast(&self) -> &BootstrapMeanContrast {
+        &self.mean_contrast
+    }
+
+    #[must_use]
+    pub fn differential(&self) -> &ProjectionMethodDifferential {
+        &self.differential
+    }
 }
 
 impl ProjectionMethodDifferential {
@@ -1133,6 +1165,42 @@ pub fn bootstrap_residual_geometries(
         output.push(BootstrapResidualGeometry {
             mean_contrast,
             residual,
+        });
+    }
+    Ok(output)
+}
+
+/// Apply the projection-method differential to every declared bootstrap replicate.
+///
+/// Replicates retain their resampled population indices and mean contrasts. The
+/// first rank or residual disagreement aborts the complete batch rather than
+/// dropping a numerically inconvenient replicate from Development evidence.
+pub fn bootstrap_projection_method_differentials(
+    positive: &[Vec<f64>],
+    control: &[Vec<f64>],
+    basis_directions: &[Vec<f64>],
+    tolerance: f64,
+    agreement_tolerance: f64,
+    plan: DevelopmentResamplingPlan,
+) -> Result<Vec<BootstrapProjectionMethodDifferential>, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    valid_tolerance(agreement_tolerance)?;
+    let contrasts = bootstrap_mean_contrasts(positive, control, plan)?;
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(contrasts.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+
+    for mean_contrast in contrasts {
+        let differential = projection_method_differential(
+            mean_contrast.contrast(),
+            basis_directions,
+            tolerance,
+            agreement_tolerance,
+        )?;
+        output.push(BootstrapProjectionMethodDifferential {
+            mean_contrast,
+            differential,
         });
     }
     Ok(output)
@@ -1950,6 +2018,8 @@ mod tests {
         let reports = bootstrap_mean_contrasts(&positive, &control, plan).unwrap();
 
         for (replicate, report) in indices.iter().zip(&reports) {
+            assert_eq!(report.positive_indices(), replicate.positive());
+            assert_eq!(report.control_indices(), replicate.control());
             let positive_rows = replicate
                 .positive()
                 .iter()
@@ -2347,6 +2417,62 @@ mod tests {
         assert_eq!(
             bootstrap_residual_geometries(&positive, &control, &[], DEFAULT_TOLERANCE, plan,),
             Err(ConceptGeometryError::ZeroNorm)
+        );
+    }
+
+    #[test]
+    fn bootstrap_projection_differential_is_complete_and_identity_preserving() {
+        let positive = vec![vec![3.0, 4.0, 2.0]; 3];
+        let control = vec![vec![0.0, 0.0, 0.0]; 3];
+        let basis = vec![
+            vec![1.0, 1.0, 0.0],
+            vec![1.0, 1.0 + 1.0e-10, 0.0],
+        ];
+        let plan = DevelopmentResamplingPlan::new(5, 0x2702_0201).unwrap();
+
+        let reports = bootstrap_projection_method_differentials(
+            &positive,
+            &control,
+            &basis,
+            1.0e-12,
+            1.0e-8,
+            plan,
+        )
+        .unwrap();
+
+        assert_eq!(reports.len(), plan.replicates());
+        for report in reports {
+            assert_eq!(report.mean_contrast().contrast(), &[3.0, 4.0, 2.0]);
+            assert_eq!(report.mean_contrast().positive_indices().len(), 3);
+            assert_eq!(report.mean_contrast().control_indices().len(), 3);
+            assert_eq!(report.differential().modified_gram_schmidt().basis_rank(), 2);
+            assert_eq!(report.differential().householder_qr().basis_rank(), 2);
+            assert!(report.differential().max_abs_residual_difference() <= 1.0e-8);
+        }
+    }
+
+    #[test]
+    fn bootstrap_projection_differential_rejects_any_rank_disagreement() {
+        let positive = vec![vec![1.0, 2.0, 3.0, 4.0]; 2];
+        let control = vec![vec![0.0, 0.0, 0.0, 0.0]; 2];
+        let basis = vec![
+            vec![1.0, 1.0, 1.0, 1.0],
+            vec![1.0, 1.000_000_000_000_001, 1.0, 1.0],
+            vec![1.0, 1.0, 1.000_000_000_000_001, 1.0],
+            vec![1.0, 1.0, 1.0, 1.000_000_000_000_001],
+        ];
+        let plan = DevelopmentResamplingPlan::new(3, 0x2702_0202).unwrap();
+
+        assert_eq!(
+            bootstrap_projection_method_differentials(
+                &positive,
+                &control,
+                &basis,
+                1.0e-15,
+                1.0e-9,
+                plan,
+            ),
+            Err(ConceptGeometryError::ProjectionMethodDisagreement)
         );
     }
 
