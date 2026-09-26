@@ -233,6 +233,15 @@ independent QR/SVD or Moore-Penrose implementation. Near-degenerate subspaces
 must be included. Numerical disagreement is a blocker, not a parameter-tuning
 opportunity.
 
+The first Development slice adds a dependency-free, column-pivoted Householder
+QR oracle. It retains the caller-supplied numerical tolerance, compares rank
+and residual coordinates against the existing two-pass modified Gram-Schmidt
+reference, and fails closed when either the retained rank differs or the
+maximum absolute residual-coordinate difference exceeds a separately supplied
+agreement bound. The slice includes analytic and near-degenerate controls. It
+does not choose either tolerance, define a scientific threshold, or authorize
+real-model, confirmatory, or final execution.
+
 ### TDI-27.3 — causal intervention harness
 
 Introduce a model-agnostic intervention adapter with fixed intervention norms,
