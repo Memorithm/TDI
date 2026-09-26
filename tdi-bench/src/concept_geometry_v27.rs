@@ -649,6 +649,8 @@ pub enum ConceptGeometryError {
     InvalidInterventionAlphaGrid,
     NonOrthogonalControl,
     UnrepresentableInterventionDose,
+    NonOrthogonalAlignment,
+    UnrepresentableCrossLayerTransport,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -2033,16 +2035,20 @@ fn subnormal_quotient_is_exact(numerator: f64, denominator: f64, quotient: f64) 
     )
 }
 
-fn compensated_dot_with_roundoff_bound(left: &[f64], right: &[f64]) -> (f64, f64) {
+fn compensated_dot_terms_with_roundoff_bound(
+    terms: impl Iterator<Item = (f64, f64)>,
+) -> (f64, f64) {
     let mut sum = 0.0_f64;
     let mut correction = 0.0_f64;
     let mut absolute_product_sum = 0.0_f64;
     let mut subnormal_product_count = 0_usize;
-    for (left, right) in left.iter().zip(right) {
+    let mut term_count = 0_usize;
+    for (left, right) in terms {
         let product = left * right;
-        if *left != 0.0 && *right != 0.0 && product.abs() < f64::MIN_POSITIVE {
+        if left != 0.0 && right != 0.0 && product.abs() < f64::MIN_POSITIVE {
             subnormal_product_count = subnormal_product_count.saturating_add(1);
         }
+        term_count = term_count.saturating_add(1);
         absolute_product_sum += product.abs();
         let next = sum + product;
         if sum.abs() >= product.abs() {
@@ -2054,10 +2060,26 @@ fn compensated_dot_with_roundoff_bound(left: &[f64], right: &[f64]) -> (f64, f64
     }
     let value = sum + correction;
     let summation_roundoff_bound =
-        4.0 * f64::EPSILON * (left.len() as f64 + 1.0) * absolute_product_sum;
+        4.0 * f64::EPSILON * (term_count as f64 + 1.0) * absolute_product_sum;
     let subnormal_product_roundoff_bound = (subnormal_product_count as f64) * f64::from_bits(1);
     let roundoff_bound = summation_roundoff_bound + subnormal_product_roundoff_bound;
     (value, roundoff_bound)
+}
+
+fn compensated_dot_with_roundoff_bound(left: &[f64], right: &[f64]) -> (f64, f64) {
+    compensated_dot_terms_with_roundoff_bound(left.iter().copied().zip(right.iter().copied()))
+}
+
+fn compensated_column_dot_with_roundoff_bound(
+    matrix: &[Vec<f64>],
+    left_column: usize,
+    right_column: usize,
+) -> (f64, f64) {
+    compensated_dot_terms_with_roundoff_bound(
+        matrix
+            .iter()
+            .map(|row| (row[left_column], row[right_column])),
+    )
 }
 
 /// One signed, predeclared intervention dose applied to a target direction and
@@ -2070,6 +2092,71 @@ pub struct MatchedInterventionDoseState {
     alpha: f64,
     target_state: Vec<f64>,
     matched_control_states: Vec<Vec<f64>>,
+}
+
+/// Descriptive comparison after transporting a source direction through a
+/// caller-declared orthogonal alignment operator.
+///
+/// The record contains no learned alignment, acceptance threshold, scientific
+/// verdict, or execution authorization.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CrossLayerTransportComparison {
+    source_unit_direction: Vec<f64>,
+    transported_source_unit_direction: Vec<f64>,
+    target_unit_direction: Vec<f64>,
+    signed_cosine: f64,
+    signed_cosine_roundoff_bound: f64,
+    max_abs_coordinate_difference: f64,
+    max_alignment_orthogonality_deviation: f64,
+    max_alignment_orthogonality_roundoff_bound: f64,
+    max_transport_roundoff_bound: f64,
+}
+
+impl CrossLayerTransportComparison {
+    #[must_use]
+    pub fn source_unit_direction(&self) -> &[f64] {
+        &self.source_unit_direction
+    }
+
+    #[must_use]
+    pub fn transported_source_unit_direction(&self) -> &[f64] {
+        &self.transported_source_unit_direction
+    }
+
+    #[must_use]
+    pub fn target_unit_direction(&self) -> &[f64] {
+        &self.target_unit_direction
+    }
+
+    #[must_use]
+    pub const fn signed_cosine(&self) -> f64 {
+        self.signed_cosine
+    }
+
+    #[must_use]
+    pub const fn signed_cosine_roundoff_bound(&self) -> f64 {
+        self.signed_cosine_roundoff_bound
+    }
+
+    #[must_use]
+    pub const fn max_abs_coordinate_difference(&self) -> f64 {
+        self.max_abs_coordinate_difference
+    }
+
+    #[must_use]
+    pub const fn max_alignment_orthogonality_deviation(&self) -> f64 {
+        self.max_alignment_orthogonality_deviation
+    }
+
+    #[must_use]
+    pub const fn max_alignment_orthogonality_roundoff_bound(&self) -> f64 {
+        self.max_alignment_orthogonality_roundoff_bound
+    }
+
+    #[must_use]
+    pub const fn max_transport_roundoff_bound(&self) -> f64 {
+        self.max_transport_roundoff_bound
+    }
 }
 
 impl MatchedInterventionDoseState {
@@ -2089,10 +2176,11 @@ impl MatchedInterventionDoseState {
     }
 }
 
-fn normalized_intervention_direction(
+fn normalized_direction(
     direction: &[f64],
     width: usize,
     tolerance: f64,
+    unrepresentable_error: ConceptGeometryError,
 ) -> Result<Vec<f64>, ConceptGeometryError> {
     validate_vector(direction)?;
     if direction.len() != width {
@@ -2114,12 +2202,154 @@ fn normalized_intervention_direction(
                 && normalized.abs() < f64::MIN_POSITIVE
                 && !subnormal_quotient_is_exact(scaled, scaled_direction_norm, normalized);
             if scaled_is_inexact_subnormal || normalized_is_inexact_subnormal {
-                Err(ConceptGeometryError::UnrepresentableInterventionDose)
+                Err(unrepresentable_error)
             } else {
                 Ok(normalized)
             }
         })
         .collect()
+}
+
+fn normalized_intervention_direction(
+    direction: &[f64],
+    width: usize,
+    tolerance: f64,
+) -> Result<Vec<f64>, ConceptGeometryError> {
+    normalized_direction(
+        direction,
+        width,
+        tolerance,
+        ConceptGeometryError::UnrepresentableInterventionDose,
+    )
+}
+
+/// Transport and compare directions using a declared orthogonal alignment.
+///
+/// `alignment_operator` is row-major: each row produces one coordinate in the
+/// target representation basis. It must be square and match both direction
+/// widths. Every row pair is checked against the corresponding identity-matrix
+/// entry using compensated dot products. The observed deviation plus its
+/// roundoff bound must fit `orthogonality_tolerance`. Matrix-vector and final
+/// cosine roundoff bounds must each fit `calculation_roundoff_tolerance`.
+///
+/// This Development primitive does not estimate an alignment, select either
+/// tolerance, define persistence, or infer a scientific result.
+pub fn compare_cross_layer_transport(
+    source_direction: &[f64],
+    target_direction: &[f64],
+    alignment_operator: &[Vec<f64>],
+    tolerance: f64,
+    orthogonality_tolerance: f64,
+    calculation_roundoff_tolerance: f64,
+) -> Result<CrossLayerTransportComparison, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    valid_tolerance(orthogonality_tolerance)?;
+    valid_tolerance(calculation_roundoff_tolerance)?;
+    let width = validate_rows(alignment_operator)?;
+    if alignment_operator.len() != width
+        || source_direction.len() != width
+        || target_direction.len() != width
+    {
+        return Err(ConceptGeometryError::DimensionMismatch);
+    }
+
+    let source_unit_direction = normalized_direction(
+        source_direction,
+        width,
+        tolerance,
+        ConceptGeometryError::UnrepresentableCrossLayerTransport,
+    )?;
+    let target_unit_direction = normalized_direction(
+        target_direction,
+        width,
+        tolerance,
+        ConceptGeometryError::UnrepresentableCrossLayerTransport,
+    )?;
+
+    let mut max_alignment_orthogonality_deviation = 0.0_f64;
+    let mut max_alignment_orthogonality_roundoff_bound = 0.0_f64;
+    for (left_index, left) in alignment_operator.iter().enumerate() {
+        for (right_index, right) in alignment_operator.iter().enumerate().skip(left_index) {
+            let expected = if left_index == right_index { 1.0 } else { 0.0 };
+            let (inner_product, roundoff_bound) = compensated_dot_with_roundoff_bound(left, right);
+            let (column_inner_product, column_roundoff_bound) =
+                compensated_column_dot_with_roundoff_bound(
+                    alignment_operator,
+                    left_index,
+                    right_index,
+                );
+            for (value, uncertainty) in [
+                (inner_product, roundoff_bound),
+                (column_inner_product, column_roundoff_bound),
+            ] {
+                let deviation = (value - expected).abs();
+                if !value.is_finite()
+                    || !uncertainty.is_finite()
+                    || deviation + uncertainty > orthogonality_tolerance
+                {
+                    return Err(ConceptGeometryError::NonOrthogonalAlignment);
+                }
+                max_alignment_orthogonality_deviation =
+                    max_alignment_orthogonality_deviation.max(deviation);
+                max_alignment_orthogonality_roundoff_bound =
+                    max_alignment_orthogonality_roundoff_bound.max(uncertainty);
+            }
+        }
+    }
+
+    let mut transported_source = Vec::new();
+    transported_source
+        .try_reserve_exact(width)
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    let mut max_transport_roundoff_bound = 0.0_f64;
+    for row in alignment_operator {
+        let (coordinate, roundoff_bound) =
+            compensated_dot_with_roundoff_bound(row, &source_unit_direction);
+        if !coordinate.is_finite()
+            || !roundoff_bound.is_finite()
+            || roundoff_bound > calculation_roundoff_tolerance
+        {
+            return Err(ConceptGeometryError::UnrepresentableCrossLayerTransport);
+        }
+        max_transport_roundoff_bound = max_transport_roundoff_bound.max(roundoff_bound);
+        transported_source.push(coordinate);
+    }
+    let transported_source_unit_direction = normalized_direction(
+        &transported_source,
+        width,
+        tolerance,
+        ConceptGeometryError::UnrepresentableCrossLayerTransport,
+    )?;
+
+    let (signed_cosine, signed_cosine_roundoff_bound) = compensated_dot_with_roundoff_bound(
+        &transported_source_unit_direction,
+        &target_unit_direction,
+    );
+    if !signed_cosine.is_finite()
+        || !signed_cosine_roundoff_bound.is_finite()
+        || signed_cosine_roundoff_bound > calculation_roundoff_tolerance
+        || signed_cosine.abs() > 1.0 + signed_cosine_roundoff_bound
+    {
+        return Err(ConceptGeometryError::UnrepresentableCrossLayerTransport);
+    }
+    let signed_cosine = signed_cosine.clamp(-1.0, 1.0);
+    let max_abs_coordinate_difference = transported_source_unit_direction
+        .iter()
+        .zip(&target_unit_direction)
+        .map(|(transported, target)| (transported - target).abs())
+        .fold(0.0_f64, f64::max);
+
+    Ok(CrossLayerTransportComparison {
+        source_unit_direction,
+        transported_source_unit_direction,
+        target_unit_direction,
+        signed_cosine,
+        signed_cosine_roundoff_bound,
+        max_abs_coordinate_difference,
+        max_alignment_orthogonality_deviation,
+        max_alignment_orthogonality_roundoff_bound,
+        max_transport_roundoff_bound,
+    })
 }
 
 fn intervention_state(
@@ -3269,6 +3499,104 @@ mod tests {
     fn causal_and_interaction_helpers_keep_semantics_separate() {
         close(causal_novelty_gap(0.75, &[0.0, 0.25]).unwrap(), 0.625);
         close(interaction_residual(1.0, 1.0, 2.5).unwrap(), 0.5);
+    }
+
+    #[test]
+    fn cross_layer_transport_compares_after_declared_rotation() {
+        let comparison = compare_cross_layer_transport(
+            &[2.0, 0.0],
+            &[0.0, 5.0],
+            &[vec![0.0, -1.0], vec![1.0, 0.0]],
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+
+        assert_eq!(comparison.source_unit_direction(), &[1.0, 0.0]);
+        assert_eq!(comparison.transported_source_unit_direction(), &[0.0, 1.0]);
+        assert_eq!(comparison.target_unit_direction(), &[0.0, 1.0]);
+        assert_eq!(comparison.signed_cosine(), 1.0);
+        assert_eq!(comparison.max_abs_coordinate_difference(), 0.0);
+        assert_eq!(comparison.max_alignment_orthogonality_deviation(), 0.0);
+        assert!(comparison.signed_cosine_roundoff_bound() > 0.0);
+        assert!(comparison.max_alignment_orthogonality_roundoff_bound() > 0.0);
+        assert!(comparison.max_transport_roundoff_bound() > 0.0);
+    }
+
+    #[test]
+    fn cross_layer_transport_keeps_signed_direction_information() {
+        let comparison = compare_cross_layer_transport(
+            &[1.0, 0.0],
+            &[-1.0, 0.0],
+            &[vec![1.0, 0.0], vec![0.0, 1.0]],
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+
+        assert_eq!(comparison.signed_cosine(), -1.0);
+        assert_eq!(comparison.max_abs_coordinate_difference(), 2.0);
+    }
+
+    #[test]
+    fn cross_layer_transport_rejects_invalid_or_uncertain_operators() {
+        assert_eq!(
+            compare_cross_layer_transport(
+                &[1.0, 0.0],
+                &[1.0, 0.0],
+                &[],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::EmptyGroup)
+        );
+        assert_eq!(
+            compare_cross_layer_transport(
+                &[1.0, 0.0],
+                &[1.0, 0.0],
+                &[vec![1.0, 0.0]],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::DimensionMismatch)
+        );
+        assert_eq!(
+            compare_cross_layer_transport(
+                &[1.0, 0.0],
+                &[1.0, 0.0],
+                &[vec![1.0, 0.0], vec![0.25, 1.0]],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::NonOrthogonalAlignment)
+        );
+        assert_eq!(
+            compare_cross_layer_transport(
+                &[1.0, 0.0],
+                &[1.0, 0.0],
+                &[vec![1.0, 0.0], vec![0.0, 1.0]],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+                f64::from_bits(1),
+            ),
+            Err(ConceptGeometryError::UnrepresentableCrossLayerTransport)
+        );
+        assert_eq!(
+            compare_cross_layer_transport(
+                &[1.0, 0.0],
+                &[1.0, 0.0],
+                &[vec![f64::INFINITY, 0.0], vec![0.0, 1.0]],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::NonFiniteValue)
+        );
     }
 
     #[test]
