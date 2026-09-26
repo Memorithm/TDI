@@ -645,6 +645,10 @@ pub enum ConceptGeometryError {
     InvalidSubsampleSize,
     EmptySampleSizeGrid,
     ProjectionMethodDisagreement,
+    EmptyInterventionAlphaGrid,
+    InvalidInterventionAlphaGrid,
+    NonOrthogonalControl,
+    UnrepresentableInterventionDose,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1850,6 +1854,409 @@ pub fn cosine_similarity(
     Ok(dot(left, right) / (left_norm * right_norm))
 }
 
+fn scaled_euclidean_norm_parts(values: &[f64]) -> (f64, f64) {
+    let mut scale = 0.0_f64;
+    let mut scaled_sum = 1.0_f64;
+    for value in values {
+        let magnitude = value.abs();
+        if magnitude == 0.0 {
+            continue;
+        }
+        if scale < magnitude {
+            let ratio = scale / magnitude;
+            scaled_sum = 1.0 + scaled_sum * ratio * ratio;
+            scale = magnitude;
+        } else {
+            let ratio = magnitude / scale;
+            scaled_sum += ratio * ratio;
+        }
+    }
+    (scale, scaled_sum.sqrt())
+}
+
+fn positive_finite_parts(value: f64) -> (u64, i32) {
+    debug_assert!(value.is_finite() && value > 0.0);
+    let bits = value.to_bits();
+    let stored_exponent = ((bits >> 52) & 0x7ff) as i32;
+    let fraction = bits & ((1_u64 << 52) - 1);
+    if stored_exponent == 0 {
+        (fraction, -1074)
+    } else {
+        ((1_u64 << 52) | fraction, stored_exponent - 1023 - 52)
+    }
+}
+
+const EXACT_SQUARE_MIN_EXPONENT: i32 = -2148;
+const EXACT_SQUARE_LIMBS: usize = 68;
+
+struct ExactNonnegativeSum {
+    limbs: [u64; EXACT_SQUARE_LIMBS],
+    overflow: bool,
+}
+
+impl ExactNonnegativeSum {
+    fn zero() -> Self {
+        Self {
+            limbs: [0; EXACT_SQUARE_LIMBS],
+            overflow: false,
+        }
+    }
+
+    fn add_to_limb(&mut self, mut index: usize, value: u64) {
+        if value == 0 {
+            return;
+        }
+        if index >= self.limbs.len() {
+            self.overflow = true;
+            return;
+        }
+        let (sum, mut carry) = self.limbs[index].overflowing_add(value);
+        self.limbs[index] = sum;
+        while carry {
+            index += 1;
+            if index >= self.limbs.len() {
+                self.overflow = true;
+                return;
+            }
+            let (sum, next_carry) = self.limbs[index].overflowing_add(1);
+            self.limbs[index] = sum;
+            carry = next_carry;
+        }
+    }
+
+    fn add_word(&mut self, word: u64, bit_offset: usize) {
+        let index = bit_offset / u64::BITS as usize;
+        let shift = (bit_offset % u64::BITS as usize) as u32;
+        if shift == 0 {
+            self.add_to_limb(index, word);
+        } else {
+            self.add_to_limb(index, word << shift);
+            self.add_to_limb(index + 1, word >> (u64::BITS - shift));
+        }
+    }
+
+    fn add_square(&mut self, value: f64) {
+        if value == 0.0 {
+            return;
+        }
+        let (significand, exponent) = positive_finite_parts(value.abs());
+        let square = u128::from(significand) * u128::from(significand);
+        let bit_offset = (2 * exponent - EXACT_SQUARE_MIN_EXPONENT) as usize;
+        self.add_word(square as u64, bit_offset);
+        self.add_word(
+            (square >> u64::BITS) as u64,
+            bit_offset + u64::BITS as usize,
+        );
+    }
+
+    fn at_most(&self, other: &Self) -> bool {
+        if self.overflow != other.overflow {
+            return !self.overflow;
+        }
+        for index in (0..self.limbs.len()).rev() {
+            if self.limbs[index] != other.limbs[index] {
+                return self.limbs[index] < other.limbs[index];
+            }
+        }
+        true
+    }
+}
+
+fn exact_squared_norm_at_most(values: &[f64], tolerance: f64) -> bool {
+    let mut squared_norm = ExactNonnegativeSum::zero();
+    for value in values {
+        squared_norm.add_square(*value);
+    }
+    let mut squared_tolerance = ExactNonnegativeSum::zero();
+    squared_tolerance.add_square(tolerance);
+    squared_norm.at_most(&squared_tolerance)
+}
+
+fn subnormal_product_is_exact(left: f64, right: f64, product: f64) -> bool {
+    debug_assert!(left.is_finite() && right.is_finite());
+    debug_assert!(left != 0.0 && right != 0.0);
+    debug_assert!(product.abs() < f64::MIN_POSITIVE);
+    if product == 0.0 {
+        return false;
+    }
+
+    let (left_significand, left_exponent) = positive_finite_parts(left.abs());
+    let (right_significand, right_exponent) = positive_finite_parts(right.abs());
+    let exact_significand = u128::from(left_significand) * u128::from(right_significand);
+    let subnormal_unit_shift = left_exponent + right_exponent + 1074;
+    let exact_subnormal_units = if subnormal_unit_shift >= 0 {
+        exact_significand.checked_shl(subnormal_unit_shift as u32)
+    } else {
+        let discarded_bits = (-subnormal_unit_shift) as u32;
+        if discarded_bits >= u128::BITS {
+            return false;
+        }
+        let discarded_mask = (1_u128 << discarded_bits) - 1;
+        if exact_significand & discarded_mask != 0 {
+            return false;
+        }
+        exact_significand.checked_shr(discarded_bits)
+    };
+
+    exact_subnormal_units == Some(u128::from(product.abs().to_bits()))
+}
+
+fn binary_values_are_equal(
+    left_significand: u128,
+    left_exponent: i32,
+    right_significand: u128,
+    right_exponent: i32,
+) -> bool {
+    let left_trailing_zeros = left_significand.trailing_zeros();
+    let right_trailing_zeros = right_significand.trailing_zeros();
+    left_significand >> left_trailing_zeros == right_significand >> right_trailing_zeros
+        && left_exponent + left_trailing_zeros as i32
+            == right_exponent + right_trailing_zeros as i32
+}
+
+fn subnormal_quotient_is_exact(numerator: f64, denominator: f64, quotient: f64) -> bool {
+    debug_assert!(numerator.is_finite() && denominator.is_finite());
+    debug_assert!(numerator != 0.0 && denominator != 0.0);
+    debug_assert!(quotient.abs() < f64::MIN_POSITIVE);
+    if quotient == 0.0 {
+        return false;
+    }
+
+    let (numerator_significand, numerator_exponent) = positive_finite_parts(numerator.abs());
+    let (denominator_significand, denominator_exponent) = positive_finite_parts(denominator.abs());
+    let (quotient_significand, quotient_exponent) = positive_finite_parts(quotient.abs());
+    binary_values_are_equal(
+        u128::from(numerator_significand),
+        numerator_exponent,
+        u128::from(denominator_significand) * u128::from(quotient_significand),
+        denominator_exponent + quotient_exponent,
+    )
+}
+
+fn compensated_dot_with_roundoff_bound(left: &[f64], right: &[f64]) -> (f64, f64) {
+    let mut sum = 0.0_f64;
+    let mut correction = 0.0_f64;
+    let mut absolute_product_sum = 0.0_f64;
+    let mut subnormal_product_count = 0_usize;
+    for (left, right) in left.iter().zip(right) {
+        let product = left * right;
+        if *left != 0.0 && *right != 0.0 && product.abs() < f64::MIN_POSITIVE {
+            subnormal_product_count = subnormal_product_count.saturating_add(1);
+        }
+        absolute_product_sum += product.abs();
+        let next = sum + product;
+        if sum.abs() >= product.abs() {
+            correction += (sum - next) + product;
+        } else {
+            correction += (product - next) + sum;
+        }
+        sum = next;
+    }
+    let value = sum + correction;
+    let summation_roundoff_bound =
+        4.0 * f64::EPSILON * (left.len() as f64 + 1.0) * absolute_product_sum;
+    let subnormal_product_roundoff_bound = (subnormal_product_count as f64) * f64::from_bits(1);
+    let roundoff_bound = summation_roundoff_bound + subnormal_product_roundoff_bound;
+    (value, roundoff_bound)
+}
+
+/// One signed, predeclared intervention dose applied to a target direction and
+/// every matched orthogonal control direction.
+///
+/// This is a state-construction record only. It contains no model outcome,
+/// causal verdict, acceptance threshold, or execution authorization.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MatchedInterventionDoseState {
+    alpha: f64,
+    target_state: Vec<f64>,
+    matched_control_states: Vec<Vec<f64>>,
+}
+
+impl MatchedInterventionDoseState {
+    #[must_use]
+    pub const fn alpha(&self) -> f64 {
+        self.alpha
+    }
+
+    #[must_use]
+    pub fn target_state(&self) -> &[f64] {
+        &self.target_state
+    }
+
+    #[must_use]
+    pub fn matched_control_states(&self) -> &[Vec<f64>] {
+        &self.matched_control_states
+    }
+}
+
+fn normalized_intervention_direction(
+    direction: &[f64],
+    width: usize,
+    tolerance: f64,
+) -> Result<Vec<f64>, ConceptGeometryError> {
+    validate_vector(direction)?;
+    if direction.len() != width {
+        return Err(ConceptGeometryError::DimensionMismatch);
+    }
+    if exact_squared_norm_at_most(direction, tolerance) {
+        return Err(ConceptGeometryError::ZeroNorm);
+    }
+    let (direction_scale, scaled_direction_norm) = scaled_euclidean_norm_parts(direction);
+    direction
+        .iter()
+        .map(|value| {
+            let scaled = value / direction_scale;
+            let scaled_is_inexact_subnormal = *value != 0.0
+                && scaled.abs() < f64::MIN_POSITIVE
+                && !subnormal_quotient_is_exact(*value, direction_scale, scaled);
+            let normalized = scaled / scaled_direction_norm;
+            let normalized_is_inexact_subnormal = scaled != 0.0
+                && normalized.abs() < f64::MIN_POSITIVE
+                && !subnormal_quotient_is_exact(scaled, scaled_direction_norm, normalized);
+            if scaled_is_inexact_subnormal || normalized_is_inexact_subnormal {
+                Err(ConceptGeometryError::UnrepresentableInterventionDose)
+            } else {
+                Ok(normalized)
+            }
+        })
+        .collect()
+}
+
+fn intervention_state(
+    baseline: &[f64],
+    direction: &[f64],
+    alpha: f64,
+) -> Result<Vec<f64>, ConceptGeometryError> {
+    let mut state = Vec::new();
+    state
+        .try_reserve_exact(baseline.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    for (value, direction) in baseline.iter().zip(direction) {
+        let intervened = value + alpha * direction;
+        if !intervened.is_finite() {
+            return Err(ConceptGeometryError::NonFiniteValue);
+        }
+        state.push(intervened);
+    }
+    let achieved_displacement = state
+        .iter()
+        .zip(baseline)
+        .zip(direction)
+        .map(|((intervened, original), direction)| {
+            let achieved = intervened - original;
+            let requested = alpha * direction;
+            let inexact_subnormal_product = alpha != 0.0
+                && *direction != 0.0
+                && requested.abs() < f64::MIN_POSITIVE
+                && !subnormal_product_is_exact(alpha, *direction, requested);
+            let coordinate_roundoff_bound =
+                64.0 * f64::EPSILON * (baseline.len() as f64 + 1.0) * requested.abs();
+            if inexact_subnormal_product
+                || !achieved.is_finite()
+                || !requested.is_finite()
+                || (achieved - requested).abs() > coordinate_roundoff_bound
+            {
+                Err(ConceptGeometryError::UnrepresentableInterventionDose)
+            } else {
+                Ok(achieved)
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let requested_norm = alpha.abs();
+    let (achieved_scale, achieved_scaled_norm) =
+        scaled_euclidean_norm_parts(&achieved_displacement);
+    let relative_roundoff_bound = 64.0 * f64::EPSILON * (baseline.len() as f64 + 1.0);
+    let achieved_to_requested = if requested_norm == 0.0 {
+        if achieved_scale == 0.0 {
+            1.0
+        } else {
+            f64::INFINITY
+        }
+    } else {
+        (achieved_scale / requested_norm) * achieved_scaled_norm
+    };
+    if !achieved_to_requested.is_finite()
+        || (achieved_to_requested - 1.0).abs() > relative_roundoff_bound
+    {
+        return Err(ConceptGeometryError::UnrepresentableInterventionDose);
+    }
+    Ok(state)
+}
+
+/// Construct equal-norm target/control intervention states for signed doses.
+///
+/// Alpha values must be finite and strictly increasing in the exact order
+/// supplied by the caller. Every direction is normalized before applying the
+/// dose, so each target/control displacement has norm `abs(alpha)` up to
+/// floating-point arithmetic. Controls must be orthogonal to the target within
+/// the separately declared absolute dot-product bound.
+///
+/// This Development primitive does not evaluate the states, choose an alpha
+/// grid, select tolerances, or infer a causal result.
+pub fn matched_intervention_dose_states(
+    baseline: &[f64],
+    target_direction: &[f64],
+    matched_control_directions: &[Vec<f64>],
+    alphas: &[f64],
+    tolerance: f64,
+    orthogonality_tolerance: f64,
+) -> Result<Vec<MatchedInterventionDoseState>, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    valid_tolerance(orthogonality_tolerance)?;
+    validate_vector(baseline)?;
+    if matched_control_directions.is_empty() {
+        return Err(ConceptGeometryError::EmptyControls);
+    }
+    if alphas.is_empty() {
+        return Err(ConceptGeometryError::EmptyInterventionAlphaGrid);
+    }
+    if alphas.iter().any(|alpha| !alpha.is_finite())
+        || alphas.windows(2).any(|pair| pair[0] >= pair[1])
+    {
+        return Err(ConceptGeometryError::InvalidInterventionAlphaGrid);
+    }
+
+    let target = normalized_intervention_direction(target_direction, baseline.len(), tolerance)?;
+    let mut controls = Vec::new();
+    controls
+        .try_reserve_exact(matched_control_directions.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    for control in matched_control_directions {
+        let control = normalized_intervention_direction(control, baseline.len(), tolerance)?;
+        let (overlap, overlap_roundoff_bound) =
+            compensated_dot_with_roundoff_bound(&target, &control);
+        let overlap = overlap.abs();
+        if !overlap.is_finite()
+            || !overlap_roundoff_bound.is_finite()
+            || overlap + overlap_roundoff_bound > orthogonality_tolerance
+        {
+            return Err(ConceptGeometryError::NonOrthogonalControl);
+        }
+        controls.push(control);
+    }
+
+    let mut doses = Vec::new();
+    doses
+        .try_reserve_exact(alphas.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    for &alpha in alphas {
+        let target_state = intervention_state(baseline, &target, alpha)?;
+        let mut matched_control_states = Vec::new();
+        matched_control_states
+            .try_reserve_exact(controls.len())
+            .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+        for control in &controls {
+            matched_control_states.push(intervention_state(baseline, control, alpha)?);
+        }
+        doses.push(MatchedInterventionDoseState {
+            alpha,
+            target_state,
+            matched_control_states,
+        });
+    }
+    Ok(doses)
+}
+
 /// Target intervention effect minus the mean matched-control effect.
 pub fn causal_novelty_gap(
     target_effect: f64,
@@ -2862,6 +3269,318 @@ mod tests {
     fn causal_and_interaction_helpers_keep_semantics_separate() {
         close(causal_novelty_gap(0.75, &[0.0, 0.25]).unwrap(), 0.625);
         close(interaction_residual(1.0, 1.0, 2.5).unwrap(), 0.5);
+    }
+
+    #[test]
+    fn matched_intervention_doses_preserve_signed_equal_norm_displacements() {
+        let baseline = [10.0, 20.0, 30.0];
+        let controls = vec![vec![0.0, 3.0, 0.0], vec![0.0, 0.0, -4.0]];
+        let doses = matched_intervention_dose_states(
+            &baseline,
+            &[2.0, 0.0, 0.0],
+            &controls,
+            &[-1.0, 0.0, 2.0],
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+
+        assert_eq!(doses.len(), 3);
+        assert_eq!(doses[0].alpha(), -1.0);
+        assert_eq!(doses[0].target_state(), &[9.0, 20.0, 30.0]);
+        assert_eq!(
+            doses[0].matched_control_states(),
+            &[vec![10.0, 19.0, 30.0], vec![10.0, 20.0, 31.0]]
+        );
+        assert_eq!(doses[1].target_state(), &baseline);
+        assert_eq!(doses[2].target_state(), &[12.0, 20.0, 30.0]);
+
+        for dose in doses {
+            let target_delta = dose
+                .target_state()
+                .iter()
+                .zip(baseline)
+                .map(|(state, base)| state - base)
+                .collect::<Vec<_>>();
+            close(norm(&target_delta), dose.alpha().abs());
+            for control_state in dose.matched_control_states() {
+                let control_delta = control_state
+                    .iter()
+                    .zip(baseline)
+                    .map(|(state, base)| state - base)
+                    .collect::<Vec<_>>();
+                close(norm(&control_delta), dose.alpha().abs());
+            }
+        }
+    }
+
+    #[test]
+    fn matched_intervention_doses_reject_invalid_plans() {
+        let baseline = [0.0, 0.0];
+        let controls = vec![vec![0.0, 1.0]];
+        assert_eq!(
+            matched_intervention_dose_states(
+                &baseline,
+                &[1.0, 0.0],
+                &controls,
+                &[],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::EmptyInterventionAlphaGrid)
+        );
+        for invalid_alphas in [vec![0.0, 0.0], vec![1.0, -1.0], vec![0.0, f64::INFINITY]] {
+            assert_eq!(
+                matched_intervention_dose_states(
+                    &baseline,
+                    &[1.0, 0.0],
+                    &controls,
+                    &invalid_alphas,
+                    DEFAULT_TOLERANCE,
+                    DEFAULT_TOLERANCE,
+                ),
+                Err(ConceptGeometryError::InvalidInterventionAlphaGrid)
+            );
+        }
+        assert_eq!(
+            matched_intervention_dose_states(
+                &baseline,
+                &[1.0, 0.0],
+                &[],
+                &[-1.0, 0.0, 1.0],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::EmptyControls)
+        );
+        assert_eq!(
+            matched_intervention_dose_states(
+                &baseline,
+                &[1.0, 0.0],
+                &[vec![1.0, 1.0]],
+                &[-1.0, 0.0, 1.0],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::NonOrthogonalControl)
+        );
+        let small_component = 10.0_f64.powf(-8.5);
+        let cancelling_component = ((1.0 - small_component * small_component) / 2.0).sqrt();
+        assert_eq!(
+            matched_intervention_dose_states(
+                &[0.0, 0.0, 0.0],
+                &[cancelling_component, small_component, cancelling_component],
+                &[vec![
+                    cancelling_component,
+                    small_component,
+                    -cancelling_component,
+                ]],
+                &[1.0],
+                DEFAULT_TOLERANCE,
+                1.0e-18,
+            ),
+            Err(ConceptGeometryError::NonOrthogonalControl)
+        );
+        let mut underflow_target = vec![1.5e-162; 10_002];
+        underflow_target[0] = 1.0;
+        underflow_target[1] = 0.0;
+        let mut underflow_control = vec![1.5e-162; 10_002];
+        underflow_control[0] = 0.0;
+        underflow_control[1] = 1.0;
+        assert_eq!(
+            matched_intervention_dose_states(
+                &vec![0.0; 10_002],
+                &underflow_target,
+                &[underflow_control],
+                &[1.0],
+                DEFAULT_TOLERANCE,
+                1.0e-320,
+            ),
+            Err(ConceptGeometryError::NonOrthogonalControl)
+        );
+        assert_eq!(
+            matched_intervention_dose_states(
+                &[f64::MAX, 0.0],
+                &[1.0, 0.0],
+                &controls,
+                &[f64::MAX],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::NonFiniteValue)
+        );
+        assert_eq!(
+            matched_intervention_dose_states(
+                &[1.0, 0.0],
+                &[1.0, 0.0],
+                &controls,
+                &[1.0e-16],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::UnrepresentableInterventionDose)
+        );
+        let mut high_dynamic_range_target = vec![4.0e-16; 10];
+        high_dynamic_range_target[0] = f64::MAX;
+        let mut high_dynamic_range_control = vec![1.0; 10];
+        high_dynamic_range_control[0] = 0.0;
+        assert_eq!(
+            matched_intervention_dose_states(
+                &[0.0; 10],
+                &high_dynamic_range_target,
+                &[high_dynamic_range_control],
+                &[1.0],
+                DEFAULT_TOLERANCE,
+                f64::from_bits(1),
+            ),
+            Err(ConceptGeometryError::UnrepresentableInterventionDose)
+        );
+        assert_eq!(
+            matched_intervention_dose_states(
+                &[0.0, 0.0],
+                &[f64::MAX, 6.66e-16],
+                &[vec![6.66e-16, -f64::MAX]],
+                &[f64::MAX],
+                1.0e-320,
+                1.0e-320,
+            ),
+            Err(ConceptGeometryError::UnrepresentableInterventionDose)
+        );
+        let minimum_subnormal = f64::from_bits(1);
+        assert_eq!(
+            matched_intervention_dose_states(
+                &[0.0, 0.0],
+                &[0.4, 0.84_f64.sqrt()],
+                &[vec![0.84_f64.sqrt(), -0.4]],
+                &[minimum_subnormal],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::UnrepresentableInterventionDose)
+        );
+        assert_eq!(
+            matched_intervention_dose_states(
+                &[9_007_199_254_740_992.0, 2_251_799_813_685_248.0, 0.0],
+                &[0.6, 0.8, 0.0],
+                &[vec![0.0, 0.0, 1.0]],
+                &[1.0],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::UnrepresentableInterventionDose)
+        );
+    }
+
+    #[test]
+    fn matched_intervention_doses_accept_representable_large_finite_magnitudes() {
+        let minimum_subnormal = f64::from_bits(1);
+        let subnormal_direction = matched_intervention_dose_states(
+            &[0.0, 0.0],
+            &[minimum_subnormal, minimum_subnormal],
+            &[vec![minimum_subnormal, -minimum_subnormal]],
+            &[1.0],
+            minimum_subnormal,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+        assert_eq!(subnormal_direction.len(), 1);
+
+        let exact_subnormal = f64::MIN_POSITIVE / 2.0;
+        let exact_subnormal_dose = matched_intervention_dose_states(
+            &[0.0, 0.0],
+            &[1.0, exact_subnormal],
+            &[vec![exact_subnormal, -1.0]],
+            &[1.0],
+            minimum_subnormal,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+        assert_eq!(
+            exact_subnormal_dose[0].target_state(),
+            &[1.0, exact_subnormal]
+        );
+        assert_eq!(
+            exact_subnormal_dose[0].matched_control_states(),
+            &[vec![exact_subnormal, -1.0]]
+        );
+
+        let threshold = 1.0e-12;
+        let small_component = threshold * 2.0_f64.powi(-27);
+        let complete_norm_direction = matched_intervention_dose_states(
+            &[0.0, 0.0],
+            &[threshold, small_component],
+            &[vec![-small_component, threshold]],
+            &[0.0],
+            threshold,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+        assert_eq!(complete_norm_direction.len(), 1);
+
+        let large_direction = matched_intervention_dose_states(
+            &[0.0, 0.0],
+            &[1.0e200, 0.0],
+            &[vec![0.0, 1.0]],
+            &[1.0],
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+        assert_eq!(large_direction[0].target_state(), &[1.0, 0.0]);
+
+        let large_dose = matched_intervention_dose_states(
+            &[0.0, 0.0],
+            &[1.0, 0.0],
+            &[vec![0.0, 1.0]],
+            &[1.0e200],
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+        assert_eq!(large_dose[0].target_state(), &[1.0e200, 0.0]);
+        assert_eq!(
+            large_dose[0].matched_control_states(),
+            &[vec![0.0, 1.0e200]]
+        );
+
+        let maximal_directions = matched_intervention_dose_states(
+            &[0.0, 0.0],
+            &[f64::MAX, f64::MAX],
+            &[vec![f64::MAX, -f64::MAX]],
+            &[1.0],
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+        let coordinate = 1.0 / 2.0_f64.sqrt();
+        close(maximal_directions[0].target_state()[0], coordinate);
+        close(maximal_directions[0].target_state()[1], coordinate);
+        close(
+            maximal_directions[0].matched_control_states()[0][0],
+            coordinate,
+        );
+        close(
+            maximal_directions[0].matched_control_states()[0][1],
+            -coordinate,
+        );
+
+        let near_maximum_dose = f64::from_bits(f64::MAX.to_bits() - 1);
+        let maximal_dose = matched_intervention_dose_states(
+            &[0.0, 0.0],
+            &[5.0, 7.0],
+            &[vec![7.0, -5.0]],
+            &[near_maximum_dose],
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+        assert!(
+            maximal_dose[0]
+                .target_state()
+                .iter()
+                .chain(maximal_dose[0].matched_control_states()[0].iter())
+                .all(|value| value.is_finite())
+        );
     }
 
     #[test]
