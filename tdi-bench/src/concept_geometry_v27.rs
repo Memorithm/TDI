@@ -1924,8 +1924,22 @@ fn intervention_state(
     let achieved_displacement = state
         .iter()
         .zip(baseline)
-        .map(|(intervened, original)| intervened - original)
-        .collect::<Vec<_>>();
+        .zip(direction)
+        .map(|((intervened, original), direction)| {
+            let achieved = intervened - original;
+            let requested = alpha * direction;
+            let coordinate_roundoff_bound =
+                64.0 * f64::EPSILON * (baseline.len() as f64 + 1.0) * requested.abs();
+            if !achieved.is_finite()
+                || !requested.is_finite()
+                || (achieved - requested).abs() > coordinate_roundoff_bound
+            {
+                Err(ConceptGeometryError::UnrepresentableInterventionDose)
+            } else {
+                Ok(achieved)
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     let achieved_norm = norm(&achieved_displacement);
     let requested_norm = alpha.abs();
     let relative_roundoff_bound =
@@ -3131,6 +3145,17 @@ mod tests {
                 &[1.0, 0.0],
                 &controls,
                 &[1.0e-16],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::UnrepresentableInterventionDose)
+        );
+        assert_eq!(
+            matched_intervention_dose_states(
+                &[9_007_199_254_740_992.0, 2_251_799_813_685_248.0, 0.0],
+                &[0.6, 0.8, 0.0],
+                &[vec![0.0, 0.0, 1.0]],
+                &[1.0],
                 DEFAULT_TOLERANCE,
                 DEFAULT_TOLERANCE,
             ),
