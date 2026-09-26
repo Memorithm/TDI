@@ -1874,11 +1874,6 @@ fn scaled_euclidean_norm_parts(values: &[f64]) -> (f64, f64) {
     (scale, scaled_sum.sqrt())
 }
 
-fn stable_euclidean_norm(values: &[f64]) -> f64 {
-    let (scale, scaled_norm) = scaled_euclidean_norm_parts(values);
-    scale * scaled_norm
-}
-
 /// One signed, predeclared intervention dose applied to a target direction and
 /// every matched orthogonal control direction.
 ///
@@ -1962,12 +1957,21 @@ fn intervention_state(
             }
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let achieved_norm = stable_euclidean_norm(&achieved_displacement);
     let requested_norm = alpha.abs();
-    let relative_roundoff_bound =
-        64.0 * f64::EPSILON * (baseline.len() as f64 + 1.0) * requested_norm;
-    if !achieved_norm.is_finite()
-        || (achieved_norm - requested_norm).abs() > relative_roundoff_bound
+    let (achieved_scale, achieved_scaled_norm) =
+        scaled_euclidean_norm_parts(&achieved_displacement);
+    let relative_roundoff_bound = 64.0 * f64::EPSILON * (baseline.len() as f64 + 1.0);
+    let achieved_to_requested = if requested_norm == 0.0 {
+        if achieved_scale == 0.0 {
+            1.0
+        } else {
+            f64::INFINITY
+        }
+    } else {
+        (achieved_scale / requested_norm) * achieved_scaled_norm
+    };
+    if !achieved_to_requested.is_finite()
+        || (achieved_to_requested - 1.0).abs() > relative_roundoff_bound
     {
         return Err(ConceptGeometryError::UnrepresentableInterventionDose);
     }
@@ -3232,6 +3236,24 @@ mod tests {
         close(
             maximal_directions[0].matched_control_states()[0][1],
             -coordinate,
+        );
+
+        let near_maximum_dose = f64::from_bits(f64::MAX.to_bits() - 1);
+        let maximal_dose = matched_intervention_dose_states(
+            &[0.0, 0.0],
+            &[5.0, 7.0],
+            &[vec![7.0, -5.0]],
+            &[near_maximum_dose],
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+        assert!(
+            maximal_dose[0]
+                .target_state()
+                .iter()
+                .chain(maximal_dose[0].matched_control_states()[0].iter())
+                .all(|value| value.is_finite())
         );
     }
 
