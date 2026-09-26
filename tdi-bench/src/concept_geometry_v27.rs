@@ -1896,8 +1896,7 @@ fn compensated_dot_with_roundoff_bound(left: &[f64], right: &[f64]) -> (f64, f64
     let value = sum + correction;
     let summation_roundoff_bound =
         4.0 * f64::EPSILON * (left.len() as f64 + 1.0) * absolute_product_sum;
-    let subnormal_product_roundoff_bound =
-        (subnormal_product_count as f64) * f64::from_bits(1);
+    let subnormal_product_roundoff_bound = (subnormal_product_count as f64) * f64::from_bits(1);
     let roundoff_bound = summation_roundoff_bound + subnormal_product_roundoff_bound;
     (value, roundoff_bound)
 }
