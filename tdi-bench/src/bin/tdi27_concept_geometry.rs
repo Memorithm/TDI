@@ -3,7 +3,7 @@
 use tdi_bench::concept_geometry_v27::{
     ConceptGeometryError, DEFAULT_TOLERANCE, DevelopmentResamplingPlan, DevelopmentSampleSizePoint,
     bootstrap_direction_stability, bootstrap_innovation_energy_summary,
-    bootstrap_projection_method_differentials, causal_novelty_gap,
+    bootstrap_projection_method_differentials, causal_novelty_gap, compare_cross_layer_transport,
     compare_innovation_energy_to_shuffled_null, interaction_residual,
     matched_intervention_dose_states, mean_difference, projection_method_differential, residualize,
     sample_size_sensitivity_grid, sequential_accepted_rank_summary, sequential_innovations,
@@ -49,6 +49,18 @@ fn run() -> Result<(), ConceptGeometryError> {
         unit,
         &[vec![0.0, 0.0, 1.0]],
         &[-1.0, 0.0, 1.0],
+        DEFAULT_TOLERANCE,
+        DEFAULT_TOLERANCE,
+    )?;
+    let cross_layer_transport = compare_cross_layer_transport(
+        unit,
+        &[0.0, unit[1], unit[0]],
+        &[
+            vec![0.0, 0.0, 1.0],
+            vec![0.0, 1.0, 0.0],
+            vec![1.0, 0.0, 0.0],
+        ],
+        DEFAULT_TOLERANCE,
         DEFAULT_TOLERANCE,
         DEFAULT_TOLERANCE,
     )?;
@@ -171,6 +183,18 @@ fn run() -> Result<(), ConceptGeometryError> {
         intervention_doses[0].matched_control_states().len()
     );
     println!("intervention_alpha_grid=-1.000000000000,0.000000000000,1.000000000000");
+    println!(
+        "cross_layer_transport_signed_cosine={:.12}",
+        cross_layer_transport.signed_cosine()
+    );
+    println!(
+        "cross_layer_transport_max_abs_coordinate_difference={:.17e}",
+        cross_layer_transport.max_abs_coordinate_difference()
+    );
+    println!(
+        "cross_layer_transport_max_orthogonality_deviation={:.17e}",
+        cross_layer_transport.max_alignment_orthogonality_deviation()
+    );
     println!("orthogonal_interaction_residual={interaction:.12}");
     println!(
         "sequential_innovation_ratios={:.12},{:.12},{:.12}",
