@@ -2,9 +2,11 @@
 
 use tdi_bench::concept_geometry_v27::{
     ConceptGeometryError, DEFAULT_TOLERANCE, DevelopmentResamplingPlan, DevelopmentSampleSizePoint,
-    bootstrap_direction_stability, bootstrap_innovation_energy_summary, causal_novelty_gap,
-    compare_innovation_energy_to_shuffled_null, interaction_residual, mean_difference, residualize,
-    sample_size_sensitivity_grid, sequential_accepted_rank_summary, sequential_innovations,
+    bootstrap_direction_stability, bootstrap_innovation_energy_summary,
+    bootstrap_projection_method_differentials, causal_novelty_gap,
+    compare_innovation_energy_to_shuffled_null, interaction_residual, mean_difference,
+    projection_method_differential, residualize, sample_size_sensitivity_grid,
+    sequential_accepted_rank_summary, sequential_innovations,
 };
 
 fn response(state: &[f64]) -> f64 {
@@ -75,6 +77,20 @@ fn run() -> Result<(), ConceptGeometryError> {
         &resampling_control,
         &known_basis,
         DEFAULT_TOLERANCE,
+        resampling_plan,
+    )?;
+    let differential_basis = vec![vec![1.0, 1.0, 0.0], vec![1.0, 1.0 + 1.0e-10, 0.0]];
+    let projection_vector = [3.0, 4.0, 2.0];
+    let projection_differential =
+        projection_method_differential(&projection_vector, &differential_basis, 1.0e-12, 1.0e-8)?;
+    let projection_positive = vec![projection_vector.to_vec(); 4];
+    let projection_control = vec![vec![0.0, 0.0, 0.0]; 4];
+    let bootstrap_projection_differentials = bootstrap_projection_method_differentials(
+        &projection_positive,
+        &projection_control,
+        &differential_basis,
+        1.0e-12,
+        1.0e-8,
         resampling_plan,
     )?;
     let null_summary = compare_innovation_energy_to_shuffled_null(
@@ -170,6 +186,21 @@ fn run() -> Result<(), ConceptGeometryError> {
             .iter()
             .filter(|value| value.is_none())
             .count()
+    );
+    println!(
+        "projection_method_max_abs_residual_difference={:.17e}",
+        projection_differential.max_abs_residual_difference()
+    );
+    println!(
+        "projection_method_bootstrap_replicates={}",
+        bootstrap_projection_differentials.len()
+    );
+    println!(
+        "projection_method_bootstrap_max_abs_residual_difference={:.17e}",
+        bootstrap_projection_differentials
+            .iter()
+            .map(|report| report.differential().max_abs_residual_difference())
+            .fold(0.0, f64::max)
     );
     println!("null_total_replicates={}", null_summary.total_replicates());
     println!(
