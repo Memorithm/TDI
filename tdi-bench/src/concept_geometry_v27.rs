@@ -1874,6 +1874,37 @@ fn scaled_euclidean_norm_parts(values: &[f64]) -> (f64, f64) {
     (scale, scaled_sum.sqrt())
 }
 
+fn positive_finite_parts(value: f64) -> (u64, i32) {
+    debug_assert!(value.is_finite() && value > 0.0);
+    let bits = value.to_bits();
+    let stored_exponent = ((bits >> 52) & 0x7ff) as i32;
+    let fraction = bits & ((1_u64 << 52) - 1);
+    if stored_exponent == 0 {
+        (fraction, -1074)
+    } else {
+        ((1_u64 << 52) | fraction, stored_exponent - 1023 - 52)
+    }
+}
+
+fn positive_product_at_most(left: f64, right: f64, limit: f64) -> bool {
+    let (left_significand, left_exponent) = positive_finite_parts(left);
+    let (right_significand, right_exponent) = positive_finite_parts(right);
+    let (limit_significand, limit_exponent) = positive_finite_parts(limit);
+    let product_significand = u128::from(left_significand) * u128::from(right_significand);
+    let product_exponent = left_exponent + right_exponent;
+    let product_bits = u128::BITS - product_significand.leading_zeros();
+    let limit_bits = u64::BITS - limit_significand.leading_zeros();
+    let product_top_exponent = product_exponent + product_bits as i32 - 1;
+    let limit_top_exponent = limit_exponent + limit_bits as i32 - 1;
+    if product_top_exponent != limit_top_exponent {
+        return product_top_exponent < limit_top_exponent;
+    }
+    let common_exponent = product_exponent.min(limit_exponent);
+    let product = product_significand << (product_exponent - common_exponent) as u32;
+    let limit = u128::from(limit_significand) << (limit_exponent - common_exponent) as u32;
+    product <= limit
+}
+
 fn compensated_dot_with_roundoff_bound(left: &[f64], right: &[f64]) -> (f64, f64) {
     let mut sum = 0.0_f64;
     let mut correction = 0.0_f64;
@@ -1940,7 +1971,9 @@ fn normalized_intervention_direction(
         return Err(ConceptGeometryError::DimensionMismatch);
     }
     let (direction_scale, scaled_direction_norm) = scaled_euclidean_norm_parts(direction);
-    if direction_scale == 0.0 || direction_scale <= tolerance / scaled_direction_norm {
+    if direction_scale == 0.0
+        || positive_product_at_most(direction_scale, scaled_direction_norm, tolerance)
+    {
         return Err(ConceptGeometryError::ZeroNorm);
     }
     Ok(direction
@@ -1972,9 +2005,12 @@ fn intervention_state(
         .map(|((intervened, original), direction)| {
             let achieved = intervened - original;
             let requested = alpha * direction;
+            let multiplication_underflow =
+                alpha != 0.0 && *direction != 0.0 && requested.abs() < f64::MIN_POSITIVE;
             let coordinate_roundoff_bound =
                 64.0 * f64::EPSILON * (baseline.len() as f64 + 1.0) * requested.abs();
-            if !achieved.is_finite()
+            if multiplication_underflow
+                || !achieved.is_finite()
                 || !requested.is_finite()
                 || (achieved - requested).abs() > coordinate_roundoff_bound
             {
@@ -3242,6 +3278,18 @@ mod tests {
             ),
             Err(ConceptGeometryError::UnrepresentableInterventionDose)
         );
+        let minimum_subnormal = f64::from_bits(1);
+        assert_eq!(
+            matched_intervention_dose_states(
+                &[0.0, 0.0],
+                &[0.4, 0.84_f64.sqrt()],
+                &[vec![0.84_f64.sqrt(), -0.4]],
+                &[minimum_subnormal],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::UnrepresentableInterventionDose)
+        );
         assert_eq!(
             matched_intervention_dose_states(
                 &[9_007_199_254_740_992.0, 2_251_799_813_685_248.0, 0.0],
@@ -3257,6 +3305,18 @@ mod tests {
 
     #[test]
     fn matched_intervention_doses_accept_representable_large_finite_magnitudes() {
+        let minimum_subnormal = f64::from_bits(1);
+        let subnormal_direction = matched_intervention_dose_states(
+            &[0.0, 0.0],
+            &[minimum_subnormal, minimum_subnormal],
+            &[vec![minimum_subnormal, -minimum_subnormal]],
+            &[1.0],
+            minimum_subnormal,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+        assert_eq!(subnormal_direction.len(), 1);
+
         let large_direction = matched_intervention_dose_states(
             &[0.0, 0.0],
             &[1.0e200, 0.0],
