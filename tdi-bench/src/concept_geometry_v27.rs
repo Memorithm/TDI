@@ -1904,6 +1904,25 @@ fn normalized_intervention_direction(
         .collect())
 }
 
+fn intervention_state(
+    baseline: &[f64],
+    direction: &[f64],
+    alpha: f64,
+) -> Result<Vec<f64>, ConceptGeometryError> {
+    let mut state = Vec::new();
+    state
+        .try_reserve_exact(baseline.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    for (value, direction) in baseline.iter().zip(direction) {
+        let intervened = value + alpha * direction;
+        if !intervened.is_finite() {
+            return Err(ConceptGeometryError::NonFiniteValue);
+        }
+        state.push(intervened);
+    }
+    Ok(state)
+}
+
 /// Construct equal-norm target/control intervention states for signed doses.
 ///
 /// Alpha values must be finite and strictly increasing in the exact order
@@ -1956,21 +1975,14 @@ pub fn matched_intervention_dose_states(
         .try_reserve_exact(alphas.len())
         .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
     for &alpha in alphas {
-        let target_state = baseline
-            .iter()
-            .zip(&target)
-            .map(|(value, direction)| value + alpha * direction)
-            .collect();
-        let matched_control_states = controls
-            .iter()
-            .map(|control| {
-                baseline
-                    .iter()
-                    .zip(control)
-                    .map(|(value, direction)| value + alpha * direction)
-                    .collect()
-            })
-            .collect();
+        let target_state = intervention_state(baseline, &target, alpha)?;
+        let mut matched_control_states = Vec::new();
+        matched_control_states
+            .try_reserve_exact(controls.len())
+            .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+        for control in &controls {
+            matched_control_states.push(intervention_state(baseline, control, alpha)?);
+        }
         doses.push(MatchedInterventionDoseState {
             alpha,
             target_state,
@@ -3086,6 +3098,17 @@ mod tests {
                 DEFAULT_TOLERANCE,
             ),
             Err(ConceptGeometryError::NonOrthogonalControl)
+        );
+        assert_eq!(
+            matched_intervention_dose_states(
+                &[f64::MAX, 0.0],
+                &[1.0, 0.0],
+                &controls,
+                &[f64::MAX],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::NonFiniteValue)
         );
     }
 
