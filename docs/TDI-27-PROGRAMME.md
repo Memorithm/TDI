@@ -276,7 +276,9 @@ against `alpha * direction` and its norm is checked against the requested norm,
 both under dimension-scaled machine-roundoff bounds. A dose lost against a
 baseline coordinate's ULP, or rotated by heterogeneous coordinate ULPs, thus
 fails closed rather than silently breaking target/control matching. It does
-not run a model, inspect outcomes, choose controls or doses, authorize
+so using a scaled Euclidean norm that does not reject a representable finite
+direction or dose merely because squaring its coordinates would overflow. It
+does not run a model, inspect outcomes, choose controls or doses, authorize
 actuation, or infer a causal or scientific result.
 
 ### TDI-27.4 — cross-layer transport
