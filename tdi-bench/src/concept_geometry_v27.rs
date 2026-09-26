@@ -2001,6 +2001,38 @@ fn subnormal_product_is_exact(left: f64, right: f64, product: f64) -> bool {
     exact_subnormal_units == Some(u128::from(product.abs().to_bits()))
 }
 
+fn binary_values_are_equal(
+    left_significand: u128,
+    left_exponent: i32,
+    right_significand: u128,
+    right_exponent: i32,
+) -> bool {
+    let left_trailing_zeros = left_significand.trailing_zeros();
+    let right_trailing_zeros = right_significand.trailing_zeros();
+    left_significand >> left_trailing_zeros == right_significand >> right_trailing_zeros
+        && left_exponent + left_trailing_zeros as i32
+            == right_exponent + right_trailing_zeros as i32
+}
+
+fn subnormal_quotient_is_exact(numerator: f64, denominator: f64, quotient: f64) -> bool {
+    debug_assert!(numerator.is_finite() && denominator.is_finite());
+    debug_assert!(numerator != 0.0 && denominator != 0.0);
+    debug_assert!(quotient.abs() < f64::MIN_POSITIVE);
+    if quotient == 0.0 {
+        return false;
+    }
+
+    let (numerator_significand, numerator_exponent) = positive_finite_parts(numerator.abs());
+    let (denominator_significand, denominator_exponent) = positive_finite_parts(denominator.abs());
+    let (quotient_significand, quotient_exponent) = positive_finite_parts(quotient.abs());
+    binary_values_are_equal(
+        u128::from(numerator_significand),
+        numerator_exponent,
+        u128::from(denominator_significand) * u128::from(quotient_significand),
+        denominator_exponent + quotient_exponent,
+    )
+}
+
 fn compensated_dot_with_roundoff_bound(left: &[f64], right: &[f64]) -> (f64, f64) {
     let mut sum = 0.0_f64;
     let mut correction = 0.0_f64;
@@ -2073,8 +2105,15 @@ fn normalized_intervention_direction(
     direction
         .iter()
         .map(|value| {
-            let normalized = (value / direction_scale) / scaled_direction_norm;
-            if *value != 0.0 && normalized == 0.0 {
+            let scaled = value / direction_scale;
+            let scaled_is_inexact_subnormal = *value != 0.0
+                && scaled.abs() < f64::MIN_POSITIVE
+                && !subnormal_quotient_is_exact(*value, direction_scale, scaled);
+            let normalized = scaled / scaled_direction_norm;
+            let normalized_is_inexact_subnormal = scaled != 0.0
+                && normalized.abs() < f64::MIN_POSITIVE
+                && !subnormal_quotient_is_exact(scaled, scaled_direction_norm, normalized);
+            if scaled_is_inexact_subnormal || normalized_is_inexact_subnormal {
                 Err(ConceptGeometryError::UnrepresentableInterventionDose)
             } else {
                 Ok(normalized)
@@ -3393,6 +3432,17 @@ mod tests {
                 &[1.0],
                 DEFAULT_TOLERANCE,
                 f64::from_bits(1),
+            ),
+            Err(ConceptGeometryError::UnrepresentableInterventionDose)
+        );
+        assert_eq!(
+            matched_intervention_dose_states(
+                &[0.0, 0.0],
+                &[f64::MAX, 6.66e-16],
+                &[vec![6.66e-16, -f64::MAX]],
+                &[f64::MAX],
+                1.0e-320,
+                1.0e-320,
             ),
             Err(ConceptGeometryError::UnrepresentableInterventionDose)
         );
