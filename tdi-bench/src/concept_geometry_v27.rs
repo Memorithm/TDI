@@ -1972,6 +1972,35 @@ fn exact_squared_norm_at_most(values: &[f64], tolerance: f64) -> bool {
     squared_norm.at_most(&squared_tolerance)
 }
 
+fn subnormal_product_is_exact(left: f64, right: f64, product: f64) -> bool {
+    debug_assert!(left.is_finite() && right.is_finite());
+    debug_assert!(left != 0.0 && right != 0.0);
+    debug_assert!(product.abs() < f64::MIN_POSITIVE);
+    if product == 0.0 {
+        return false;
+    }
+
+    let (left_significand, left_exponent) = positive_finite_parts(left.abs());
+    let (right_significand, right_exponent) = positive_finite_parts(right.abs());
+    let exact_significand = u128::from(left_significand) * u128::from(right_significand);
+    let subnormal_unit_shift = left_exponent + right_exponent + 1074;
+    let exact_subnormal_units = if subnormal_unit_shift >= 0 {
+        exact_significand.checked_shl(subnormal_unit_shift as u32)
+    } else {
+        let discarded_bits = (-subnormal_unit_shift) as u32;
+        if discarded_bits >= u128::BITS {
+            return false;
+        }
+        let discarded_mask = (1_u128 << discarded_bits) - 1;
+        if exact_significand & discarded_mask != 0 {
+            return false;
+        }
+        exact_significand.checked_shr(discarded_bits)
+    };
+
+    exact_subnormal_units == Some(u128::from(product.abs().to_bits()))
+}
+
 fn compensated_dot_with_roundoff_bound(left: &[f64], right: &[f64]) -> (f64, f64) {
     let mut sum = 0.0_f64;
     let mut correction = 0.0_f64;
@@ -2070,11 +2099,13 @@ fn intervention_state(
         .map(|((intervened, original), direction)| {
             let achieved = intervened - original;
             let requested = alpha * direction;
-            let multiplication_underflow =
-                alpha != 0.0 && *direction != 0.0 && requested.abs() < f64::MIN_POSITIVE;
+            let inexact_subnormal_product = alpha != 0.0
+                && *direction != 0.0
+                && requested.abs() < f64::MIN_POSITIVE
+                && !subnormal_product_is_exact(alpha, *direction, requested);
             let coordinate_roundoff_bound =
                 64.0 * f64::EPSILON * (baseline.len() as f64 + 1.0) * requested.abs();
-            if multiplication_underflow
+            if inexact_subnormal_product
                 || !achieved.is_finite()
                 || !requested.is_finite()
                 || (achieved - requested).abs() > coordinate_roundoff_bound
@@ -3381,6 +3412,25 @@ mod tests {
         )
         .unwrap();
         assert_eq!(subnormal_direction.len(), 1);
+
+        let exact_subnormal = f64::MIN_POSITIVE / 2.0;
+        let exact_subnormal_dose = matched_intervention_dose_states(
+            &[0.0, 0.0],
+            &[1.0, exact_subnormal],
+            &[vec![exact_subnormal, -1.0]],
+            &[1.0],
+            minimum_subnormal,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+        assert_eq!(
+            exact_subnormal_dose[0].target_state(),
+            &[1.0, exact_subnormal]
+        );
+        assert_eq!(
+            exact_subnormal_dose[0].matched_control_states(),
+            &[vec![exact_subnormal, -1.0]]
+        );
 
         let threshold = 1.0e-12;
         let small_component = threshold * 2.0_f64.powi(-27);
