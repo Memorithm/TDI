@@ -958,29 +958,62 @@ frozen_workflow_retirement_2026_09_25:
 
 tdi27_stage0_progress_2026_09_25:
   status: development_active
-  merged:
-    slice_01_deterministic_resampling_plan:
-      pull_request: https://github.com/Memorithm/TDI/pull/621
-      merge: bc5325948da7db4ef364294179424408bcfd466c
-  active:
-    slice_02_independent_P_C_bootstrap_streams:
-      pull_request: https://github.com/Memorithm/TDI/pull/623
-      semantics:
-        - preserve_each_group_original_cardinality_per_replicate
-        - separate_domain_separated_deterministic_streams
-        - changing_one_group_cardinality_does_not_perturb_other_group_draw_sequence
-        - no_interval_p_value_threshold_or_confirmatory_rule
-  prepared_not_yet_PR:
-    slice_03_innovation_energy_bootstrap:
-      branch: research/tdi27-03-innovation-bootstrap
-      semantics:
-        - recompute_signed_mean_contrast_per_independent_P_C_resample
-        - reuse_declared_nuisance_subspace
-        - explicitly_account_for_near_zero_contrast_replicates
-        - no_silent_drop_or_zero_coercion
+  source_of_truth: current_default_branch_and_exact_PR_records_override_this_coordination_snapshot
+  bootstrap:
+    pull_request: https://github.com/Memorithm/TDI/pull/617
+    qualified_head: 029e1c0c1a189d2c42ec1256f9b2371567cfa932
+    merge: 63fc5351b30f756a3a96c3db9b9c085249aabc78
+  tdi27_1_resampling_and_null_calibration:
+    status: all_15_declared_development_slices_merged
+    slices:
+      - {slice: 1, pull_request: 621, merge: bc5325948da7db4ef364294179424408bcfd466c}
+      - {slice: 2, pull_request: 623, merge: 0ec57cb6b67413da85fcba73473b07597079eaa0}
+      - {slice: 3, pull_request: 625, merge: 2d3835dbf28271e6128c018921891ed75da2a076}
+      - {slice: 4, pull_request: 626, merge: 32333b78959d1d8daabf0a27ef574b6994abe53e}
+      - {slice: 5, pull_request: 627, merge: 67e20d166b458a7d3198049a76e38b5d940dc556}
+      - {slice: 6, pull_request: 628, merge: 3798e915414a6a9f4f3ccd4f5ed098cf3f93d660}
+      - {slice: 7, pull_request: 629, merge: 9bd48c5f97f96b09297f64797f9d5485a495dbce}
+      - {slice: 8, pull_request: 630, merge: a34ef0d80d8151b27d8c509d21e5b99269895e12}
+      - {slice: 9, pull_request: 631, merge: 41e9a593ddce59637df18bcddcd7a416bb522854}
+      - {slice: 10, pull_request: 632, merge: a9d8f36da6028b60f78f121fe1ef5528ed17cf03}
+      - {slice: 11, pull_request: 633, merge: ced3752ad5ae740c4b1d87958728c4f8d92580e5}
+      - {slice: 12, pull_request: 634, merge: 14a0db9ee87be6d8d70fdb50ee749fd3b73d7e07}
+      - {slice: 13, pull_request: 635, merge: 1e98815f21ebbce6601def21346d0841107b5658}
+      - {slice: 14, pull_request: 636, merge: 03d52644f538a1a67a7e5c410aad5322af7f46d8}
+      - {slice: 15, pull_request: 637, merge: d0d4e173263ad1debe1e2f92fa954e4ddbed8dfe}
+    authority: development_software_evidence_only_no_confidence_significance_or_scientific_verdict
+  tdi27_2_projection_method_differential:
+    status: active
+    merged:
+      slice_01:
+        pull_request: https://github.com/Memorithm/TDI/pull/640
+        qualified_head: 132d803f4a838af26c0f6843eef80e07b037c08b
+        merge: a9601df352e1f2cecafd012406f943b81c94d837
+      slice_02:
+        pull_request: https://github.com/Memorithm/TDI/pull/641
+        qualified_head: 57a8654b310832383f9d963fb0703f124207229e
+        merge: 769d14f025ad040febc7c295c4bd4a6501b838e4
+    candidate:
+      slice_03:
+        pull_request: https://github.com/Memorithm/TDI/pull/642
+        head: 8e62e8f18487e4dfc354a63865cc3fb155223a1b
+        status: exact_head_CI_and_review_pending
+        semantics:
+          - require_MGS_and_Householder_agreement_on_normalized_direction_definedness
+          - separate_caller_declared_residual_and_direction_coordinate_bounds
+          - reject_any_semantic_or_coordinate_disagreement_fail_closed
+          - preserve_full_and_bootstrap_diagnostics_without_tolerance_selection
+  next_after_qualified_TDI_27_2:
+    - TDI_27_3_causal_intervention_harness
   batch_policy:
     batch_size: 15
-    current_batch: 1
-    merge_rule: required_exact_head_CI_green_before_merge
+    current_batch: TDI_27_2
+    merge_rule: required_exact_head_CI_green_and_material_review_clear_before_merge
     frozen_series_workers_must_remain_retired: true
-
+  boundaries:
+    development_execution_authorized: true
+    confirmatory_execution_authorized: false
+    final_execution_authorized: false
+    tolerance_or_threshold_selection_from_observed_results: false
+    synthetic_development_is_real_model_evidence: false
+    downstream_promotion_from_geometry_alone: false
