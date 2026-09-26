@@ -1878,8 +1878,12 @@ fn compensated_dot_with_roundoff_bound(left: &[f64], right: &[f64]) -> (f64, f64
     let mut sum = 0.0_f64;
     let mut correction = 0.0_f64;
     let mut absolute_product_sum = 0.0_f64;
+    let mut subnormal_product_count = 0_usize;
     for (left, right) in left.iter().zip(right) {
         let product = left * right;
+        if *left != 0.0 && *right != 0.0 && product.abs() < f64::MIN_POSITIVE {
+            subnormal_product_count = subnormal_product_count.saturating_add(1);
+        }
         absolute_product_sum += product.abs();
         let next = sum + product;
         if sum.abs() >= product.abs() {
@@ -1890,7 +1894,11 @@ fn compensated_dot_with_roundoff_bound(left: &[f64], right: &[f64]) -> (f64, f64
         sum = next;
     }
     let value = sum + correction;
-    let roundoff_bound = 4.0 * f64::EPSILON * (left.len() as f64 + 1.0) * absolute_product_sum;
+    let summation_roundoff_bound =
+        4.0 * f64::EPSILON * (left.len() as f64 + 1.0) * absolute_product_sum;
+    let subnormal_product_roundoff_bound =
+        (subnormal_product_count as f64) * f64::from_bits(1);
+    let roundoff_bound = summation_roundoff_bound + subnormal_product_roundoff_bound;
     (value, roundoff_bound)
 }
 
@@ -3193,6 +3201,23 @@ mod tests {
                 &[1.0],
                 DEFAULT_TOLERANCE,
                 1.0e-18,
+            ),
+            Err(ConceptGeometryError::NonOrthogonalControl)
+        );
+        let mut underflow_target = vec![1.5e-162; 10_002];
+        underflow_target[0] = 1.0;
+        underflow_target[1] = 0.0;
+        let mut underflow_control = vec![1.5e-162; 10_002];
+        underflow_control[0] = 0.0;
+        underflow_control[1] = 1.0;
+        assert_eq!(
+            matched_intervention_dose_states(
+                &vec![0.0; 10_002],
+                &underflow_target,
+                &[underflow_control],
+                &[1.0],
+                DEFAULT_TOLERANCE,
+                1.0e-320,
             ),
             Err(ConceptGeometryError::NonOrthogonalControl)
         );
