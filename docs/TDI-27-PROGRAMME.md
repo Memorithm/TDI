@@ -284,6 +284,17 @@ Euclidean norm exceeds `f64::MAX`. It does not run a model, inspect outcomes,
 choose controls or doses, authorize actuation, or infer a causal or scientific
 result.
 
+The second Development slice evaluates that construction through a
+caller-supplied, model-agnostic outcome adapter. The caller must predeclare one
+target outcome index and a non-empty, strictly increasing set of distinct
+non-target outcome indices. The adapter is evaluated exactly once for the
+baseline and once for every target/control state at every alpha; all returned
+outcome vectors must be non-empty, finite and width-invariant. The resulting
+record retains baseline outcomes, raw target/control outcomes, and their signed
+baseline-relative effects without aggregation. It does not fit a response
+curve, select outcomes or thresholds, convert a contrast into a causal verdict,
+authorize real-model execution, or infer a scientific result.
+
 ### TDI-27.4 — cross-layer transport
 
 Measure whether residual directions persist after a declared alignment
