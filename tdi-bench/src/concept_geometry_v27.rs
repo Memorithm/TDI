@@ -648,6 +648,7 @@ pub enum ConceptGeometryError {
     EmptyInterventionAlphaGrid,
     InvalidInterventionAlphaGrid,
     NonOrthogonalControl,
+    UnrepresentableInterventionDose,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1920,6 +1921,20 @@ fn intervention_state(
         }
         state.push(intervened);
     }
+    let achieved_displacement = state
+        .iter()
+        .zip(baseline)
+        .map(|(intervened, original)| intervened - original)
+        .collect::<Vec<_>>();
+    let achieved_norm = norm(&achieved_displacement);
+    let requested_norm = alpha.abs();
+    let relative_roundoff_bound =
+        64.0 * f64::EPSILON * (baseline.len() as f64 + 1.0) * requested_norm;
+    if !achieved_norm.is_finite()
+        || (achieved_norm - requested_norm).abs() > relative_roundoff_bound
+    {
+        return Err(ConceptGeometryError::UnrepresentableInterventionDose);
+    }
     Ok(state)
 }
 
@@ -3109,6 +3124,17 @@ mod tests {
                 DEFAULT_TOLERANCE,
             ),
             Err(ConceptGeometryError::NonFiniteValue)
+        );
+        assert_eq!(
+            matched_intervention_dose_states(
+                &[1.0, 0.0],
+                &[1.0, 0.0],
+                &controls,
+                &[1.0e-16],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+            ),
+            Err(ConceptGeometryError::UnrepresentableInterventionDose)
         );
     }
 
