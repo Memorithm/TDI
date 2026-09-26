@@ -1943,7 +1943,10 @@ impl ExactNonnegativeSum {
         let square = u128::from(significand) * u128::from(significand);
         let bit_offset = (2 * exponent - EXACT_SQUARE_MIN_EXPONENT) as usize;
         self.add_word(square as u64, bit_offset);
-        self.add_word((square >> u64::BITS) as u64, bit_offset + u64::BITS as usize);
+        self.add_word(
+            (square >> u64::BITS) as u64,
+            bit_offset + u64::BITS as usize,
+        );
     }
 
     fn at_most(&self, other: &Self) -> bool {
