@@ -1004,11 +1004,33 @@ tdi27_stage0_progress_2026_09_25:
           - reject_any_semantic_or_coordinate_disagreement_fail_closed
           - preserve_full_and_bootstrap_diagnostics_without_tolerance_selection
     candidate: none
-  next_after_qualified_TDI_27_2:
-    - TDI_27_3_causal_intervention_harness
+  tdi27_3_matched_intervention_harness:
+    status: active
+    merged:
+      slice_01:
+        pull_request: https://github.com/Memorithm/TDI/pull/643
+        qualified_head: 09ed71f7139e3d34a59500ec5a26b0e9e322f0d5
+        merge: a644b53db41b917934c093bc7bbfdeafcb06e579
+        qualification: 57_exact_head_workflows_success_and_exact_head_review_no_major_issue
+        local_validation: 53_targeted_tests_rustfmt_clippy_runner_and_bootstrap_success
+        material_review_corrections:
+          - preserve_requested_dose_norm_and_direction_against_baseline_ULP_loss
+          - avoid_norm_overflow_for_finite_directions_and_doses
+          - bound_cancellation_and_underflow_in_orthogonality_checks
+          - compare_direction_norm_threshold_with_exact_binary_square_accumulation
+          - distinguish_exact_from_inexact_subnormal_dose_products
+          - reject_zeroed_or_rounded_subnormal_normalization_components
+        semantics:
+          - deterministic_signed_target_and_matched_control_state_construction_only
+          - caller_declared_strict_alpha_grid_and_orthogonality_bound
+          - fail_closed_when_requested_direction_or_dose_is_not_representable
+          - no_model_execution_outcome_inspection_actuation_or_scientific_verdict
+    candidate: none
+  next_after_qualified_TDI_27_3:
+    - TDI_27_4_cross_layer_transport
   batch_policy:
     batch_size: 15
-    current_batch: TDI_27_2
+    current_batch: TDI_27_3
     merge_rule: required_exact_head_CI_green_and_material_review_clear_before_merge
     frozen_series_workers_must_remain_retired: true
   boundaries:
