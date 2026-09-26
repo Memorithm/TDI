@@ -81,14 +81,13 @@ fn run() -> Result<(), ConceptGeometryError> {
     )?;
     let differential_basis = vec![vec![1.0, 1.0, 0.0], vec![1.0, 1.0 + 1.0e-10, 0.0]];
     let projection_vector = [3.0, 4.0, 2.0];
-    let projection_differential =
-        projection_method_differential(
-            &projection_vector,
-            &differential_basis,
-            1.0e-12,
-            1.0e-8,
-            1.0e-8,
-        )?;
+    let projection_differential = projection_method_differential(
+        &projection_vector,
+        &differential_basis,
+        1.0e-12,
+        1.0e-8,
+        1.0e-8,
+    )?;
     let projection_positive = vec![projection_vector.to_vec(); 4];
     let projection_control = vec![vec![0.0, 0.0, 0.0]; 4];
     let bootstrap_projection_differentials = bootstrap_projection_method_differentials(
@@ -199,9 +198,9 @@ fn run() -> Result<(), ConceptGeometryError> {
         projection_differential.max_abs_residual_difference()
     );
     match projection_differential.max_abs_unit_direction_difference() {
-        Some(difference) => println!(
-            "projection_method_max_abs_unit_direction_difference={difference:.17e}"
-        ),
+        Some(difference) => {
+            println!("projection_method_max_abs_unit_direction_difference={difference:.17e}")
+        }
         None => println!("projection_method_max_abs_unit_direction_difference=undefined"),
     }
     println!(
@@ -217,11 +216,7 @@ fn run() -> Result<(), ConceptGeometryError> {
     );
     let bootstrap_direction_difference = bootstrap_projection_differentials
         .iter()
-        .filter_map(|report| {
-            report
-                .differential()
-                .max_abs_unit_direction_difference()
-        })
+        .filter_map(|report| report.differential().max_abs_unit_direction_difference())
         .fold(None::<f64>, |maximum, difference| {
             Some(maximum.map_or(difference, |current| current.max(difference)))
         });
@@ -229,9 +224,7 @@ fn run() -> Result<(), ConceptGeometryError> {
         Some(difference) => println!(
             "projection_method_bootstrap_max_abs_unit_direction_difference={difference:.17e}"
         ),
-        None => println!(
-            "projection_method_bootstrap_max_abs_unit_direction_difference=undefined"
-        ),
+        None => println!("projection_method_bootstrap_max_abs_unit_direction_difference=undefined"),
     }
     println!("null_total_replicates={}", null_summary.total_replicates());
     println!(
