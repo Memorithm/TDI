@@ -5,8 +5,9 @@ use tdi_bench::concept_geometry_v27::{
     bootstrap_direction_stability, bootstrap_innovation_energy_summary,
     bootstrap_projection_method_differentials, causal_novelty_gap,
     compare_innovation_energy_to_shuffled_null, interaction_residual,
-    matched_intervention_dose_states, mean_difference, projection_method_differential, residualize,
-    sample_size_sensitivity_grid, sequential_accepted_rank_summary, sequential_innovations,
+    matched_intervention_dose_response_curve, matched_intervention_dose_states, mean_difference,
+    projection_method_differential, residualize, sample_size_sensitivity_grid,
+    sequential_accepted_rank_summary, sequential_innovations,
 };
 
 fn response(state: &[f64]) -> f64 {
@@ -51,6 +52,17 @@ fn run() -> Result<(), ConceptGeometryError> {
         &[-1.0, 0.0, 1.0],
         DEFAULT_TOLERANCE,
         DEFAULT_TOLERANCE,
+    )?;
+    let intervention_curve = matched_intervention_dose_response_curve(
+        &base,
+        unit,
+        &[vec![0.0, 0.0, 1.0]],
+        &[-1.0, 0.0, 1.0],
+        0,
+        &[1],
+        DEFAULT_TOLERANCE,
+        DEFAULT_TOLERANCE,
+        |state| Ok(vec![response(state), state[0] - state[1]]),
     )?;
 
     let effect_a = intervention_effect(&base, &[1.0, 0.0, 0.0], 1.0);
@@ -171,6 +183,23 @@ fn run() -> Result<(), ConceptGeometryError> {
         intervention_doses[0].matched_control_states().len()
     );
     println!("intervention_alpha_grid=-1.000000000000,0.000000000000,1.000000000000");
+    println!(
+        "intervention_curve_target_outcome_index={}",
+        intervention_curve.target_outcome_index()
+    );
+    println!("intervention_curve_non_target_outcome_indices=1");
+    println!(
+        "intervention_curve_target_effects={:.12},{:.12},{:.12}",
+        intervention_curve.points()[0].target_state_effects()[0],
+        intervention_curve.points()[1].target_state_effects()[0],
+        intervention_curve.points()[2].target_state_effects()[0]
+    );
+    println!(
+        "intervention_curve_matched_control_effects={:.12},{:.12},{:.12}",
+        intervention_curve.points()[0].matched_control_effects()[0][0],
+        intervention_curve.points()[1].matched_control_effects()[0][0],
+        intervention_curve.points()[2].matched_control_effects()[0][0]
+    );
     println!("orthogonal_interaction_residual={interaction:.12}");
     println!(
         "sequential_innovation_ratios={:.12},{:.12},{:.12}",
