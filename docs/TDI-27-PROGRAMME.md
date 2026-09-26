@@ -290,6 +290,17 @@ Measure whether residual directions persist after a declared alignment
 operator, including orthogonal Procrustes-style alignment where justified.
 Raw cosine across incompatible representation bases is not sufficient.
 
+The first Development slice accepts only a caller-declared square alignment
+operator. It normalizes source and target directions with the same bounded
+numerical policy used by the intervention harness, verifies every alignment
+row pair against the corresponding identity-matrix entry with compensated dot
+products and explicit roundoff bounds, transports the source direction, and
+reports signed cosine plus maximum coordinate difference in the target basis.
+Matrix-vector and cosine roundoff must fit a separate caller-declared bound.
+This slice does not learn or fit an operator, choose tolerances, define a
+persistence threshold, compare real-model layers, authorize another stage, or
+infer a scientific result.
+
 ### TDI-27.5 — sequential latent-rank programme
 
 Build ordered innovation bases across layers, tasks and concept families;
