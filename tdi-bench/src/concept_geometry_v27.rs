@@ -2424,19 +2424,11 @@ mod tests {
     fn bootstrap_projection_differential_is_complete_and_identity_preserving() {
         let positive = vec![vec![3.0, 4.0, 2.0]; 3];
         let control = vec![vec![0.0, 0.0, 0.0]; 3];
-        let basis = vec![
-            vec![1.0, 1.0, 0.0],
-            vec![1.0, 1.0 + 1.0e-10, 0.0],
-        ];
+        let basis = vec![vec![1.0, 1.0, 0.0], vec![1.0, 1.0 + 1.0e-10, 0.0]];
         let plan = DevelopmentResamplingPlan::new(5, 0x2702_0201).unwrap();
 
         let reports = bootstrap_projection_method_differentials(
-            &positive,
-            &control,
-            &basis,
-            1.0e-12,
-            1.0e-8,
-            plan,
+            &positive, &control, &basis, 1.0e-12, 1.0e-8, plan,
         )
         .unwrap();
 
@@ -2445,7 +2437,10 @@ mod tests {
             assert_eq!(report.mean_contrast().contrast(), &[3.0, 4.0, 2.0]);
             assert_eq!(report.mean_contrast().positive_indices().len(), 3);
             assert_eq!(report.mean_contrast().control_indices().len(), 3);
-            assert_eq!(report.differential().modified_gram_schmidt().basis_rank(), 2);
+            assert_eq!(
+                report.differential().modified_gram_schmidt().basis_rank(),
+                2
+            );
             assert_eq!(report.differential().householder_qr().basis_rank(), 2);
             assert!(report.differential().max_abs_residual_difference() <= 1.0e-8);
         }
@@ -2465,12 +2460,7 @@ mod tests {
 
         assert_eq!(
             bootstrap_projection_method_differentials(
-                &positive,
-                &control,
-                &basis,
-                1.0e-15,
-                1.0e-9,
-                plan,
+                &positive, &control, &basis, 1.0e-15, 1.0e-9, plan,
             ),
             Err(ConceptGeometryError::ProjectionMethodDisagreement)
         );
