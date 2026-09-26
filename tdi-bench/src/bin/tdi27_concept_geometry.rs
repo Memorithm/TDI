@@ -79,17 +79,10 @@ fn run() -> Result<(), ConceptGeometryError> {
         DEFAULT_TOLERANCE,
         resampling_plan,
     )?;
-    let differential_basis = vec![
-        vec![1.0, 1.0, 0.0],
-        vec![1.0, 1.0 + 1.0e-10, 0.0],
-    ];
+    let differential_basis = vec![vec![1.0, 1.0, 0.0], vec![1.0, 1.0 + 1.0e-10, 0.0]];
     let projection_vector = [3.0, 4.0, 2.0];
-    let projection_differential = projection_method_differential(
-        &projection_vector,
-        &differential_basis,
-        1.0e-12,
-        1.0e-8,
-    )?;
+    let projection_differential =
+        projection_method_differential(&projection_vector, &differential_basis, 1.0e-12, 1.0e-8)?;
     let projection_positive = vec![projection_vector.to_vec(); 4];
     let projection_control = vec![vec![0.0, 0.0, 0.0]; 4];
     let bootstrap_projection_differentials = bootstrap_projection_method_differentials(
