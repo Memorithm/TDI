@@ -2500,20 +2500,31 @@ pub fn matched_intervention_dose_response_curve(
     })
 }
 
-fn scaled_finite_mean(values: &[f64]) -> Result<f64, ConceptGeometryError> {
+fn compensated_finite_mean(values: &[f64]) -> Result<f64, ConceptGeometryError> {
     if values.is_empty() {
         return Err(ConceptGeometryError::EmptyControls);
     }
     if values.iter().any(|value| !value.is_finite()) {
         return Err(ConceptGeometryError::NonFiniteValue);
     }
-    let scale = values.iter().map(|value| value.abs()).fold(0.0, f64::max);
-    if scale == 0.0 {
-        return Ok(0.0);
+
+    // Divide first so a finite mean does not overflow through an avoidable
+    // intermediate sum. Neumaier compensation retains small contributions
+    // when much larger finite terms cancel, independently of input order.
+    let divisor = values.len() as f64;
+    let mut sum = 0.0;
+    let mut correction = 0.0;
+    for value in values {
+        let term = value / divisor;
+        let next = sum + term;
+        correction += if sum.abs() >= term.abs() {
+            (sum - next) + term
+        } else {
+            (term - next) + sum
+        };
+        sum = next;
     }
-    let scaled_sum = values.iter().map(|value| value / scale).sum::<f64>();
-    let scaled_mean = (scaled_sum / values.len() as f64).clamp(-1.0, 1.0);
-    let mean = scaled_mean * scale;
+    let mean = sum + correction;
     if !mean.is_finite() {
         return Err(ConceptGeometryError::NonFiniteValue);
     }
@@ -2522,7 +2533,7 @@ fn scaled_finite_mean(values: &[f64]) -> Result<f64, ConceptGeometryError> {
 
 /// Target intervention effect minus the mean matched-control effect.
 ///
-/// The matched-control mean is evaluated after finite scaling so a finite mean
+/// The matched-control mean is evaluated with compensated pre-division so a finite mean
 /// is not lost merely because a naive intermediate sum would overflow.
 pub fn causal_novelty_gap(
     target_effect: f64,
@@ -2531,7 +2542,7 @@ pub fn causal_novelty_gap(
     if !target_effect.is_finite() {
         return Err(ConceptGeometryError::NonFiniteValue);
     }
-    let gap = target_effect - scaled_finite_mean(matched_control_effects)?;
+    let gap = target_effect - compensated_finite_mean(matched_control_effects)?;
     if !gap.is_finite() {
         return Err(ConceptGeometryError::NonFiniteValue);
     }
@@ -3612,7 +3623,7 @@ mod tests {
     }
 
     #[test]
-    fn causal_gap_uses_a_scaled_mean_and_fails_closed_on_overflow() {
+    fn causal_gap_uses_a_compensated_mean_and_fails_closed_on_overflow() {
         assert_eq!(causal_novelty_gap(f64::MAX, &[f64::MAX, f64::MAX]), Ok(0.0));
         assert_eq!(
             causal_novelty_gap(f64::MAX, &[-f64::MAX]),
@@ -3622,6 +3633,17 @@ mod tests {
             causal_novelty_gap(0.0, &[]),
             Err(ConceptGeometryError::EmptyControls)
         );
+
+        let small = 1.0e-308;
+        for controls in [
+            [f64::MAX, -f64::MAX, small],
+            [f64::MAX, small, -f64::MAX],
+            [small, f64::MAX, -f64::MAX],
+        ] {
+            let mean = causal_novelty_gap(0.0, &controls).unwrap();
+            assert!(mean < 0.0);
+            close(mean, -(small / 3.0));
+        }
     }
 
     #[test]
