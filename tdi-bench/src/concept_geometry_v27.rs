@@ -2500,6 +2500,60 @@ pub fn matched_intervention_dose_response_curve(
     })
 }
 
+fn expansion_add(partials: &mut Vec<f64>, mut value: f64) -> Result<(), ()> {
+    if value == 0.0 {
+        return Ok(());
+    }
+    let original_len = partials.len();
+    let mut write = 0_usize;
+    for read in 0..original_len {
+        let mut partial = partials[read];
+        if value.abs() < partial.abs() {
+            std::mem::swap(&mut value, &mut partial);
+        }
+        let high = value + partial;
+        if !high.is_finite() {
+            return Err(());
+        }
+        let low = partial - (high - value);
+        if low != 0.0 {
+            partials[write] = low;
+            write += 1;
+        }
+        value = high;
+    }
+    partials.truncate(write);
+    partials.push(value);
+    Ok(())
+}
+
+fn collapse_expansion(partials: &[f64]) -> f64 {
+    partials.iter().copied().sum()
+}
+
+fn predivided_expansion_mean(
+    values: &[f64],
+    lower: f64,
+    upper: f64,
+) -> Result<f64, ConceptGeometryError> {
+    let divisor = values.len() as f64;
+    let mut partials = Vec::new();
+    partials
+        .try_reserve_exact(values.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    for value in values {
+        let term = value / divisor;
+        if expansion_add(&mut partials, term).is_err() {
+            return Ok(if term.is_sign_negative() { lower } else { upper });
+        }
+    }
+    let mean = collapse_expansion(&partials).clamp(lower, upper);
+    if !mean.is_finite() {
+        return Err(ConceptGeometryError::NonFiniteValue);
+    }
+    Ok(mean)
+}
+
 fn compensated_finite_mean(values: &[f64]) -> Result<f64, ConceptGeometryError> {
     if values.is_empty() {
         return Err(ConceptGeometryError::EmptyControls);
@@ -2508,36 +2562,67 @@ fn compensated_finite_mean(values: &[f64]) -> Result<f64, ConceptGeometryError> 
         return Err(ConceptGeometryError::NonFiniteValue);
     }
 
-    // Divide first so a finite mean does not overflow through an avoidable
-    // intermediate sum. Neumaier compensation retains small contributions
-    // when much larger finite terms cancel, independently of input order.
-    let divisor = values.len() as f64;
     let lower = values.iter().copied().fold(f64::INFINITY, f64::min);
     let upper = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-    let mut sum = 0.0;
-    let mut correction = 0.0;
-    for value in values {
-        let term = value / divisor;
-        let raw_next = sum + term;
-        // A rounded partial can cross the finite boundary even though no
-        // partial of n terms divided by n can exceed MAX mathematically.
-        let next = if raw_next.is_infinite() {
-            f64::MAX.copysign(raw_next)
-        } else {
-            raw_next
-        };
-        correction += if sum.abs() >= term.abs() {
-            (sum - next) + term
-        } else {
-            (term - next) + sum
-        };
-        sum = next;
+    let mut positives = Vec::new();
+    let mut negatives = Vec::new();
+    positives
+        .try_reserve_exact(values.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    negatives
+        .try_reserve_exact(values.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    for &value in values {
+        if value.is_sign_negative() && value != 0.0 {
+            negatives.push(value);
+        } else if value != 0.0 {
+            positives.push(value);
+        }
     }
-    let mean = (sum + correction).clamp(lower, upper);
+    positives.sort_by(|left, right| right.abs().total_cmp(&left.abs()));
+    negatives.sort_by(|left, right| right.abs().total_cmp(&left.abs()));
+
+    // Opposite-sign pairs cannot overflow. Feeding their error-free TwoSum
+    // components into an expansion preserves small cancellation residuals
+    // before any same-sign remainder is accumulated.
+    let mut partials = Vec::new();
+    partials
+        .try_reserve_exact(values.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    let paired = positives.len().min(negatives.len());
+    for index in 0..paired {
+        let positive = positives[index];
+        let negative = negatives[index];
+        let high = positive + negative;
+        let low = if positive.abs() >= negative.abs() {
+            (positive - high) + negative
+        } else {
+            (negative - high) + positive
+        };
+        expansion_add(&mut partials, low)
+            .and_then(|()| expansion_add(&mut partials, high))
+            .map_err(|()| ConceptGeometryError::NonFiniteValue)?;
+    }
+
+    let mut raw_sum_overflowed = false;
+    for &value in positives[paired..].iter().chain(&negatives[paired..]) {
+        if expansion_add(&mut partials, value).is_err() {
+            raw_sum_overflowed = true;
+            break;
+        }
+    }
+    if raw_sum_overflowed {
+        // Here the remaining terms all have one sign, so the unscaled exact
+        // sum is outside the finite range. Compute the still-finite mean from
+        // a full expansion of pre-divided terms.
+        return predivided_expansion_mean(values, lower, upper);
+    }
+
+    let mean = collapse_expansion(&partials) / values.len() as f64;
     if !mean.is_finite() {
         return Err(ConceptGeometryError::NonFiniteValue);
     }
-    Ok(mean)
+    Ok(mean.clamp(lower, upper))
 }
 
 /// Target intervention effect minus the mean matched-control effect.
@@ -3655,6 +3740,25 @@ mod tests {
         ] {
             assert_eq!(causal_novelty_gap(0.0, &controls), Ok(-(small / 3.0)));
         }
+
+        let review_regression = [f64::MAX / 2.0, 1.0, -f64::MAX / 2.0, -1.0, small];
+        assert_eq!(
+            causal_novelty_gap(0.0, &review_regression),
+            Ok(-(small / 5.0))
+        );
+        assert_eq!(
+            causal_novelty_gap(
+                0.0,
+                &[f64::MAX / 2.0, -f64::MAX / 2.0, 1.0, -1.0, small]
+            ),
+            Ok(-(small / 5.0))
+        );
+
+        let least_subnormal = f64::from_bits(1);
+        assert_eq!(
+            causal_novelty_gap(0.0, &[least_subnormal, least_subnormal]),
+            Ok(-least_subnormal)
+        );
     }
 
     #[test]
