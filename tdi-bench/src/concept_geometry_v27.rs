@@ -2544,7 +2544,11 @@ fn predivided_expansion_mean(
     for value in values {
         let term = value / divisor;
         if expansion_add(&mut partials, term).is_err() {
-            return Ok(if term.is_sign_negative() { lower } else { upper });
+            return Ok(if term.is_sign_negative() {
+                lower
+            } else {
+                upper
+            });
         }
     }
     let mean = collapse_expansion(&partials).clamp(lower, upper);
