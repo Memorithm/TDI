@@ -5,7 +5,8 @@ use tdi_bench::concept_geometry_v27::{
     bootstrap_direction_stability, bootstrap_innovation_energy_summary,
     bootstrap_projection_method_differentials, causal_novelty_gap,
     compare_innovation_energy_to_shuffled_null, interaction_residual,
-    matched_intervention_dose_response_curve, matched_intervention_dose_states, mean_difference,
+    matched_intervention_causal_contrasts, matched_intervention_dose_response_curve,
+    matched_intervention_dose_states, mean_difference,
     projection_method_differential, residualize, sample_size_sensitivity_grid,
     sequential_accepted_rank_summary, sequential_innovations,
 };
@@ -64,6 +65,8 @@ fn run() -> Result<(), ConceptGeometryError> {
         DEFAULT_TOLERANCE,
         |state| Ok(vec![response(state), state[0] - state[1]]),
     )?;
+
+    let intervention_contrasts = matched_intervention_causal_contrasts(&intervention_curve)?;
 
     let effect_a = intervention_effect(&base, &[1.0, 0.0, 0.0], 1.0);
     let effect_b = intervention_effect(&base, &[0.0, 1.0, 0.0], 1.0);
@@ -159,7 +162,7 @@ fn run() -> Result<(), ConceptGeometryError> {
         2,
     )?;
 
-    println!("schema=tdi27-concept-geometry-development/v2");
+    println!("schema=tdi27-concept-geometry-development/v3");
     println!("scope=synthetic_development_only");
     println!(
         "mean_contrast={:.12},{:.12},{:.12}",
@@ -199,6 +202,18 @@ fn run() -> Result<(), ConceptGeometryError> {
         intervention_curve.points()[0].matched_control_effects()[0][0],
         intervention_curve.points()[1].matched_control_effects()[0][0],
         intervention_curve.points()[2].matched_control_effects()[0][0]
+    );
+    println!(
+        "intervention_contrast_target_gaps={:.12},{:.12},{:.12}",
+        intervention_contrasts.points()[0].target_outcome_gap(),
+        intervention_contrasts.points()[1].target_outcome_gap(),
+        intervention_contrasts.points()[2].target_outcome_gap()
+    );
+    println!(
+        "intervention_contrast_non_target_gaps={:.12},{:.12},{:.12}",
+        intervention_contrasts.points()[0].non_target_outcome_gaps()[0],
+        intervention_contrasts.points()[1].non_target_outcome_gaps()[0],
+        intervention_contrasts.points()[2].non_target_outcome_gaps()[0]
     );
     println!("orthogonal_interaction_residual={interaction:.12}");
     println!(
