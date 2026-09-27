@@ -296,10 +296,11 @@ curve, select outcomes or thresholds, convert a contrast into a causal verdict,
 authorize real-model execution, or infer a scientific result.
 
 The third Development slice derives one raw signed causal contrast per declared
-outcome and alpha: the target-state effect minus the finite scaled mean of the
-matched-control effects. Scaling prevents a representable finite control mean
-from being lost to intermediate summation overflow; a non-finite final
-subtraction still fails closed. Target and ordered non-target roles remain
+outcome and alpha: the target-state effect minus a compensated mean of the
+matched-control effects. Each finite control is divided by the fixed count
+before Neumaier summation, preventing avoidable overflow while retaining small
+residuals when much larger controls cancel; a non-finite final subtraction
+still fails closed. Target and ordered non-target roles remain
 explicit, and malformed widths, empty controls, non-finite inputs, or allocation
 failure are rejected. This explanatory record does not choose a dose, outcome,
 control, threshold or verdict; it does not fit a curve, run a statistical test,
