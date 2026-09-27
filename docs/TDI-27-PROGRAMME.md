@@ -320,6 +320,18 @@ interpolate doses, fit a response curve, run a statistical test, set a
 threshold or verdict, authorize model execution, or advance the scientific
 stage.
 
+The fifth Development slice makes the declared deterministic-adapter contract
+observable at the zero dose. When the predeclared grid contains `alpha = 0`,
+the target and every matched-control state are the unchanged baseline, so every
+corresponding outcome vector must be bit-identical to the separately evaluated
+baseline vector. Zero-dose state construction clones the baseline rather than
+recomputing `baseline + 0 * direction`, preserving signed-zero bits before the
+adapter is called. A stateful, stochastic, signed-zero-changing or otherwise
+non-reproducible adapter fails closed before a curve is published. This is an
+input-integrity invariant only: it does not require a zero dose, select a grid,
+estimate evaluator noise, repeat nonzero doses, classify causality or symmetry,
+set a tolerance/verdict, authorize model execution, or advance TDI-27.4.
+
 ### TDI-27.4 — cross-layer transport
 
 Measure whether residual directions persist after a declared alignment

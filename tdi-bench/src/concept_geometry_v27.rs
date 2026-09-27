@@ -651,6 +651,7 @@ pub enum ConceptGeometryError {
     UnrepresentableInterventionDose,
     InvalidTargetOutcomeIndex,
     InvalidNonTargetOutcomeIndices,
+    InconsistentZeroDoseOutcomes,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -2358,6 +2359,10 @@ fn intervention_state(
     state
         .try_reserve_exact(baseline.len())
         .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    if alpha == 0.0 {
+        state.extend_from_slice(baseline);
+        return Ok(state);
+    }
     for (value, direction) in baseline.iter().zip(direction) {
         let intervened = value + alpha * direction;
         if !intervened.is_finite() {
@@ -2518,8 +2523,11 @@ fn evaluated_outcome_effects(
 /// strictly increasing, in range, and distinct from the target index.
 ///
 /// Returned effects are raw signed `outcome - baseline` values. This
-/// Development primitive retains all evaluated values and makes no causal
-/// decision, threshold choice, stage authorization, or scientific claim.
+/// Development primitive retains all evaluated values. When the predeclared
+/// grid contains zero, every target/control evaluation at that dose must be
+/// bit-identical to the separately evaluated baseline; a stateful or otherwise
+/// non-reproducible adapter fails closed. The function makes no causal decision,
+/// threshold choice, stage authorization, or scientific claim.
 #[allow(clippy::too_many_arguments)]
 pub fn matched_intervention_dose_response_curve(
     baseline: &[f64],
@@ -2576,6 +2584,20 @@ pub fn matched_intervention_dose_response_curve(
                 evaluated_outcome_effects(control_state, &baseline_outcomes, &mut evaluate)?;
             matched_control_outcomes.push(outcomes);
             matched_control_effects.push(effects);
+        }
+        if state.alpha() == 0.0
+            && (!target_state_outcomes
+                .iter()
+                .zip(&baseline_outcomes)
+                .all(|(outcome, baseline)| outcome.to_bits() == baseline.to_bits())
+                || matched_control_outcomes.iter().any(|outcomes| {
+                    !outcomes
+                        .iter()
+                        .zip(&baseline_outcomes)
+                        .all(|(outcome, baseline)| outcome.to_bits() == baseline.to_bits())
+                }))
+        {
+            return Err(ConceptGeometryError::InconsistentZeroDoseOutcomes);
         }
         points.push(MatchedInterventionDoseResponsePoint {
             alpha: state.alpha(),
@@ -4326,6 +4348,91 @@ mod tests {
             curve.points()[2].matched_control_effects(),
             &[vec![1.0, -1.0]]
         );
+    }
+
+    #[test]
+    fn matched_intervention_response_curve_rejects_non_reproducible_zero_dose() {
+        let mut evaluations = 0_u64;
+        assert_eq!(
+            matched_intervention_dose_response_curve(
+                &[0.0, 0.0],
+                &[1.0, 0.0],
+                &[vec![0.0, 1.0]],
+                &[0.0],
+                0,
+                &[1],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+                |_| {
+                    evaluations += 1;
+                    Ok(vec![evaluations as f64, 0.0])
+                },
+            ),
+            Err(ConceptGeometryError::InconsistentZeroDoseOutcomes)
+        );
+    }
+
+    #[test]
+    fn matched_intervention_response_curve_checks_zero_dose_bits() {
+        let mut first = true;
+        assert_eq!(
+            matched_intervention_dose_response_curve(
+                &[0.0, 0.0],
+                &[1.0, 0.0],
+                &[vec![0.0, 1.0]],
+                &[0.0],
+                0,
+                &[1],
+                DEFAULT_TOLERANCE,
+                DEFAULT_TOLERANCE,
+                |_| {
+                    let signed_zero = if first { 0.0 } else { -0.0 };
+                    first = false;
+                    Ok(vec![signed_zero, 0.0])
+                },
+            ),
+            Err(ConceptGeometryError::InconsistentZeroDoseOutcomes)
+        );
+    }
+
+    #[test]
+    fn zero_dose_preserves_baseline_bits_before_evaluation() {
+        let baseline = [-0.0, 0.0];
+        let doses = matched_intervention_dose_states(
+            &baseline,
+            &[1.0, 0.0],
+            &[vec![0.0, 1.0]],
+            &[0.0],
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+
+        assert_eq!(doses.len(), 1);
+        for state in std::iter::once(doses[0].target_state())
+            .chain(doses[0].matched_control_states().iter().map(Vec::as_slice))
+        {
+            assert!(
+                state
+                    .iter()
+                    .zip(baseline)
+                    .all(|(value, original)| value.to_bits() == original.to_bits())
+            );
+        }
+
+        let curve = matched_intervention_dose_response_curve(
+            &baseline,
+            &[1.0, 0.0],
+            &[vec![0.0, 1.0]],
+            &[0.0],
+            0,
+            &[1],
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+            |state| Ok(state.to_vec()),
+        )
+        .unwrap();
+        assert_eq!(curve.points().len(), 1);
     }
 
     #[test]

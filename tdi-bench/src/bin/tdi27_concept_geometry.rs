@@ -164,7 +164,7 @@ fn run() -> Result<(), ConceptGeometryError> {
         2,
     )?;
 
-    println!("schema=tdi27-concept-geometry-development/v4");
+    println!("schema=tdi27-concept-geometry-development/v5");
     println!("scope=synthetic_development_only");
     println!(
         "mean_contrast={:.12},{:.12},{:.12}",
@@ -239,6 +239,7 @@ fn run() -> Result<(), ConceptGeometryError> {
         "intervention_zero_point_present={}",
         signed_dose_decomposition.zero_point().is_some()
     );
+    println!("intervention_zero_identity_enforced=true");
     println!(
         "intervention_unpaired_point_count={}",
         signed_dose_decomposition.unpaired_points().len()
