@@ -2151,6 +2151,60 @@ impl MatchedInterventionDoseResponseCurve {
     }
 }
 
+/// Raw target-minus-matched-control gaps for one predeclared dose.
+///
+/// The target outcome remains separate from the ordered, caller-declared
+/// non-target outcomes. These values are explanatory Development data only:
+/// they carry no threshold, verdict, statistical decision, or authorization.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MatchedInterventionDoseCausalContrastPoint {
+    alpha: f64,
+    target_outcome_gap: f64,
+    non_target_outcome_gaps: Vec<f64>,
+}
+
+impl MatchedInterventionDoseCausalContrastPoint {
+    #[must_use]
+    pub const fn alpha(&self) -> f64 {
+        self.alpha
+    }
+
+    #[must_use]
+    pub const fn target_outcome_gap(&self) -> f64 {
+        self.target_outcome_gap
+    }
+
+    #[must_use]
+    pub fn non_target_outcome_gaps(&self) -> &[f64] {
+        &self.non_target_outcome_gaps
+    }
+}
+
+/// Development-only causal contrasts over a predeclared intervention grid.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MatchedInterventionDoseCausalContrasts {
+    target_outcome_index: usize,
+    non_target_outcome_indices: Vec<usize>,
+    points: Vec<MatchedInterventionDoseCausalContrastPoint>,
+}
+
+impl MatchedInterventionDoseCausalContrasts {
+    #[must_use]
+    pub const fn target_outcome_index(&self) -> usize {
+        self.target_outcome_index
+    }
+
+    #[must_use]
+    pub fn non_target_outcome_indices(&self) -> &[usize] {
+        &self.non_target_outcome_indices
+    }
+
+    #[must_use]
+    pub fn points(&self) -> &[MatchedInterventionDoseCausalContrastPoint] {
+        &self.points
+    }
+}
+
 impl MatchedInterventionDoseState {
     #[must_use]
     pub const fn alpha(&self) -> f64 {
@@ -2446,24 +2500,121 @@ pub fn matched_intervention_dose_response_curve(
     })
 }
 
+fn scaled_finite_mean(values: &[f64]) -> Result<f64, ConceptGeometryError> {
+    if values.is_empty() {
+        return Err(ConceptGeometryError::EmptyControls);
+    }
+    if values.iter().any(|value| !value.is_finite()) {
+        return Err(ConceptGeometryError::NonFiniteValue);
+    }
+    let scale = values.iter().map(|value| value.abs()).fold(0.0, f64::max);
+    if scale == 0.0 {
+        return Ok(0.0);
+    }
+    let scaled_sum = values.iter().map(|value| value / scale).sum::<f64>();
+    let scaled_mean = (scaled_sum / values.len() as f64).clamp(-1.0, 1.0);
+    let mean = scaled_mean * scale;
+    if !mean.is_finite() {
+        return Err(ConceptGeometryError::NonFiniteValue);
+    }
+    Ok(mean)
+}
+
 /// Target intervention effect minus the mean matched-control effect.
+///
+/// The matched-control mean is evaluated after finite scaling so a finite mean
+/// is not lost merely because a naive intermediate sum would overflow.
 pub fn causal_novelty_gap(
     target_effect: f64,
     matched_control_effects: &[f64],
 ) -> Result<f64, ConceptGeometryError> {
-    if !target_effect.is_finite()
-        || matched_control_effects
-            .iter()
-            .any(|effect| !effect.is_finite())
-    {
+    if !target_effect.is_finite() {
         return Err(ConceptGeometryError::NonFiniteValue);
     }
-    if matched_control_effects.is_empty() {
-        return Err(ConceptGeometryError::EmptyControls);
+    let gap = target_effect - scaled_finite_mean(matched_control_effects)?;
+    if !gap.is_finite() {
+        return Err(ConceptGeometryError::NonFiniteValue);
     }
-    let control_mean =
-        matched_control_effects.iter().sum::<f64>() / matched_control_effects.len() as f64;
-    Ok(target_effect - control_mean)
+    Ok(gap)
+}
+
+/// Derive raw signed target-minus-control gaps from an evaluated dose curve.
+///
+/// Each gap is the target-state effect minus the scaled finite mean of the
+/// matched-control effects for the same declared outcome. The function
+/// preserves the target/non-target roles and alpha order fixed by the parent
+/// curve. It chooses no threshold, dose, control, outcome, or verdict.
+pub fn matched_intervention_causal_contrasts(
+    curve: &MatchedInterventionDoseResponseCurve,
+) -> Result<MatchedInterventionDoseCausalContrasts, ConceptGeometryError> {
+    let width = curve.baseline_outcomes.len();
+    if curve.target_outcome_index >= width {
+        return Err(ConceptGeometryError::InvalidTargetOutcomeIndex);
+    }
+    if curve.non_target_outcome_indices.is_empty()
+        || curve
+            .non_target_outcome_indices
+            .iter()
+            .any(|index| *index >= width || *index == curve.target_outcome_index)
+        || curve
+            .non_target_outcome_indices
+            .windows(2)
+            .any(|pair| pair[0] >= pair[1])
+    {
+        return Err(ConceptGeometryError::InvalidNonTargetOutcomeIndices);
+    }
+
+    let mut points = Vec::new();
+    points
+        .try_reserve_exact(curve.points.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    for point in &curve.points {
+        if point.target_state_effects.len() != width
+            || point
+                .matched_control_effects
+                .iter()
+                .any(|effects| effects.len() != width)
+        {
+            return Err(ConceptGeometryError::DimensionMismatch);
+        }
+        if point.matched_control_effects.is_empty() {
+            return Err(ConceptGeometryError::EmptyControls);
+        }
+
+        let gap_for = |outcome_index: usize| {
+            let mut controls = Vec::new();
+            controls
+                .try_reserve_exact(point.matched_control_effects.len())
+                .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+            controls.extend(
+                point
+                    .matched_control_effects
+                    .iter()
+                    .map(|effects| effects[outcome_index]),
+            );
+            causal_novelty_gap(point.target_state_effects[outcome_index], &controls)
+        };
+
+        let target_outcome_gap = gap_for(curve.target_outcome_index)?;
+        let mut non_target_outcome_gaps = Vec::new();
+        non_target_outcome_gaps
+            .try_reserve_exact(curve.non_target_outcome_indices.len())
+            .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+        for &outcome_index in &curve.non_target_outcome_indices {
+            non_target_outcome_gaps.push(gap_for(outcome_index)?);
+        }
+        points.push(MatchedInterventionDoseCausalContrastPoint {
+            alpha: point.alpha,
+            target_outcome_gap,
+            non_target_outcome_gaps,
+        });
+    }
+
+    Ok(MatchedInterventionDoseCausalContrasts {
+        target_outcome_index: curve.target_outcome_index,
+        non_target_outcome_indices: curve.non_target_outcome_indices.clone(),
+        points,
+    })
 }
 
 /// Non-additive interaction when all effects are measured from one baseline.
@@ -3458,6 +3609,86 @@ mod tests {
     fn causal_and_interaction_helpers_keep_semantics_separate() {
         close(causal_novelty_gap(0.75, &[0.0, 0.25]).unwrap(), 0.625);
         close(interaction_residual(1.0, 1.0, 2.5).unwrap(), 0.5);
+    }
+
+    #[test]
+    fn causal_gap_uses_a_scaled_mean_and_fails_closed_on_overflow() {
+        assert_eq!(
+            causal_novelty_gap(f64::MAX, &[f64::MAX, f64::MAX]),
+            Ok(0.0)
+        );
+        assert_eq!(
+            causal_novelty_gap(f64::MAX, &[-f64::MAX]),
+            Err(ConceptGeometryError::NonFiniteValue)
+        );
+        assert_eq!(
+            causal_novelty_gap(0.0, &[]),
+            Err(ConceptGeometryError::EmptyControls)
+        );
+    }
+
+    #[test]
+    fn matched_intervention_causal_contrasts_preserve_roles_and_signs() {
+        let curve = matched_intervention_dose_response_curve(
+            &[0.0, 0.0],
+            &[1.0, 0.0],
+            &[vec![0.0, 1.0]],
+            &[-1.0, 1.0],
+            0,
+            &[1],
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+            |state| Ok(state.to_vec()),
+        )
+        .unwrap();
+        let contrasts = matched_intervention_causal_contrasts(&curve).unwrap();
+
+        assert_eq!(contrasts.target_outcome_index(), 0);
+        assert_eq!(contrasts.non_target_outcome_indices(), &[1]);
+        assert_eq!(contrasts.points().len(), 2);
+        assert_eq!(contrasts.points()[0].alpha(), -1.0);
+        assert_eq!(contrasts.points()[0].target_outcome_gap(), -1.0);
+        assert_eq!(contrasts.points()[0].non_target_outcome_gaps(), &[1.0]);
+        assert_eq!(contrasts.points()[1].alpha(), 1.0);
+        assert_eq!(contrasts.points()[1].target_outcome_gap(), 1.0);
+        assert_eq!(contrasts.points()[1].non_target_outcome_gaps(), &[-1.0]);
+    }
+
+    #[test]
+    fn matched_intervention_causal_contrasts_reject_malformed_records() {
+        let malformed = MatchedInterventionDoseResponseCurve {
+            baseline_outcomes: vec![0.0, 0.0],
+            target_outcome_index: 0,
+            non_target_outcome_indices: vec![1],
+            points: vec![MatchedInterventionDoseResponsePoint {
+                alpha: 1.0,
+                target_state_outcomes: vec![0.0, 0.0],
+                target_state_effects: vec![1.0],
+                matched_control_outcomes: vec![vec![0.0, 0.0]],
+                matched_control_effects: vec![vec![0.0, 0.0]],
+            }],
+        };
+        assert_eq!(
+            matched_intervention_causal_contrasts(&malformed),
+            Err(ConceptGeometryError::DimensionMismatch)
+        );
+
+        let no_controls = MatchedInterventionDoseResponseCurve {
+            baseline_outcomes: vec![0.0, 0.0],
+            target_outcome_index: 0,
+            non_target_outcome_indices: vec![1],
+            points: vec![MatchedInterventionDoseResponsePoint {
+                alpha: 1.0,
+                target_state_outcomes: vec![1.0, 0.0],
+                target_state_effects: vec![1.0, 0.0],
+                matched_control_outcomes: vec![],
+                matched_control_effects: vec![],
+            }],
+        };
+        assert_eq!(
+            matched_intervention_causal_contrasts(&no_controls),
+            Err(ConceptGeometryError::EmptyControls)
+        );
     }
 
     #[test]
