@@ -2359,6 +2359,10 @@ fn intervention_state(
     state
         .try_reserve_exact(baseline.len())
         .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    if alpha == 0.0 {
+        state.extend_from_slice(baseline);
+        return Ok(state);
+    }
     for (value, direction) in baseline.iter().zip(direction) {
         let intervened = value + alpha * direction;
         if !intervened.is_finite() {
@@ -4389,6 +4393,46 @@ mod tests {
             ),
             Err(ConceptGeometryError::InconsistentZeroDoseOutcomes)
         );
+    }
+
+    #[test]
+    fn zero_dose_preserves_baseline_bits_before_evaluation() {
+        let baseline = [-0.0, 0.0];
+        let doses = matched_intervention_dose_states(
+            &baseline,
+            &[1.0, 0.0],
+            &[vec![0.0, 1.0]],
+            &[0.0],
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+
+        assert_eq!(doses.len(), 1);
+        for state in std::iter::once(doses[0].target_state())
+            .chain(doses[0].matched_control_states().iter().map(Vec::as_slice))
+        {
+            assert!(
+                state
+                    .iter()
+                    .zip(baseline)
+                    .all(|(value, original)| value.to_bits() == original.to_bits())
+            );
+        }
+
+        let curve = matched_intervention_dose_response_curve(
+            &baseline,
+            &[1.0, 0.0],
+            &[vec![0.0, 1.0]],
+            &[0.0],
+            0,
+            &[1],
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+            |state| Ok(state.to_vec()),
+        )
+        .unwrap();
+        assert_eq!(curve.points().len(), 1);
     }
 
     #[test]
