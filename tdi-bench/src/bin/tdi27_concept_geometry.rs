@@ -6,9 +6,8 @@ use tdi_bench::concept_geometry_v27::{
     bootstrap_projection_method_differentials, causal_novelty_gap,
     compare_innovation_energy_to_shuffled_null, interaction_residual,
     matched_intervention_causal_contrasts, matched_intervention_dose_response_curve,
-    matched_intervention_dose_states, mean_difference,
-    projection_method_differential, residualize, sample_size_sensitivity_grid,
-    sequential_accepted_rank_summary, sequential_innovations,
+    matched_intervention_dose_states, mean_difference, projection_method_differential, residualize,
+    sample_size_sensitivity_grid, sequential_accepted_rank_summary, sequential_innovations,
 };
 
 fn response(state: &[f64]) -> f64 {
