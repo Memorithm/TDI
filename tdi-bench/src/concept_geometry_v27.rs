@@ -2603,9 +2603,12 @@ fn compensated_finite_mean(values: &[f64]) -> Result<f64, ConceptGeometryError> 
         } else {
             (negative - high) + positive
         };
-        expansion_add(&mut partials, low)
+        if expansion_add(&mut partials, low)
             .and_then(|()| expansion_add(&mut partials, high))
-            .map_err(|()| ConceptGeometryError::NonFiniteValue)?;
+            .is_err()
+        {
+            return predivided_expansion_mean(values, lower, upper);
+        }
     }
 
     let mut raw_sum_overflowed = false;
@@ -3759,6 +3762,13 @@ mod tests {
         assert_eq!(
             causal_novelty_gap(0.0, &[least_subnormal, least_subnormal]),
             Ok(-least_subnormal)
+        );
+        assert_eq!(
+            causal_novelty_gap(
+                0.0,
+                &[-9.464_889_054_487_247e257, -least_subnormal, f64::MAX, f64::MAX]
+            ),
+            Ok(-(f64::MAX / 2.0))
         );
     }
 
