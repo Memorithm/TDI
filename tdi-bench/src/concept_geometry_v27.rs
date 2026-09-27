@@ -2513,10 +2513,7 @@ fn compensated_finite_mean(values: &[f64]) -> Result<f64, ConceptGeometryError> 
     // when much larger finite terms cancel, independently of input order.
     let divisor = values.len() as f64;
     let lower = values.iter().copied().fold(f64::INFINITY, f64::min);
-    let upper = values
-        .iter()
-        .copied()
-        .fold(f64::NEG_INFINITY, f64::max);
+    let upper = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     let mut sum = 0.0;
     let mut correction = 0.0;
     for value in values {
