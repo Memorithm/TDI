@@ -2642,12 +2642,11 @@ fn compensated_finite_mean(values: &[f64]) -> Result<f64, ConceptGeometryError> 
     if ordering == std::cmp::Ordering::Equal {
         return Ok(0.0);
     }
-    let (larger, smaller, result_is_negative) =
-        if ordering == std::cmp::Ordering::Greater {
-            (&positive, &negative, false)
-        } else {
-            (&negative, &positive, true)
-        };
+    let (larger, smaller, result_is_negative) = if ordering == std::cmp::Ordering::Greater {
+        (&positive, &negative, false)
+    } else {
+        (&negative, &positive, true)
+    };
 
     let mut magnitude = Vec::new();
     magnitude
