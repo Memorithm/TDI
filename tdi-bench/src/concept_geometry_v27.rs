@@ -2512,11 +2512,23 @@ fn compensated_finite_mean(values: &[f64]) -> Result<f64, ConceptGeometryError> 
     // intermediate sum. Neumaier compensation retains small contributions
     // when much larger finite terms cancel, independently of input order.
     let divisor = values.len() as f64;
+    let lower = values.iter().copied().fold(f64::INFINITY, f64::min);
+    let upper = values
+        .iter()
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
     let mut sum = 0.0;
     let mut correction = 0.0;
     for value in values {
         let term = value / divisor;
-        let next = sum + term;
+        let raw_next = sum + term;
+        // A rounded partial can cross the finite boundary even though no
+        // partial of n terms divided by n can exceed MAX mathematically.
+        let next = if raw_next.is_infinite() {
+            f64::MAX.copysign(raw_next)
+        } else {
+            raw_next
+        };
         correction += if sum.abs() >= term.abs() {
             (sum - next) + term
         } else {
@@ -2524,7 +2536,7 @@ fn compensated_finite_mean(values: &[f64]) -> Result<f64, ConceptGeometryError> 
         };
         sum = next;
     }
-    let mean = sum + correction;
+    let mean = (sum + correction).clamp(lower, upper);
     if !mean.is_finite() {
         return Err(ConceptGeometryError::NonFiniteValue);
     }
@@ -3625,6 +3637,10 @@ mod tests {
     #[test]
     fn causal_gap_uses_a_compensated_mean_and_fails_closed_on_overflow() {
         assert_eq!(causal_novelty_gap(f64::MAX, &[f64::MAX, f64::MAX]), Ok(0.0));
+        assert_eq!(
+            causal_novelty_gap(f64::MAX, &[f64::MAX, f64::MAX, f64::MAX]),
+            Ok(0.0)
+        );
         assert_eq!(
             causal_novelty_gap(f64::MAX, &[-f64::MAX]),
             Err(ConceptGeometryError::NonFiniteValue)
