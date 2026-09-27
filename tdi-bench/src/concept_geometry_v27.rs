@@ -2523,7 +2523,11 @@ fn rounded_exact_ratio(
     negative: bool,
 ) -> Result<f64, ConceptGeometryError> {
     let divisor = divisor as u128;
-    let mut quotient = vec![0_u8; magnitude.len()];
+    let mut quotient = Vec::new();
+    quotient
+        .try_reserve_exact(magnitude.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    quotient.resize(magnitude.len(), 0_u8);
     let mut remainder = 0_u128;
     for index in (0..magnitude.len()).rev() {
         remainder = remainder * 2 + u128::from(magnitude[index]);
@@ -2558,18 +2562,23 @@ fn rounded_exact_ratio(
     for index in (shift..=highest).rev() {
         significand = (significand << 1) | u64::from(quotient[index]);
     }
-    if shift > 0 {
+    let round_up = if shift == 0 {
+        let twice_remainder = remainder * 2;
+        twice_remainder > divisor
+            || (twice_remainder == divisor && significand & 1 == 1)
+    } else {
         let guard = quotient[shift - 1] != 0;
         let sticky = remainder != 0
             || quotient[..shift.saturating_sub(1)]
                 .iter()
                 .any(|bit| *bit != 0);
-        if guard && (sticky || significand & 1 == 1) {
-            significand += 1;
-            if significand == 1_u64 << 53 {
-                significand >>= 1;
-                highest += 1;
-            }
+        guard && (sticky || significand & 1 == 1)
+    };
+    if round_up {
+        significand += 1;
+        if significand == 1_u64 << 53 {
+            significand >>= 1;
+            highest += 1;
         }
     }
 
@@ -2593,8 +2602,16 @@ fn compensated_finite_mean(values: &[f64]) -> Result<f64, ConceptGeometryError> 
         return Err(ConceptGeometryError::NonFiniteValue);
     }
 
-    let mut positive = vec![0_u128; EXACT_SUM_BITS];
-    let mut negative = vec![0_u128; EXACT_SUM_BITS];
+    let mut positive = Vec::new();
+    positive
+        .try_reserve_exact(EXACT_SUM_BITS)
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    positive.resize(EXACT_SUM_BITS, 0_u128);
+    let mut negative = Vec::new();
+    negative
+        .try_reserve_exact(EXACT_SUM_BITS)
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    negative.resize(EXACT_SUM_BITS, 0_u128);
     for &value in values {
         let raw = value.to_bits();
         let exponent_bits = ((raw >> 52) & 0x7ff) as i32;
@@ -2632,7 +2649,11 @@ fn compensated_finite_mean(values: &[f64]) -> Result<f64, ConceptGeometryError> 
             (&negative, &positive, true)
         };
 
-    let mut magnitude = vec![0_u8; EXACT_SUM_BITS];
+    let mut magnitude = Vec::new();
+    magnitude
+        .try_reserve_exact(EXACT_SUM_BITS)
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    magnitude.resize(EXACT_SUM_BITS, 0_u8);
     let mut borrow = 0_i8;
     for index in 0..EXACT_SUM_BITS {
         let difference = larger[index] as i8 - smaller[index] as i8 - borrow;
@@ -3799,11 +3820,11 @@ mod tests {
 
         let power = 2.0_f64.powi(1023);
         let mut exact_cancellation = Vec::new();
-        exact_cancellation.extend(std::iter::repeat_n(power, 4));
-        exact_cancellation.extend(std::iter::repeat_n(power / 8.0, 8));
-        exact_cancellation.extend(std::iter::repeat_n(least_subnormal, 25));
-        exact_cancellation.extend(std::iter::repeat_n(-power / 2.0, 4));
-        exact_cancellation.extend(std::iter::repeat_n(-3.0 * power / 8.0, 8));
+        exact_cancellation.extend(std::iter::repeat(power).take(4));
+        exact_cancellation.extend(std::iter::repeat(power / 8.0).take(8));
+        exact_cancellation.extend(std::iter::repeat(least_subnormal).take(25));
+        exact_cancellation.extend(std::iter::repeat(-power / 2.0).take(4));
+        exact_cancellation.extend(std::iter::repeat(-3.0 * power / 8.0).take(8));
         assert_eq!(
             causal_novelty_gap(0.0, &exact_cancellation),
             Ok(-least_subnormal)
