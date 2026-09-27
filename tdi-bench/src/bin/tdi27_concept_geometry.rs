@@ -4,10 +4,11 @@ use tdi_bench::concept_geometry_v27::{
     ConceptGeometryError, DEFAULT_TOLERANCE, DevelopmentResamplingPlan, DevelopmentSampleSizePoint,
     bootstrap_direction_stability, bootstrap_innovation_energy_summary,
     bootstrap_projection_method_differentials, causal_novelty_gap,
-    compare_innovation_energy_to_shuffled_null, interaction_residual,
-    matched_intervention_causal_contrasts, matched_intervention_dose_response_curve,
-    matched_intervention_dose_states, mean_difference, projection_method_differential, residualize,
-    sample_size_sensitivity_grid, sequential_accepted_rank_summary, sequential_innovations,
+    compare_innovation_energy_to_shuffled_null, decompose_symmetric_intervention_causal_contrasts,
+    interaction_residual, matched_intervention_causal_contrasts,
+    matched_intervention_dose_response_curve, matched_intervention_dose_states, mean_difference,
+    projection_method_differential, residualize, sample_size_sensitivity_grid,
+    sequential_accepted_rank_summary, sequential_innovations,
 };
 
 fn response(state: &[f64]) -> f64 {
@@ -66,6 +67,8 @@ fn run() -> Result<(), ConceptGeometryError> {
     )?;
 
     let intervention_contrasts = matched_intervention_causal_contrasts(&intervention_curve)?;
+    let signed_dose_decomposition =
+        decompose_symmetric_intervention_causal_contrasts(&intervention_contrasts)?;
 
     let effect_a = intervention_effect(&base, &[1.0, 0.0, 0.0], 1.0);
     let effect_b = intervention_effect(&base, &[0.0, 1.0, 0.0], 1.0);
@@ -161,7 +164,7 @@ fn run() -> Result<(), ConceptGeometryError> {
         2,
     )?;
 
-    println!("schema=tdi27-concept-geometry-development/v3");
+    println!("schema=tdi27-concept-geometry-development/v4");
     println!("scope=synthetic_development_only");
     println!(
         "mean_contrast={:.12},{:.12},{:.12}",
@@ -213,6 +216,32 @@ fn run() -> Result<(), ConceptGeometryError> {
         intervention_contrasts.points()[0].non_target_outcome_gaps()[0],
         intervention_contrasts.points()[1].non_target_outcome_gaps()[0],
         intervention_contrasts.points()[2].non_target_outcome_gaps()[0]
+    );
+    println!(
+        "intervention_symmetric_pair_count={}",
+        signed_dose_decomposition.pairs().len()
+    );
+    println!(
+        "intervention_symmetric_pair_alpha={:.12}",
+        signed_dose_decomposition.pairs()[0].alpha_magnitude()
+    );
+    println!(
+        "intervention_symmetric_target_odd_even={:.12},{:.12}",
+        signed_dose_decomposition.pairs()[0].target_odd_component(),
+        signed_dose_decomposition.pairs()[0].target_even_component()
+    );
+    println!(
+        "intervention_symmetric_non_target_odd_even={:.12},{:.12}",
+        signed_dose_decomposition.pairs()[0].non_target_odd_components()[0],
+        signed_dose_decomposition.pairs()[0].non_target_even_components()[0]
+    );
+    println!(
+        "intervention_zero_point_present={}",
+        signed_dose_decomposition.zero_point().is_some()
+    );
+    println!(
+        "intervention_unpaired_point_count={}",
+        signed_dose_decomposition.unpaired_points().len()
     );
     println!("orthogonal_interaction_residual={interaction:.12}");
     println!(

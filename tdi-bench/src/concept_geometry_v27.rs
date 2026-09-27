@@ -2205,6 +2205,100 @@ impl MatchedInterventionDoseCausalContrasts {
     }
 }
 
+/// Descriptive decomposition of one exactly matched `-alpha`/`+alpha` pair.
+///
+/// The odd component is `(gap(+alpha) - gap(-alpha)) / 2`; the even component
+/// is `(gap(+alpha) + gap(-alpha)) / 2`. Both are explanatory Development
+/// values only and carry no symmetry verdict, threshold, or authorization.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SymmetricInterventionDoseCausalContrast {
+    negative_point: MatchedInterventionDoseCausalContrastPoint,
+    positive_point: MatchedInterventionDoseCausalContrastPoint,
+    target_odd_component: f64,
+    target_even_component: f64,
+    non_target_odd_components: Vec<f64>,
+    non_target_even_components: Vec<f64>,
+}
+
+impl SymmetricInterventionDoseCausalContrast {
+    #[must_use]
+    pub const fn alpha_magnitude(&self) -> f64 {
+        self.positive_point.alpha
+    }
+
+    #[must_use]
+    pub fn negative_point(&self) -> &MatchedInterventionDoseCausalContrastPoint {
+        &self.negative_point
+    }
+
+    #[must_use]
+    pub fn positive_point(&self) -> &MatchedInterventionDoseCausalContrastPoint {
+        &self.positive_point
+    }
+
+    #[must_use]
+    pub const fn target_odd_component(&self) -> f64 {
+        self.target_odd_component
+    }
+
+    #[must_use]
+    pub const fn target_even_component(&self) -> f64 {
+        self.target_even_component
+    }
+
+    #[must_use]
+    pub fn non_target_odd_components(&self) -> &[f64] {
+        &self.non_target_odd_components
+    }
+
+    #[must_use]
+    pub fn non_target_even_components(&self) -> &[f64] {
+        &self.non_target_even_components
+    }
+}
+
+/// Lossless accounting of signed dose contrasts by exact `-alpha`/`+alpha` pairs.
+///
+/// A zero-dose point and every nonzero dose lacking an exact opposite are kept
+/// explicitly. Pairing therefore never drops evidence or fabricates a missing
+/// dose. Pair order follows increasing positive alpha; unpaired order follows
+/// the caller's original strictly increasing grid.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MatchedInterventionSignedDoseDecomposition {
+    target_outcome_index: usize,
+    non_target_outcome_indices: Vec<usize>,
+    pairs: Vec<SymmetricInterventionDoseCausalContrast>,
+    zero_point: Option<MatchedInterventionDoseCausalContrastPoint>,
+    unpaired_points: Vec<MatchedInterventionDoseCausalContrastPoint>,
+}
+
+impl MatchedInterventionSignedDoseDecomposition {
+    #[must_use]
+    pub const fn target_outcome_index(&self) -> usize {
+        self.target_outcome_index
+    }
+
+    #[must_use]
+    pub fn non_target_outcome_indices(&self) -> &[usize] {
+        &self.non_target_outcome_indices
+    }
+
+    #[must_use]
+    pub fn pairs(&self) -> &[SymmetricInterventionDoseCausalContrast] {
+        &self.pairs
+    }
+
+    #[must_use]
+    pub fn zero_point(&self) -> Option<&MatchedInterventionDoseCausalContrastPoint> {
+        self.zero_point.as_ref()
+    }
+
+    #[must_use]
+    pub fn unpaired_points(&self) -> &[MatchedInterventionDoseCausalContrastPoint] {
+        &self.unpaired_points
+    }
+}
+
 impl MatchedInterventionDoseState {
     #[must_use]
     pub const fn alpha(&self) -> f64 {
@@ -2764,6 +2858,144 @@ pub fn matched_intervention_causal_contrasts(
         target_outcome_index: curve.target_outcome_index,
         non_target_outcome_indices: curve.non_target_outcome_indices.clone(),
         points,
+    })
+}
+
+fn exact_symmetric_components(
+    negative_value: f64,
+    positive_value: f64,
+) -> Result<(f64, f64), ConceptGeometryError> {
+    let odd = compensated_finite_mean(&[positive_value, -negative_value])?;
+    let even = compensated_finite_mean(&[positive_value, negative_value])?;
+    Ok((odd, even))
+}
+
+/// Decompose available exact `-alpha`/`+alpha` causal-contrast pairs.
+///
+/// The input grid is revalidated and every point is accounted for exactly once
+/// as a paired member, the optional zero point, or an explicitly unpaired
+/// point. Components use the exact finite-sum machinery and one ties-to-even
+/// division by two. This function does not infer symmetry, select doses, fit a
+/// response curve, run a statistical test, or authorize another stage.
+pub fn decompose_symmetric_intervention_causal_contrasts(
+    contrasts: &MatchedInterventionDoseCausalContrasts,
+) -> Result<MatchedInterventionSignedDoseDecomposition, ConceptGeometryError> {
+    if contrasts.non_target_outcome_indices.is_empty()
+        || contrasts
+            .non_target_outcome_indices
+            .contains(&contrasts.target_outcome_index)
+        || contrasts
+            .non_target_outcome_indices
+            .windows(2)
+            .any(|pair| pair[0] >= pair[1])
+    {
+        return Err(ConceptGeometryError::InvalidNonTargetOutcomeIndices);
+    }
+    if contrasts.points.is_empty() {
+        return Err(ConceptGeometryError::EmptyInterventionAlphaGrid);
+    }
+
+    let non_target_width = contrasts.non_target_outcome_indices.len();
+    for point in &contrasts.points {
+        if !point.alpha.is_finite()
+            || !point.target_outcome_gap.is_finite()
+            || point
+                .non_target_outcome_gaps
+                .iter()
+                .any(|value| !value.is_finite())
+        {
+            return Err(ConceptGeometryError::NonFiniteValue);
+        }
+        if point.non_target_outcome_gaps.len() != non_target_width {
+            return Err(ConceptGeometryError::DimensionMismatch);
+        }
+    }
+    if contrasts
+        .points
+        .windows(2)
+        .any(|pair| pair[0].alpha >= pair[1].alpha)
+    {
+        return Err(ConceptGeometryError::InvalidInterventionAlphaGrid);
+    }
+
+    let mut paired = Vec::new();
+    paired
+        .try_reserve_exact(contrasts.points.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    paired.resize(contrasts.points.len(), false);
+
+    let mut pairs = Vec::new();
+    pairs
+        .try_reserve_exact(contrasts.points.len() / 2)
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    for (positive_index, positive_point) in contrasts.points.iter().enumerate() {
+        if positive_point.alpha <= 0.0 {
+            continue;
+        }
+        let opposite = -positive_point.alpha;
+        let Ok(negative_index) = contrasts
+            .points
+            .binary_search_by(|point| point.alpha.total_cmp(&opposite))
+        else {
+            continue;
+        };
+        let negative_point = &contrasts.points[negative_index];
+
+        let (target_odd_component, target_even_component) = exact_symmetric_components(
+            negative_point.target_outcome_gap,
+            positive_point.target_outcome_gap,
+        )?;
+        let mut non_target_odd_components = Vec::new();
+        non_target_odd_components
+            .try_reserve_exact(non_target_width)
+            .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+        let mut non_target_even_components = Vec::new();
+        non_target_even_components
+            .try_reserve_exact(non_target_width)
+            .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+        for (&negative_value, &positive_value) in negative_point
+            .non_target_outcome_gaps
+            .iter()
+            .zip(&positive_point.non_target_outcome_gaps)
+        {
+            let (odd, even) = exact_symmetric_components(negative_value, positive_value)?;
+            non_target_odd_components.push(odd);
+            non_target_even_components.push(even);
+        }
+
+        paired[negative_index] = true;
+        paired[positive_index] = true;
+        pairs.push(SymmetricInterventionDoseCausalContrast {
+            negative_point: negative_point.clone(),
+            positive_point: positive_point.clone(),
+            target_odd_component,
+            target_even_component,
+            non_target_odd_components,
+            non_target_even_components,
+        });
+    }
+
+    let zero_point = contrasts
+        .points
+        .iter()
+        .find(|point| point.alpha == 0.0)
+        .cloned();
+    let mut unpaired_points = Vec::new();
+    unpaired_points
+        .try_reserve_exact(contrasts.points.len().saturating_sub(pairs.len() * 2))
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    for (index, point) in contrasts.points.iter().enumerate() {
+        if !paired[index] && point.alpha != 0.0 {
+            unpaired_points.push(point.clone());
+        }
+    }
+
+    Ok(MatchedInterventionSignedDoseDecomposition {
+        target_outcome_index: contrasts.target_outcome_index,
+        non_target_outcome_indices: contrasts.non_target_outcome_indices.clone(),
+        pairs,
+        zero_point,
+        unpaired_points,
     })
 }
 
@@ -3888,6 +4120,130 @@ mod tests {
         assert_eq!(
             matched_intervention_causal_contrasts(&no_controls),
             Err(ConceptGeometryError::EmptyControls)
+        );
+    }
+
+    #[test]
+    fn symmetric_causal_contrast_decomposition_is_lossless_and_role_preserving() {
+        let curve = matched_intervention_dose_response_curve(
+            &[0.0, 0.0],
+            &[1.0, 0.0],
+            &[vec![0.0, 1.0]],
+            &[-2.0, -1.0, 0.0, 1.0, 3.0],
+            0,
+            &[1],
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+            |state| Ok(state.to_vec()),
+        )
+        .unwrap();
+        let contrasts = matched_intervention_causal_contrasts(&curve).unwrap();
+        let decomposition = decompose_symmetric_intervention_causal_contrasts(&contrasts).unwrap();
+
+        assert_eq!(decomposition.target_outcome_index(), 0);
+        assert_eq!(decomposition.non_target_outcome_indices(), &[1]);
+        assert_eq!(decomposition.pairs().len(), 1);
+        let pair = &decomposition.pairs()[0];
+        assert_eq!(pair.alpha_magnitude(), 1.0);
+        assert_eq!(pair.negative_point().alpha(), -1.0);
+        assert_eq!(pair.positive_point().alpha(), 1.0);
+        assert_eq!(pair.target_odd_component(), 1.0);
+        assert_eq!(pair.target_even_component(), 0.0);
+        assert_eq!(pair.non_target_odd_components(), &[-1.0]);
+        assert_eq!(pair.non_target_even_components(), &[0.0]);
+        assert_eq!(decomposition.zero_point().unwrap().alpha(), 0.0);
+        assert_eq!(
+            decomposition
+                .unpaired_points()
+                .iter()
+                .map(MatchedInterventionDoseCausalContrastPoint::alpha)
+                .collect::<Vec<_>>(),
+            vec![-2.0, 3.0]
+        );
+        assert_eq!(
+            decomposition.pairs().len() * 2
+                + usize::from(decomposition.zero_point().is_some())
+                + decomposition.unpaired_points().len(),
+            contrasts.points().len()
+        );
+    }
+
+    #[test]
+    fn symmetric_causal_contrast_components_use_exact_finite_means() {
+        let contrasts = MatchedInterventionDoseCausalContrasts {
+            target_outcome_index: 0,
+            non_target_outcome_indices: vec![1],
+            points: vec![
+                MatchedInterventionDoseCausalContrastPoint {
+                    alpha: -1.0,
+                    target_outcome_gap: -f64::MAX,
+                    non_target_outcome_gaps: vec![f64::MAX],
+                },
+                MatchedInterventionDoseCausalContrastPoint {
+                    alpha: 1.0,
+                    target_outcome_gap: f64::MAX,
+                    non_target_outcome_gaps: vec![f64::MAX],
+                },
+            ],
+        };
+        let decomposition = decompose_symmetric_intervention_causal_contrasts(&contrasts).unwrap();
+        let pair = &decomposition.pairs()[0];
+
+        assert_eq!(pair.target_odd_component(), f64::MAX);
+        assert_eq!(pair.target_even_component(), 0.0);
+        assert_eq!(pair.non_target_odd_components(), &[0.0]);
+        assert_eq!(pair.non_target_even_components(), &[f64::MAX]);
+    }
+
+    #[test]
+    fn symmetric_causal_contrast_decomposition_rejects_malformed_records() {
+        let malformed = MatchedInterventionDoseCausalContrasts {
+            target_outcome_index: 0,
+            non_target_outcome_indices: vec![1],
+            points: vec![
+                MatchedInterventionDoseCausalContrastPoint {
+                    alpha: 1.0,
+                    target_outcome_gap: 1.0,
+                    non_target_outcome_gaps: vec![0.0],
+                },
+                MatchedInterventionDoseCausalContrastPoint {
+                    alpha: -1.0,
+                    target_outcome_gap: -1.0,
+                    non_target_outcome_gaps: vec![0.0],
+                },
+            ],
+        };
+        assert_eq!(
+            decompose_symmetric_intervention_causal_contrasts(&malformed),
+            Err(ConceptGeometryError::InvalidInterventionAlphaGrid)
+        );
+
+        let non_finite = MatchedInterventionDoseCausalContrasts {
+            target_outcome_index: 0,
+            non_target_outcome_indices: vec![1],
+            points: vec![MatchedInterventionDoseCausalContrastPoint {
+                alpha: 0.0,
+                target_outcome_gap: f64::NAN,
+                non_target_outcome_gaps: vec![0.0],
+            }],
+        };
+        assert_eq!(
+            decompose_symmetric_intervention_causal_contrasts(&non_finite),
+            Err(ConceptGeometryError::NonFiniteValue)
+        );
+
+        let wrong_width = MatchedInterventionDoseCausalContrasts {
+            target_outcome_index: 0,
+            non_target_outcome_indices: vec![1],
+            points: vec![MatchedInterventionDoseCausalContrastPoint {
+                alpha: 0.0,
+                target_outcome_gap: 0.0,
+                non_target_outcome_gaps: vec![],
+            }],
+        };
+        assert_eq!(
+            decompose_symmetric_intervention_causal_contrasts(&wrong_width),
+            Err(ConceptGeometryError::DimensionMismatch)
         );
     }
 
