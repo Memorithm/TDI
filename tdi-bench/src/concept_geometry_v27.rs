@@ -3747,10 +3747,7 @@ mod tests {
             Ok(-(small / 5.0))
         );
         assert_eq!(
-            causal_novelty_gap(
-                0.0,
-                &[f64::MAX / 2.0, -f64::MAX / 2.0, 1.0, -1.0, small]
-            ),
+            causal_novelty_gap(0.0, &[f64::MAX / 2.0, -f64::MAX / 2.0, 1.0, -1.0, small]),
             Ok(-(small / 5.0))
         );
 
