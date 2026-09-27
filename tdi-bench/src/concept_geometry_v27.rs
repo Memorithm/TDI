@@ -2549,9 +2549,7 @@ fn rounded_exact_ratio(
             subnormal = (subnormal << 1) | u64::from(quotient[index]);
         }
         let twice_remainder = remainder * 2;
-        if twice_remainder > divisor
-            || (twice_remainder == divisor && subnormal & 1 == 1)
-        {
+        if twice_remainder > divisor || (twice_remainder == divisor && subnormal & 1 == 1) {
             subnormal += 1;
         }
         return Ok(f64::from_bits(sign | subnormal));
@@ -2564,8 +2562,7 @@ fn rounded_exact_ratio(
     }
     let round_up = if shift == 0 {
         let twice_remainder = remainder * 2;
-        twice_remainder > divisor
-            || (twice_remainder == divisor && significand & 1 == 1)
+        twice_remainder > divisor || (twice_remainder == divisor && significand & 1 == 1)
     } else {
         let guard = quotient[shift - 1] != 0;
         let sticky = remainder != 0
