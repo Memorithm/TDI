@@ -2500,62 +2500,89 @@ pub fn matched_intervention_dose_response_curve(
     })
 }
 
-fn expansion_add(partials: &mut Vec<f64>, mut value: f64) -> Result<(), ()> {
-    if value == 0.0 {
-        return Ok(());
+const EXACT_SUM_MIN_EXPONENT: i32 = -1074;
+const EXACT_SUM_BITS: usize = 2176;
+
+fn normalize_exact_buckets(buckets: &mut [u128]) -> Result<(), ConceptGeometryError> {
+    for index in 0..buckets.len() - 1 {
+        let carry = buckets[index] >> 1;
+        buckets[index] &= 1;
+        buckets[index + 1] = buckets[index + 1]
+            .checked_add(carry)
+            .ok_or(ConceptGeometryError::ReplicateAccountingOverflow)?;
     }
-    let original_len = partials.len();
-    let mut write = 0_usize;
-    for read in 0..original_len {
-        let mut partial = partials[read];
-        if value.abs() < partial.abs() {
-            std::mem::swap(&mut value, &mut partial);
-        }
-        let high = value + partial;
-        if !high.is_finite() {
-            return Err(());
-        }
-        let low = partial - (high - value);
-        if low != 0.0 {
-            partials[write] = low;
-            write += 1;
-        }
-        value = high;
+    if buckets[buckets.len() - 1] > 1 {
+        return Err(ConceptGeometryError::ReplicateAccountingOverflow);
     }
-    partials.truncate(write);
-    partials.push(value);
     Ok(())
 }
 
-fn collapse_expansion(partials: &[f64]) -> f64 {
-    partials.iter().copied().sum()
-}
-
-fn predivided_expansion_mean(
-    values: &[f64],
-    lower: f64,
-    upper: f64,
+fn rounded_exact_ratio(
+    magnitude: &[u8],
+    divisor: usize,
+    negative: bool,
 ) -> Result<f64, ConceptGeometryError> {
-    let divisor = values.len() as f64;
-    let mut partials = Vec::new();
-    partials
-        .try_reserve_exact(values.len())
-        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
-    for value in values {
-        let term = value / divisor;
-        if expansion_add(&mut partials, term).is_err() {
-            return Ok(if term.is_sign_negative() {
-                lower
-            } else {
-                upper
-            });
+    let divisor = divisor as u128;
+    let mut quotient = vec![0_u8; magnitude.len()];
+    let mut remainder = 0_u128;
+    for index in (0..magnitude.len()).rev() {
+        remainder = remainder * 2 + u128::from(magnitude[index]);
+        if remainder >= divisor {
+            quotient[index] = 1;
+            remainder -= divisor;
         }
     }
-    let mean = collapse_expansion(&partials).clamp(lower, upper);
-    if !mean.is_finite() {
-        return Err(ConceptGeometryError::NonFiniteValue);
+
+    let sign = if negative { 1_u64 << 63 } else { 0 };
+    let Some(mut highest) = quotient.iter().rposition(|bit| *bit != 0) else {
+        let round_up = remainder * 2 > divisor;
+        return Ok(f64::from_bits(sign | u64::from(round_up)));
+    };
+
+    if highest <= 51 {
+        let mut subnormal = 0_u64;
+        for index in (0..=highest).rev() {
+            subnormal = (subnormal << 1) | u64::from(quotient[index]);
+        }
+        let twice_remainder = remainder * 2;
+        if twice_remainder > divisor
+            || (twice_remainder == divisor && subnormal & 1 == 1)
+        {
+            subnormal += 1;
+        }
+        return Ok(f64::from_bits(sign | subnormal));
     }
-    Ok(mean)
+
+    let shift = highest - 52;
+    let mut significand = 0_u64;
+    for index in (shift..=highest).rev() {
+        significand = (significand << 1) | u64::from(quotient[index]);
+    }
+    if shift > 0 {
+        let guard = quotient[shift - 1] != 0;
+        let sticky = remainder != 0
+            || quotient[..shift.saturating_sub(1)]
+                .iter()
+                .any(|bit| *bit != 0);
+        if guard && (sticky || significand & 1 == 1) {
+            significand += 1;
+            if significand == 1_u64 << 53 {
+                significand >>= 1;
+                highest += 1;
+            }
+        }
+    }
+
+    let unbiased_exponent = EXACT_SUM_MIN_EXPONENT
+        + i32::try_from(highest).map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    if unbiased_exponent > 1023 {
+        return Ok(f64::from_bits(sign | f64::MAX.to_bits()));
+    }
+    let exponent_bits = u64::try_from(unbiased_exponent + 1023)
+        .map_err(|_| ConceptGeometryError::NonFiniteValue)?
+        << 52;
+    let fraction_bits = significand & ((1_u64 << 52) - 1);
+    Ok(f64::from_bits(sign | exponent_bits | fraction_bits))
 }
 
 fn compensated_finite_mean(values: &[f64]) -> Result<f64, ConceptGeometryError> {
@@ -2566,70 +2593,64 @@ fn compensated_finite_mean(values: &[f64]) -> Result<f64, ConceptGeometryError> 
         return Err(ConceptGeometryError::NonFiniteValue);
     }
 
-    let lower = values.iter().copied().fold(f64::INFINITY, f64::min);
-    let upper = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-    let mut positives = Vec::new();
-    let mut negatives = Vec::new();
-    positives
-        .try_reserve_exact(values.len())
-        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
-    negatives
-        .try_reserve_exact(values.len())
-        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    let mut positive = vec![0_u128; EXACT_SUM_BITS];
+    let mut negative = vec![0_u128; EXACT_SUM_BITS];
     for &value in values {
-        if value.is_sign_negative() && value != 0.0 {
-            negatives.push(value);
-        } else if value != 0.0 {
-            positives.push(value);
-        }
-    }
-    positives.sort_by(|left, right| right.abs().total_cmp(&left.abs()));
-    negatives.sort_by(|left, right| right.abs().total_cmp(&left.abs()));
-
-    // Opposite-sign pairs cannot overflow. Feeding their error-free TwoSum
-    // components into an expansion preserves small cancellation residuals
-    // before any same-sign remainder is accumulated.
-    let mut partials = Vec::new();
-    partials
-        .try_reserve_exact(values.len())
-        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
-    let paired = positives.len().min(negatives.len());
-    for index in 0..paired {
-        let positive = positives[index];
-        let negative = negatives[index];
-        let high = positive + negative;
-        let low = if positive.abs() >= negative.abs() {
-            (positive - high) + negative
+        let raw = value.to_bits();
+        let exponent_bits = ((raw >> 52) & 0x7ff) as i32;
+        let fraction = raw & ((1_u64 << 52) - 1);
+        let (significand, exponent) = if exponent_bits == 0 {
+            (fraction, EXACT_SUM_MIN_EXPONENT)
         } else {
-            (negative - high) + positive
+            ((1_u64 << 52) | fraction, exponent_bits - 1023 - 52)
         };
-        if expansion_add(&mut partials, low)
-            .and_then(|()| expansion_add(&mut partials, high))
-            .is_err()
-        {
-            return predivided_expansion_mean(values, lower, upper);
+        if significand == 0 {
+            continue;
+        }
+        let index = usize::try_from(exponent - EXACT_SUM_MIN_EXPONENT)
+            .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+        let buckets = if raw >> 63 == 0 {
+            &mut positive
+        } else {
+            &mut negative
+        };
+        buckets[index] = buckets[index]
+            .checked_add(u128::from(significand))
+            .ok_or(ConceptGeometryError::ReplicateAccountingOverflow)?;
+    }
+    normalize_exact_buckets(&mut positive)?;
+    normalize_exact_buckets(&mut negative)?;
+
+    let ordering = positive.iter().rev().cmp(negative.iter().rev());
+    if ordering == std::cmp::Ordering::Equal {
+        return Ok(0.0);
+    }
+    let (larger, smaller, result_is_negative) =
+        if ordering == std::cmp::Ordering::Greater {
+            (&positive, &negative, false)
+        } else {
+            (&negative, &positive, true)
+        };
+
+    let mut magnitude = vec![0_u8; EXACT_SUM_BITS];
+    let mut borrow = 0_i8;
+    for index in 0..EXACT_SUM_BITS {
+        let difference = larger[index] as i8 - smaller[index] as i8 - borrow;
+        if difference < 0 {
+            magnitude[index] = u8::try_from(difference + 2)
+                .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+            borrow = 1;
+        } else {
+            magnitude[index] = u8::try_from(difference)
+                .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+            borrow = 0;
         }
     }
-
-    let mut raw_sum_overflowed = false;
-    for &value in positives[paired..].iter().chain(&negatives[paired..]) {
-        if expansion_add(&mut partials, value).is_err() {
-            raw_sum_overflowed = true;
-            break;
-        }
-    }
-    if raw_sum_overflowed {
-        // Here the remaining terms all have one sign, so the unscaled exact
-        // sum is outside the finite range. Compute the still-finite mean from
-        // a full expansion of pre-divided terms.
-        return predivided_expansion_mean(values, lower, upper);
+    if borrow != 0 {
+        return Err(ConceptGeometryError::ReplicateAccountingOverflow);
     }
 
-    let mean = collapse_expansion(&partials) / values.len() as f64;
-    if !mean.is_finite() {
-        return Err(ConceptGeometryError::NonFiniteValue);
-    }
-    Ok(mean.clamp(lower, upper))
+    rounded_exact_ratio(&magnitude, values.len(), result_is_negative)
 }
 
 /// Target intervention effect minus the mean matched-control effect.
@@ -3774,6 +3795,18 @@ mod tests {
                 ]
             ),
             Ok(-(f64::MAX / 2.0))
+        );
+
+        let power = 2.0_f64.powi(1023);
+        let mut exact_cancellation = Vec::new();
+        exact_cancellation.extend(std::iter::repeat_n(power, 4));
+        exact_cancellation.extend(std::iter::repeat_n(power / 8.0, 8));
+        exact_cancellation.extend(std::iter::repeat_n(least_subnormal, 25));
+        exact_cancellation.extend(std::iter::repeat_n(-power / 2.0, 4));
+        exact_cancellation.extend(std::iter::repeat_n(-3.0 * power / 8.0, 8));
+        assert_eq!(
+            causal_novelty_gap(0.0, &exact_cancellation),
+            Ok(-least_subnormal)
         );
     }
 
