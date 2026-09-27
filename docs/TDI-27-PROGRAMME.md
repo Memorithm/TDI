@@ -297,10 +297,11 @@ authorize real-model execution, or infer a scientific result.
 
 The third Development slice derives one raw signed causal contrast per declared
 outcome and alpha: the target-state effect minus a compensated mean of the
-matched-control effects. Each finite control is divided by the fixed count
-before Neumaier summation, preventing avoidable overflow while retaining small
-residuals when much larger controls cancel; a non-finite final subtraction
-still fails closed. Target and ordered non-target roles remain
+matched-control effects. Opposite-sign controls are paired before an
+error-free floating-point expansion so small cancellation residuals and
+subnormal contributions remain explicit and input-order independent. A bounded
+pre-divided expansion is used only when the exact raw sum exceeds the finite
+range; a non-finite final subtraction still fails closed. Target and ordered non-target roles remain
 explicit, and malformed widths, empty controls, non-finite inputs, or allocation
 failure are rejected. This explanatory record does not choose a dose, outcome,
 control, threshold or verdict; it does not fit a curve, run a statistical test,
