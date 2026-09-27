@@ -295,6 +295,19 @@ baseline-relative effects without aggregation. It does not fit a response
 curve, select outcomes or thresholds, convert a contrast into a causal verdict,
 authorize real-model execution, or infer a scientific result.
 
+The third Development slice derives one raw signed causal contrast per declared
+outcome and alpha: the target-state effect minus a compensated mean of the
+matched-control effects. Finite IEEE-754 inputs are decomposed into signed
+integer significands and exponent buckets, accumulated and cancelled exactly,
+then divided by the fixed control count with an explicit ties-to-even rounding
+step. This preserves subnormal residuals, remains input-order independent, and
+does not require an overflowing raw floating-point sum; a non-finite final
+target-minus-control subtraction still fails closed. Target and ordered non-target roles remain
+explicit, and malformed widths, empty controls, non-finite inputs, or allocation
+failure are rejected. This explanatory record does not choose a dose, outcome,
+control, threshold or verdict; it does not fit a curve, run a statistical test,
+authorize real-model execution, or advance the scientific stage.
+
 ### TDI-27.4 — cross-layer transport
 
 Measure whether residual directions persist after a declared alignment

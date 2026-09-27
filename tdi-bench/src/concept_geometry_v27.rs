@@ -2151,6 +2151,60 @@ impl MatchedInterventionDoseResponseCurve {
     }
 }
 
+/// Raw target-minus-matched-control gaps for one predeclared dose.
+///
+/// The target outcome remains separate from the ordered, caller-declared
+/// non-target outcomes. These values are explanatory Development data only:
+/// they carry no threshold, verdict, statistical decision, or authorization.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MatchedInterventionDoseCausalContrastPoint {
+    alpha: f64,
+    target_outcome_gap: f64,
+    non_target_outcome_gaps: Vec<f64>,
+}
+
+impl MatchedInterventionDoseCausalContrastPoint {
+    #[must_use]
+    pub const fn alpha(&self) -> f64 {
+        self.alpha
+    }
+
+    #[must_use]
+    pub const fn target_outcome_gap(&self) -> f64 {
+        self.target_outcome_gap
+    }
+
+    #[must_use]
+    pub fn non_target_outcome_gaps(&self) -> &[f64] {
+        &self.non_target_outcome_gaps
+    }
+}
+
+/// Development-only causal contrasts over a predeclared intervention grid.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MatchedInterventionDoseCausalContrasts {
+    target_outcome_index: usize,
+    non_target_outcome_indices: Vec<usize>,
+    points: Vec<MatchedInterventionDoseCausalContrastPoint>,
+}
+
+impl MatchedInterventionDoseCausalContrasts {
+    #[must_use]
+    pub const fn target_outcome_index(&self) -> usize {
+        self.target_outcome_index
+    }
+
+    #[must_use]
+    pub fn non_target_outcome_indices(&self) -> &[usize] {
+        &self.non_target_outcome_indices
+    }
+
+    #[must_use]
+    pub fn points(&self) -> &[MatchedInterventionDoseCausalContrastPoint] {
+        &self.points
+    }
+}
+
 impl MatchedInterventionDoseState {
     #[must_use]
     pub const fn alpha(&self) -> f64 {
@@ -2446,24 +2500,271 @@ pub fn matched_intervention_dose_response_curve(
     })
 }
 
+const EXACT_SUM_MIN_EXPONENT: i32 = -1074;
+const EXACT_SUM_BITS: usize = 2176;
+
+fn normalize_exact_buckets(buckets: &mut [u128]) -> Result<(), ConceptGeometryError> {
+    for index in 0..buckets.len() - 1 {
+        let carry = buckets[index] >> 1;
+        buckets[index] &= 1;
+        buckets[index + 1] = buckets[index + 1]
+            .checked_add(carry)
+            .ok_or(ConceptGeometryError::ReplicateAccountingOverflow)?;
+    }
+    if buckets[buckets.len() - 1] > 1 {
+        return Err(ConceptGeometryError::ReplicateAccountingOverflow);
+    }
+    Ok(())
+}
+
+fn rounded_exact_ratio(
+    magnitude: &[u8],
+    divisor: usize,
+    negative: bool,
+) -> Result<f64, ConceptGeometryError> {
+    let divisor = divisor as u128;
+    let mut quotient = Vec::new();
+    quotient
+        .try_reserve_exact(magnitude.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    quotient.resize(magnitude.len(), 0_u8);
+    let mut remainder = 0_u128;
+    for index in (0..magnitude.len()).rev() {
+        remainder = remainder * 2 + u128::from(magnitude[index]);
+        if remainder >= divisor {
+            quotient[index] = 1;
+            remainder -= divisor;
+        }
+    }
+
+    let sign = if negative { 1_u64 << 63 } else { 0 };
+    let Some(mut highest) = quotient.iter().rposition(|bit| *bit != 0) else {
+        let round_up = remainder * 2 > divisor;
+        return Ok(f64::from_bits(sign | u64::from(round_up)));
+    };
+
+    if highest <= 51 {
+        let mut subnormal = 0_u64;
+        for index in (0..=highest).rev() {
+            subnormal = (subnormal << 1) | u64::from(quotient[index]);
+        }
+        let twice_remainder = remainder * 2;
+        if twice_remainder > divisor || (twice_remainder == divisor && subnormal & 1 == 1) {
+            subnormal += 1;
+        }
+        return Ok(f64::from_bits(sign | subnormal));
+    }
+
+    let shift = highest - 52;
+    let mut significand = 0_u64;
+    for index in (shift..=highest).rev() {
+        significand = (significand << 1) | u64::from(quotient[index]);
+    }
+    let round_up = if shift == 0 {
+        let twice_remainder = remainder * 2;
+        twice_remainder > divisor || (twice_remainder == divisor && significand & 1 == 1)
+    } else {
+        let guard = quotient[shift - 1] != 0;
+        let sticky = remainder != 0
+            || quotient[..shift.saturating_sub(1)]
+                .iter()
+                .any(|bit| *bit != 0);
+        guard && (sticky || significand & 1 == 1)
+    };
+    if round_up {
+        significand += 1;
+        if significand == 1_u64 << 53 {
+            significand >>= 1;
+            highest += 1;
+        }
+    }
+
+    let unbiased_exponent = EXACT_SUM_MIN_EXPONENT
+        + i32::try_from(highest).map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    if unbiased_exponent > 1023 {
+        return Ok(f64::from_bits(sign | f64::MAX.to_bits()));
+    }
+    let exponent_bits = u64::try_from(unbiased_exponent + 1023)
+        .map_err(|_| ConceptGeometryError::NonFiniteValue)?
+        << 52;
+    let fraction_bits = significand & ((1_u64 << 52) - 1);
+    Ok(f64::from_bits(sign | exponent_bits | fraction_bits))
+}
+
+fn compensated_finite_mean(values: &[f64]) -> Result<f64, ConceptGeometryError> {
+    if values.is_empty() {
+        return Err(ConceptGeometryError::EmptyControls);
+    }
+    if values.iter().any(|value| !value.is_finite()) {
+        return Err(ConceptGeometryError::NonFiniteValue);
+    }
+
+    let mut positive = Vec::new();
+    positive
+        .try_reserve_exact(EXACT_SUM_BITS)
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    positive.resize(EXACT_SUM_BITS, 0_u128);
+    let mut negative = Vec::new();
+    negative
+        .try_reserve_exact(EXACT_SUM_BITS)
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    negative.resize(EXACT_SUM_BITS, 0_u128);
+    for &value in values {
+        let raw = value.to_bits();
+        let exponent_bits = ((raw >> 52) & 0x7ff) as i32;
+        let fraction = raw & ((1_u64 << 52) - 1);
+        let (significand, exponent) = if exponent_bits == 0 {
+            (fraction, EXACT_SUM_MIN_EXPONENT)
+        } else {
+            ((1_u64 << 52) | fraction, exponent_bits - 1023 - 52)
+        };
+        if significand == 0 {
+            continue;
+        }
+        let index = usize::try_from(exponent - EXACT_SUM_MIN_EXPONENT)
+            .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+        let buckets = if raw >> 63 == 0 {
+            &mut positive
+        } else {
+            &mut negative
+        };
+        buckets[index] = buckets[index]
+            .checked_add(u128::from(significand))
+            .ok_or(ConceptGeometryError::ReplicateAccountingOverflow)?;
+    }
+    normalize_exact_buckets(&mut positive)?;
+    normalize_exact_buckets(&mut negative)?;
+
+    let ordering = positive.iter().rev().cmp(negative.iter().rev());
+    if ordering == std::cmp::Ordering::Equal {
+        return Ok(0.0);
+    }
+    let (larger, smaller, result_is_negative) = if ordering == std::cmp::Ordering::Greater {
+        (&positive, &negative, false)
+    } else {
+        (&negative, &positive, true)
+    };
+
+    let mut magnitude = Vec::new();
+    magnitude
+        .try_reserve_exact(EXACT_SUM_BITS)
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    magnitude.resize(EXACT_SUM_BITS, 0_u8);
+    let mut borrow = 0_i8;
+    for index in 0..EXACT_SUM_BITS {
+        let difference = larger[index] as i8 - smaller[index] as i8 - borrow;
+        if difference < 0 {
+            magnitude[index] = u8::try_from(difference + 2)
+                .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+            borrow = 1;
+        } else {
+            magnitude[index] = u8::try_from(difference)
+                .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+            borrow = 0;
+        }
+    }
+    if borrow != 0 {
+        return Err(ConceptGeometryError::ReplicateAccountingOverflow);
+    }
+
+    rounded_exact_ratio(&magnitude, values.len(), result_is_negative)
+}
+
 /// Target intervention effect minus the mean matched-control effect.
+///
+/// The matched-control mean is evaluated from an exact signed binary sum and rounded
+/// once, so cancellation and finite means survive naive intermediate overflow.
 pub fn causal_novelty_gap(
     target_effect: f64,
     matched_control_effects: &[f64],
 ) -> Result<f64, ConceptGeometryError> {
-    if !target_effect.is_finite()
-        || matched_control_effects
-            .iter()
-            .any(|effect| !effect.is_finite())
-    {
+    if !target_effect.is_finite() {
         return Err(ConceptGeometryError::NonFiniteValue);
     }
-    if matched_control_effects.is_empty() {
-        return Err(ConceptGeometryError::EmptyControls);
+    let gap = target_effect - compensated_finite_mean(matched_control_effects)?;
+    if !gap.is_finite() {
+        return Err(ConceptGeometryError::NonFiniteValue);
     }
-    let control_mean =
-        matched_control_effects.iter().sum::<f64>() / matched_control_effects.len() as f64;
-    Ok(target_effect - control_mean)
+    Ok(gap)
+}
+
+/// Derive raw signed target-minus-control gaps from an evaluated dose curve.
+///
+/// Each gap is the target-state effect minus the scaled finite mean of the
+/// matched-control effects for the same declared outcome. The function
+/// preserves the target/non-target roles and alpha order fixed by the parent
+/// curve. It chooses no threshold, dose, control, outcome, or verdict.
+pub fn matched_intervention_causal_contrasts(
+    curve: &MatchedInterventionDoseResponseCurve,
+) -> Result<MatchedInterventionDoseCausalContrasts, ConceptGeometryError> {
+    let width = curve.baseline_outcomes.len();
+    if curve.target_outcome_index >= width {
+        return Err(ConceptGeometryError::InvalidTargetOutcomeIndex);
+    }
+    if curve.non_target_outcome_indices.is_empty()
+        || curve
+            .non_target_outcome_indices
+            .iter()
+            .any(|index| *index >= width || *index == curve.target_outcome_index)
+        || curve
+            .non_target_outcome_indices
+            .windows(2)
+            .any(|pair| pair[0] >= pair[1])
+    {
+        return Err(ConceptGeometryError::InvalidNonTargetOutcomeIndices);
+    }
+
+    let mut points = Vec::new();
+    points
+        .try_reserve_exact(curve.points.len())
+        .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+    for point in &curve.points {
+        if point.target_state_effects.len() != width
+            || point
+                .matched_control_effects
+                .iter()
+                .any(|effects| effects.len() != width)
+        {
+            return Err(ConceptGeometryError::DimensionMismatch);
+        }
+        if point.matched_control_effects.is_empty() {
+            return Err(ConceptGeometryError::EmptyControls);
+        }
+
+        let gap_for = |outcome_index: usize| {
+            let mut controls = Vec::new();
+            controls
+                .try_reserve_exact(point.matched_control_effects.len())
+                .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+            controls.extend(
+                point
+                    .matched_control_effects
+                    .iter()
+                    .map(|effects| effects[outcome_index]),
+            );
+            causal_novelty_gap(point.target_state_effects[outcome_index], &controls)
+        };
+
+        let target_outcome_gap = gap_for(curve.target_outcome_index)?;
+        let mut non_target_outcome_gaps = Vec::new();
+        non_target_outcome_gaps
+            .try_reserve_exact(curve.non_target_outcome_indices.len())
+            .map_err(|_| ConceptGeometryError::ReplicateAccountingOverflow)?;
+        for &outcome_index in &curve.non_target_outcome_indices {
+            non_target_outcome_gaps.push(gap_for(outcome_index)?);
+        }
+        points.push(MatchedInterventionDoseCausalContrastPoint {
+            alpha: point.alpha,
+            target_outcome_gap,
+            non_target_outcome_gaps,
+        });
+    }
+
+    Ok(MatchedInterventionDoseCausalContrasts {
+        target_outcome_index: curve.target_outcome_index,
+        non_target_outcome_indices: curve.non_target_outcome_indices.clone(),
+        points,
+    })
 }
 
 /// Non-additive interaction when all effects are measured from one baseline.
@@ -3458,6 +3759,136 @@ mod tests {
     fn causal_and_interaction_helpers_keep_semantics_separate() {
         close(causal_novelty_gap(0.75, &[0.0, 0.25]).unwrap(), 0.625);
         close(interaction_residual(1.0, 1.0, 2.5).unwrap(), 0.5);
+    }
+
+    #[test]
+    fn causal_gap_uses_a_compensated_mean_and_fails_closed_on_overflow() {
+        assert_eq!(causal_novelty_gap(f64::MAX, &[f64::MAX, f64::MAX]), Ok(0.0));
+        assert_eq!(
+            causal_novelty_gap(f64::MAX, &[f64::MAX, f64::MAX, f64::MAX]),
+            Ok(0.0)
+        );
+        assert_eq!(
+            causal_novelty_gap(f64::MAX, &[-f64::MAX]),
+            Err(ConceptGeometryError::NonFiniteValue)
+        );
+        assert_eq!(
+            causal_novelty_gap(0.0, &[]),
+            Err(ConceptGeometryError::EmptyControls)
+        );
+
+        let small = 1.0e-308;
+        for controls in [
+            [f64::MAX, -f64::MAX, small],
+            [f64::MAX, small, -f64::MAX],
+            [small, f64::MAX, -f64::MAX],
+        ] {
+            assert_eq!(causal_novelty_gap(0.0, &controls), Ok(-(small / 3.0)));
+        }
+
+        let review_regression = [f64::MAX / 2.0, 1.0, -f64::MAX / 2.0, -1.0, small];
+        assert_eq!(
+            causal_novelty_gap(0.0, &review_regression),
+            Ok(-(small / 5.0))
+        );
+        assert_eq!(
+            causal_novelty_gap(0.0, &[f64::MAX / 2.0, -f64::MAX / 2.0, 1.0, -1.0, small]),
+            Ok(-(small / 5.0))
+        );
+
+        let least_subnormal = f64::from_bits(1);
+        assert_eq!(
+            causal_novelty_gap(0.0, &[least_subnormal, least_subnormal]),
+            Ok(-least_subnormal)
+        );
+        assert_eq!(
+            causal_novelty_gap(
+                0.0,
+                &[
+                    -9.464_889_054_487_247e257,
+                    -least_subnormal,
+                    f64::MAX,
+                    f64::MAX
+                ]
+            ),
+            Ok(-(f64::MAX / 2.0))
+        );
+
+        let power = 2.0_f64.powi(1023);
+        let mut exact_cancellation = Vec::new();
+        exact_cancellation.extend([power; 4]);
+        exact_cancellation.extend([power / 8.0; 8]);
+        exact_cancellation.extend([least_subnormal; 25]);
+        exact_cancellation.extend([-power / 2.0; 4]);
+        exact_cancellation.extend([-3.0 * (power / 8.0); 8]);
+        assert_eq!(
+            causal_novelty_gap(0.0, &exact_cancellation),
+            Ok(-least_subnormal)
+        );
+    }
+
+    #[test]
+    fn matched_intervention_causal_contrasts_preserve_roles_and_signs() {
+        let curve = matched_intervention_dose_response_curve(
+            &[0.0, 0.0],
+            &[1.0, 0.0],
+            &[vec![0.0, 1.0]],
+            &[-1.0, 1.0],
+            0,
+            &[1],
+            DEFAULT_TOLERANCE,
+            DEFAULT_TOLERANCE,
+            |state| Ok(state.to_vec()),
+        )
+        .unwrap();
+        let contrasts = matched_intervention_causal_contrasts(&curve).unwrap();
+
+        assert_eq!(contrasts.target_outcome_index(), 0);
+        assert_eq!(contrasts.non_target_outcome_indices(), &[1]);
+        assert_eq!(contrasts.points().len(), 2);
+        assert_eq!(contrasts.points()[0].alpha(), -1.0);
+        assert_eq!(contrasts.points()[0].target_outcome_gap(), -1.0);
+        assert_eq!(contrasts.points()[0].non_target_outcome_gaps(), &[1.0]);
+        assert_eq!(contrasts.points()[1].alpha(), 1.0);
+        assert_eq!(contrasts.points()[1].target_outcome_gap(), 1.0);
+        assert_eq!(contrasts.points()[1].non_target_outcome_gaps(), &[-1.0]);
+    }
+
+    #[test]
+    fn matched_intervention_causal_contrasts_reject_malformed_records() {
+        let malformed = MatchedInterventionDoseResponseCurve {
+            baseline_outcomes: vec![0.0, 0.0],
+            target_outcome_index: 0,
+            non_target_outcome_indices: vec![1],
+            points: vec![MatchedInterventionDoseResponsePoint {
+                alpha: 1.0,
+                target_state_outcomes: vec![0.0, 0.0],
+                target_state_effects: vec![1.0],
+                matched_control_outcomes: vec![vec![0.0, 0.0]],
+                matched_control_effects: vec![vec![0.0, 0.0]],
+            }],
+        };
+        assert_eq!(
+            matched_intervention_causal_contrasts(&malformed),
+            Err(ConceptGeometryError::DimensionMismatch)
+        );
+
+        let no_controls = MatchedInterventionDoseResponseCurve {
+            baseline_outcomes: vec![0.0, 0.0],
+            target_outcome_index: 0,
+            non_target_outcome_indices: vec![1],
+            points: vec![MatchedInterventionDoseResponsePoint {
+                alpha: 1.0,
+                target_state_outcomes: vec![1.0, 0.0],
+                target_state_effects: vec![1.0, 0.0],
+                matched_control_outcomes: vec![],
+                matched_control_effects: vec![],
+            }],
+        };
+        assert_eq!(
+            matched_intervention_causal_contrasts(&no_controls),
+            Err(ConceptGeometryError::EmptyControls)
+        );
     }
 
     #[test]
