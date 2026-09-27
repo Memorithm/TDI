@@ -308,6 +308,18 @@ failure are rejected. This explanatory record does not choose a dose, outcome,
 control, threshold or verdict; it does not fit a curve, run a statistical test,
 authorize real-model execution, or advance the scientific stage.
 
+The fourth Development slice pairs only doses whose finite alpha values are
+exact opposites and reports the descriptive odd component
+`(gap(+alpha) - gap(-alpha)) / 2` and even component
+`(gap(+alpha) + gap(-alpha)) / 2` for the declared target and ordered non-target
+outcomes. Both two-point means reuse exact finite binary accumulation and one
+ties-to-even division. The zero-dose point and every dose without an exact
+opposite remain explicit, so pairing never drops evidence or fabricates a
+missing observation. This decomposition does not classify symmetry, choose or
+interpolate doses, fit a response curve, run a statistical test, set a
+threshold or verdict, authorize model execution, or advance the scientific
+stage.
+
 ### TDI-27.4 — cross-layer transport
 
 Measure whether residual directions persist after a declared alignment
