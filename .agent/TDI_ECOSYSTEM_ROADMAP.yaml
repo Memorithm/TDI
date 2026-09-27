@@ -1040,3 +1040,25 @@ tdi27_stage0_progress_2026_09_25:
     tolerance_or_threshold_selection_from_observed_results: false
     synthetic_development_is_real_model_evidence: false
     downstream_promotion_from_geometry_alone: false
+
+
+ax_isolated_experiment_program:
+  source_review_date: "2026-09-27"
+  external_reference: google_ax_architecture_only
+  role: isolated_research_task_consumer
+  objective: >-
+    Execute TDI Development, Validation and authorised confirmation work inside
+    exact-revision task workspaces with explicit resource envelopes and
+    independent run provenance, without changing preregistration or evidence
+    authority.
+  phases:
+    - AXT1_bind_experiment_tasks_to_exact_code_data_and_protocol_revisions
+    - AXT2_attach_matched_cpu_ram_gpu_time_and_token_budgets_where_relevant
+    - AXT3_isolate_parallel_runs_to_prevent_workspace_and_process_contamination
+    - AXT4_export_task_trajectory_as_supporting_provenance
+    - AXT5_qualify_checkpoint_resume_only_for_declared_side_effect_safe_runs
+  invariants:
+    - task_success_is_not_scientific_success
+    - task_telemetry_never_receives_hidden_evaluator_truth
+    - frozen_evidence_boundaries_remain_authoritative
+    - retries_get_fresh_attempt_identity_and_do_not_rewrite_prior_results
