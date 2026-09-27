@@ -2672,8 +2672,8 @@ fn compensated_finite_mean(values: &[f64]) -> Result<f64, ConceptGeometryError> 
 
 /// Target intervention effect minus the mean matched-control effect.
 ///
-/// The matched-control mean is evaluated with compensated pre-division so a finite mean
-/// is not lost merely because a naive intermediate sum would overflow.
+/// The matched-control mean is evaluated from an exact signed binary sum and rounded
+/// once, so cancellation and finite means survive naive intermediate overflow.
 pub fn causal_novelty_gap(
     target_effect: f64,
     matched_control_effects: &[f64],
@@ -3820,7 +3820,7 @@ mod tests {
         exact_cancellation.extend(std::iter::repeat(power / 8.0).take(8));
         exact_cancellation.extend(std::iter::repeat(least_subnormal).take(25));
         exact_cancellation.extend(std::iter::repeat(-power / 2.0).take(4));
-        exact_cancellation.extend(std::iter::repeat(-3.0 * power / 8.0).take(8));
+        exact_cancellation.extend(std::iter::repeat(-3.0 * (power / 8.0)).take(8));
         assert_eq!(
             causal_novelty_gap(0.0, &exact_cancellation),
             Ok(-least_subnormal)
