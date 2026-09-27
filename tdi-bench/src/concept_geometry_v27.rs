@@ -3816,11 +3816,11 @@ mod tests {
 
         let power = 2.0_f64.powi(1023);
         let mut exact_cancellation = Vec::new();
-        exact_cancellation.extend(std::iter::repeat(power).take(4));
-        exact_cancellation.extend(std::iter::repeat(power / 8.0).take(8));
-        exact_cancellation.extend(std::iter::repeat(least_subnormal).take(25));
-        exact_cancellation.extend(std::iter::repeat(-power / 2.0).take(4));
-        exact_cancellation.extend(std::iter::repeat(-3.0 * (power / 8.0)).take(8));
+        exact_cancellation.extend([power; 4]);
+        exact_cancellation.extend([power / 8.0; 8]);
+        exact_cancellation.extend([least_subnormal; 25]);
+        exact_cancellation.extend([-power / 2.0; 4]);
+        exact_cancellation.extend([-3.0 * (power / 8.0); 8]);
         assert_eq!(
             causal_novelty_gap(0.0, &exact_cancellation),
             Ok(-least_subnormal)
