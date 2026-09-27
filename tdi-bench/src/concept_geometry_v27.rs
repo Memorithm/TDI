@@ -3640,9 +3640,10 @@ mod tests {
             [f64::MAX, small, -f64::MAX],
             [small, f64::MAX, -f64::MAX],
         ] {
-            let mean = causal_novelty_gap(0.0, &controls).unwrap();
-            assert!(mean < 0.0);
-            close(mean, -(small / 3.0));
+            assert_eq!(
+                causal_novelty_gap(0.0, &controls),
+                Ok(-(small / 3.0))
+            );
         }
     }
 
