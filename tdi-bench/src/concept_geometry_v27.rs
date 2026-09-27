@@ -3613,10 +3613,7 @@ mod tests {
 
     #[test]
     fn causal_gap_uses_a_scaled_mean_and_fails_closed_on_overflow() {
-        assert_eq!(
-            causal_novelty_gap(f64::MAX, &[f64::MAX, f64::MAX]),
-            Ok(0.0)
-        );
+        assert_eq!(causal_novelty_gap(f64::MAX, &[f64::MAX, f64::MAX]), Ok(0.0));
         assert_eq!(
             causal_novelty_gap(f64::MAX, &[-f64::MAX]),
             Err(ConceptGeometryError::NonFiniteValue)
