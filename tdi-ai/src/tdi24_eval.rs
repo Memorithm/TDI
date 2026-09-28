@@ -6,7 +6,9 @@
 //! refuses protected/final population labels. Slice 22 adds the matched C6 arm
 //! under the same envelope and readout budget. Slice 23 adds an explicit
 //! trainable-capacity / parameter-count matcher that accepts only matched V6/C6
-//! configurations and rejects unmatched capacity fail-closed. No training,
+//! configurations and rejects unmatched capacity fail-closed. Slice 24 adds a
+//! paired deterministic initialization-policy matcher so V6/C6 share one seed
+//! stream and kind, rejecting unpaired draws fail-closed. No training,
 //! primary-metric freeze, confirmatory execution, or scientific claim is
 //! authorised here.
 
@@ -36,6 +38,9 @@ pub const READOUT_BUDGET_CONTRACT: &str = "tdi24-readout-budget-v1";
 
 /// Versioned trainable-capacity / parameter-count matcher contract.
 pub const PARAMETER_COUNT_MATCHER_CONTRACT: &str = "tdi24-parameter-count-matcher-v1";
+
+/// Versioned paired deterministic initialization-policy matcher contract.
+pub const INITIALIZATION_MATCHER_CONTRACT: &str = "tdi24-initialization-matcher-v1";
 
 /// Maximum cases admitted to one non-final evaluator run.
 pub const MAX_CASES_PER_RUN: u64 = 64;
@@ -466,6 +471,112 @@ pub fn match_parameter_counts(
     })
 }
 
+/// Deterministic initialization kind shared by paired Phase-C arms.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InitializationKind {
+    /// Non-trained reference path: no parameter draw is performed.
+    ReferenceNone,
+    /// Deterministic paired draw from a shared seed stream (trained arms).
+    DeterministicPaired,
+}
+
+impl InitializationKind {
+    /// Stable lowercase label for manifests and audits.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ReferenceNone => "reference_none",
+            Self::DeterministicPaired => "deterministic_paired",
+        }
+    }
+}
+
+/// Explicit initialization policy for one Phase-C arm.
+///
+/// Paired V6/C6 configurations must publish identical seed and kind through
+/// this descriptor rather than silently using divergent draws.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InitializationPolicy {
+    /// Arm whose initialization is declared.
+    pub arm: EvalArm,
+    /// Initialization kind for this configuration.
+    pub kind: InitializationKind,
+    /// Shared deterministic seed for the paired draw stream.
+    pub seed: u64,
+    /// Stream discriminator kept identical across paired arms.
+    pub stream_id: u64,
+    /// Matcher contract pin.
+    pub matcher_contract: &'static str,
+}
+
+impl InitializationPolicy {
+    /// Canonical non-trained V6 reference initialization (no parameter draw).
+    #[must_use]
+    pub const fn reference_v6(seed: u64) -> Self {
+        Self {
+            arm: EvalArm::V6,
+            kind: InitializationKind::ReferenceNone,
+            seed,
+            stream_id: 0,
+            matcher_contract: INITIALIZATION_MATCHER_CONTRACT,
+        }
+    }
+
+    /// Canonical non-trained C6 reference initialization (no parameter draw).
+    #[must_use]
+    pub const fn reference_c6(seed: u64) -> Self {
+        Self {
+            arm: EvalArm::C6,
+            kind: InitializationKind::ReferenceNone,
+            seed,
+            stream_id: 0,
+            matcher_contract: INITIALIZATION_MATCHER_CONTRACT,
+        }
+    }
+}
+
+/// Witness that two arm initialization policies are matched under Slice 24.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MatchedInitialization {
+    pub kind: InitializationKind,
+    pub seed: u64,
+    pub stream_id: u64,
+    pub left_arm: EvalArm,
+    pub right_arm: EvalArm,
+    pub matcher_contract: &'static str,
+}
+
+/// Accept only paired deterministic initialization policies; reject unpaired
+/// seeds/kinds fail-closed without silently compensating.
+pub fn match_initialization(
+    left: InitializationPolicy,
+    right: InitializationPolicy,
+) -> Result<MatchedInitialization, EvalError> {
+    if left.matcher_contract != INITIALIZATION_MATCHER_CONTRACT
+        || right.matcher_contract != INITIALIZATION_MATCHER_CONTRACT
+    {
+        return Err(EvalError::ContractMismatch {
+            field: "initialization_matcher_contract",
+        });
+    }
+    if left.kind != right.kind || left.seed != right.seed || left.stream_id != right.stream_id {
+        return Err(EvalError::InitializationMismatch {
+            left_arm: left.arm,
+            right_arm: right.arm,
+            left_seed: left.seed,
+            right_seed: right.seed,
+        });
+    }
+    Ok(MatchedInitialization {
+        kind: left.kind,
+        seed: left.seed,
+        stream_id: left.stream_id,
+        left_arm: left.arm,
+        right_arm: right.arm,
+        matcher_contract: INITIALIZATION_MATCHER_CONTRACT,
+    })
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -512,6 +623,13 @@ pub enum EvalError {
         left_parameters: u64,
         right_parameters: u64,
     },
+    /// Initialization seed/kind/stream are unmatched across paired arms.
+    InitializationMismatch {
+        left_arm: EvalArm,
+        right_arm: EvalArm,
+        left_seed: u64,
+        right_seed: u64,
+    },
 }
 
 impl fmt::Display for EvalError {
@@ -546,6 +664,19 @@ impl fmt::Display for EvalError {
                 left_parameters,
                 right_arm.as_str(),
                 right_parameters
+            ),
+            Self::InitializationMismatch {
+                left_arm,
+                right_arm,
+                left_seed,
+                right_seed,
+            } => write!(
+                formatter,
+                "initialization mismatch: {} seed={} vs {} seed={}",
+                left_arm.as_str(),
+                left_seed,
+                right_arm.as_str(),
+                right_seed
             ),
         }
     }
@@ -807,6 +938,78 @@ mod tests {
             match_parameter_counts(drifted, TrainableCapacity::reference_c6()),
             Err(EvalError::ContractMismatch {
                 field: "parameter_count_matcher_contract",
+            })
+        );
+    }
+
+    #[test]
+    fn initialization_matcher_accepts_paired_reference_policies() {
+        assert_eq!(
+            INITIALIZATION_MATCHER_CONTRACT,
+            "tdi24-initialization-matcher-v1"
+        );
+        let seed = 42_u64;
+        let v6 = InitializationPolicy::reference_v6(seed);
+        let c6 = InitializationPolicy::reference_c6(seed);
+        assert_eq!(v6.kind, InitializationKind::ReferenceNone);
+        assert_eq!(c6.kind, InitializationKind::ReferenceNone);
+        assert_eq!(v6.seed, seed);
+        assert_eq!(c6.seed, seed);
+        assert_eq!(v6.stream_id, 0);
+        assert_eq!(InitializationKind::ReferenceNone.as_str(), "reference_none");
+        assert_eq!(
+            InitializationKind::DeterministicPaired.as_str(),
+            "deterministic_paired"
+        );
+        let matched = match_initialization(v6, c6).unwrap();
+        assert_eq!(matched.kind, InitializationKind::ReferenceNone);
+        assert_eq!(matched.seed, seed);
+        assert_eq!(matched.stream_id, 0);
+        assert_eq!(matched.left_arm, EvalArm::V6);
+        assert_eq!(matched.right_arm, EvalArm::C6);
+        assert_eq!(matched.matcher_contract, INITIALIZATION_MATCHER_CONTRACT);
+        // Paired init remains admissible only on Development/Validation.
+        for split in [DataSplit::Development, DataSplit::Validation] {
+            assert!(validate_non_final_split(split).is_ok());
+        }
+        assert!(parse_non_final_split("protected").is_err());
+        assert!(parse_non_final_split("final").is_err());
+    }
+
+    #[test]
+    fn initialization_matcher_rejects_unpaired_seed_or_kind() {
+        let v6 = InitializationPolicy::reference_v6(7);
+        let other_seed = InitializationPolicy::reference_c6(8);
+        assert_eq!(
+            match_initialization(v6, other_seed),
+            Err(EvalError::InitializationMismatch {
+                left_arm: EvalArm::V6,
+                right_arm: EvalArm::C6,
+                left_seed: 7,
+                right_seed: 8,
+            })
+        );
+
+        let mut other_kind = InitializationPolicy::reference_c6(7);
+        other_kind.kind = InitializationKind::DeterministicPaired;
+        assert!(matches!(
+            match_initialization(v6, other_kind),
+            Err(EvalError::InitializationMismatch { .. })
+        ));
+
+        let mut other_stream = InitializationPolicy::reference_c6(7);
+        other_stream.stream_id = 1;
+        assert!(matches!(
+            match_initialization(v6, other_stream),
+            Err(EvalError::InitializationMismatch { .. })
+        ));
+
+        let mut drifted = InitializationPolicy::reference_v6(7);
+        drifted.matcher_contract = "not-an-init-matcher";
+        assert_eq!(
+            match_initialization(drifted, InitializationPolicy::reference_c6(7)),
+            Err(EvalError::ContractMismatch {
+                field: "initialization_matcher_contract",
             })
         );
     }
