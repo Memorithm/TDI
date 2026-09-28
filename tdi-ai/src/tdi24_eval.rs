@@ -3,20 +3,24 @@
 //! Slice 21 lands the shared evaluator envelope and the V6 arm: a deterministic
 //! non-final Development/Validation path that scores through the matched vector
 //! reference, never observes sealed targets inside the inference callback, and
-//! refuses protected/final population labels. No training, primary-metric freeze,
-//! confirmatory execution, or scientific claim is authorised here.
+//! refuses protected/final population labels. Slice 22 adds the matched C6 arm
+//! under the same envelope and readout budget. Slice 23 adds an explicit
+//! trainable-capacity / parameter-count matcher that accepts only matched V6/C6
+//! configurations and rejects unmatched capacity fail-closed. No training,
+//! primary-metric freeze, confirmatory execution, or scientific claim is
+//! authorised here.
 
 use core::fmt;
 
 use super::tdi24_accounting::ScoreArm;
 use super::tdi24_chiral::{
-    CHIRAL_CONTRACT, Chiral6, ChiralError, ChiralScoreWeights, chiral_score,
+    CHIRAL_CONTRACT, CHIRAL_WIDTH, Chiral6, ChiralError, ChiralScoreWeights, chiral_score,
 };
 use super::tdi24_tasks::{
     DataSplit, DirectionTarget, HandednessTarget, InferenceView, LabeledCase, NonChiralTarget,
     ReflectionInvariantTarget, TaskFamily, canonicalize_inference_view, run_inference_callback,
 };
-use super::tdi24_vector::{VECTOR6_CONTRACT, Vector6, Vector6Error, vector6_score};
+use super::tdi24_vector::{VECTOR6_CONTRACT, VECTOR6_WIDTH, Vector6, Vector6Error, vector6_score};
 
 /// Shared evaluator envelope consumed by V6 now and by later matched arms.
 pub const EVALUATOR_ENVELOPE_CONTRACT: &str = "tdi24-evaluator-envelope-v1";
@@ -29,6 +33,9 @@ pub const C6_EVALUATOR_CONTRACT: &str = "tdi24-c6-evaluator-v1";
 
 /// Matched readout-budget contract shared across Phase-C evaluator arms.
 pub const READOUT_BUDGET_CONTRACT: &str = "tdi24-readout-budget-v1";
+
+/// Versioned trainable-capacity / parameter-count matcher contract.
+pub const PARAMETER_COUNT_MATCHER_CONTRACT: &str = "tdi24-parameter-count-matcher-v1";
 
 /// Maximum cases admitted to one non-final evaluator run.
 pub const MAX_CASES_PER_RUN: u64 = 64;
@@ -370,6 +377,95 @@ pub fn score_v6_from_view(view: &InferenceView) -> Result<f64, EvalError> {
     vector6_score(query, key).map_err(EvalError::Numerical)
 }
 
+/// Explicit trainable-capacity descriptor for one Phase-C arm.
+///
+/// The non-trained Slice-21/22 reference path declares zero trainable
+/// parameters at matched carrier width. Later trained arms must publish an
+/// exact count through this descriptor rather than silently compensating.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TrainableCapacity {
+    /// Arm whose capacity is declared.
+    pub arm: EvalArm,
+    /// Exact trainable parameter count for this configuration.
+    pub trainable_parameters: u64,
+    /// Carrier width consumed by the arm.
+    pub carrier_width: u64,
+    /// Matcher contract pin.
+    pub matcher_contract: &'static str,
+}
+
+impl TrainableCapacity {
+    /// Canonical non-trained V6 reference capacity.
+    #[must_use]
+    pub const fn reference_v6() -> Self {
+        Self {
+            arm: EvalArm::V6,
+            trainable_parameters: 0,
+            carrier_width: VECTOR6_WIDTH as u64,
+            matcher_contract: PARAMETER_COUNT_MATCHER_CONTRACT,
+        }
+    }
+
+    /// Canonical non-trained C6 reference capacity.
+    #[must_use]
+    pub const fn reference_c6() -> Self {
+        Self {
+            arm: EvalArm::C6,
+            trainable_parameters: 0,
+            carrier_width: CHIRAL_WIDTH as u64,
+            matcher_contract: PARAMETER_COUNT_MATCHER_CONTRACT,
+        }
+    }
+}
+
+/// Witness that two arm capacities are matched under the Slice-23 contract.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MatchedParameterCount {
+    pub trainable_parameters: u64,
+    pub carrier_width: u64,
+    pub left_arm: EvalArm,
+    pub right_arm: EvalArm,
+    pub matcher_contract: &'static str,
+}
+
+/// Accept only matched trainable-capacity configurations; reject mismatches
+/// fail-closed without silently compensating.
+pub fn match_parameter_counts(
+    left: TrainableCapacity,
+    right: TrainableCapacity,
+) -> Result<MatchedParameterCount, EvalError> {
+    if left.matcher_contract != PARAMETER_COUNT_MATCHER_CONTRACT
+        || right.matcher_contract != PARAMETER_COUNT_MATCHER_CONTRACT
+    {
+        return Err(EvalError::ContractMismatch {
+            field: "parameter_count_matcher_contract",
+        });
+    }
+    if left.trainable_parameters != right.trainable_parameters {
+        return Err(EvalError::ParameterCountMismatch {
+            left_arm: left.arm,
+            right_arm: right.arm,
+            left_parameters: left.trainable_parameters,
+            right_parameters: right.trainable_parameters,
+        });
+    }
+    if left.carrier_width != right.carrier_width {
+        return Err(EvalError::ParameterCountMismatch {
+            left_arm: left.arm,
+            right_arm: right.arm,
+            left_parameters: left.trainable_parameters,
+            right_parameters: right.trainable_parameters,
+        });
+    }
+    Ok(MatchedParameterCount {
+        trainable_parameters: left.trainable_parameters,
+        carrier_width: left.carrier_width,
+        left_arm: left.arm,
+        right_arm: right.arm,
+        matcher_contract: PARAMETER_COUNT_MATCHER_CONTRACT,
+    })
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -409,6 +505,13 @@ pub enum EvalError {
     Numerical(Vector6Error),
     /// C6 arithmetic rejected the carriers.
     ChiralNumerical(ChiralError),
+    /// Trainable parameter counts or carrier widths are unmatched.
+    ParameterCountMismatch {
+        left_arm: EvalArm,
+        right_arm: EvalArm,
+        left_parameters: u64,
+        right_parameters: u64,
+    },
 }
 
 impl fmt::Display for EvalError {
@@ -431,6 +534,19 @@ impl fmt::Display for EvalError {
             Self::CaseBudgetExceeded => formatter.write_str("evaluator case budget exceeded"),
             Self::Numerical(error) => write!(formatter, "v6 numerical failure: {error}"),
             Self::ChiralNumerical(error) => write!(formatter, "c6 numerical failure: {error}"),
+            Self::ParameterCountMismatch {
+                left_arm,
+                right_arm,
+                left_parameters,
+                right_parameters,
+            } => write!(
+                formatter,
+                "parameter-count mismatch: {}={} vs {}={}",
+                left_arm.as_str(),
+                left_parameters,
+                right_arm.as_str(),
+                right_parameters
+            ),
         }
     }
 }
@@ -633,5 +749,65 @@ mod tests {
         let leaked = run_inference_callback(&nuisance, |view| format!("{view:?}"));
         assert!(!leaked.contains("ClassA"));
         assert!(!leaked.contains("ClassB"));
+    }
+
+    #[test]
+    fn parameter_count_matcher_accepts_matched_reference_capacities() {
+        assert_eq!(
+            PARAMETER_COUNT_MATCHER_CONTRACT,
+            "tdi24-parameter-count-matcher-v1"
+        );
+        let v6 = TrainableCapacity::reference_v6();
+        let c6 = TrainableCapacity::reference_c6();
+        assert_eq!(v6.trainable_parameters, 0);
+        assert_eq!(c6.trainable_parameters, 0);
+        assert_eq!(v6.carrier_width, VECTOR6_WIDTH as u64);
+        assert_eq!(c6.carrier_width, CHIRAL_WIDTH as u64);
+        let matched = match_parameter_counts(v6, c6).unwrap();
+        assert_eq!(matched.trainable_parameters, 0);
+        assert_eq!(matched.carrier_width, VECTOR6_WIDTH as u64);
+        assert_eq!(matched.left_arm, EvalArm::V6);
+        assert_eq!(matched.right_arm, EvalArm::C6);
+        assert_eq!(matched.matcher_contract, PARAMETER_COUNT_MATCHER_CONTRACT);
+        // Matched capacity is admissible on Development and Validation only.
+        for split in [DataSplit::Development, DataSplit::Validation] {
+            assert!(validate_non_final_split(split).is_ok());
+            let _ = EvaluatorConfig::v6(split).unwrap();
+            let _ = EvaluatorConfig::c6(split).unwrap();
+        }
+        assert!(parse_non_final_split("protected").is_err());
+        assert!(parse_non_final_split("final").is_err());
+    }
+
+    #[test]
+    fn parameter_count_matcher_rejects_unmatched_trainable_capacity() {
+        let v6 = TrainableCapacity::reference_v6();
+        let mut inflated = TrainableCapacity::reference_c6();
+        inflated.trainable_parameters = 16;
+        assert_eq!(
+            match_parameter_counts(v6, inflated),
+            Err(EvalError::ParameterCountMismatch {
+                left_arm: EvalArm::V6,
+                right_arm: EvalArm::C6,
+                left_parameters: 0,
+                right_parameters: 16,
+            })
+        );
+
+        let mut wide = TrainableCapacity::reference_c6();
+        wide.carrier_width = 8;
+        assert!(matches!(
+            match_parameter_counts(v6, wide),
+            Err(EvalError::ParameterCountMismatch { .. })
+        ));
+
+        let mut drifted = TrainableCapacity::reference_v6();
+        drifted.matcher_contract = "not-a-matcher";
+        assert_eq!(
+            match_parameter_counts(drifted, TrainableCapacity::reference_c6()),
+            Err(EvalError::ContractMismatch {
+                field: "parameter_count_matcher_contract",
+            })
+        );
     }
 }
