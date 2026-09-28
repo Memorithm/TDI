@@ -16,6 +16,8 @@
 //! Phase-B case without changing carriers, targets, or oracles.
 //! Slice 18 adds a versioned protected-label inference API so callbacks
 //! receive only inference-visible inputs; oracles stay sealed outside.
+//! Slice 19 adds seed-domain registration with fail-closed disjointness
+//! plus stable case canonicalization/hash over inference-visible inputs.
 
 use core::fmt;
 
@@ -206,6 +208,283 @@ pub fn seal_neutral_control(
     oracle: NeutralControlOracle,
 ) -> LabeledCase<NeutralControlInput, NeutralControlOracle> {
     LabeledCase::new(input, oracle)
+}
+
+/// Versioned Slice-19 seed/case canonicalization contract.
+pub const SEED_CASE_CANONICALIZATION_CONTRACT: &str = "tdi25-seed-case-canonicalization-v1";
+
+/// Declared provenance-bound seed domain.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SeedDomain {
+    /// Non-final Development seed namespace.
+    Development,
+    /// Non-final Validation seed namespace.
+    Validation,
+}
+
+impl SeedDomain {
+    const fn domain_tag(self) -> u64 {
+        match self {
+            Self::Development => 0x5444_4932_3544_4556,
+            Self::Validation => 0x5444_4932_3556_414C,
+        }
+    }
+
+    /// Stable lowercase domain label.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Development => "development",
+            Self::Validation => "validation",
+        }
+    }
+
+    /// Fail-closed parse of a seed-domain label.
+    pub fn parse(label: &str) -> Result<Self, Tdi25TaskError> {
+        match label {
+            "development" => Ok(Self::Development),
+            "validation" => Ok(Self::Validation),
+            _ => Err(Tdi25TaskError::UnknownSeedDomain),
+        }
+    }
+
+    /// Map a typed data split onto its seed domain.
+    #[must_use]
+    pub const fn from_split(split: DataSplit) -> Self {
+        match split {
+            DataSplit::Development => Self::Development,
+            DataSplit::Validation => Self::Validation,
+        }
+    }
+}
+
+const fn task_family_label(family: TaskFamily) -> &'static str {
+    match family {
+        TaskFamily::TorsorFavorable => "torsor_favorable",
+        TaskFamily::ChiralFavorable => "chiral_favorable",
+        TaskFamily::Mixed => "mixed",
+        TaskFamily::Neutral => "neutral",
+    }
+}
+
+const fn family_seed_tag(family: TaskFamily) -> u64 {
+    match family {
+        TaskFamily::TorsorFavorable => 0x5446_4631_0000_0001,
+        TaskFamily::ChiralFavorable => 0x5446_4632_0000_0002,
+        TaskFamily::Mixed => 0x5446_4633_0000_0003,
+        TaskFamily::Neutral => 0x5446_4634_0000_0004,
+    }
+}
+
+/// Domain-separated mix of a declared local seed.
+#[must_use]
+pub fn mix_registered_seed(domain: SeedDomain, family: TaskFamily, local_seed: u64) -> u64 {
+    let mut state = local_seed
+        .wrapping_add(0x9E37_79B9_7F4A_7C15)
+        .wrapping_mul(domain.domain_tag() | 1);
+    state ^= family_seed_tag(family).rotate_left(17);
+    state = (state ^ (state >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    state = (state ^ (state >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    state ^ (state >> 31)
+}
+
+/// One registry entry binding a local seed to a domain-separated mixed seed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RegisteredSeed {
+    pub domain: SeedDomain,
+    pub family: TaskFamily,
+    pub local_seed: u64,
+    pub mixed_seed: u64,
+    pub registry_contract: &'static str,
+}
+
+/// Register a local seed under a declared domain/family namespace.
+#[must_use]
+pub fn register_seed(domain: SeedDomain, family: TaskFamily, local_seed: u64) -> RegisteredSeed {
+    RegisteredSeed {
+        domain,
+        family,
+        local_seed,
+        mixed_seed: mix_registered_seed(domain, family, local_seed),
+        registry_contract: SEED_CASE_CANONICALIZATION_CONTRACT,
+    }
+}
+
+/// Fail closed when mixed seeds collide across distinct declared domains.
+pub fn assert_seed_domain_disjointness(seeds: &[RegisteredSeed]) -> Result<(), Tdi25TaskError> {
+    for (index, left) in seeds.iter().enumerate() {
+        for right in seeds.iter().skip(index + 1) {
+            if left.mixed_seed == right.mixed_seed && left.domain != right.domain {
+                return Err(Tdi25TaskError::SeedDomainOverlap);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn format_f64_bits(value: f64) -> String {
+    format!("{:016x}", value.to_bits())
+}
+
+fn format_f64_slice(values: &[f64]) -> String {
+    values
+        .iter()
+        .copied()
+        .map(format_f64_bits)
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn format_vec3(point: Vec3) -> String {
+    format_f64_slice(&[point.x, point.y, point.z])
+}
+
+fn format_twist3(twist: Twist3) -> String {
+    format!(
+        "w={};v={}",
+        format_vec3(twist.angular()),
+        format_vec3(twist.linear())
+    )
+}
+
+fn format_torsor3(key: Torsor3) -> String {
+    format!(
+        "R={};M={};ref={}",
+        format_vec3(key.resultant()),
+        format_vec3(key.moment()),
+        format_vec3(key.reference())
+    )
+}
+
+fn format_chiral6(carrier: Chiral6) -> String {
+    format_f64_slice(&carrier.as_array())
+}
+
+fn format_generic6(carrier: Generic6) -> String {
+    format_f64_slice(&carrier.as_array())
+}
+
+fn format_weights(weights: ChiralScoreWeights) -> String {
+    format!(
+        "a={};b={};g={}",
+        format_f64_bits(weights.alpha),
+        format_f64_bits(weights.beta),
+        format_f64_bits(weights.gamma)
+    )
+}
+
+/// Stable canonical record for one inference-visible torsor-transport case.
+#[must_use]
+pub fn canonical_torsor_transport_record(input: &TorsorTransportInput) -> String {
+    format!(
+        "{SEED_CASE_CANONICALIZATION_CONTRACT};family={};split={};case={:016x};query={};key={};qpos={};gen={}",
+        task_family_label(input.task_family),
+        input.split.as_str(),
+        input.case_id,
+        format_twist3(input.query),
+        format_torsor3(input.key),
+        format_vec3(input.query_position),
+        input.generator_contract,
+    )
+}
+
+/// Stable canonical record for one inference-visible chiral-reflection case.
+#[must_use]
+pub fn canonical_chiral_reflection_record(input: &ChiralReflectionInput) -> String {
+    format!(
+        "{SEED_CASE_CANONICALIZATION_CONTRACT};family={};split={};case={:016x};query={};key={};weights={};gen={}",
+        task_family_label(input.task_family),
+        input.split.as_str(),
+        input.case_id,
+        format_chiral6(input.query),
+        format_chiral6(input.key),
+        format_weights(input.weights),
+        input.generator_contract,
+    )
+}
+
+/// Stable canonical record for one inference-visible mixed-geometry case.
+#[must_use]
+pub fn canonical_mixed_geometry_record(input: &MixedGeometryInput) -> String {
+    format!(
+        "{SEED_CASE_CANONICALIZATION_CONTRACT};family={};split={};case={:016x};tq={};tk={};qpos={};cq={};ck={};weights={};gen={}",
+        task_family_label(input.task_family),
+        input.split.as_str(),
+        input.case_id,
+        format_twist3(input.torsor_query),
+        format_torsor3(input.torsor_key),
+        format_vec3(input.query_position),
+        format_chiral6(input.chiral_query),
+        format_chiral6(input.chiral_key),
+        format_weights(input.weights),
+        input.generator_contract,
+    )
+}
+
+/// Stable canonical record for one inference-visible neutral-control case.
+#[must_use]
+pub fn canonical_neutral_control_record(input: &NeutralControlInput) -> String {
+    format!(
+        "{SEED_CASE_CANONICALIZATION_CONTRACT};family={};split={};case={:016x};query={};key={};gen={}",
+        task_family_label(input.task_family),
+        input.split.as_str(),
+        input.case_id,
+        format_generic6(input.query),
+        format_generic6(input.key),
+        input.generator_contract,
+    )
+}
+
+/// Non-cryptographic stable digest of a canonical record.
+#[must_use]
+pub fn canonical_digest(record: &str) -> String {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for byte in record.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{hash:016x}")
+}
+
+/// Canonical record plus digest for one inference-visible case.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CanonicalCaseDigest {
+    pub record: String,
+    pub digest: String,
+    pub contract: &'static str,
+}
+
+fn finalize_canonical_record(record: String) -> CanonicalCaseDigest {
+    let digest = canonical_digest(&record);
+    CanonicalCaseDigest {
+        record,
+        digest,
+        contract: SEED_CASE_CANONICALIZATION_CONTRACT,
+    }
+}
+
+/// Canonicalize a torsor-transport inference input (no oracle).
+#[must_use]
+pub fn canonicalize_torsor_transport_input(input: &TorsorTransportInput) -> CanonicalCaseDigest {
+    finalize_canonical_record(canonical_torsor_transport_record(input))
+}
+
+/// Canonicalize a chiral-reflection inference input (no oracle).
+#[must_use]
+pub fn canonicalize_chiral_reflection_input(input: &ChiralReflectionInput) -> CanonicalCaseDigest {
+    finalize_canonical_record(canonical_chiral_reflection_record(input))
+}
+
+/// Canonicalize a mixed-geometry inference input (no oracle).
+#[must_use]
+pub fn canonicalize_mixed_geometry_input(input: &MixedGeometryInput) -> CanonicalCaseDigest {
+    finalize_canonical_record(canonical_mixed_geometry_record(input))
+}
+
+/// Canonicalize a neutral-control inference input (no oracle).
+#[must_use]
+pub fn canonicalize_neutral_control_input(input: &NeutralControlInput) -> CanonicalCaseDigest {
+    finalize_canonical_record(canonical_neutral_control_record(input))
 }
 
 /// Inference-visible input for one torsor transport case.
@@ -839,6 +1118,10 @@ pub enum Tdi25TaskError {
     DifficultyOutOfRange,
     /// Split identity label is not Development or Validation.
     UnknownSplitIdentity,
+    /// Seed-domain label is not Development or Validation.
+    UnknownSeedDomain,
+    /// Mixed seeds collide across distinct declared domains.
+    SeedDomainOverlap,
     Bridge(Tdi25Error),
 }
 
@@ -859,6 +1142,8 @@ impl fmt::Display for Tdi25TaskError {
             Self::UnknownSplitIdentity => {
                 formatter.write_str("TDI-25 unknown split identity label")
             }
+            Self::UnknownSeedDomain => formatter.write_str("TDI-25 unknown seed domain label"),
+            Self::SeedDomainOverlap => formatter.write_str("TDI-25 seed domain overlap"),
             Self::Bridge(error) => write!(formatter, "TDI-25 bridge rejected task: {error}"),
         }
     }
@@ -1412,5 +1697,145 @@ mod tests {
             case.right_oracle
         );
         assert_eq!(PROTECTED_LABEL_CONTRACT, "tdi25-protected-label-api-v1");
+    }
+
+    #[test]
+    fn seed_registry_is_deterministic_and_domain_separated() {
+        let families = [
+            TaskFamily::TorsorFavorable,
+            TaskFamily::ChiralFavorable,
+            TaskFamily::Mixed,
+            TaskFamily::Neutral,
+        ];
+        for family in families {
+            for local in 0..64 {
+                let development = register_seed(SeedDomain::Development, family, local);
+                let validation = register_seed(SeedDomain::Validation, family, local);
+                assert_eq!(
+                    development,
+                    register_seed(SeedDomain::Development, family, local)
+                );
+                assert_eq!(
+                    development.registry_contract,
+                    SEED_CASE_CANONICALIZATION_CONTRACT
+                );
+                assert_eq!(
+                    development.mixed_seed,
+                    mix_registered_seed(SeedDomain::Development, family, local)
+                );
+                assert_ne!(development.mixed_seed, validation.mixed_seed);
+                assert_eq!(
+                    SeedDomain::from_split(DataSplit::Development),
+                    SeedDomain::Development
+                );
+                assert_eq!(
+                    SeedDomain::from_split(DataSplit::Validation),
+                    SeedDomain::Validation
+                );
+            }
+        }
+        assert_eq!(
+            SeedDomain::parse("protected"),
+            Err(Tdi25TaskError::UnknownSeedDomain)
+        );
+        assert_eq!(
+            SeedDomain::parse("final"),
+            Err(Tdi25TaskError::UnknownSeedDomain)
+        );
+        assert_eq!(SeedDomain::Development.as_str(), "development");
+    }
+
+    #[test]
+    fn declared_seed_domains_have_no_mixed_seed_overlap() {
+        let families = [
+            TaskFamily::TorsorFavorable,
+            TaskFamily::ChiralFavorable,
+            TaskFamily::Mixed,
+            TaskFamily::Neutral,
+        ];
+        let mut seeds = Vec::new();
+        for family in families {
+            for local in 0..256u64 {
+                seeds.push(register_seed(SeedDomain::Development, family, local));
+                seeds.push(register_seed(SeedDomain::Validation, family, local));
+            }
+        }
+        assert_eq!(seeds.len(), 2048);
+        assert_eq!(assert_seed_domain_disjointness(&seeds), Ok(()));
+
+        let mixed = seeds
+            .iter()
+            .map(|seed| seed.mixed_seed)
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(mixed.len(), seeds.len());
+
+        let forged = [
+            RegisteredSeed {
+                domain: SeedDomain::Development,
+                family: TaskFamily::TorsorFavorable,
+                local_seed: 0,
+                mixed_seed: 0xDEAD_BEEF,
+                registry_contract: SEED_CASE_CANONICALIZATION_CONTRACT,
+            },
+            RegisteredSeed {
+                domain: SeedDomain::Validation,
+                family: TaskFamily::TorsorFavorable,
+                local_seed: 1,
+                mixed_seed: 0xDEAD_BEEF,
+                registry_contract: SEED_CASE_CANONICALIZATION_CONTRACT,
+            },
+        ];
+        assert_eq!(
+            assert_seed_domain_disjointness(&forged),
+            Err(Tdi25TaskError::SeedDomainOverlap)
+        );
+    }
+
+    #[test]
+    fn case_canonicalization_is_stable_and_excludes_oracles() {
+        let torsor = torsor_transport_pair(17).unwrap();
+        let sealed = seal_torsor_transport(torsor.original, torsor.oracle);
+        let first = canonicalize_torsor_transport_input(sealed.inference_input());
+        let second = canonicalize_torsor_transport_input(sealed.inference_input());
+        assert_eq!(first, second);
+        assert_eq!(first.contract, SEED_CASE_CANONICALIZATION_CONTRACT);
+        assert_eq!(first.digest, canonical_digest(&first.record));
+        assert!(
+            first
+                .record
+                .starts_with(SEED_CASE_CANONICALIZATION_CONTRACT)
+        );
+        assert!(!first.record.contains("expected_score"));
+        assert!(!first.record.contains("oracle"));
+        assert!(first.record.contains("torsor_favorable"));
+        assert!(first.record.contains("development"));
+
+        let validation = torsor_transport_pair_in_split(17, DataSplit::Validation).unwrap();
+        let validation_digest = canonicalize_torsor_transport_input(&validation.original);
+        assert_ne!(first.digest, validation_digest.digest);
+        assert!(validation_digest.record.contains("validation"));
+    }
+
+    #[test]
+    fn every_phase_b_family_has_a_deterministic_canonical_digest() {
+        let digests = [
+            canonicalize_torsor_transport_input(&torsor_transport_pair(1).unwrap().original),
+            canonicalize_chiral_reflection_input(&chiral_reflection_pair(2).unwrap().left),
+            canonicalize_mixed_geometry_input(&mixed_geometry_pair(3).unwrap().base),
+            canonicalize_neutral_control_input(&neutral_control_pair(4).unwrap().class_a),
+        ];
+        let mut unique = std::collections::BTreeSet::new();
+        for digest in &digests {
+            assert_eq!(digest.digest.len(), 16);
+            assert!(!digest.record.contains("expected_score"));
+            assert!(!digest.record.contains("handedness"));
+            assert!(!digest.record.contains("target"));
+            unique.insert(digest.digest.clone());
+        }
+        assert_eq!(unique.len(), 4);
+        assert_eq!(
+            SEED_CASE_CANONICALIZATION_CONTRACT,
+            "tdi25-seed-case-canonicalization-v1"
+        );
     }
 }
