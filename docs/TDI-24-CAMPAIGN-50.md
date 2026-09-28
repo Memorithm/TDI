@@ -40,8 +40,8 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 | ---: | --- | --- |
 | 21 | V6 evaluator | **landed** in #611; deterministic non-final Development/Validation path |
 | 22 | C6 evaluator | **landed** in #615; same evaluator contract and readout budget |
-| 23 | Parameter-count matcher | **current stacked slice**; reject unmatched trainable-capacity configurations |
-| 24 | Initialization matcher | paired deterministic initialization policy |
+| 23 | Parameter-count matcher | **landed** in #655; reject unmatched trainable-capacity configurations |
+| 24 | Initialization matcher | **current stacked slice**; paired deterministic initialization policy |
 | 25 | Optimizer/update-budget contract | same examples, ordering, steps and stopping rule |
 | 26 | Metric registry | primary metric + paired secondary diagnostics frozen |
 | 27 | Paired uncertainty engine | confidence intervals/effect summaries without label leakage |
@@ -93,4 +93,4 @@ The campaign pauses rather than forcing a later PR when:
 
 ## Progress accounting
 
-**22/50 merged** (#406, #471, #487, #492, #548, #549, #550, #551, #556, #559, #562, #565, #567, #569, #601, #602, #604, #608, #609, #610, #611, #615). Slice 23 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**23/50 merged** (#406, #471, #487, #492, #548, #549, #550, #551, #556, #559, #562, #565, #567, #569, #601, #602, #604, #608, #609, #610, #611, #615, #655). Slice 24 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
