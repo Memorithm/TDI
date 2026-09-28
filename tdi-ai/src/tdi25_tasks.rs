@@ -14,6 +14,8 @@
 //! model output.
 //! Slice 17 embeds a typed Development/Validation split identity on every
 //! Phase-B case without changing carriers, targets, or oracles.
+//! Slice 18 adds a versioned protected-label inference API so callbacks
+//! receive only inference-visible inputs; oracles stay sealed outside.
 
 use core::fmt;
 
@@ -98,6 +100,112 @@ pub const fn split_case_identity(split: DataSplit, case_id: u64) -> SplitCaseIde
         case_id,
         split_contract: SPLIT_MANIFEST_CONTRACT,
     }
+}
+
+/// Versioned Slice-18 protected-label inference API contract.
+pub const PROTECTED_LABEL_CONTRACT: &str = "tdi25-protected-label-api-v1";
+
+/// Sealed oracle/target retained outside the inference callback.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ProtectedLabel<T> {
+    oracle: T,
+}
+
+impl<T> ProtectedLabel<T> {
+    /// Seal an oracle/target away from inference callbacks.
+    #[must_use]
+    pub const fn seal(oracle: T) -> Self {
+        Self { oracle }
+    }
+
+    /// Reveal only on the evaluation/scoring path — never passed to inference.
+    #[must_use]
+    pub const fn reveal_for_evaluation(&self) -> &T {
+        &self.oracle
+    }
+}
+
+/// Labeled case pairing an inference-visible input with a sealed oracle.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LabeledCase<I, O> {
+    input: I,
+    label: ProtectedLabel<O>,
+    label_contract: &'static str,
+}
+
+impl<I, O> LabeledCase<I, O> {
+    /// Construct a labeled case from an inference input and sealed oracle.
+    #[must_use]
+    pub const fn new(input: I, oracle: O) -> Self {
+        Self {
+            input,
+            label: ProtectedLabel::seal(oracle),
+            label_contract: PROTECTED_LABEL_CONTRACT,
+        }
+    }
+
+    /// Borrow the inference-visible input (no oracle/target).
+    #[must_use]
+    pub const fn inference_input(&self) -> &I {
+        &self.input
+    }
+
+    /// Borrow the sealed label for evaluation/scoring only.
+    #[must_use]
+    pub const fn protected_label(&self) -> &ProtectedLabel<O> {
+        &self.label
+    }
+
+    /// Protected-label API contract pin carried on every sealed case.
+    #[must_use]
+    pub const fn label_contract(&self) -> &'static str {
+        self.label_contract
+    }
+}
+
+/// Invoke an inference callback that, by construction, receives only the input.
+#[must_use]
+pub fn run_inference_callback<I, O, R, F>(case: &LabeledCase<I, O>, callback: F) -> R
+where
+    F: FnOnce(&I) -> R,
+{
+    callback(case.inference_input())
+}
+
+/// Seal a torsor-transport input with its shared oracle.
+#[must_use]
+pub fn seal_torsor_transport(
+    input: TorsorTransportInput,
+    oracle: TorsorTransportOracle,
+) -> LabeledCase<TorsorTransportInput, TorsorTransportOracle> {
+    LabeledCase::new(input, oracle)
+}
+
+/// Seal a chiral-reflection input with its member oracle.
+#[must_use]
+pub fn seal_chiral_reflection(
+    input: ChiralReflectionInput,
+    oracle: ChiralReflectionOracle,
+) -> LabeledCase<ChiralReflectionInput, ChiralReflectionOracle> {
+    LabeledCase::new(input, oracle)
+}
+
+/// Seal a mixed-geometry input with its member oracle.
+#[must_use]
+pub fn seal_mixed_geometry(
+    input: MixedGeometryInput,
+    oracle: MixedGeometryOracle,
+) -> LabeledCase<MixedGeometryInput, MixedGeometryOracle> {
+    LabeledCase::new(input, oracle)
+}
+
+/// Seal a neutral-control input with its member oracle.
+#[must_use]
+pub fn seal_neutral_control(
+    input: NeutralControlInput,
+    oracle: NeutralControlOracle,
+) -> LabeledCase<NeutralControlInput, NeutralControlOracle> {
+    LabeledCase::new(input, oracle)
 }
 
 /// Inference-visible input for one torsor transport case.
@@ -1204,5 +1312,105 @@ mod tests {
         assert_eq!(n_dev.class_a.query, n_val.class_a.query);
         assert_eq!(n_dev.class_a_oracle, n_val.class_a_oracle);
         assert_ne!(n_dev.class_a.split, n_val.class_a.split);
+    }
+
+    #[test]
+    fn protected_label_api_hides_oracles_from_inference_callbacks() {
+        let pair = torsor_transport_pair(21).unwrap();
+        let labeled = seal_torsor_transport(pair.original, pair.oracle);
+        assert_eq!(labeled.label_contract(), PROTECTED_LABEL_CONTRACT);
+        assert_eq!(labeled.inference_input().case_id, pair.original.case_id);
+        assert_eq!(labeled.inference_input().query, pair.original.query);
+        assert_eq!(labeled.inference_input().key, pair.original.key);
+        assert_eq!(
+            labeled.inference_input().task_family,
+            TaskFamily::TorsorFavorable
+        );
+        assert_eq!(
+            *labeled.protected_label().reveal_for_evaluation(),
+            pair.oracle
+        );
+
+        let observed = run_inference_callback(&labeled, |input| {
+            assert_eq!(input.query, pair.original.query);
+            assert_eq!(input.key, pair.original.key);
+            format!("{input:?}")
+        });
+        assert!(!observed.contains("expected_score"));
+        assert!(!observed.contains("oracle"));
+        assert!(observed.contains("TorsorFavorable"));
+    }
+
+    #[test]
+    fn every_phase_b_family_seals_oracles_outside_inference_inputs() {
+        let torsor = torsor_transport_pair(3).unwrap();
+        let sealed_torsor = seal_torsor_transport(torsor.transported, torsor.oracle);
+        assert_eq!(
+            run_inference_callback(&sealed_torsor, |input| input.split),
+            DataSplit::Development
+        );
+        assert_eq!(
+            sealed_torsor
+                .protected_label()
+                .reveal_for_evaluation()
+                .expected_score,
+            torsor.oracle.expected_score
+        );
+
+        let chiral = chiral_reflection_pair(4).unwrap();
+        let sealed_chiral = seal_chiral_reflection(chiral.left, chiral.left_oracle);
+        assert_eq!(
+            *sealed_chiral.protected_label().reveal_for_evaluation(),
+            chiral.left_oracle
+        );
+        let leaked = run_inference_callback(&sealed_chiral, |input| format!("{input:?}"));
+        assert!(!leaked.contains("handedness"));
+        assert!(!leaked.contains("expected_score"));
+        assert!(!leaked.contains("Left"));
+        assert!(!leaked.contains("Right"));
+        assert!(leaked.contains("ChiralFavorable"));
+
+        let mixed = mixed_geometry_pair(5).unwrap();
+        let sealed_mixed = seal_mixed_geometry(mixed.transformed, mixed.transformed_oracle);
+        assert_eq!(
+            sealed_mixed
+                .protected_label()
+                .reveal_for_evaluation()
+                .handedness,
+            HandednessTarget::Left
+        );
+        assert_eq!(
+            run_inference_callback(&sealed_mixed, |input| input.case_id),
+            mixed.transformed.case_id
+        );
+        let mixed_leaked = run_inference_callback(&sealed_mixed, |input| format!("{input:?}"));
+        assert!(!mixed_leaked.contains("expected_torsor_score"));
+        assert!(!mixed_leaked.contains("expected_chiral_score"));
+        assert!(!mixed_leaked.contains("handedness"));
+
+        let neutral = neutral_control_pair(6).unwrap();
+        let sealed_neutral = seal_neutral_control(neutral.class_b, neutral.class_b_oracle);
+        assert_eq!(
+            *sealed_neutral.protected_label().reveal_for_evaluation(),
+            neutral.class_b_oracle
+        );
+        let neutral_leaked = run_inference_callback(&sealed_neutral, |input| format!("{input:?}"));
+        assert!(!neutral_leaked.contains("ClassA"));
+        assert!(!neutral_leaked.contains("ClassB"));
+        assert!(!neutral_leaked.contains("expected_score"));
+        assert!(!neutral_leaked.contains("target"));
+        assert_eq!(sealed_neutral.label_contract(), PROTECTED_LABEL_CONTRACT);
+    }
+
+    #[test]
+    fn sealed_inference_input_preserves_split_without_exposing_oracle() {
+        let case = chiral_reflection_pair_in_split(11, DataSplit::Validation).unwrap();
+        let labeled = seal_chiral_reflection(case.right, case.right_oracle);
+        assert_eq!(labeled.inference_input().split, DataSplit::Validation);
+        assert_eq!(
+            *labeled.protected_label().reveal_for_evaluation(),
+            case.right_oracle
+        );
+        assert_eq!(PROTECTED_LABEL_CONTRACT, "tdi25-protected-label-api-v1");
     }
 }

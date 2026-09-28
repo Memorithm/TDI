@@ -29,8 +29,8 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | 14 | Neutral six-component controls | **landed** in #606; neither torsor nor chirality privileged by target construction |
 | 15 | Position-geometry arm registry | **landed** in #607; linear/helical/learned/external geometry kept explicit |
 | 16 | Difficulty strata | **landed** in #612; bounded deterministic levels independent of model output |
-| 17 | Development/Validation split manifest | **current stacked slice**; split identity embedded in every case |
-| 18 | Protected-label inference API | inference path cannot read target/oracle label |
+| 17 | Development/Validation split manifest | **landed** in #654; split identity embedded in every case |
+| 18 | Protected-label inference API | **current stacked slice**; inference path cannot read target/oracle label |
 | 19 | Seed/case canonicalization + hash | disjoint reproducible populations |
 | 20 | Stage-B leakage/balance audit | task-family and split audit green before evaluation |
 
@@ -94,4 +94,4 @@ Pause the campaign when any of the following occurs:
 
 ## Progress accounting
 
-**16/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606, #607, #612). Slice 17 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**17/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606, #607, #612, #654). Slice 18 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
