@@ -7,5 +7,4 @@ grep -Fq 'tdi24-initialization-matcher-v1' tdi-ai/src/tdi24_eval.rs
 grep -Fq 'pub fn match_initialization' tdi-ai/src/tdi24_eval.rs
 grep -Fq 'pub struct InitializationPolicy' tdi-ai/src/tdi24_eval.rs
 grep -Fq '| 23 | Parameter-count matcher | **landed** in #655;' docs/TDI-24-CAMPAIGN-50.md
-grep -Fq '| 24 | Initialization matcher | **current stacked slice**;' docs/TDI-24-CAMPAIGN-50.md
-grep -Fq '**23/50 merged**' docs/TDI-24-CAMPAIGN-50.md
+grep -Fq '| 24 | Initialization matcher | **landed** in #657;' docs/TDI-24-CAMPAIGN-50.md

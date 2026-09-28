@@ -8,9 +8,10 @@
 //! trainable-capacity / parameter-count matcher that accepts only matched V6/C6
 //! configurations and rejects unmatched capacity fail-closed. Slice 24 adds a
 //! paired deterministic initialization-policy matcher so V6/C6 share one seed
-//! stream and kind, rejecting unpaired draws fail-closed. No training,
-//! primary-metric freeze, confirmatory execution, or scientific claim is
-//! authorised here.
+//! stream and kind, rejecting unpaired draws fail-closed. Slice 25 adds an
+//! optimizer/update-budget matcher requiring identical examples, ordering,
+//! steps and stopping rule across paired arms. No training, primary-metric
+//! freeze, confirmatory execution, or scientific claim is authorised here.
 
 use core::fmt;
 
@@ -41,6 +42,9 @@ pub const PARAMETER_COUNT_MATCHER_CONTRACT: &str = "tdi24-parameter-count-matche
 
 /// Versioned paired deterministic initialization-policy matcher contract.
 pub const INITIALIZATION_MATCHER_CONTRACT: &str = "tdi24-initialization-matcher-v1";
+
+/// Versioned optimizer/update-budget matcher contract.
+pub const OPTIMIZER_UPDATE_BUDGET_CONTRACT: &str = "tdi24-optimizer-update-budget-v1";
 
 /// Maximum cases admitted to one non-final evaluator run.
 pub const MAX_CASES_PER_RUN: u64 = 64;
@@ -577,6 +581,127 @@ pub fn match_initialization(
     })
 }
 
+/// Declared stopping rule for a Phase-C optimizer/update budget.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StoppingRule {
+    /// Non-trained path: stop after the declared example budget (zero updates).
+    ExhaustExamples,
+    /// Trained path: stop after the declared fixed update count.
+    FixedUpdates,
+}
+
+impl StoppingRule {
+    /// Stable lowercase label for manifests and audits.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ExhaustExamples => "exhaust_examples",
+            Self::FixedUpdates => "fixed_updates",
+        }
+    }
+}
+
+/// Explicit optimizer/update budget for one Phase-C arm.
+///
+/// Paired V6/C6 configurations must publish identical examples, ordering seed,
+/// update steps and stopping rule rather than silently diverging.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OptimizerUpdateBudget {
+    /// Arm whose budget is declared.
+    pub arm: EvalArm,
+    /// Number of examples admitted under this budget.
+    pub examples: u64,
+    /// Parameter-update steps (zero on the non-trained reference path).
+    pub updates: u64,
+    /// Shared deterministic seed fixing example ordering across paired arms.
+    pub ordering_seed: u64,
+    /// Stopping rule applied identically to both arms.
+    pub stopping: StoppingRule,
+    /// Matcher contract pin.
+    pub matcher_contract: &'static str,
+}
+
+impl OptimizerUpdateBudget {
+    /// Canonical non-trained V6 reference budget.
+    #[must_use]
+    pub const fn reference_v6(examples: u64, ordering_seed: u64) -> Self {
+        Self {
+            arm: EvalArm::V6,
+            examples,
+            updates: NON_TRAINED_UPDATE_BUDGET,
+            ordering_seed,
+            stopping: StoppingRule::ExhaustExamples,
+            matcher_contract: OPTIMIZER_UPDATE_BUDGET_CONTRACT,
+        }
+    }
+
+    /// Canonical non-trained C6 reference budget.
+    #[must_use]
+    pub const fn reference_c6(examples: u64, ordering_seed: u64) -> Self {
+        Self {
+            arm: EvalArm::C6,
+            examples,
+            updates: NON_TRAINED_UPDATE_BUDGET,
+            ordering_seed,
+            stopping: StoppingRule::ExhaustExamples,
+            matcher_contract: OPTIMIZER_UPDATE_BUDGET_CONTRACT,
+        }
+    }
+}
+
+/// Witness that two optimizer/update budgets are matched under Slice 25.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MatchedOptimizerUpdateBudget {
+    pub examples: u64,
+    pub updates: u64,
+    pub ordering_seed: u64,
+    pub stopping: StoppingRule,
+    pub left_arm: EvalArm,
+    pub right_arm: EvalArm,
+    pub matcher_contract: &'static str,
+}
+
+/// Accept only matched optimizer/update budgets; reject unpaired examples,
+/// ordering, steps or stopping rules fail-closed.
+pub fn match_optimizer_update_budgets(
+    left: OptimizerUpdateBudget,
+    right: OptimizerUpdateBudget,
+) -> Result<MatchedOptimizerUpdateBudget, EvalError> {
+    if left.matcher_contract != OPTIMIZER_UPDATE_BUDGET_CONTRACT
+        || right.matcher_contract != OPTIMIZER_UPDATE_BUDGET_CONTRACT
+    {
+        return Err(EvalError::ContractMismatch {
+            field: "optimizer_update_budget_contract",
+        });
+    }
+    if left.examples == 0 || right.examples == 0 {
+        return Err(EvalError::InvalidBudget);
+    }
+    if left.examples != right.examples
+        || left.updates != right.updates
+        || left.ordering_seed != right.ordering_seed
+        || left.stopping != right.stopping
+    {
+        return Err(EvalError::OptimizerUpdateBudgetMismatch {
+            left_arm: left.arm,
+            right_arm: right.arm,
+            left_examples: left.examples,
+            right_examples: right.examples,
+            left_updates: left.updates,
+            right_updates: right.updates,
+        });
+    }
+    Ok(MatchedOptimizerUpdateBudget {
+        examples: left.examples,
+        updates: left.updates,
+        ordering_seed: left.ordering_seed,
+        stopping: left.stopping,
+        left_arm: left.arm,
+        right_arm: right.arm,
+        matcher_contract: OPTIMIZER_UPDATE_BUDGET_CONTRACT,
+    })
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -630,6 +755,15 @@ pub enum EvalError {
         left_seed: u64,
         right_seed: u64,
     },
+    /// Optimizer/update budgets are unmatched across paired arms.
+    OptimizerUpdateBudgetMismatch {
+        left_arm: EvalArm,
+        right_arm: EvalArm,
+        left_examples: u64,
+        right_examples: u64,
+        left_updates: u64,
+        right_updates: u64,
+    },
 }
 
 impl fmt::Display for EvalError {
@@ -677,6 +811,23 @@ impl fmt::Display for EvalError {
                 left_seed,
                 right_arm.as_str(),
                 right_seed
+            ),
+            Self::OptimizerUpdateBudgetMismatch {
+                left_arm,
+                right_arm,
+                left_examples,
+                right_examples,
+                left_updates,
+                right_updates,
+            } => write!(
+                formatter,
+                "optimizer/update-budget mismatch: {} examples={} updates={} vs {} examples={} updates={}",
+                left_arm.as_str(),
+                left_examples,
+                left_updates,
+                right_arm.as_str(),
+                right_examples,
+                right_updates
             ),
         }
     }
@@ -1010,6 +1161,84 @@ mod tests {
             match_initialization(drifted, InitializationPolicy::reference_c6(7)),
             Err(EvalError::ContractMismatch {
                 field: "initialization_matcher_contract",
+            })
+        );
+    }
+
+    #[test]
+    fn optimizer_update_budget_matcher_accepts_paired_reference_budgets() {
+        assert_eq!(
+            OPTIMIZER_UPDATE_BUDGET_CONTRACT,
+            "tdi24-optimizer-update-budget-v1"
+        );
+        let examples = 16_u64;
+        let ordering_seed = 99_u64;
+        let v6 = OptimizerUpdateBudget::reference_v6(examples, ordering_seed);
+        let c6 = OptimizerUpdateBudget::reference_c6(examples, ordering_seed);
+        assert_eq!(v6.updates, NON_TRAINED_UPDATE_BUDGET);
+        assert_eq!(c6.updates, NON_TRAINED_UPDATE_BUDGET);
+        assert_eq!(v6.stopping, StoppingRule::ExhaustExamples);
+        assert_eq!(StoppingRule::ExhaustExamples.as_str(), "exhaust_examples");
+        assert_eq!(StoppingRule::FixedUpdates.as_str(), "fixed_updates");
+        let matched = match_optimizer_update_budgets(v6, c6).unwrap();
+        assert_eq!(matched.examples, examples);
+        assert_eq!(matched.updates, 0);
+        assert_eq!(matched.ordering_seed, ordering_seed);
+        assert_eq!(matched.stopping, StoppingRule::ExhaustExamples);
+        assert_eq!(matched.left_arm, EvalArm::V6);
+        assert_eq!(matched.right_arm, EvalArm::C6);
+        assert_eq!(matched.matcher_contract, OPTIMIZER_UPDATE_BUDGET_CONTRACT);
+        for split in [DataSplit::Development, DataSplit::Validation] {
+            assert!(validate_non_final_split(split).is_ok());
+        }
+        assert!(parse_non_final_split("protected").is_err());
+        assert!(parse_non_final_split("final").is_err());
+    }
+
+    #[test]
+    fn optimizer_update_budget_matcher_rejects_unpaired_budgets() {
+        let v6 = OptimizerUpdateBudget::reference_v6(8, 1);
+        let other_examples = OptimizerUpdateBudget::reference_c6(9, 1);
+        assert_eq!(
+            match_optimizer_update_budgets(v6, other_examples),
+            Err(EvalError::OptimizerUpdateBudgetMismatch {
+                left_arm: EvalArm::V6,
+                right_arm: EvalArm::C6,
+                left_examples: 8,
+                right_examples: 9,
+                left_updates: 0,
+                right_updates: 0,
+            })
+        );
+
+        let mut other_updates = OptimizerUpdateBudget::reference_c6(8, 1);
+        other_updates.updates = 4;
+        other_updates.stopping = StoppingRule::FixedUpdates;
+        assert!(matches!(
+            match_optimizer_update_budgets(v6, other_updates),
+            Err(EvalError::OptimizerUpdateBudgetMismatch { .. })
+        ));
+
+        let other_order = OptimizerUpdateBudget::reference_c6(8, 2);
+        assert!(matches!(
+            match_optimizer_update_budgets(v6, other_order),
+            Err(EvalError::OptimizerUpdateBudgetMismatch { .. })
+        ));
+
+        assert_eq!(
+            match_optimizer_update_budgets(
+                OptimizerUpdateBudget::reference_v6(0, 1),
+                OptimizerUpdateBudget::reference_c6(0, 1)
+            ),
+            Err(EvalError::InvalidBudget)
+        );
+
+        let mut drifted = OptimizerUpdateBudget::reference_v6(8, 1);
+        drifted.matcher_contract = "not-an-opt-budget";
+        assert_eq!(
+            match_optimizer_update_budgets(drifted, OptimizerUpdateBudget::reference_c6(8, 1)),
+            Err(EvalError::ContractMismatch {
+                field: "optimizer_update_budget_contract",
             })
         );
     }
