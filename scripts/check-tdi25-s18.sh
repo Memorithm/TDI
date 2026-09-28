@@ -7,5 +7,4 @@ grep -Fq "tdi25-protected-label-api-v1" tdi-ai/src/tdi25_tasks.rs
 grep -Fq "pub fn run_inference_callback" tdi-ai/src/tdi25_tasks.rs
 grep -Fq "pub struct ProtectedLabel" tdi-ai/src/tdi25_tasks.rs
 grep -Fq '| 17 | Development/Validation split manifest | **landed** in #654;' docs/TDI-25-CAMPAIGN-50.md
-grep -Fq '| 18 | Protected-label inference API | **current stacked slice**;' docs/TDI-25-CAMPAIGN-50.md
-grep -Fq '**17/50 merged**' docs/TDI-25-CAMPAIGN-50.md
+grep -Fq '| 18 | Protected-label inference API | **landed** in #656;' docs/TDI-25-CAMPAIGN-50.md
