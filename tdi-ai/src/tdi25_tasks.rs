@@ -12,6 +12,8 @@
 //! learned/external) so no geometry is an implicit default.
 //! Slice 16 adds bounded deterministic difficulty strata independent of
 //! model output.
+//! Slice 17 embeds a typed Development/Validation split identity on every
+//! Phase-B case without changing carriers, targets, or oracles.
 
 use core::fmt;
 
@@ -45,10 +47,65 @@ pub const DIFFICULTY_STRATA_CONTRACT: &str = "tdi25-difficulty-strata-v1";
 /// Inclusive upper bound on admissible difficulty levels (`0..=MAX`).
 pub const DIFFICULTY_LEVEL_MAX: u8 = 3;
 
+/// Versioned Slice-17 Development/Validation split-manifest contract.
+pub const SPLIT_MANIFEST_CONTRACT: &str = "tdi25-split-manifest-v1";
+
+/// Typed population split carried by every Phase-B case.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum DataSplit {
+    /// Non-final Development population.
+    Development,
+    /// Non-final Validation population.
+    Validation,
+}
+
+impl DataSplit {
+    /// Stable lowercase label for manifests and audits.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Development => "development",
+            Self::Validation => "validation",
+        }
+    }
+
+    /// Fail-closed parse of a split label.
+    ///
+    /// Protected/final and any other unknown labels are rejected; this slice
+    /// never materializes those populations.
+    pub fn parse(label: &str) -> Result<Self, Tdi25TaskError> {
+        match label {
+            "development" => Ok(Self::Development),
+            "validation" => Ok(Self::Validation),
+            _ => Err(Tdi25TaskError::UnknownSplitIdentity),
+        }
+    }
+}
+
+/// Complete typed identity of one task case within a split.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SplitCaseIdentity {
+    pub split: DataSplit,
+    pub case_id: u64,
+    pub split_contract: &'static str,
+}
+
+/// Build the typed split identity embedded beside a case id.
+#[must_use]
+pub const fn split_case_identity(split: DataSplit, case_id: u64) -> SplitCaseIdentity {
+    SplitCaseIdentity {
+        split,
+        case_id,
+        split_contract: SPLIT_MANIFEST_CONTRACT,
+    }
+}
+
 /// Inference-visible input for one torsor transport case.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TorsorTransportInput {
     pub case_id: u64,
+    /// Typed Development/Validation population identity.
+    pub split: DataSplit,
     pub query: Twist3,
     pub key: Torsor3,
     pub query_position: Vec3,
@@ -104,6 +161,7 @@ pub fn torsor_transport_pair(pair_id: u64) -> Result<TorsorTransportPair, Tdi25T
 
     let make_input = |case_id, key| TorsorTransportInput {
         case_id,
+        split: DataSplit::Development,
         query,
         key,
         query_position,
@@ -135,6 +193,8 @@ pub enum HandednessTarget {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ChiralReflectionInput {
     pub case_id: u64,
+    /// Typed Development/Validation population identity.
+    pub split: DataSplit,
     pub query: Chiral6,
     pub key: Chiral6,
     pub weights: ChiralScoreWeights,
@@ -187,6 +247,7 @@ pub fn chiral_reflection_pair(pair_id: u64) -> Result<ChiralReflectionPair, Tdi2
 
     let make_input = |case_id, query, key| ChiralReflectionInput {
         case_id,
+        split: DataSplit::Development,
         query,
         key,
         weights,
@@ -216,6 +277,8 @@ pub fn chiral_reflection_pair(pair_id: u64) -> Result<ChiralReflectionPair, Tdi2
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MixedGeometryInput {
     pub case_id: u64,
+    /// Typed Development/Validation population identity.
+    pub split: DataSplit,
     pub torsor_query: Twist3,
     pub torsor_key: Torsor3,
     pub query_position: Vec3,
@@ -294,6 +357,7 @@ pub fn mixed_geometry_pair(pair_id: u64) -> Result<MixedGeometryPair, Tdi25TaskE
 
     let make_input = |case_id, torsor_key, chiral_query, chiral_key| MixedGeometryInput {
         case_id,
+        split: DataSplit::Development,
         torsor_query,
         torsor_key,
         query_position,
@@ -342,6 +406,8 @@ pub enum NeutralTarget {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NeutralControlInput {
     pub case_id: u64,
+    /// Typed Development/Validation population identity.
+    pub split: DataSplit,
     pub query: Generic6,
     pub key: Generic6,
     pub task_family: TaskFamily,
@@ -409,6 +475,7 @@ pub fn neutral_control_pair(pair_id: u64) -> Result<NeutralControlPair, Tdi25Tas
 
     let make_input = |case_id, query, key| NeutralControlInput {
         case_id,
+        split: DataSplit::Development,
         query,
         key,
         task_family: TaskFamily::Neutral,
@@ -610,6 +677,50 @@ pub fn difficulty_stratum(seed: u64) -> DifficultyStratum {
     }
 }
 
+/// Materialize a torsor-transport pair in one typed split.
+pub fn torsor_transport_pair_in_split(
+    pair_id: u64,
+    split: DataSplit,
+) -> Result<TorsorTransportPair, Tdi25TaskError> {
+    let mut pair = torsor_transport_pair(pair_id)?;
+    pair.original.split = split;
+    pair.transported.split = split;
+    Ok(pair)
+}
+
+/// Materialize a chiral-reflection pair in one typed split.
+pub fn chiral_reflection_pair_in_split(
+    pair_id: u64,
+    split: DataSplit,
+) -> Result<ChiralReflectionPair, Tdi25TaskError> {
+    let mut pair = chiral_reflection_pair(pair_id)?;
+    pair.right.split = split;
+    pair.left.split = split;
+    Ok(pair)
+}
+
+/// Materialize a mixed-geometry pair in one typed split.
+pub fn mixed_geometry_pair_in_split(
+    pair_id: u64,
+    split: DataSplit,
+) -> Result<MixedGeometryPair, Tdi25TaskError> {
+    let mut pair = mixed_geometry_pair(pair_id)?;
+    pair.base.split = split;
+    pair.transformed.split = split;
+    Ok(pair)
+}
+
+/// Materialize a neutral-control pair in one typed split.
+pub fn neutral_control_pair_in_split(
+    pair_id: u64,
+    split: DataSplit,
+) -> Result<NeutralControlPair, Tdi25TaskError> {
+    let mut pair = neutral_control_pair(pair_id)?;
+    pair.class_a.split = split;
+    pair.class_b.split = split;
+    Ok(pair)
+}
+
 /// TDI-25 task-generation failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tdi25TaskError {
@@ -618,6 +729,8 @@ pub enum Tdi25TaskError {
     ExternalPositionRequired,
     UnknownGeometryArm,
     DifficultyOutOfRange,
+    /// Split identity label is not Development or Validation.
+    UnknownSplitIdentity,
     Bridge(Tdi25Error),
 }
 
@@ -634,6 +747,9 @@ impl fmt::Display for Tdi25TaskError {
             Self::UnknownGeometryArm => formatter.write_str("TDI-25 unknown position geometry arm"),
             Self::DifficultyOutOfRange => {
                 formatter.write_str("TDI-25 difficulty level out of admissible range")
+            }
+            Self::UnknownSplitIdentity => {
+                formatter.write_str("TDI-25 unknown split identity label")
             }
             Self::Bridge(error) => write!(formatter, "TDI-25 bridge rejected task: {error}"),
         }
@@ -998,5 +1114,95 @@ mod tests {
             seen[difficulty_stratum(seed).level.level as usize] = true;
         }
         assert!(seen.iter().all(|hit| *hit));
+    }
+
+    #[test]
+    fn development_and_validation_identities_are_typed_and_disjoint() {
+        let development = split_case_identity(DataSplit::Development, 17);
+        let validation = split_case_identity(DataSplit::Validation, 17);
+        assert_ne!(development, validation);
+        assert_eq!(development.case_id, validation.case_id);
+        assert_eq!(development.split_contract, SPLIT_MANIFEST_CONTRACT);
+        assert_eq!(validation.split_contract, SPLIT_MANIFEST_CONTRACT);
+        assert_eq!(DataSplit::Development.as_str(), "development");
+        assert_eq!(DataSplit::Validation.as_str(), "validation");
+        assert_eq!(
+            DataSplit::parse("development").unwrap(),
+            DataSplit::Development
+        );
+        assert_eq!(
+            DataSplit::parse("validation").unwrap(),
+            DataSplit::Validation
+        );
+        assert_eq!(
+            DataSplit::parse("protected"),
+            Err(Tdi25TaskError::UnknownSplitIdentity)
+        );
+        assert_eq!(
+            DataSplit::parse("final"),
+            Err(Tdi25TaskError::UnknownSplitIdentity)
+        );
+        assert_eq!(
+            DataSplit::parse("holdout"),
+            Err(Tdi25TaskError::UnknownSplitIdentity)
+        );
+    }
+
+    #[test]
+    fn every_phase_b_family_embeds_the_requested_split() {
+        for split in [DataSplit::Development, DataSplit::Validation] {
+            let torsor = torsor_transport_pair_in_split(3, split).unwrap();
+            assert_eq!(torsor.original.split, split);
+            assert_eq!(torsor.transported.split, split);
+
+            let chiral = chiral_reflection_pair_in_split(4, split).unwrap();
+            assert_eq!(chiral.right.split, split);
+            assert_eq!(chiral.left.split, split);
+
+            let mixed = mixed_geometry_pair_in_split(5, split).unwrap();
+            assert_eq!(mixed.base.split, split);
+            assert_eq!(mixed.transformed.split, split);
+
+            let neutral = neutral_control_pair_in_split(6, split).unwrap();
+            assert_eq!(neutral.class_a.split, split);
+            assert_eq!(neutral.class_b.split, split);
+        }
+        assert_eq!(
+            torsor_transport_pair(1).unwrap().original.split,
+            DataSplit::Development
+        );
+        assert_eq!(
+            chiral_reflection_pair(1).unwrap().right.split,
+            DataSplit::Development
+        );
+    }
+
+    #[test]
+    fn split_choice_does_not_change_task_payload_or_oracle() {
+        let t_dev = torsor_transport_pair_in_split(11, DataSplit::Development).unwrap();
+        let t_val = torsor_transport_pair_in_split(11, DataSplit::Validation).unwrap();
+        assert_eq!(t_dev.original.query, t_val.original.query);
+        assert_eq!(t_dev.original.key, t_val.original.key);
+        assert_eq!(t_dev.oracle, t_val.oracle);
+        assert_eq!(t_dev.original.case_id, t_val.original.case_id);
+        assert_ne!(t_dev.original.split, t_val.original.split);
+
+        let c_dev = chiral_reflection_pair_in_split(9, DataSplit::Development).unwrap();
+        let c_val = chiral_reflection_pair_in_split(9, DataSplit::Validation).unwrap();
+        assert_eq!(c_dev.right.query, c_val.right.query);
+        assert_eq!(c_dev.right_oracle, c_val.right_oracle);
+        assert_ne!(c_dev.right.split, c_val.right.split);
+
+        let m_dev = mixed_geometry_pair_in_split(8, DataSplit::Development).unwrap();
+        let m_val = mixed_geometry_pair_in_split(8, DataSplit::Validation).unwrap();
+        assert_eq!(m_dev.base.torsor_query, m_val.base.torsor_query);
+        assert_eq!(m_dev.base_oracle, m_val.base_oracle);
+        assert_ne!(m_dev.base.split, m_val.base.split);
+
+        let n_dev = neutral_control_pair_in_split(7, DataSplit::Development).unwrap();
+        let n_val = neutral_control_pair_in_split(7, DataSplit::Validation).unwrap();
+        assert_eq!(n_dev.class_a.query, n_val.class_a.query);
+        assert_eq!(n_dev.class_a_oracle, n_val.class_a_oracle);
+        assert_ne!(n_dev.class_a.split, n_val.class_a.split);
     }
 }
