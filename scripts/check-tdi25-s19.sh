@@ -7,5 +7,4 @@ grep -Fq "tdi25-seed-case-canonicalization-v1" tdi-ai/src/tdi25_tasks.rs
 grep -Fq "pub fn register_seed" tdi-ai/src/tdi25_tasks.rs
 grep -Fq "pub fn canonicalize_torsor_transport_input" tdi-ai/src/tdi25_tasks.rs
 grep -Fq '| 18 | Protected-label inference API | **landed** in #656;' docs/TDI-25-CAMPAIGN-50.md
-grep -Fq '| 19 | Seed/case canonicalization + hash | **current stacked slice**;' docs/TDI-25-CAMPAIGN-50.md
-grep -Fq '**18/50 merged**' docs/TDI-25-CAMPAIGN-50.md
+grep -Fq '| 19 | Seed/case canonicalization + hash | **landed** in #658;' docs/TDI-25-CAMPAIGN-50.md
