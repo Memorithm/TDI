@@ -1,0 +1,21 @@
+schema_version: 1
+programme: TDI-25
+stage: B
+status: candidate_pending_exact_head_qualification_and_merge
+contract_versions:
+  torsor_transport: tdi25-torsor-transport-task-v1
+  chiral_reflection: tdi25-chiral-reflection-task-v1
+  mixed_geometry: tdi25-mixed-geometry-task-v1
+  neutral_control: tdi25-neutral-control-task-v1
+  position_geometry: tdi25-position-geometry-arm-v1
+  difficulty_strata: tdi25-difficulty-strata-v1
+  split_manifest: tdi25-split-manifest-v1
+  protected_label: tdi25-protected-label-api-v1
+  seed_case_canonicalization: tdi25-seed-case-canonicalization-v1
+authorizations:
+  training: false
+  development_evaluation: false
+  validation_evaluation: false
+  protected_or_final_access: false
+  scientific_claim: false
+  performance_claim: false
