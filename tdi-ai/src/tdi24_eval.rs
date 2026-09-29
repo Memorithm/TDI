@@ -17,8 +17,11 @@
 //! summaries over already-revealed V6/C6 match outcomes without accepting raw
 //! protected labels. Slice 28 introduces an explicit retained failure taxonomy:
 //! typed Invalid/Numerical/Resource/Task failures classified from EvalError and
-//! kept in a FailureRecord ledger rather than dropped. No training, confirmatory
-//! execution, protected/final evaluation, or scientific claim is authorised here.
+//! kept in a FailureRecord ledger rather than dropped. Slice 29 adds the
+//! provenance envelope: code/config/data/seed/toolchain identity retained per
+//! non-final run, validated fail-closed without inventing freeze pins. No training,
+//! confirmatory execution, protected/final evaluation, or scientific claim is
+//! authorised here.
 
 use core::fmt;
 
@@ -27,9 +30,10 @@ use super::tdi24_chiral::{
     CHIRAL_CONTRACT, CHIRAL_WIDTH, Chiral6, ChiralError, ChiralScoreWeights, chiral_score,
 };
 use super::tdi24_tasks::{
-    DataSplit, DirectionTarget, HandednessTarget, InferenceView, LabeledCase, NonChiralTarget,
-    PROTECTED_LABEL_CONTRACT, ReflectionInvariantTarget, TaskFamily, canonicalize_inference_view,
-    run_inference_callback,
+    DATASET_CANONICALIZATION_CONTRACT, DataSplit, DirectionTarget, HandednessTarget, InferenceView,
+    LabeledCase, NonChiralTarget, PROTECTED_LABEL_CONTRACT, ReflectionInvariantTarget,
+    RegisteredSeed, SEED_REGISTRY_CONTRACT, SPLIT_MANIFEST_CONTRACT, SeedDomain, TaskFamily,
+    canonicalize_inference_view, run_inference_callback,
 };
 use super::tdi24_vector::{VECTOR6_CONTRACT, VECTOR6_WIDTH, Vector6, Vector6Error, vector6_score};
 
@@ -87,6 +91,24 @@ pub const PAIRED_UNCERTAINTY_CONTRACT: &str = "tdi24-paired-uncertainty-v1";
 
 /// Versioned retained failure-taxonomy contract.
 pub const FAILURE_TAXONOMY_CONTRACT: &str = "tdi24-failure-taxonomy-v1";
+
+/// Versioned provenance-envelope contract: code/config/data/seed/toolchain identity.
+pub const PROVENANCE_ENVELOPE_CONTRACT: &str = "tdi24-provenance-envelope-v1";
+
+/// Declared rustc channel string for Stage-C provenance (matches CI gate `1.97.1`).
+///
+/// Software-surface identity only — does **not** invent a configuration-freeze pin
+/// and does not authorise protected/final execution.
+pub const PROVENANCE_TOOLCHAIN_CHANNEL: &str = "1.97.1";
+
+/// Declared Cargo feature set retained in the provenance toolchain identity.
+pub const PROVENANCE_TOOLCHAIN_FEATURES: &str = "experimental";
+
+/// Combined toolchain identity token: `{channel}/{features}`.
+pub const PROVENANCE_TOOLCHAIN_ID: &str = "1.97.1/experimental";
+
+/// Maximum UTF-8 byte length admitted for code/config/data/seed identity strings.
+pub const MAX_PROVENANCE_IDENTITY_BYTES: usize = 384;
 
 /// Nominal two-sided confidence level for Stage-C paired uncertainty summaries.
 pub const PAIRED_UNCERTAINTY_LEVEL: f64 = 0.95;
@@ -274,11 +296,44 @@ pub struct EvalRecord {
 pub struct EvaluatorRun {
     config: EvaluatorConfig,
     records: Vec<EvalRecord>,
+    /// Optional validated provenance envelope bound at open (Slice 29).
+    provenance: Option<ProvenanceEnvelope>,
 }
 
 impl EvaluatorRun {
-    /// Open a bounded non-final run.
+    /// Open a bounded non-final run without a bound provenance envelope.
+    ///
+    /// Prefer [`Self::open_with_provenance`] when a Stage-C identity envelope is available.
     pub fn open(config: EvaluatorConfig) -> Result<Self, EvalError> {
+        Self::open_inner(config, None)
+    }
+
+    /// Open a bounded non-final run bound to a validated provenance envelope.
+    ///
+    /// Fail-closed when the envelope drifts from the run arm/split or fails
+    /// [`validate_provenance_envelope`]. Does not execute protected/final data.
+    pub fn open_with_provenance(
+        config: EvaluatorConfig,
+        envelope: ProvenanceEnvelope,
+    ) -> Result<Self, EvalError> {
+        validate_provenance_envelope(&envelope)?;
+        if envelope.arm != config.arm {
+            return Err(EvalError::ProvenanceEnvelopeInvalid {
+                reason: "arm_mismatch",
+            });
+        }
+        if envelope.split != config.split {
+            return Err(EvalError::ProvenanceEnvelopeInvalid {
+                reason: "split_mismatch",
+            });
+        }
+        Self::open_inner(config, Some(envelope))
+    }
+
+    fn open_inner(
+        config: EvaluatorConfig,
+        provenance: Option<ProvenanceEnvelope>,
+    ) -> Result<Self, EvalError> {
         config.metric_registry.admit_split(config.split)?;
         if config.envelope_contract != EVALUATOR_ENVELOPE_CONTRACT {
             return Err(EvalError::ContractMismatch {
@@ -300,6 +355,7 @@ impl EvaluatorRun {
         Ok(Self {
             config,
             records: Vec::new(),
+            provenance,
         })
     }
 
@@ -307,6 +363,12 @@ impl EvaluatorRun {
     #[must_use]
     pub const fn config(&self) -> &EvaluatorConfig {
         &self.config
+    }
+
+    /// Borrow the bound provenance envelope when present.
+    #[must_use]
+    pub const fn provenance(&self) -> Option<&ProvenanceEnvelope> {
+        self.provenance.as_ref()
     }
 
     /// Borrow emitted records in admission order.
@@ -1669,7 +1731,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::OptimizerUpdateBudgetMismatch { .. }
         | EvalError::MetricRegistryInvalid { .. }
         | EvalError::PairedUncertaintyInvalid { .. }
-        | EvalError::FailureTaxonomyInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::FailureTaxonomyInvalid { .. }
+        | EvalError::ProvenanceEnvelopeInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -1703,6 +1766,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::MetricRegistryInvalid { .. } => "metric_registry_invalid",
         EvalError::PairedUncertaintyInvalid { .. } => "paired_uncertainty_invalid",
         EvalError::FailureTaxonomyInvalid { .. } => "failure_taxonomy_invalid",
+        EvalError::ProvenanceEnvelopeInvalid { .. } => "provenance_envelope_invalid",
     }
 }
 
@@ -1853,6 +1917,219 @@ pub fn retain_from_eval_record(record: &EvalRecord) -> Result<Option<FailureReco
     }
 }
 
+/// One immutable provenance envelope for a single non-final evaluator run.
+///
+/// Captures code/config/data/seed/toolchain identity so later Stage-C preflight
+/// (slice 30) can bind run identity without inventing freeze pins.
+/// Development/Validation only — protected/final splits are rejected.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProvenanceEnvelope {
+    pub provenance_contract: &'static str,
+    pub arm: EvalArm,
+    pub split: DataSplit,
+    /// Code-surface identity (crate/module contract pins or content-digest placeholder).
+    pub code_identity: String,
+    /// Configuration identity (evaluator/matcher/metric registry contract pins).
+    pub config_identity: String,
+    /// Data identity (split + dataset/canonical digest contract refs already used).
+    pub data_identity: String,
+    /// Seed identity (registered seed / group_id domain tags; no new seed material).
+    pub seed_identity: String,
+    /// Declared rustc channel (see [`PROVENANCE_TOOLCHAIN_CHANNEL`]).
+    pub toolchain_channel: &'static str,
+    /// Declared Cargo features (see [`PROVENANCE_TOOLCHAIN_FEATURES`]).
+    pub toolchain_features: &'static str,
+}
+
+impl ProvenanceEnvelope {
+    /// Construct and validate a provenance envelope for a Development/Validation run.
+    #[allow(clippy::too_many_arguments)]
+    pub fn for_non_final_run(
+        arm: EvalArm,
+        split: DataSplit,
+        code_identity: impl Into<String>,
+        config_identity: impl Into<String>,
+        data_identity: impl Into<String>,
+        seed_identity: impl Into<String>,
+        toolchain_channel: &'static str,
+        toolchain_features: &'static str,
+    ) -> Result<Self, EvalError> {
+        let envelope = Self {
+            provenance_contract: PROVENANCE_ENVELOPE_CONTRACT,
+            arm,
+            split,
+            code_identity: code_identity.into(),
+            config_identity: config_identity.into(),
+            data_identity: data_identity.into(),
+            seed_identity: seed_identity.into(),
+            toolchain_channel,
+            toolchain_features,
+        };
+        validate_provenance_envelope(&envelope)?;
+        Ok(envelope)
+    }
+
+    /// Canonical Stage-C reference envelope using pinned toolchain channel/features
+    /// and identity bundles derived from already-landed contracts / registered seeds.
+    pub fn for_pinned_stage_c_run(
+        arm: EvalArm,
+        split: DataSplit,
+        registered: &RegisteredSeed,
+        group_id: u64,
+    ) -> Result<Self, EvalError> {
+        Self::for_non_final_run(
+            arm,
+            split,
+            stage_c_code_identity_bundle(arm),
+            stage_c_config_identity_bundle(),
+            stage_c_data_identity_bundle(split),
+            stage_c_seed_identity(registered, group_id),
+            PROVENANCE_TOOLCHAIN_CHANNEL,
+            PROVENANCE_TOOLCHAIN_FEATURES,
+        )
+    }
+
+    /// Combined toolchain identity token `{channel}/{features}`.
+    #[must_use]
+    pub fn toolchain_identity(&self) -> String {
+        format!("{}/{}", self.toolchain_channel, self.toolchain_features)
+    }
+}
+
+fn validate_identity_string(field: &'static str, value: &str) -> Result<(), EvalError> {
+    if value.is_empty() {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: match field {
+                "code_identity" => "empty_code_identity",
+                "config_identity" => "empty_config_identity",
+                "data_identity" => "empty_data_identity",
+                "seed_identity" => "empty_seed_identity",
+                _ => "empty_identity",
+            },
+        });
+    }
+    if value.len() > MAX_PROVENANCE_IDENTITY_BYTES {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "identity_too_long",
+        });
+    }
+    if value.chars().any(|ch| ch.is_control()) {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "identity_control_char",
+        });
+    }
+    Ok(())
+}
+
+/// Validate a provenance envelope against the closed contract and identity rules.
+pub fn validate_provenance_envelope(envelope: &ProvenanceEnvelope) -> Result<(), EvalError> {
+    validate_non_final_split(envelope.split)?;
+    if envelope.provenance_contract != PROVENANCE_ENVELOPE_CONTRACT {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "contract_drift",
+        });
+    }
+    validate_identity_string("code_identity", &envelope.code_identity)?;
+    validate_identity_string("config_identity", &envelope.config_identity)?;
+    validate_identity_string("data_identity", &envelope.data_identity)?;
+    validate_identity_string("seed_identity", &envelope.seed_identity)?;
+    if envelope.toolchain_channel.is_empty() {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "empty_toolchain_channel",
+        });
+    }
+    if envelope.toolchain_features.is_empty() {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "empty_toolchain_features",
+        });
+    }
+    if envelope.toolchain_channel != PROVENANCE_TOOLCHAIN_CHANNEL
+        || envelope.toolchain_features != PROVENANCE_TOOLCHAIN_FEATURES
+    {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "toolchain_drift",
+        });
+    }
+    if envelope.toolchain_identity() != PROVENANCE_TOOLCHAIN_ID {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "toolchain_drift",
+        });
+    }
+    // Seed-domain tag must agree with the declared non-final split.
+    let expected_domain = SeedDomain::from_split(envelope.split);
+    let domain_needle = format!("domain={}", expected_domain.as_str());
+    if !envelope.seed_identity.contains(&domain_needle) {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "seed_domain_split_mismatch",
+        });
+    }
+    if !envelope.seed_identity.contains(SEED_REGISTRY_CONTRACT) {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "seed_registry_contract_missing",
+        });
+    }
+    Ok(())
+}
+
+/// Build a deterministic config-identity bundle from the live Stage-C contract pins.
+///
+/// Concatenates known evaluator/matcher/metric/uncertainty/failure/provenance
+/// contract ids in a stable order. Does not invent freeze pins.
+#[must_use]
+pub fn stage_c_config_identity_bundle() -> String {
+    [
+        EVALUATOR_ENVELOPE_CONTRACT,
+        READOUT_BUDGET_CONTRACT,
+        PARAMETER_COUNT_MATCHER_CONTRACT,
+        INITIALIZATION_MATCHER_CONTRACT,
+        OPTIMIZER_UPDATE_BUDGET_CONTRACT,
+        METRIC_REGISTRY_CONTRACT,
+        PAIRED_UNCERTAINTY_CONTRACT,
+        FAILURE_TAXONOMY_CONTRACT,
+        PROVENANCE_ENVELOPE_CONTRACT,
+    ]
+    .join("|")
+}
+
+/// Build a deterministic code-identity bundle for the V6/C6 evaluator surface.
+#[must_use]
+pub fn stage_c_code_identity_bundle(arm: EvalArm) -> String {
+    format!(
+        "{}|{}|{}",
+        EVALUATOR_ENVELOPE_CONTRACT,
+        arm.evaluator_contract(),
+        PROVENANCE_ENVELOPE_CONTRACT
+    )
+}
+
+/// Build a data-identity bundle from already-used split + dataset canonical refs.
+#[must_use]
+pub fn stage_c_data_identity_bundle(split: DataSplit) -> String {
+    format!(
+        "{}|{}|split={}",
+        SPLIT_MANIFEST_CONTRACT,
+        DATASET_CANONICALIZATION_CONTRACT,
+        split.as_str()
+    )
+}
+
+/// Build a seed-identity string from a registered seed and group_id domain tags.
+///
+/// Reuses the Slice-18 registry contract and mixed seed — does not invent new
+/// seed material.
+#[must_use]
+pub fn stage_c_seed_identity(registered: &RegisteredSeed, group_id: u64) -> String {
+    format!(
+        "{}|domain={}|family={}|local={:016x}|mixed={:016x}|group={:016x}",
+        SEED_REGISTRY_CONTRACT,
+        registered.domain.as_str(),
+        registered.family.as_str(),
+        registered.local_seed,
+        registered.mixed_seed,
+        group_id
+    )
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -1921,6 +2198,8 @@ pub enum EvalError {
     PairedUncertaintyInvalid { reason: &'static str },
     /// Failure taxonomy rejected an unknown class, empty code, or contract drift.
     FailureTaxonomyInvalid { reason: &'static str },
+    /// Provenance envelope rejected empty/drifted identity fields or protected split.
+    ProvenanceEnvelopeInvalid { reason: &'static str },
 }
 
 impl fmt::Display for EvalError {
@@ -1995,6 +2274,9 @@ impl fmt::Display for EvalError {
             Self::FailureTaxonomyInvalid { reason } => {
                 write!(formatter, "failure taxonomy invalid: {reason}")
             }
+            Self::ProvenanceEnvelopeInvalid { reason } => {
+                write!(formatter, "provenance envelope invalid: {reason}")
+            }
         }
     }
 }
@@ -2037,8 +2319,9 @@ pub fn non_chiral_sign(target: &NonChiralTarget) -> Result<i8, EvalError> {
 mod tests {
     use super::*;
     use crate::experimental::tdi24_tasks::{
-        PROTECTED_LABEL_CONTRACT, non_chiral_control_case, reflection_discriminative_pair,
-        reflection_discriminative_pair_in_split, reflection_nuisance_pair, seal_non_chiral_control,
+        PROTECTED_LABEL_CONTRACT, SeedDomain, TaskFamily, non_chiral_control_case,
+        reflection_discriminative_pair, reflection_discriminative_pair_in_split,
+        reflection_nuisance_pair, register_seed, seal_non_chiral_control,
         seal_reflection_discriminative, seal_reflection_nuisance,
     };
 
@@ -3358,5 +3641,328 @@ mod tests {
             EvaluatorRun::open(too_many_scalars),
             Err(EvalError::InvalidBudget)
         );
+    }
+
+    #[test]
+    fn provenance_envelope_accepts_pinned_non_final_run() {
+        assert_eq!(PROVENANCE_ENVELOPE_CONTRACT, "tdi24-provenance-envelope-v1");
+        assert_eq!(PROVENANCE_TOOLCHAIN_CHANNEL, "1.97.1");
+        assert_eq!(PROVENANCE_TOOLCHAIN_FEATURES, "experimental");
+        assert_eq!(PROVENANCE_TOOLCHAIN_ID, "1.97.1/experimental");
+
+        let registered = register_seed(
+            SeedDomain::Development,
+            TaskFamily::ReflectionDiscriminative,
+            42,
+        );
+        let envelope = ProvenanceEnvelope::for_pinned_stage_c_run(
+            EvalArm::V6,
+            DataSplit::Development,
+            &registered,
+            0x11,
+        )
+        .unwrap();
+
+        assert_eq!(envelope.provenance_contract, PROVENANCE_ENVELOPE_CONTRACT);
+        assert_eq!(envelope.arm, EvalArm::V6);
+        assert_eq!(envelope.split, DataSplit::Development);
+        assert_eq!(
+            envelope.code_identity,
+            stage_c_code_identity_bundle(EvalArm::V6)
+        );
+        assert_eq!(envelope.config_identity, stage_c_config_identity_bundle());
+        assert_eq!(
+            envelope.data_identity,
+            stage_c_data_identity_bundle(DataSplit::Development)
+        );
+        assert!(envelope.data_identity.contains(SPLIT_MANIFEST_CONTRACT));
+        assert!(
+            envelope
+                .data_identity
+                .contains(DATASET_CANONICALIZATION_CONTRACT)
+        );
+        assert_eq!(
+            envelope.seed_identity,
+            stage_c_seed_identity(&registered, 0x11)
+        );
+        assert!(envelope.seed_identity.contains(SEED_REGISTRY_CONTRACT));
+        assert!(envelope.seed_identity.contains("domain=development"));
+        assert_eq!(envelope.toolchain_channel, PROVENANCE_TOOLCHAIN_CHANNEL);
+        assert_eq!(envelope.toolchain_features, PROVENANCE_TOOLCHAIN_FEATURES);
+        assert_eq!(envelope.toolchain_identity(), PROVENANCE_TOOLCHAIN_ID);
+        validate_provenance_envelope(&envelope).unwrap();
+
+        let config = EvaluatorConfig::v6(DataSplit::Development).unwrap();
+        let run = EvaluatorRun::open_with_provenance(config, envelope.clone()).unwrap();
+        assert_eq!(run.provenance(), Some(&envelope));
+        assert!(run.records().is_empty());
+
+        let registered_v = register_seed(
+            SeedDomain::Validation,
+            TaskFamily::ReflectionDiscriminative,
+            7,
+        );
+        let c6 = ProvenanceEnvelope::for_pinned_stage_c_run(
+            EvalArm::C6,
+            DataSplit::Validation,
+            &registered_v,
+            0x22,
+        )
+        .unwrap();
+        assert_eq!(c6.arm, EvalArm::C6);
+        assert_eq!(c6.split, DataSplit::Validation);
+        assert!(c6.code_identity.contains(C6_EVALUATOR_CONTRACT));
+        assert!(c6.seed_identity.contains("domain=validation"));
+    }
+
+    #[test]
+    fn provenance_envelope_rejects_empty_protected_and_toolchain_drift() {
+        let registered = register_seed(
+            SeedDomain::Development,
+            TaskFamily::ReflectionDiscriminative,
+            1,
+        );
+        let seed = stage_c_seed_identity(&registered, 0);
+        let data = stage_c_data_identity_bundle(DataSplit::Development);
+
+        assert_eq!(
+            ProvenanceEnvelope::for_non_final_run(
+                EvalArm::V6,
+                DataSplit::Development,
+                "",
+                "config",
+                data.clone(),
+                seed.clone(),
+                PROVENANCE_TOOLCHAIN_CHANNEL,
+                PROVENANCE_TOOLCHAIN_FEATURES,
+            ),
+            Err(EvalError::ProvenanceEnvelopeInvalid {
+                reason: "empty_code_identity",
+            })
+        );
+        assert_eq!(
+            ProvenanceEnvelope::for_non_final_run(
+                EvalArm::V6,
+                DataSplit::Development,
+                "code",
+                "",
+                data.clone(),
+                seed.clone(),
+                PROVENANCE_TOOLCHAIN_CHANNEL,
+                PROVENANCE_TOOLCHAIN_FEATURES,
+            ),
+            Err(EvalError::ProvenanceEnvelopeInvalid {
+                reason: "empty_config_identity",
+            })
+        );
+        assert_eq!(
+            ProvenanceEnvelope::for_non_final_run(
+                EvalArm::V6,
+                DataSplit::Development,
+                "code",
+                "config",
+                "",
+                seed.clone(),
+                PROVENANCE_TOOLCHAIN_CHANNEL,
+                PROVENANCE_TOOLCHAIN_FEATURES,
+            ),
+            Err(EvalError::ProvenanceEnvelopeInvalid {
+                reason: "empty_data_identity",
+            })
+        );
+        assert_eq!(
+            ProvenanceEnvelope::for_non_final_run(
+                EvalArm::V6,
+                DataSplit::Development,
+                "code",
+                "config",
+                data.clone(),
+                "",
+                PROVENANCE_TOOLCHAIN_CHANNEL,
+                PROVENANCE_TOOLCHAIN_FEATURES,
+            ),
+            Err(EvalError::ProvenanceEnvelopeInvalid {
+                reason: "empty_seed_identity",
+            })
+        );
+        assert_eq!(
+            ProvenanceEnvelope::for_non_final_run(
+                EvalArm::V6,
+                DataSplit::Development,
+                "code",
+                "config",
+                data.clone(),
+                seed.clone(),
+                "",
+                PROVENANCE_TOOLCHAIN_FEATURES,
+            ),
+            Err(EvalError::ProvenanceEnvelopeInvalid {
+                reason: "empty_toolchain_channel",
+            })
+        );
+        assert_eq!(
+            ProvenanceEnvelope::for_non_final_run(
+                EvalArm::V6,
+                DataSplit::Development,
+                "code",
+                "config",
+                data.clone(),
+                seed.clone(),
+                PROVENANCE_TOOLCHAIN_CHANNEL,
+                "",
+            ),
+            Err(EvalError::ProvenanceEnvelopeInvalid {
+                reason: "empty_toolchain_features",
+            })
+        );
+        assert_eq!(
+            ProvenanceEnvelope::for_non_final_run(
+                EvalArm::V6,
+                DataSplit::Development,
+                "code",
+                "config",
+                data.clone(),
+                seed.clone(),
+                "1.96.0",
+                PROVENANCE_TOOLCHAIN_FEATURES,
+            ),
+            Err(EvalError::ProvenanceEnvelopeInvalid {
+                reason: "toolchain_drift",
+            })
+        );
+        assert_eq!(
+            ProvenanceEnvelope::for_non_final_run(
+                EvalArm::V6,
+                DataSplit::Development,
+                "code",
+                "config",
+                data.clone(),
+                seed.clone(),
+                PROVENANCE_TOOLCHAIN_CHANNEL,
+                "default",
+            ),
+            Err(EvalError::ProvenanceEnvelopeInvalid {
+                reason: "toolchain_drift",
+            })
+        );
+
+        let overlong = "x".repeat(MAX_PROVENANCE_IDENTITY_BYTES + 1);
+        assert_eq!(
+            ProvenanceEnvelope::for_non_final_run(
+                EvalArm::C6,
+                DataSplit::Validation,
+                overlong,
+                "config",
+                stage_c_data_identity_bundle(DataSplit::Validation),
+                stage_c_seed_identity(
+                    &register_seed(
+                        SeedDomain::Validation,
+                        TaskFamily::ReflectionDiscriminative,
+                        1,
+                    ),
+                    0,
+                ),
+                PROVENANCE_TOOLCHAIN_CHANNEL,
+                PROVENANCE_TOOLCHAIN_FEATURES,
+            ),
+            Err(EvalError::ProvenanceEnvelopeInvalid {
+                reason: "identity_too_long",
+            })
+        );
+
+        assert_eq!(
+            parse_non_final_split("protected"),
+            Err(EvalError::ProtectedOrFinalSplit)
+        );
+        assert_eq!(
+            parse_non_final_split("final"),
+            Err(EvalError::ProtectedOrFinalSplit)
+        );
+
+        // Seed domain must match split.
+        let mismatched_seed = stage_c_seed_identity(
+            &register_seed(
+                SeedDomain::Validation,
+                TaskFamily::ReflectionDiscriminative,
+                1,
+            ),
+            0,
+        );
+        assert_eq!(
+            ProvenanceEnvelope::for_non_final_run(
+                EvalArm::V6,
+                DataSplit::Development,
+                "code",
+                "config",
+                data.clone(),
+                mismatched_seed,
+                PROVENANCE_TOOLCHAIN_CHANNEL,
+                PROVENANCE_TOOLCHAIN_FEATURES,
+            ),
+            Err(EvalError::ProvenanceEnvelopeInvalid {
+                reason: "seed_domain_split_mismatch",
+            })
+        );
+
+        let mut drifted = ProvenanceEnvelope::for_pinned_stage_c_run(
+            EvalArm::V6,
+            DataSplit::Development,
+            &registered,
+            0,
+        )
+        .unwrap();
+        drifted.provenance_contract = "tdi24-provenance-envelope-v0-drift";
+        assert_eq!(
+            validate_provenance_envelope(&drifted),
+            Err(EvalError::ProvenanceEnvelopeInvalid {
+                reason: "contract_drift",
+            })
+        );
+
+        // Arm/split binding on open_with_provenance.
+        let envelope = ProvenanceEnvelope::for_pinned_stage_c_run(
+            EvalArm::V6,
+            DataSplit::Development,
+            &registered,
+            0,
+        )
+        .unwrap();
+        assert_eq!(
+            EvaluatorRun::open_with_provenance(
+                EvaluatorConfig::c6(DataSplit::Development).unwrap(),
+                envelope.clone(),
+            ),
+            Err(EvalError::ProvenanceEnvelopeInvalid {
+                reason: "arm_mismatch",
+            })
+        );
+        assert_eq!(
+            EvaluatorRun::open_with_provenance(
+                EvaluatorConfig::v6(DataSplit::Validation).unwrap(),
+                envelope,
+            ),
+            Err(EvalError::ProvenanceEnvelopeInvalid {
+                reason: "split_mismatch",
+            })
+        );
+
+        assert_eq!(
+            classify_eval_error(&EvalError::ProvenanceEnvelopeInvalid {
+                reason: "contract_drift",
+            })
+            .unwrap(),
+            FailureClass::Invalid
+        );
+        assert_eq!(
+            eval_error_message_code(&EvalError::ProvenanceEnvelopeInvalid {
+                reason: "contract_drift",
+            }),
+            "provenance_envelope_invalid"
+        );
+
+        let bundle = stage_c_config_identity_bundle();
+        assert!(bundle.contains(FAILURE_TAXONOMY_CONTRACT));
+        assert!(bundle.contains(PROVENANCE_ENVELOPE_CONTRACT));
+        assert!(!bundle.contains("freeze"));
     }
 }
