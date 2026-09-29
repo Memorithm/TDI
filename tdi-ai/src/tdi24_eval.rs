@@ -1637,9 +1637,8 @@ impl FailureLedger {
             });
         }
         if self.records.len() as u64 >= MAX_FAILURES_PER_RUN {
-            return Err(EvalError::FailureTaxonomyInvalid {
-                reason: "failure_budget_exceeded",
-            });
+            // Ledger capacity is a resource bound (same class as case budget).
+            return Err(EvalError::CaseBudgetExceeded);
         }
         self.records.push(record);
         Ok(self.records.last().expect("just pushed"))
@@ -1789,11 +1788,56 @@ pub fn retain_eval_failure(
     )
 }
 
+/// Validate evaluator provenance pins on a source [`EvalRecord`].
+///
+/// Mirrors the contract gate used by [`revealed_matches_from_records`] so stale
+/// or drifted records cannot be repinned under the current taxonomy.
+pub fn validate_eval_record_contracts(record: &EvalRecord) -> Result<(), EvalError> {
+    validate_non_final_split(record.split)?;
+    if record.envelope_contract != EVALUATOR_ENVELOPE_CONTRACT {
+        return Err(EvalError::ContractMismatch {
+            field: "envelope_contract",
+        });
+    }
+    if record.arm_contract != record.arm.evaluator_contract() {
+        return Err(EvalError::ContractMismatch {
+            field: "arm_contract",
+        });
+    }
+    if record.budget_contract != READOUT_BUDGET_CONTRACT {
+        return Err(EvalError::ContractMismatch {
+            field: "budget_contract",
+        });
+    }
+    if record.metric_registry_contract != METRIC_REGISTRY_CONTRACT {
+        return Err(EvalError::ContractMismatch {
+            field: "metric_registry_contract",
+        });
+    }
+    let expected_vector_contract = match record.arm {
+        EvalArm::V6 => VECTOR6_CONTRACT,
+        EvalArm::C6 => CHIRAL_CONTRACT,
+    };
+    if record.vector_contract != expected_vector_contract {
+        return Err(EvalError::ContractMismatch {
+            field: "vector_contract",
+        });
+    }
+    if record.label_contract != PROTECTED_LABEL_CONTRACT {
+        return Err(EvalError::ContractMismatch {
+            field: "label_contract",
+        });
+    }
+    Ok(())
+}
+
 /// Extract a retained failure from an [`EvalRecord`] outcome when present.
 ///
 /// Scored outcomes yield `Ok(None)`. Failure outcomes are classified and
-/// retained; they are never dropped.
+/// retained; they are never dropped. Stale envelope/arm/budget/registry/vector/
+/// label contract pins fail closed before repinning under the taxonomy.
 pub fn retain_from_eval_record(record: &EvalRecord) -> Result<Option<FailureRecord>, EvalError> {
+    validate_eval_record_contracts(record)?;
     match record.outcome {
         EvalOutcome::Scored { .. } => Ok(None),
         EvalOutcome::Failure(failure) => Ok(Some(retain_eval_failure(
@@ -3265,8 +3309,33 @@ mod tests {
         assert_eq!(full.records().len() as u64, MAX_FAILURES_PER_RUN);
         assert_eq!(
             full.retain_eval_error(&EvalError::InvalidBudget, EvalArm::V6, None),
-            Err(EvalError::FailureTaxonomyInvalid {
-                reason: "failure_budget_exceeded",
+            Err(EvalError::CaseBudgetExceeded)
+        );
+        assert_eq!(
+            classify_eval_error(&EvalError::CaseBudgetExceeded).unwrap(),
+            FailureClass::Resource
+        );
+
+        // Stale arm_contract on a source EvalRecord fails closed before retain.
+        let stale = EvalRecord {
+            arm: EvalArm::V6,
+            split: DataSplit::Development,
+            family: TaskFamily::ReflectionDiscriminative,
+            case_id: 3,
+            group_id: 3,
+            outcome: EvalOutcome::Failure(EvalFailure::Task),
+            canonical_digest: "stale".to_string(),
+            envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
+            arm_contract: "tdi24-v6-evaluator-v0-drift",
+            budget_contract: READOUT_BUDGET_CONTRACT,
+            metric_registry_contract: METRIC_REGISTRY_CONTRACT,
+            vector_contract: VECTOR6_CONTRACT,
+            label_contract: PROTECTED_LABEL_CONTRACT,
+        };
+        assert_eq!(
+            retain_from_eval_record(&stale),
+            Err(EvalError::ContractMismatch {
+                field: "arm_contract",
             })
         );
     }
