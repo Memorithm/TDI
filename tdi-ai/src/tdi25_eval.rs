@@ -129,9 +129,7 @@ impl T6EvaluatorRun {
             return Err(EvalError::InvalidBudget);
         }
         let sources = validate_source_contracts().map_err(EvalError::Bridge)?;
-        if sources.torsor != TORSOR_CONTRACT
-            || sources.torsor != PINNED_SOURCE_CONTRACTS.torsor
-        {
+        if sources.torsor != TORSOR_CONTRACT || sources.torsor != PINNED_SOURCE_CONTRACTS.torsor {
             return Err(EvalError::ContractMismatch("source_torsor_contract"));
         }
         Ok(Self {
