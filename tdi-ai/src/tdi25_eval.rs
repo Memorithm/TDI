@@ -123,7 +123,9 @@ impl T6EvaluatorRun {
             return Err(EvalError::ContractMismatch("budget_contract"));
         }
         if config.budget.max_cases == 0
+            || config.budget.max_cases > MAX_CASES_PER_RUN
             || config.budget.max_readout_scalars_per_case < 2
+            || config.budget.max_readout_scalars_per_case > MAX_READOUT_SCALARS_PER_CASE
             || config.budget.updates != NON_TRAINED_UPDATE_BUDGET
         {
             return Err(EvalError::InvalidBudget);
@@ -150,23 +152,27 @@ impl T6EvaluatorRun {
         case: &LabeledCase<TorsorTransportInput, TorsorTransportOracle>,
     ) -> Result<&T6EvalRecord, EvalError> {
         self.reserve_case(case.inference_input().split)?;
+        let input = case.inference_input();
+        let oracle = case.protected_label().reveal_for_evaluation();
         if case.inference_input().generator_contract != TORSOR_TRANSPORT_TASK_CONTRACT
+            || oracle.generator_contract != TORSOR_TRANSPORT_TASK_CONTRACT
+            || oracle.pair_id != input.case_id / 2
+            || input.task_family != TaskFamily::TorsorFavorable
             || case.label_contract() != PROTECTED_LABEL_CONTRACT
         {
             return Err(EvalError::ContractMismatch("torsor_transport_case"));
         }
         let score =
             run_inference_callback(case, score_torsor_transport).map_err(EvalError::Bridge)?;
-        let oracle = case.protected_label().reveal_for_evaluation();
         let record = T6EvalRecord {
-            split: case.inference_input().split,
-            family: case.inference_input().task_family,
-            case_id: case.inference_input().case_id,
+            split: input.split,
+            family: input.task_family,
+            case_id: input.case_id,
             outcome: T6Outcome {
                 score,
                 matches_oracle: approximately_equal(score, oracle.expected_score),
             },
-            canonical_digest: canonicalize_torsor_transport_input(case.inference_input()).digest,
+            canonical_digest: canonicalize_torsor_transport_input(input).digest,
             envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
             arm_contract: T6_EVALUATOR_CONTRACT,
             budget_contract: READOUT_BUDGET_CONTRACT,
@@ -183,22 +189,26 @@ impl T6EvaluatorRun {
         case: &LabeledCase<MixedGeometryInput, MixedGeometryOracle>,
     ) -> Result<&T6EvalRecord, EvalError> {
         self.reserve_case(case.inference_input().split)?;
-        if case.inference_input().generator_contract != MIXED_GEOMETRY_TASK_CONTRACT
+        let input = case.inference_input();
+        let oracle = case.protected_label().reveal_for_evaluation();
+        if input.generator_contract != MIXED_GEOMETRY_TASK_CONTRACT
+            || oracle.generator_contract != MIXED_GEOMETRY_TASK_CONTRACT
+            || oracle.pair_id != input.case_id / 2
+            || input.task_family != TaskFamily::Mixed
             || case.label_contract() != PROTECTED_LABEL_CONTRACT
         {
             return Err(EvalError::ContractMismatch("mixed_case"));
         }
         let score = run_inference_callback(case, score_mixed_torsor).map_err(EvalError::Bridge)?;
-        let oracle = case.protected_label().reveal_for_evaluation();
         let record = T6EvalRecord {
-            split: case.inference_input().split,
-            family: case.inference_input().task_family,
-            case_id: case.inference_input().case_id,
+            split: input.split,
+            family: input.task_family,
+            case_id: input.case_id,
             outcome: T6Outcome {
                 score,
                 matches_oracle: approximately_equal(score, oracle.expected_torsor_score),
             },
-            canonical_digest: canonicalize_mixed_geometry_input(case.inference_input()).digest,
+            canonical_digest: canonicalize_mixed_geometry_input(input).digest,
             envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
             arm_contract: T6_EVALUATOR_CONTRACT,
             budget_contract: READOUT_BUDGET_CONTRACT,
@@ -340,6 +350,17 @@ mod tests {
         invalid.budget.updates = 1;
         assert_eq!(T6EvaluatorRun::open(invalid), Err(EvalError::InvalidBudget));
 
+        let mut unbounded = EvaluatorConfig::t6(DataSplit::Development);
+        unbounded.budget.max_cases = MAX_CASES_PER_RUN + 1;
+        assert_eq!(
+            T6EvaluatorRun::open(unbounded),
+            Err(EvalError::InvalidBudget)
+        );
+
+        let mut wide = EvaluatorConfig::t6(DataSplit::Development);
+        wide.budget.max_readout_scalars_per_case = MAX_READOUT_SCALARS_PER_CASE + 1;
+        assert_eq!(T6EvaluatorRun::open(wide), Err(EvalError::InvalidBudget));
+
         let mut drifted = EvaluatorConfig::t6(DataSplit::Development);
         drifted.arm_contract = "not-t6";
         assert!(matches!(
@@ -362,5 +383,34 @@ mod tests {
             Err(EvalError::CaseBudgetExceeded)
         );
         assert_eq!(run.records().len(), 1);
+    }
+
+    #[test]
+    fn mismatched_oracle_and_family_provenance_fail_closed() {
+        let first_pair = torsor_transport_pair_in_split(3, DataSplit::Development).unwrap();
+        let second_pair = torsor_transport_pair_in_split(4, DataSplit::Development).unwrap();
+        let mismatched = seal_torsor_transport(first_pair.original, second_pair.oracle);
+        let mut run = T6EvaluatorRun::open(EvaluatorConfig::t6(DataSplit::Development)).unwrap();
+        assert_eq!(
+            run.evaluate_torsor_transport(&mismatched),
+            Err(EvalError::ContractMismatch("torsor_transport_case"))
+        );
+
+        let mut wrong_family_input = first_pair.original;
+        wrong_family_input.task_family = TaskFamily::Mixed;
+        let wrong_family = seal_torsor_transport(wrong_family_input, first_pair.oracle);
+        assert_eq!(
+            run.evaluate_torsor_transport(&wrong_family),
+            Err(EvalError::ContractMismatch("torsor_transport_case"))
+        );
+
+        let mixed_pair = mixed_geometry_pair_in_split(5, DataSplit::Development).unwrap();
+        let mut drifted_oracle = mixed_pair.base_oracle;
+        drifted_oracle.generator_contract = "not-mixed";
+        let drifted = seal_mixed_geometry(mixed_pair.base, drifted_oracle);
+        assert_eq!(
+            run.evaluate_mixed(&drifted),
+            Err(EvalError::ContractMismatch("mixed_case"))
+        );
     }
 }
