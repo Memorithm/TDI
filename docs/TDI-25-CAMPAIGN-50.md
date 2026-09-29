@@ -44,7 +44,7 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | 24 | Parameter/readout matcher | **landed** in #669, exact head `69f5ec9c27ceeadd047fd196193131964b7a0023`, merge `32c02cb7625dae788dc5d44d4449447a408f0589`; reject capacity mismatch rather than silently compensate |
 | 25 | Optimizer/update-budget matcher | **landed** in #673, exact head `d171ee9815813704b7214f5c812b2e6e864b6116`, merge `efb03b8c3e37bcb537952bdca2ce545765da29c8`; same examples/order/steps/stopping rule where trained |
 | 26 | Metric registry | **landed** in #679, exact head `c21c4463bb23eb8f078d1ec51612cd04def112d2`, merge `62b015cf3752835bda2f4f476f118118ef4208b6`; primary family metrics and cross-family summary frozen |
-| 27 | Paired uncertainty engine | **current candidate** in #683; paired effect/interval computation by seed block |
+| 27 | Paired uncertainty engine | **landed** in #683, exact head `9bf33373630ea7b7bdc338da359c9eb1fcc845d9`, merge `ff7de14f6f3968f2fb5679e96d962a5f651d43b4`; paired effect/interval computation by seed block |
 | 28 | Family-stratified synthesis | pooled summaries cannot hide sign reversals |
 | 29 | Typed failure/resource accounting | numerical/task/resource failures retained by arm |
 | 30 | Stage-C bounded preflight | Development/Validation only; no protected/final execution |
@@ -94,4 +94,4 @@ Pause the campaign when any of the following occurs:
 
 ## Progress accounting
 
-**26/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606, #607, #612, #654, #656, #658, #660, #661, #663, #666, #669, #673, #679). Slice 27 is next. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**27/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606, #607, #612, #654, #656, #658, #660, #661, #663, #666, #669, #673, #679, #683). Slice 28 is next. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
