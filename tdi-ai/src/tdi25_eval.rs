@@ -10,7 +10,11 @@
 //! parameter/readout matcher that accepts only capacity-matched arm pairs on
 //! the declared readout surface (trainable/update budget, readout scalars,
 //! matched query/score carrier widths from `carrier_accounting`) and rejects
-//! mismatches fail-closed without silently compensating. All arms consume
+//! mismatches fail-closed without silently compensating. Slice 25 adds an
+//! optimizer/update-budget matcher that requires identical examples count,
+//! ordering identity, update steps, and stopping rule across paired arms so
+//! later trained paths cannot silently diverge; Phase-C references remain
+//! non-trained (`updates=0`, `ExhaustExamples`). All arms consume
 //! sealed Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
@@ -52,6 +56,13 @@ pub const READOUT_BUDGET_CONTRACT: &str = "tdi25-readout-budget-v1";
 
 /// Versioned parameter/readout capacity matcher contract.
 pub const PARAMETER_READOUT_MATCHER_CONTRACT: &str = "tdi25-parameter-readout-matcher-v1";
+
+/// Versioned optimizer/update-budget matcher contract.
+pub const OPTIMIZER_UPDATE_BUDGET_MATCHER_CONTRACT: &str =
+    "tdi25-optimizer-update-budget-matcher-v1";
+
+/// Shared ordering identity for non-trained Phase-C optimizer budgets.
+pub const NON_TRAINED_ORDERING_ID: u64 = 0;
 
 /// Maximum cases admitted to one non-final evaluator run.
 pub const MAX_CASES_PER_RUN: u64 = 64;
@@ -259,6 +270,141 @@ pub fn match_parameter_readouts(
         right_arm: right.arm,
         matcher_contract: PARAMETER_READOUT_MATCHER_CONTRACT,
         budget_contract: READOUT_BUDGET_CONTRACT,
+    })
+}
+
+/// Declared stopping rule for a Phase-C optimizer/update budget.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StoppingRule {
+    /// Non-trained path: stop after the declared example budget (zero updates).
+    ExhaustExamples,
+    /// Trained path: stop after the declared fixed update count.
+    FixedUpdates,
+}
+
+impl StoppingRule {
+    /// Stable lowercase label for manifests and audits.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ExhaustExamples => "exhaust_examples",
+            Self::FixedUpdates => "fixed_updates",
+        }
+    }
+}
+
+/// Explicit optimizer/update budget for one Phase-C arm.
+///
+/// Paired T6/C6/G6 attribution configurations must publish identical examples,
+/// ordering identity, update steps and stopping rule rather than silently
+/// diverging. Phase-C reference arms remain non-trained (`examples=0`,
+/// `updates=0`, `ExhaustExamples`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OptimizerUpdateBudget {
+    /// Arm whose budget is declared.
+    pub arm: ComparisonArm,
+    /// Number of examples admitted under this budget (0 on non-trained refs).
+    pub examples: u64,
+    /// Parameter-update steps (zero on the non-trained reference path).
+    pub updates: u64,
+    /// Shared deterministic ordering identity across paired arms.
+    pub ordering_id: u64,
+    /// Stopping rule applied identically to both arms.
+    pub stopping: StoppingRule,
+    /// Matcher contract pin.
+    pub matcher_contract: &'static str,
+}
+
+impl OptimizerUpdateBudget {
+    /// Build a non-trained matched reference budget for one arm.
+    #[must_use]
+    pub const fn matched_non_trained(arm: ComparisonArm) -> Self {
+        Self {
+            arm,
+            examples: 0,
+            updates: NON_TRAINED_UPDATE_BUDGET,
+            ordering_id: NON_TRAINED_ORDERING_ID,
+            stopping: StoppingRule::ExhaustExamples,
+            matcher_contract: OPTIMIZER_UPDATE_BUDGET_MATCHER_CONTRACT,
+        }
+    }
+
+    /// Canonical non-trained T6 reference budget.
+    #[must_use]
+    pub const fn reference_t6() -> Self {
+        Self::matched_non_trained(ComparisonArm::T6)
+    }
+
+    /// Canonical non-trained C6 reference budget.
+    #[must_use]
+    pub const fn reference_c6() -> Self {
+        Self::matched_non_trained(ComparisonArm::C6)
+    }
+
+    /// Canonical non-trained G6 reference budget.
+    #[must_use]
+    pub const fn reference_g6() -> Self {
+        Self::matched_non_trained(ComparisonArm::G6)
+    }
+}
+
+/// Witness that two optimizer/update budgets are matched under Slice 25.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MatchedOptimizerUpdateBudget {
+    pub examples: u64,
+    pub updates: u64,
+    pub ordering_id: u64,
+    pub stopping: StoppingRule,
+    pub left_arm: ComparisonArm,
+    pub right_arm: ComparisonArm,
+    pub matcher_contract: &'static str,
+}
+
+/// Accept only matched optimizer/update budgets; reject unpaired examples,
+/// ordering, steps or stopping rules fail-closed without silent compensation.
+///
+/// Attribution pairs (T6↔G6, C6↔G6, T6↔C6) must agree on examples count,
+/// ordering identity, update steps, and stopping rule. Later trained paths
+/// must still pass through this matcher so mismatched budgets cannot diverge
+/// silently.
+pub fn match_optimizer_update_budgets(
+    left: OptimizerUpdateBudget,
+    right: OptimizerUpdateBudget,
+) -> Result<MatchedOptimizerUpdateBudget, EvalError> {
+    if left.matcher_contract != OPTIMIZER_UPDATE_BUDGET_MATCHER_CONTRACT
+        || right.matcher_contract != OPTIMIZER_UPDATE_BUDGET_MATCHER_CONTRACT
+    {
+        return Err(EvalError::ContractMismatch(
+            "optimizer_update_budget_matcher_contract",
+        ));
+    }
+    if left.arm == right.arm {
+        return Err(EvalError::ContractMismatch(
+            "optimizer_update_budget_distinct_arms",
+        ));
+    }
+    if left.examples != right.examples
+        || left.updates != right.updates
+        || left.ordering_id != right.ordering_id
+        || left.stopping != right.stopping
+    {
+        return Err(EvalError::OptimizerUpdateBudgetMismatch {
+            left_arm: left.arm,
+            right_arm: right.arm,
+            left_examples: left.examples,
+            right_examples: right.examples,
+            left_updates: left.updates,
+            right_updates: right.updates,
+        });
+    }
+    Ok(MatchedOptimizerUpdateBudget {
+        examples: left.examples,
+        updates: left.updates,
+        ordering_id: left.ordering_id,
+        stopping: left.stopping,
+        left_arm: left.arm,
+        right_arm: right.arm,
+        matcher_contract: OPTIMIZER_UPDATE_BUDGET_MATCHER_CONTRACT,
     })
 }
 
@@ -815,6 +961,15 @@ pub enum EvalError {
         left_query_components: u64,
         right_query_components: u64,
     },
+    /// Optimizer/update budgets are unmatched across paired arms.
+    OptimizerUpdateBudgetMismatch {
+        left_arm: ComparisonArm,
+        right_arm: ComparisonArm,
+        left_examples: u64,
+        right_examples: u64,
+        left_updates: u64,
+        right_updates: u64,
+    },
 }
 
 impl fmt::Display for EvalError {
@@ -854,6 +1009,23 @@ impl fmt::Display for EvalError {
                 right_trainable,
                 right_updates,
                 right_query_components
+            ),
+            Self::OptimizerUpdateBudgetMismatch {
+                left_arm,
+                right_arm,
+                left_examples,
+                right_examples,
+                left_updates,
+                right_updates,
+            } => write!(
+                formatter,
+                "optimizer/update-budget mismatch: {} examples={} updates={} vs {} examples={} updates={}",
+                left_arm.as_str(),
+                left_examples,
+                left_updates,
+                right_arm.as_str(),
+                right_examples,
+                right_updates
             ),
         }
     }
@@ -1519,6 +1691,131 @@ mod tests {
         assert_eq!(
             match_parameter_readouts(budget_drift, ParameterReadoutCapacity::reference_c6()),
             Err(EvalError::ContractMismatch("budget_contract"))
+        );
+    }
+
+    #[test]
+    fn optimizer_update_budget_matcher_accepts_matched_non_trained_refs() {
+        assert_eq!(
+            OPTIMIZER_UPDATE_BUDGET_MATCHER_CONTRACT,
+            "tdi25-optimizer-update-budget-matcher-v1"
+        );
+        assert_eq!(StoppingRule::ExhaustExamples.as_str(), "exhaust_examples");
+        assert_eq!(StoppingRule::FixedUpdates.as_str(), "fixed_updates");
+        let t6 = OptimizerUpdateBudget::reference_t6();
+        let c6 = OptimizerUpdateBudget::reference_c6();
+        let g6 = OptimizerUpdateBudget::reference_g6();
+        assert_eq!(t6.examples, 0);
+        assert_eq!(c6.updates, NON_TRAINED_UPDATE_BUDGET);
+        assert_eq!(g6.ordering_id, NON_TRAINED_ORDERING_ID);
+        assert_eq!(t6.stopping, StoppingRule::ExhaustExamples);
+        assert_eq!(
+            c6.matcher_contract,
+            OPTIMIZER_UPDATE_BUDGET_MATCHER_CONTRACT
+        );
+        assert_eq!(g6.arm, ComparisonArm::G6);
+
+        for (left, right) in [(t6, g6), (c6, g6), (t6, c6)] {
+            let matched = match_optimizer_update_budgets(left, right).unwrap();
+            assert_eq!(matched.examples, 0);
+            assert_eq!(matched.updates, 0);
+            assert_eq!(matched.ordering_id, NON_TRAINED_ORDERING_ID);
+            assert_eq!(matched.stopping, StoppingRule::ExhaustExamples);
+            assert_eq!(matched.left_arm, left.arm);
+            assert_eq!(matched.right_arm, right.arm);
+            assert_eq!(
+                matched.matcher_contract,
+                OPTIMIZER_UPDATE_BUDGET_MATCHER_CONTRACT
+            );
+        }
+    }
+
+    #[test]
+    fn optimizer_update_budget_matcher_rejects_unpaired_budgets() {
+        let t6 = OptimizerUpdateBudget::reference_t6();
+        let mut other_examples = OptimizerUpdateBudget::reference_c6();
+        other_examples.examples = 8;
+        assert_eq!(
+            match_optimizer_update_budgets(t6, other_examples),
+            Err(EvalError::OptimizerUpdateBudgetMismatch {
+                left_arm: ComparisonArm::T6,
+                right_arm: ComparisonArm::C6,
+                left_examples: 0,
+                right_examples: 8,
+                left_updates: 0,
+                right_updates: 0,
+            })
+        );
+
+        let mut other_updates = OptimizerUpdateBudget::reference_g6();
+        other_updates.updates = 4;
+        other_updates.stopping = StoppingRule::FixedUpdates;
+        assert!(matches!(
+            match_optimizer_update_budgets(t6, other_updates),
+            Err(EvalError::OptimizerUpdateBudgetMismatch { .. })
+        ));
+
+        let mut other_order = OptimizerUpdateBudget::reference_c6();
+        other_order.ordering_id = 2;
+        assert!(matches!(
+            match_optimizer_update_budgets(t6, other_order),
+            Err(EvalError::OptimizerUpdateBudgetMismatch { .. })
+        ));
+
+        let mut other_stopping = OptimizerUpdateBudget::reference_g6();
+        other_stopping.stopping = StoppingRule::FixedUpdates;
+        assert!(matches!(
+            match_optimizer_update_budgets(t6, other_stopping),
+            Err(EvalError::OptimizerUpdateBudgetMismatch { .. })
+        ));
+
+        // Matched trained-shaped budgets are accepted so later trained paths
+        // cannot bypass the matcher; mismatch still fails closed.
+        let mut left_trained = OptimizerUpdateBudget::reference_t6();
+        let mut right_trained = OptimizerUpdateBudget::reference_c6();
+        left_trained.examples = 16;
+        right_trained.examples = 16;
+        left_trained.updates = 8;
+        right_trained.updates = 8;
+        left_trained.ordering_id = 99;
+        right_trained.ordering_id = 99;
+        left_trained.stopping = StoppingRule::FixedUpdates;
+        right_trained.stopping = StoppingRule::FixedUpdates;
+        let matched = match_optimizer_update_budgets(left_trained, right_trained).unwrap();
+        assert_eq!(matched.examples, 16);
+        assert_eq!(matched.updates, 8);
+        assert_eq!(matched.ordering_id, 99);
+        assert_eq!(matched.stopping, StoppingRule::FixedUpdates);
+
+        right_trained.updates = 7;
+        assert!(matches!(
+            match_optimizer_update_budgets(left_trained, right_trained),
+            Err(EvalError::OptimizerUpdateBudgetMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn optimizer_update_budget_matcher_rejects_contract_and_arm_drift() {
+        for budget in [
+            OptimizerUpdateBudget::reference_t6(),
+            OptimizerUpdateBudget::reference_c6(),
+            OptimizerUpdateBudget::reference_g6(),
+        ] {
+            assert_eq!(
+                match_optimizer_update_budgets(budget, budget),
+                Err(EvalError::ContractMismatch(
+                    "optimizer_update_budget_distinct_arms"
+                ))
+            );
+        }
+
+        let mut drifted = OptimizerUpdateBudget::reference_t6();
+        drifted.matcher_contract = "not-an-opt-budget";
+        assert_eq!(
+            match_optimizer_update_budgets(drifted, OptimizerUpdateBudget::reference_g6()),
+            Err(EvalError::ContractMismatch(
+                "optimizer_update_budget_matcher_contract"
+            ))
         );
     }
 }
