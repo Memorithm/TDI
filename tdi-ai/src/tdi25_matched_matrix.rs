@@ -7,12 +7,9 @@
 
 use core::fmt;
 
-use super::tdi25_eval::{
-    C6_EVALUATOR_CONTRACT, G6_EVALUATOR_CONTRACT, T6_EVALUATOR_CONTRACT,
-};
+use super::tdi25_eval::{C6_EVALUATOR_CONTRACT, G6_EVALUATOR_CONTRACT, T6_EVALUATOR_CONTRACT};
 use super::tdi25_tasks::{
-    CHIRAL_REFLECTION_TASK_CONTRACT, MIXED_GEOMETRY_TASK_CONTRACT,
-    TORSOR_TRANSPORT_TASK_CONTRACT,
+    CHIRAL_REFLECTION_TASK_CONTRACT, MIXED_GEOMETRY_TASK_CONTRACT, TORSOR_TRANSPORT_TASK_CONTRACT,
 };
 use super::tdi25_torsor_chiral::TaskFamily;
 
@@ -102,10 +99,7 @@ impl MatchedFamilyPaths {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MatchedMatrixError {
     /// One declared family lacks a sealed path for one primary arm.
-    MissingPrimaryPath {
-        family: TaskFamily,
-        arm: PrimaryArm,
-    },
+    MissingPrimaryPath { family: TaskFamily, arm: PrimaryArm },
     /// A G6 path was proposed as a primary T6/C6 replacement.
     SecondaryControlCannotSatisfyPrimary {
         family: TaskFamily,
