@@ -2430,12 +2430,19 @@ pub struct PooledSynthesisSummary {
 #[derive(Clone, Debug, PartialEq)]
 pub struct FamilyStratifiedSynthesisReport {
     pub split: DataSplit,
+    /// Cluster-aware aggregate effect for each required task family.
     pub family_effects: Vec<FamilySignedEffect>,
+    /// Individually classified `(family, seed_block)` effects retained before
+    /// any cluster-aware family aggregation.
+    pub seed_block_effects: Vec<FamilySignedEffect>,
     /// True when at least one family is Positive and another is Negative.
     pub sign_reversal_present: bool,
-    /// Present only when [`Self::sign_reversal_present`] is false.
+    /// True when one family contains both positive and negative seed blocks.
+    pub seed_block_sign_reversal_present: bool,
+    /// Present only when neither family nor seed-block sign reversal exists.
     pub pooled_summary: Option<PooledSynthesisSummary>,
-    /// True only when a pooled Positive claim is admitted without reversal.
+    /// True only when a pooled Positive claim is admitted without either kind
+    /// of reversal.
     pub claims_clean_pooled_win: bool,
     pub synthesis_contract: &'static str,
     pub uncertainty_contract: &'static str,
@@ -2662,6 +2669,19 @@ fn detect_sign_reversal(effects: &[FamilySignedEffect]) -> bool {
     saw_positive && saw_negative
 }
 
+fn detect_seed_block_sign_reversal(effects: &[FamilySignedEffect]) -> bool {
+    REQUIRED_SYNTHESIS_FAMILIES.iter().any(|family| {
+        let family_effects = effects.iter().filter(|effect| effect.family == *family);
+        let has_positive = family_effects
+            .clone()
+            .any(|effect| effect.effect_sign == EffectSign::Positive);
+        let has_negative = family_effects
+            .clone()
+            .any(|effect| effect.effect_sign == EffectSign::Negative);
+        has_positive && has_negative
+    })
+}
+
 fn pooled_summary_from_effects(
     effects: &[FamilySignedEffect],
     cross_family_summary: CrossFamilySummaryMetricId,
@@ -2776,9 +2796,15 @@ pub fn synthesize_family_stratified_effects(
         });
     }
 
+    let seed_block_effects: Vec<FamilySignedEffect> = effects
+        .iter()
+        .filter(|effect| effect.seed_blocks.len() == 1)
+        .cloned()
+        .collect();
     let sign_reversal_present = detect_sign_reversal(&effects);
+    let seed_block_sign_reversal_present = detect_seed_block_sign_reversal(&seed_block_effects);
     let cross_family_summary = registry.cross_family_summary;
-    let pooled_summary = if sign_reversal_present {
+    let pooled_summary = if sign_reversal_present || seed_block_sign_reversal_present {
         None
     } else {
         Some(pooled_summary_from_effects(&effects, cross_family_summary)?)
@@ -2791,7 +2817,9 @@ pub fn synthesize_family_stratified_effects(
     Ok(FamilyStratifiedSynthesisReport {
         split,
         family_effects: effects,
+        seed_block_effects,
         sign_reversal_present,
+        seed_block_sign_reversal_present,
         pooled_summary,
         claims_clean_pooled_win,
         synthesis_contract: FAMILY_STRATIFIED_SYNTHESIS_CONTRACT,
@@ -2836,6 +2864,7 @@ pub fn synthesize_family_stratified_from_revealed_outcomes(
     }
 
     let mut summaries = Vec::with_capacity(families.len());
+    let mut seed_block_summaries = Vec::new();
     for family in families {
         let t6_family: Vec<RevealedMatchOutcome> = t6_matches
             .iter()
@@ -2859,6 +2888,34 @@ pub fn synthesize_family_stratified_from_revealed_outcomes(
             }
         }
         seed_blocks.sort_unstable();
+        for block in &seed_blocks {
+            let t6_block: Vec<RevealedMatchOutcome> = t6_family
+                .iter()
+                .copied()
+                .filter(|outcome| outcome.seed_block == *block)
+                .collect();
+            let c6_block: Vec<RevealedMatchOutcome> = c6_family
+                .iter()
+                .copied()
+                .filter(|outcome| outcome.seed_block == *block)
+                .collect();
+            seed_block_summaries.push(
+                summarize_paired_uncertainty_by_seed_block(
+                    split,
+                    family,
+                    *block,
+                    &t6_block,
+                    &c6_block,
+                    registry,
+                )
+                .map_err(|err| match err {
+                    EvalError::PairedUncertaintyInvalid { reason } => {
+                        EvalError::FamilyStratifiedSynthesisInvalid { reason }
+                    }
+                    other => other,
+                })?,
+            );
+        }
         let seed_block = seed_blocks[0];
         let cluster_sum_squares = if seed_blocks.len() > 1 {
             Some(sum_squared_seed_block_sizes(&t6_family)?)
@@ -2883,7 +2940,27 @@ pub fn synthesize_family_stratified_from_revealed_outcomes(
         summaries.push(summary);
     }
 
-    synthesize_family_stratified_effects(split, &summaries, registry)
+    let mut report = synthesize_family_stratified_effects(split, &summaries, registry)?;
+    report.seed_block_effects = seed_block_summaries
+        .iter()
+        .map(family_signed_effect_from_summary)
+        .collect::<Result<Vec<_>, _>>()?;
+    report.seed_block_effects.sort_by_key(|effect| {
+        (
+            REQUIRED_SYNTHESIS_FAMILIES
+                .iter()
+                .position(|family| *family == effect.family)
+                .unwrap_or(REQUIRED_SYNTHESIS_FAMILIES.len()),
+            effect.seed_block,
+        )
+    });
+    report.seed_block_sign_reversal_present =
+        detect_seed_block_sign_reversal(&report.seed_block_effects);
+    if report.seed_block_sign_reversal_present {
+        report.pooled_summary = None;
+        report.claims_clean_pooled_win = false;
+    }
+    Ok(report)
 }
 
 /// Reject any split identity outside Development/Validation.
@@ -4895,6 +4972,7 @@ mod tests {
                 .unwrap();
 
         assert!(!report.sign_reversal_present);
+        assert!(!report.seed_block_sign_reversal_present);
         assert!(report.claims_clean_pooled_win);
         assert!(report.experimental_non_final);
         assert_eq!(
@@ -4908,6 +4986,7 @@ mod tests {
             CrossFamilySummaryMetricId::CrossFamilyPairedSummary
         );
         assert_eq!(report.family_effects.len(), 4);
+        assert_eq!(report.seed_block_effects.len(), 4);
         for effect in &report.family_effects {
             assert_eq!(effect.effect_sign, EffectSign::Positive);
             assert_eq!(effect.outcome_class, SignedEffectClass::Positive);
@@ -4947,6 +5026,8 @@ mod tests {
         )
         .unwrap();
         assert_eq!(report.family_effects.len(), 4);
+        assert_eq!(report.seed_block_effects.len(), 8);
+        assert!(!report.seed_block_sign_reversal_present);
         for effect in &report.family_effects {
             assert_eq!(effect.seed_block, 10);
             assert_eq!(effect.seed_blocks, vec![10, 11]);
@@ -4955,6 +5036,61 @@ mod tests {
                 effect.paired_difference_ci.method,
                 UncertaintyMethod::ClusterHoeffdingPairedDifference
             );
+        }
+        for family in REQUIRED_SYNTHESIS_FAMILIES {
+            let retained_blocks: Vec<u64> = report
+                .seed_block_effects
+                .iter()
+                .filter(|effect| effect.family == *family)
+                .map(|effect| effect.seed_block)
+                .collect();
+            assert_eq!(retained_blocks, vec![10, 11]);
+        }
+    }
+
+    #[test]
+    fn family_stratified_synthesis_retains_opposed_seed_block_effects() {
+        let split = DataSplit::Development;
+        let mut t6 = Vec::new();
+        let mut c6 = Vec::new();
+        for family in REQUIRED_SYNTHESIS_FAMILIES {
+            let t6_losses: Vec<(u64, bool)> = (0..MAX_CASES_PER_RUN)
+                .map(|case_id| (case_id, false))
+                .collect();
+            let c6_wins: Vec<(u64, bool)> = (0..MAX_CASES_PER_RUN)
+                .map(|case_id| (case_id, true))
+                .collect();
+            let t6_wins = c6_wins.clone();
+            let c6_losses = t6_losses.clone();
+            t6.extend(matches(split, *family, 20, &t6_losses));
+            c6.extend(matches(split, *family, 20, &c6_wins));
+            t6.extend(matches(split, *family, 21, &t6_wins));
+            c6.extend(matches(split, *family, 21, &c6_losses));
+        }
+
+        let report = synthesize_family_stratified_from_revealed_outcomes(
+            split,
+            &t6,
+            &c6,
+            &MetricRegistry::pinned(),
+        )
+        .unwrap();
+        assert_eq!(report.family_effects.len(), 4);
+        assert_eq!(report.seed_block_effects.len(), 8);
+        assert!(report.seed_block_sign_reversal_present);
+        assert!(report.pooled_summary.is_none());
+        assert!(!report.claims_clean_pooled_win);
+        for family in REQUIRED_SYNTHESIS_FAMILIES {
+            let retained: Vec<&FamilySignedEffect> = report
+                .seed_block_effects
+                .iter()
+                .filter(|effect| effect.family == *family)
+                .collect();
+            assert_eq!(retained.len(), 2);
+            assert_eq!(retained[0].seed_block, 20);
+            assert_eq!(retained[0].outcome_class, SignedEffectClass::Positive);
+            assert_eq!(retained[1].seed_block, 21);
+            assert_eq!(retained[1].outcome_class, SignedEffectClass::Harmful);
         }
     }
 
