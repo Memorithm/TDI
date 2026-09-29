@@ -1542,7 +1542,8 @@ pub struct PairedEffectSummary {
     pub family: TaskFamily,
     /// Canonical first block, retained for single-block API compatibility.
     pub seed_block: u64,
-    /// Complete sorted block provenance. Multi-block summaries use cluster-aware CIs.
+    /// Complete sorted block provenance, bound into the integrity snapshot.
+    /// Multi-block summaries use cluster-aware CIs.
     pub seed_blocks: Vec<u64>,
     pub n_pairs: u64,
     pub t6_accuracy: f64,
