@@ -1490,7 +1490,7 @@ impl ConfidenceInterval {
 /// [`super::tdi25_tasks::ProtectedLabel`], raw sealed targets, or leak oracles
 /// beyond what T6/C6/G6 eval records already retained. `seed_block` is the
 /// paired seed-block / group identity used for stratified synthesis.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RevealedMatchOutcome {
     /// Non-final split retained with the revealed bit.
     pub split: DataSplit,
@@ -1500,6 +1500,9 @@ pub struct RevealedMatchOutcome {
     pub seed_block: u64,
     /// Case identity within the seed block.
     pub case_id: u64,
+    /// Canonical case identity retained across evaluator arms. Kept private so
+    /// callers cannot relabel record-derived evidence after revelation.
+    canonical_digest: String,
     /// Whether the arm score matched the sealed oracle on the evaluation path.
     pub matches_oracle: bool,
 }
@@ -1507,7 +1510,7 @@ pub struct RevealedMatchOutcome {
 impl RevealedMatchOutcome {
     /// Build from an evaluator-retained correctness / match-oracle bit.
     #[must_use]
-    pub const fn from_matches_oracle(
+    pub fn from_matches_oracle(
         split: DataSplit,
         family: TaskFamily,
         seed_block: u64,
@@ -1519,6 +1522,25 @@ impl RevealedMatchOutcome {
             family,
             seed_block,
             case_id,
+            canonical_digest: format!("synthetic:{seed_block}:{case_id}"),
+            matches_oracle,
+        }
+    }
+
+    fn from_evaluator_record(
+        split: DataSplit,
+        family: TaskFamily,
+        seed_block: u64,
+        case_id: u64,
+        canonical_digest: String,
+        matches_oracle: bool,
+    ) -> Self {
+        Self {
+            split,
+            family,
+            seed_block,
+            case_id,
+            canonical_digest,
             matches_oracle,
         }
     }
@@ -1830,6 +1852,7 @@ fn require_pair_identity_alignment(
             || a.family != b.family
             || a.seed_block != b.seed_block
             || a.case_id != b.case_id
+            || a.canonical_digest != b.canonical_digest
         {
             return Err(EvalError::PairedUncertaintyInvalid {
                 reason: "pair_identity_mismatch",
@@ -2164,11 +2187,12 @@ pub fn revealed_matches_from_t6_records(
         if record.label_contract != PROTECTED_LABEL_CONTRACT {
             return Err(EvalError::ContractMismatch("label_contract"));
         }
-        out.push(RevealedMatchOutcome::from_matches_oracle(
+        out.push(RevealedMatchOutcome::from_evaluator_record(
             record.split,
             record.family,
             record.seed_block,
             record.case_id,
+            record.canonical_digest.clone(),
             record.outcome.matches_oracle,
         ));
     }
@@ -2217,11 +2241,12 @@ pub fn revealed_matches_from_c6_records(
         if record.label_contract != PROTECTED_LABEL_CONTRACT {
             return Err(EvalError::ContractMismatch("label_contract"));
         }
-        out.push(RevealedMatchOutcome::from_matches_oracle(
+        out.push(RevealedMatchOutcome::from_evaluator_record(
             record.split,
             record.family,
             record.seed_block,
             record.case_id,
+            record.canonical_digest.clone(),
             record.outcome.matches_oracle,
         ));
     }
@@ -2270,11 +2295,12 @@ pub fn revealed_matches_from_g6_records(
         if record.label_contract != PROTECTED_LABEL_CONTRACT {
             return Err(EvalError::ContractMismatch("label_contract"));
         }
-        out.push(RevealedMatchOutcome::from_matches_oracle(
+        out.push(RevealedMatchOutcome::from_evaluator_record(
             record.split,
             record.family,
             record.seed_block,
             record.case_id,
+            record.canonical_digest.clone(),
             record.outcome.matches_oracle,
         ));
     }
@@ -2451,15 +2477,19 @@ pub struct FamilyStratifiedSynthesisReport {
     pub experimental_non_final: bool,
 }
 
-/// Map a paired-difference mean onto its algebraic sign.
-#[must_use]
-pub fn effect_sign_from_mean(mean: f64) -> EffectSign {
+/// Map a finite paired-difference mean onto its algebraic sign.
+pub fn effect_sign_from_mean(mean: f64) -> Result<EffectSign, EvalError> {
+    if !mean.is_finite() {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "non_finite",
+        });
+    }
     if mean > 0.0 {
-        EffectSign::Positive
+        Ok(EffectSign::Positive)
     } else if mean < 0.0 {
-        EffectSign::Negative
+        Ok(EffectSign::Negative)
     } else {
-        EffectSign::Zero
+        Ok(EffectSign::Zero)
     }
 }
 
@@ -2654,7 +2684,7 @@ fn family_signed_effect_from_summary(
         n_pairs: summary.n_pairs,
         paired_difference_mean: summary.paired_difference_mean,
         paired_difference_ci: summary.paired_difference_ci,
-        effect_sign: effect_sign_from_mean(summary.paired_difference_mean),
+        effect_sign: effect_sign_from_mean(summary.paired_difference_mean)?,
         outcome_class,
         primary_family_metric: summary.primary_family_metric,
     })
@@ -2735,7 +2765,7 @@ fn pooled_summary_from_effects(
     Ok(PooledSynthesisSummary {
         n_pairs: total_pairs,
         paired_difference_mean: mean,
-        effect_sign: effect_sign_from_mean(mean),
+        effect_sign: effect_sign_from_mean(mean)?,
         outcome_class,
         cross_family_summary,
     })
@@ -2872,12 +2902,12 @@ pub fn synthesize_family_stratified_from_revealed_outcomes(
     for family in families {
         let t6_family: Vec<RevealedMatchOutcome> = t6_matches
             .iter()
-            .copied()
+            .cloned()
             .filter(|outcome| outcome.family == family)
             .collect();
         let c6_family: Vec<RevealedMatchOutcome> = c6_matches
             .iter()
-            .copied()
+            .cloned()
             .filter(|outcome| outcome.family == family)
             .collect();
         if t6_family.is_empty() {
@@ -2895,12 +2925,12 @@ pub fn synthesize_family_stratified_from_revealed_outcomes(
         for block in &seed_blocks {
             let t6_block: Vec<RevealedMatchOutcome> = t6_family
                 .iter()
-                .copied()
+                .cloned()
                 .filter(|outcome| outcome.seed_block == *block)
                 .collect();
             let c6_block: Vec<RevealedMatchOutcome> = c6_family
                 .iter()
-                .copied()
+                .cloned()
                 .filter(|outcome| outcome.seed_block == *block)
                 .collect();
             seed_block_summaries.push(
@@ -4802,8 +4832,23 @@ mod tests {
         assert!((summary.paired_difference_mean - 0.5).abs() < 1e-12);
         let t6_revealed =
             revealed_matches_from_t6_records(&t6_records, DataSplit::Development).unwrap();
+        let c6_revealed =
+            revealed_matches_from_c6_records(&c6_records, DataSplit::Development).unwrap();
         assert_eq!(t6_revealed[0].seed_block, seed_block);
         assert_eq!(t6_revealed[0].split, DataSplit::Development);
+        assert_eq!(
+            summarize_paired_uncertainty_by_seed_block(
+                DataSplit::Development,
+                family,
+                seed_block,
+                &t6_revealed,
+                &c6_revealed,
+                &registry,
+            )
+            .unwrap()
+            .n_pairs,
+            2
+        );
         // Single seed-block summaries use informative within-block Wilson/Hoeffding.
         assert_eq!(
             summary.t6_accuracy_ci.method,
@@ -4837,6 +4882,22 @@ mod tests {
                 seed_block,
                 &t6_records,
                 &mismatched,
+                &registry,
+            ),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "pair_identity_mismatch",
+            })
+        );
+
+        let mut digest_mismatched = c6_records.clone();
+        digest_mismatched[0].canonical_digest = "different-canonical-case".into();
+        let digest_mismatched_revealed =
+            revealed_matches_from_c6_records(&digest_mismatched, DataSplit::Development).unwrap();
+        assert_eq!(
+            synthesize_family_stratified_from_revealed_outcomes(
+                DataSplit::Development,
+                &t6_revealed,
+                &digest_mismatched_revealed,
                 &registry,
             ),
             Err(EvalError::PairedUncertaintyInvalid {
@@ -5310,6 +5371,21 @@ mod tests {
                 reason: "mean_outside_interval",
             })
         );
+    }
+
+    #[test]
+    fn effect_sign_rejects_non_finite_means() {
+        assert_eq!(effect_sign_from_mean(1.0), Ok(EffectSign::Positive));
+        assert_eq!(effect_sign_from_mean(-1.0), Ok(EffectSign::Negative));
+        assert_eq!(effect_sign_from_mean(0.0), Ok(EffectSign::Zero));
+        for non_finite in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(
+                effect_sign_from_mean(non_finite),
+                Err(EvalError::FamilyStratifiedSynthesisInvalid {
+                    reason: "non_finite",
+                })
+            );
+        }
     }
 
     #[test]
