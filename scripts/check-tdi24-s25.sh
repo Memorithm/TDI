@@ -7,5 +7,5 @@ grep -Fq 'tdi24-optimizer-update-budget-v1' tdi-ai/src/tdi24_eval.rs
 grep -Fq 'pub fn match_optimizer_update_budgets' tdi-ai/src/tdi24_eval.rs
 grep -Fq 'pub struct OptimizerUpdateBudget' tdi-ai/src/tdi24_eval.rs
 grep -Fq '| 24 | Initialization matcher | **landed** in #657;' docs/TDI-24-CAMPAIGN-50.md
-grep -Fq '| 25 | Optimizer/update-budget contract | **current stacked slice**;' docs/TDI-24-CAMPAIGN-50.md
-grep -Fq '**24/50 merged**' docs/TDI-24-CAMPAIGN-50.md
+grep -Fq '| 25 | Optimizer/update-budget contract | **landed** in #659, exact head `922ffe5c1dabed26f8662b0be319466ef020e8a9`, merge `5f4bd6c51e81adb4ef831b3caf3aeb0db62ff498`;' docs/TDI-24-CAMPAIGN-50.md
+# Do not pin the global merged count here: later qualified slices must advance it.
