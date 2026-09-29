@@ -2902,13 +2902,13 @@ pub fn synthesize_family_stratified_from_revealed_outcomes(
     for family in families {
         let t6_family: Vec<RevealedMatchOutcome> = t6_matches
             .iter()
-            .cloned()
             .filter(|outcome| outcome.family == family)
+            .cloned()
             .collect();
         let c6_family: Vec<RevealedMatchOutcome> = c6_matches
             .iter()
-            .cloned()
             .filter(|outcome| outcome.family == family)
+            .cloned()
             .collect();
         if t6_family.is_empty() {
             return Err(EvalError::FamilyStratifiedSynthesisInvalid {
@@ -2925,13 +2925,13 @@ pub fn synthesize_family_stratified_from_revealed_outcomes(
         for block in &seed_blocks {
             let t6_block: Vec<RevealedMatchOutcome> = t6_family
                 .iter()
-                .cloned()
                 .filter(|outcome| outcome.seed_block == *block)
+                .cloned()
                 .collect();
             let c6_block: Vec<RevealedMatchOutcome> = c6_family
                 .iter()
-                .cloned()
                 .filter(|outcome| outcome.seed_block == *block)
+                .cloned()
                 .collect();
             seed_block_summaries.push(
                 summarize_paired_uncertainty_by_seed_block(
