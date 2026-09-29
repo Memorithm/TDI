@@ -27,16 +27,48 @@ pub enum PrimaryArm {
 /// One production-reachable primary evaluator path.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PrimaryEvaluatorPath {
-    pub family: TaskFamily,
-    pub arm: PrimaryArm,
-    pub task_contract: &'static str,
-    pub evaluator_contract: &'static str,
+    family: TaskFamily,
+    arm: PrimaryArm,
+    task_contract: &'static str,
+    evaluator_contract: &'static str,
     /// Common target/scoring contract shared by both primary arms.
     ///
     /// Existing arm-specific oracle fields are not a common target, so all
     /// current paths intentionally carry `None`.
-    pub shared_target_contract: Option<&'static str>,
-    pub matrix_contract: &'static str,
+    shared_target_contract: Option<&'static str>,
+    matrix_contract: &'static str,
+}
+
+impl PrimaryEvaluatorPath {
+    #[must_use]
+    pub const fn family(self) -> TaskFamily {
+        self.family
+    }
+
+    #[must_use]
+    pub const fn arm(self) -> PrimaryArm {
+        self.arm
+    }
+
+    #[must_use]
+    pub const fn task_contract(self) -> &'static str {
+        self.task_contract
+    }
+
+    #[must_use]
+    pub const fn evaluator_contract(self) -> &'static str {
+        self.evaluator_contract
+    }
+
+    #[must_use]
+    pub const fn shared_target_contract(self) -> Option<&'static str> {
+        self.shared_target_contract
+    }
+
+    #[must_use]
+    pub const fn matrix_contract(self) -> &'static str {
+        self.matrix_contract
+    }
 }
 
 /// Closed family order required by the Stage-C primary comparison.
@@ -90,18 +122,54 @@ pub const CURRENT_PRIMARY_PATHS: [PrimaryEvaluatorPath; 4] = [
 /// Paired capability view for one declared task family.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MatchedFamilyPaths {
-    pub family: TaskFamily,
-    pub t6: Option<PrimaryEvaluatorPath>,
-    pub c6: Option<PrimaryEvaluatorPath>,
-    pub shared_target_contract: Option<&'static str>,
-    pub matrix_contract: &'static str,
+    family: TaskFamily,
+    t6: Option<PrimaryEvaluatorPath>,
+    c6: Option<PrimaryEvaluatorPath>,
+    matrix_contract: &'static str,
 }
 
 impl MatchedFamilyPaths {
-    /// True only when both primary arms have sealed paths for this family.
+    #[must_use]
+    pub const fn family(self) -> TaskFamily {
+        self.family
+    }
+
+    #[must_use]
+    pub const fn t6(self) -> Option<PrimaryEvaluatorPath> {
+        self.t6
+    }
+
+    #[must_use]
+    pub const fn c6(self) -> Option<PrimaryEvaluatorPath> {
+        self.c6
+    }
+
+    #[must_use]
+    pub const fn matrix_contract(self) -> &'static str {
+        self.matrix_contract
+    }
+
+    /// Return a common target only when both sealed paths declare the same one.
+    #[must_use]
+    pub const fn shared_target_contract(self) -> Option<&'static str> {
+        match (self.t6, self.c6) {
+            (Some(t6_path), Some(c6_path)) => match (
+                t6_path.shared_target_contract,
+                c6_path.shared_target_contract,
+            ) {
+                (Some(t6_target), Some(c6_target)) if t6_target.as_bytes() == c6_target.as_bytes() => {
+                    Some(t6_target)
+                }
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// True only when both opaque primary paths declare the same shared target.
     #[must_use]
     pub const fn is_complete(self) -> bool {
-        self.t6.is_some() && self.c6.is_some() && self.shared_target_contract.is_some()
+        self.shared_target_contract().is_some()
     }
 }
 
@@ -155,22 +223,10 @@ pub fn primary_path(family: TaskFamily, arm: PrimaryArm) -> Option<PrimaryEvalua
 /// Return the current paired capability view for one family.
 #[must_use]
 pub fn matched_family_paths(family: TaskFamily) -> MatchedFamilyPaths {
-    let t6 = primary_path(family, PrimaryArm::T6);
-    let c6 = primary_path(family, PrimaryArm::C6);
-    let shared_target_contract = match (t6, c6) {
-        (Some(t6_path), Some(c6_path))
-            if t6_path.shared_target_contract.is_some()
-                && t6_path.shared_target_contract == c6_path.shared_target_contract =>
-        {
-            t6_path.shared_target_contract
-        }
-        _ => None,
-    };
     MatchedFamilyPaths {
         family,
-        t6,
-        c6,
-        shared_target_contract,
+        t6: primary_path(family, PrimaryArm::T6),
+        c6: primary_path(family, PrimaryArm::C6),
         matrix_contract: MATCHED_EVALUATOR_MATRIX_CONTRACT,
     }
 }
@@ -194,7 +250,7 @@ pub fn require_complete_primary_matrix() -> Result<[MatchedFamilyPaths; 4], Matc
                 arm: PrimaryArm::C6,
             });
         }
-        if paths.shared_target_contract.is_none() {
+        if paths.shared_target_contract().is_none() {
             return Err(MatchedMatrixError::MissingCommonTargetContract {
                 family: paths.family,
             });
@@ -233,7 +289,7 @@ mod tests {
         );
         let mixed = matched_family_paths(TaskFamily::Mixed);
         assert!(!mixed.is_complete());
-        assert_eq!(mixed.shared_target_contract, None);
+        assert_eq!(mixed.shared_target_contract(), None);
     }
 
     #[test]
