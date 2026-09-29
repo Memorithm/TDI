@@ -157,9 +157,7 @@ impl MatchedFamilyPaths {
                 t6_path.shared_target_contract,
                 c6_path.shared_target_contract,
             ) {
-                (Some(t6_target), Some(c6_target)) if t6_target == c6_target => {
-                    Some(t6_target)
-                }
+                (Some(t6_target), Some(c6_target)) if t6_target == c6_target => Some(t6_target),
                 _ => None,
             },
             _ => None,
