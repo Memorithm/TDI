@@ -157,7 +157,8 @@ impl T6EvaluatorRun {
         {
             return Err(EvalError::ContractMismatch("torsor_transport_case"));
         }
-        let score = run_inference_callback(case, score_torsor_transport).map_err(EvalError::Bridge)?;
+        let score =
+            run_inference_callback(case, score_torsor_transport).map_err(EvalError::Bridge)?;
         let oracle = case.protected_label().reveal_for_evaluation();
         let record = T6EvalRecord {
             split: case.inference_input().split,
@@ -244,7 +245,10 @@ fn approximately_equal(left: f64, right: f64) -> bool {
 pub enum EvalError {
     ContractMismatch(&'static str),
     InvalidBudget,
-    SplitMismatch { expected: DataSplit, actual: DataSplit },
+    SplitMismatch {
+        expected: DataSplit,
+        actual: DataSplit,
+    },
     CaseBudgetExceeded,
     Bridge(Tdi25Error),
 }
