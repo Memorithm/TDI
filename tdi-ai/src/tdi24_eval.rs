@@ -1459,7 +1459,11 @@ pub fn summarize_paired_uncertainty_from_records(
             reason: "too_many_pairs",
         });
     }
-    for (left, right) in v6_records.iter().zip(c6_records.iter()) {
+    for (index, (left, right)) in v6_records
+        .iter()
+        .zip(c6_records.iter())
+        .enumerate()
+    {
         if left.family != right.family
             || left.case_id != right.case_id
             || left.group_id != right.group_id
@@ -1467,6 +1471,16 @@ pub fn summarize_paired_uncertainty_from_records(
         {
             return Err(EvalError::PairedUncertaintyInvalid {
                 reason: "pair_identity_mismatch",
+            });
+        }
+        if v6_records[..index].iter().any(|prior| {
+            prior.family == left.family
+                && prior.case_id == left.case_id
+                && prior.group_id == left.group_id
+                && prior.canonical_digest == left.canonical_digest
+        }) {
+            return Err(EvalError::PairedUncertaintyInvalid {
+                reason: "duplicate_pair_identity",
             });
         }
     }
@@ -2641,6 +2655,28 @@ mod tests {
             ),
             Err(EvalError::PairedUncertaintyInvalid {
                 reason: "pair_identity_mismatch",
+            })
+        );
+
+        let mut duplicate_v6 = v6_records.clone();
+        duplicate_v6[1].family = duplicate_v6[0].family;
+        duplicate_v6[1].case_id = duplicate_v6[0].case_id;
+        duplicate_v6[1].group_id = duplicate_v6[0].group_id;
+        duplicate_v6[1].canonical_digest = duplicate_v6[0].canonical_digest.clone();
+        let mut duplicate_c6 = c6_records.clone();
+        duplicate_c6[1].family = duplicate_c6[0].family;
+        duplicate_c6[1].case_id = duplicate_c6[0].case_id;
+        duplicate_c6[1].group_id = duplicate_c6[0].group_id;
+        duplicate_c6[1].canonical_digest = duplicate_c6[0].canonical_digest.clone();
+        assert_eq!(
+            summarize_paired_uncertainty_from_records(
+                DataSplit::Development,
+                &duplicate_v6,
+                &duplicate_c6,
+                &registry,
+            ),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "duplicate_pair_identity",
             })
         );
     }
