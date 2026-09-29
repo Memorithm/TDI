@@ -21,13 +21,4 @@ jobs:
         with:
           toolchain: 1.97.1
           components: rustfmt, clippy
-      - name: Diagnose rustfmt drift
-        run: |
-          cargo +1.97.1 fmt --all
-          if ! git diff --quiet; then
-            git diff --no-ext-diff -- tdi-ai/src/tdi25_eval.rs tdi-ai/src/experimental.rs > /tmp/rustfmt.diff
-            message=$(sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g' /tmp/rustfmt.diff)
-            echo "::error file=tdi-ai/src/tdi25_eval.rs,line=1::$message"
-            exit 1
-          fi
       - run: bash scripts/check-tdi25-s21.sh
