@@ -32,13 +32,13 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | 17 | Development/Validation split manifest | **landed** in #654; split identity embedded in every case |
 | 18 | Protected-label inference API | **landed** in #656; inference path cannot read target/oracle label |
 | 19 | Seed/case canonicalization + hash | **landed** in #658; disjoint reproducible populations |
-| 20 | Stage-B leakage/balance audit | **current stacked slice**; task-family and split audit green before evaluation |
+| 20 | Stage-B leakage/balance audit | **landed** in #660; task-family and split audit green before evaluation |
 
 ## Phase C — matched evaluators and statistical protocol (PR 21–30)
 
 | Slice | Deliverable | Gate / definition of done |
 | ---: | --- | --- |
-| 21 | T6 evaluator | consumes TDI-22 factorized torsor contract |
+| 21 | T6 evaluator | **current candidate**; consumes TDI-22 factorized torsor contract through a bounded non-final envelope |
 | 22 | C6 evaluator | consumes TDI-24 chiral contract unchanged |
 | 23 | G6 evaluator | same readout/evaluation envelope |
 | 24 | Parameter/readout matcher | reject capacity mismatch rather than silently compensate |
@@ -94,4 +94,4 @@ Pause the campaign when any of the following occurs:
 
 ## Progress accounting
 
-**19/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606, #607, #612, #654, #656, #658). Slice 20 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**20/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606, #607, #612, #654, #656, #658, #660). Slice 21 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
