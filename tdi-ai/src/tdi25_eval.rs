@@ -2491,7 +2491,11 @@ fn require_admissible_confidence_interval(
     mean: f64,
     admitted_methods: &[UncertaintyMethod],
 ) -> Result<(), EvalError> {
-    if !ci.lower.is_finite() || !ci.upper.is_finite() || !ci.confidence.is_finite() {
+    if !mean.is_finite()
+        || !ci.lower.is_finite()
+        || !ci.upper.is_finite()
+        || !ci.confidence.is_finite()
+    {
         return Err(EvalError::FamilyStratifiedSynthesisInvalid {
             reason: "non_finite",
         });
@@ -5338,6 +5342,15 @@ mod tests {
                 reason: "non_finite",
             })
         );
+
+        for non_finite_mean in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(
+                classify_signed_effect(non_finite_mean, wrong_confidence),
+                Err(EvalError::FamilyStratifiedSynthesisInvalid {
+                    reason: "non_finite",
+                })
+            );
+        }
 
         let wrong_method = ConfidenceInterval {
             confidence: PAIRED_UNCERTAINTY_LEVEL,
