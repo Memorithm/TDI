@@ -61,7 +61,7 @@ impl PrimaryEvaluatorPath {
     }
 
     #[must_use]
-    pub const fn shared_target_contract(self) -> Option<&'static str> {
+    pub fn shared_target_contract(self) -> Option<&'static str> {
         self.shared_target_contract
     }
 
@@ -157,7 +157,7 @@ impl MatchedFamilyPaths {
                 t6_path.shared_target_contract,
                 c6_path.shared_target_contract,
             ) {
-                (Some(t6_target), Some(c6_target)) if t6_target.as_bytes() == c6_target.as_bytes() => {
+                (Some(t6_target), Some(c6_target)) if t6_target == c6_target => {
                     Some(t6_target)
                 }
                 _ => None,
@@ -168,7 +168,7 @@ impl MatchedFamilyPaths {
 
     /// True only when both opaque primary paths declare the same shared target.
     #[must_use]
-    pub const fn is_complete(self) -> bool {
+    pub fn is_complete(self) -> bool {
         self.shared_target_contract().is_some()
     }
 }
