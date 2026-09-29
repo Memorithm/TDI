@@ -823,7 +823,9 @@ pub fn parse_secondary_diagnostic_id(label: &str) -> Result<SecondaryDiagnosticI
             Ok(SecondaryDiagnosticId::CalibrationConfidenceError)
         }
         SECONDARY_GRADIENT_STABILITY => Ok(SecondaryDiagnosticId::GradientStability),
-        SECONDARY_OP_COUNT_MEMORY_LATENCY_THROUGHPUT => Ok(SecondaryDiagnosticId::OpCountMemoryLatencyThroughput),
+        SECONDARY_OP_COUNT_MEMORY_LATENCY_THROUGHPUT => {
+            Ok(SecondaryDiagnosticId::OpCountMemoryLatencyThroughput)
+        }
         _ => Err(EvalError::MetricRegistryInvalid {
             reason: "unknown_secondary",
         }),
