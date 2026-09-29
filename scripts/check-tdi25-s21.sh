@@ -8,4 +8,4 @@ grep -Fq 'tdi25-evaluator-envelope-v1' tdi-ai/src/tdi25_eval.rs
 grep -Fq 'tdi25-readout-budget-v1' tdi-ai/src/tdi25_eval.rs
 grep -Fq 'pub mod tdi25_eval;' tdi-ai/src/experimental.rs
 grep -Fq '| 20 | Stage-B leakage/balance audit | **landed** in #660;' docs/TDI-25-CAMPAIGN-50.md
-grep -Fq '| 21 | T6 evaluator | **current candidate**;' docs/TDI-25-CAMPAIGN-50.md
+grep -Fq '| 21 | T6 evaluator | **current candidate** in #661;' docs/TDI-25-CAMPAIGN-50.md
