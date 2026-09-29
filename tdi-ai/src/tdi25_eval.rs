@@ -172,6 +172,21 @@ pub struct MatchedParameterReadout {
     pub budget_contract: &'static str,
 }
 
+fn validate_capacity_carrier(capacity: ParameterReadoutCapacity) -> Result<(), EvalError> {
+    let accounting = carrier_accounting(capacity.arm);
+    if capacity.query_components != accounting.query_components as u64
+        || capacity.score_components != accounting.score_components as u64
+        || capacity.key_components != accounting.key_components as u64
+        || capacity.external_geometry_components
+            != accounting.external_geometry_components as u64
+    {
+        return Err(EvalError::ContractMismatch(
+            "parameter_readout_carrier_accounting",
+        ));
+    }
+    Ok(())
+}
+
 /// Accept only matched parameter/readout configurations; reject mismatches
 /// fail-closed without silently padding or compensating.
 ///
@@ -194,6 +209,13 @@ pub fn match_parameter_readouts(
         || right.budget_contract != READOUT_BUDGET_CONTRACT
     {
         return Err(EvalError::ContractMismatch("budget_contract"));
+    }
+    validate_capacity_carrier(left)?;
+    validate_capacity_carrier(right)?;
+    if left.arm == right.arm {
+        return Err(EvalError::ContractMismatch(
+            "parameter_readout_distinct_arms",
+        ));
     }
     if left.trainable_parameters != right.trainable_parameters
         || left.updates != right.updates
@@ -1422,24 +1444,45 @@ mod tests {
         wide.query_components = 8;
         assert_eq!(
             match_parameter_readouts(c6, wide),
-            Err(EvalError::ParameterReadoutMismatch {
-                left_arm: ComparisonArm::C6,
-                right_arm: ComparisonArm::G6,
-                left_trainable: 0,
-                right_trainable: 0,
-                left_updates: 0,
-                right_updates: 0,
-                left_query_components: 6,
-                right_query_components: 8,
-            })
+            Err(EvalError::ContractMismatch(
+                "parameter_readout_carrier_accounting"
+            ))
         );
 
         let mut score_drift = ParameterReadoutCapacity::reference_g6();
         score_drift.score_components = 2;
-        assert!(matches!(
+        assert_eq!(
             match_parameter_readouts(c6, score_drift),
-            Err(EvalError::ParameterReadoutMismatch { .. })
-        ));
+            Err(EvalError::ContractMismatch(
+                "parameter_readout_carrier_accounting"
+            ))
+        );
+
+        let mut paired_drift_left = ParameterReadoutCapacity::reference_t6();
+        let mut paired_drift_right = ParameterReadoutCapacity::reference_c6();
+        paired_drift_left.key_components = 6;
+        paired_drift_left.external_geometry_components = 0;
+        paired_drift_right.key_components = 9;
+        paired_drift_right.external_geometry_components = 3;
+        assert_eq!(
+            match_parameter_readouts(paired_drift_left, paired_drift_right),
+            Err(EvalError::ContractMismatch(
+                "parameter_readout_carrier_accounting"
+            ))
+        );
+
+        for capacity in [
+            ParameterReadoutCapacity::reference_t6(),
+            ParameterReadoutCapacity::reference_c6(),
+            ParameterReadoutCapacity::reference_g6(),
+        ] {
+            assert_eq!(
+                match_parameter_readouts(capacity, capacity),
+                Err(EvalError::ContractMismatch(
+                    "parameter_readout_distinct_arms"
+                ))
+            );
+        }
 
         let mut drifted = ParameterReadoutCapacity::reference_t6();
         drifted.matcher_contract = "not-a-matcher";
