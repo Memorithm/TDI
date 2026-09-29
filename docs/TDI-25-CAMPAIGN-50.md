@@ -39,7 +39,7 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | Slice | Deliverable | Gate / definition of done |
 | ---: | --- | --- |
 | 21 | T6 evaluator | **landed** in #661, exact head `6646886c7e749bf158714984ac4de92eec3228cb`, merge `8dfc513382f77308042f01ad2571cd1844c27d64`; consumes TDI-22 factorized torsor contract through a bounded non-final envelope |
-| 22 | C6 evaluator | consumes TDI-24 chiral contract unchanged |
+| 22 | C6 evaluator | **current candidate** in #663; consumes TDI-24 chiral contract unchanged |
 | 23 | G6 evaluator | same readout/evaluation envelope |
 | 24 | Parameter/readout matcher | reject capacity mismatch rather than silently compensate |
 | 25 | Optimizer/update-budget matcher | same examples/order/steps/stopping rule where trained |
@@ -94,4 +94,4 @@ Pause the campaign when any of the following occurs:
 
 ## Progress accounting
 
-**21/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606, #607, #612, #654, #656, #658, #660, #661). Slice 22 is next. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**21/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606, #607, #612, #654, #656, #658, #660, #661). Slice 22 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
