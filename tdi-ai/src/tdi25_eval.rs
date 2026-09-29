@@ -4700,13 +4700,13 @@ mod tests {
     #[test]
     fn family_stratified_synthesis_does_not_claim_win_from_null_family_intervals() {
         let split = DataSplit::Development;
-        let t6_false = [(0, false)];
-        let c6_true = [(0, true)];
+        let t6_false = [(0, false), (1, false)];
+        let c6_mixed = [(0, true), (1, false)];
         let summaries = [
-            family_summary(split, TaskFamily::TorsorFavorable, 8, &t6_false, &c6_true),
-            family_summary(split, TaskFamily::ChiralFavorable, 8, &t6_false, &c6_true),
-            family_summary(split, TaskFamily::Mixed, 8, &t6_false, &c6_true),
-            family_summary(split, TaskFamily::Neutral, 8, &t6_false, &c6_true),
+            family_summary(split, TaskFamily::TorsorFavorable, 8, &t6_false, &c6_mixed),
+            family_summary(split, TaskFamily::ChiralFavorable, 8, &t6_false, &c6_mixed),
+            family_summary(split, TaskFamily::Mixed, 8, &t6_false, &c6_mixed),
+            family_summary(split, TaskFamily::Neutral, 8, &t6_false, &c6_mixed),
         ];
         let report =
             synthesize_family_stratified_effects(split, &summaries, &MetricRegistry::pinned())
