@@ -92,10 +92,10 @@ pub mod tdi24_eval;
 pub mod tdi24_tasks;
 #[path = "tdi24_vector.rs"]
 pub mod tdi24_vector;
-#[path = "tdi25_tasks.rs"]
-pub mod tdi25_tasks;
 #[path = "tdi25_eval.rs"]
 pub mod tdi25_eval;
+#[path = "tdi25_tasks.rs"]
+pub mod tdi25_tasks;
 #[path = "tdi25_torsor_chiral.rs"]
 pub mod tdi25_torsor_chiral;
 #[path = "tdi26_v888.rs"]
