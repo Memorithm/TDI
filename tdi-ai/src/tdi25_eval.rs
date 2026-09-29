@@ -4941,8 +4941,8 @@ mod tests {
                 let c6_bits: Vec<(u64, bool)> = (0..MAX_CASES_PER_RUN)
                     .map(|case_id| (case_id, true))
                     .collect();
-                t6.extend(matches(split, family, seed_block, &t6_bits));
-                c6.extend(matches(split, family, seed_block, &c6_bits));
+                t6.extend(matches(split, *family, seed_block, &t6_bits));
+                c6.extend(matches(split, *family, seed_block, &c6_bits));
             }
         }
 
