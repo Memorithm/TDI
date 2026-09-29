@@ -77,6 +77,18 @@ pub enum ComparisonArm {
     G6,
 }
 
+impl ComparisonArm {
+    /// Stable lowercase arm label.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::T6 => "t6",
+            Self::C6 => "c6",
+            Self::G6 => "g6",
+        }
+    }
+}
+
 /// Static score-carrier accounting for one arm.
 ///
 /// The six score-pairing components are matched across arms. T6 additionally

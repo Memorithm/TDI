@@ -6,8 +6,12 @@
 //! adds the matched G6 attribution-control arm that scores sealed Neutral
 //! Generic6 cases through `generic_arm_score` / `GENERIC6_CONTRACT` under the
 //! same envelope. MixedGeometryInput does not expose Generic6 fields, so G6
-//! does not invent a mixed scoring path. All arms consume sealed
-//! Development/Validation cases, keep task oracles outside inference
+//! does not invent a mixed scoring path. Slice 24 adds an explicit
+//! parameter/readout matcher that accepts only capacity-matched arm pairs on
+//! the declared readout surface (trainable/update budget, readout scalars,
+//! matched query/score carrier widths from `carrier_accounting`) and rejects
+//! mismatches fail-closed without silently compensating. All arms consume
+//! sealed Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
 
@@ -26,8 +30,9 @@ use super::tdi25_tasks::{
     run_inference_callback, torsor_transport_pair_in_split,
 };
 use super::tdi25_torsor_chiral::{
-    GENERIC6_CONTRACT, PINNED_SOURCE_CONTRACTS, TaskFamily, Tdi25Error, chiral_arm_score,
-    generic_arm_score, torsor_arm_score, validate_source_contracts,
+    ComparisonArm, GENERIC6_CONTRACT, PINNED_SOURCE_CONTRACTS, TaskFamily, Tdi25Error,
+    carrier_accounting, chiral_arm_score, generic_arm_score, torsor_arm_score,
+    validate_source_contracts,
 };
 
 /// Shared evaluator envelope for all later TDI-25 arms.
@@ -44,6 +49,9 @@ pub const G6_EVALUATOR_CONTRACT: &str = "tdi25-g6-evaluator-v1";
 
 /// Matched readout-budget contract shared by Phase-C evaluator arms.
 pub const READOUT_BUDGET_CONTRACT: &str = "tdi25-readout-budget-v1";
+
+/// Versioned parameter/readout capacity matcher contract.
+pub const PARAMETER_READOUT_MATCHER_CONTRACT: &str = "tdi25-parameter-readout-matcher-v1";
 
 /// Maximum cases admitted to one non-final evaluator run.
 pub const MAX_CASES_PER_RUN: u64 = 64;
@@ -74,6 +82,184 @@ impl ReadoutBudget {
             contract: READOUT_BUDGET_CONTRACT,
         }
     }
+}
+
+/// Per-arm parameter and readout capacity descriptor.
+///
+/// Non-trained Phase-C reference arms declare zero trainable parameters and
+/// zero updates. Carrier widths come from `carrier_accounting`: the matched
+/// readout surface is the shared query/score pairing width; T6 may still
+/// declare extra key/external geometry without silently padding other arms.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ParameterReadoutCapacity {
+    /// Arm whose capacity is declared.
+    pub arm: ComparisonArm,
+    /// Exact trainable parameter count (0 on the non-trained Stage-C path).
+    pub trainable_parameters: u64,
+    /// Optimizer/update count retained in the shared readout budget.
+    pub updates: u64,
+    /// Maximum cases admitted to one run.
+    pub max_cases: u64,
+    /// Maximum readout scalars retained per case.
+    pub max_readout_scalars_per_case: u64,
+    /// Matched score-pairing query width from `carrier_accounting`.
+    pub query_components: u64,
+    /// Matched score-pairing score width from `carrier_accounting`.
+    pub score_components: u64,
+    /// Declared key width from `carrier_accounting` (T6 may differ).
+    pub key_components: u64,
+    /// Declared external geometry width from `carrier_accounting`.
+    pub external_geometry_components: u64,
+    /// Matcher contract pin.
+    pub matcher_contract: &'static str,
+    /// Shared readout-budget contract pin.
+    pub budget_contract: &'static str,
+}
+
+impl ParameterReadoutCapacity {
+    /// Build a non-trained reference capacity from the arm's carrier accounting
+    /// and the shared readout budget.
+    #[must_use]
+    pub const fn reference(arm: ComparisonArm) -> Self {
+        let accounting = carrier_accounting(arm);
+        let budget = ReadoutBudget::matched_non_trained();
+        Self {
+            arm,
+            trainable_parameters: 0,
+            updates: budget.updates,
+            max_cases: budget.max_cases,
+            max_readout_scalars_per_case: budget.max_readout_scalars_per_case,
+            query_components: accounting.query_components as u64,
+            score_components: accounting.score_components as u64,
+            key_components: accounting.key_components as u64,
+            external_geometry_components: accounting.external_geometry_components as u64,
+            matcher_contract: PARAMETER_READOUT_MATCHER_CONTRACT,
+            budget_contract: READOUT_BUDGET_CONTRACT,
+        }
+    }
+
+    /// Canonical non-trained T6 reference capacity.
+    #[must_use]
+    pub const fn reference_t6() -> Self {
+        Self::reference(ComparisonArm::T6)
+    }
+
+    /// Canonical non-trained C6 reference capacity.
+    #[must_use]
+    pub const fn reference_c6() -> Self {
+        Self::reference(ComparisonArm::C6)
+    }
+
+    /// Canonical non-trained G6 reference capacity.
+    #[must_use]
+    pub const fn reference_g6() -> Self {
+        Self::reference(ComparisonArm::G6)
+    }
+}
+
+/// Witness that two arm parameter/readout capacities are matched.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MatchedParameterReadout {
+    pub trainable_parameters: u64,
+    pub updates: u64,
+    pub max_cases: u64,
+    pub max_readout_scalars_per_case: u64,
+    pub query_components: u64,
+    pub score_components: u64,
+    pub left_arm: ComparisonArm,
+    pub right_arm: ComparisonArm,
+    pub matcher_contract: &'static str,
+    pub budget_contract: &'static str,
+}
+
+fn validate_capacity_budget(capacity: ParameterReadoutCapacity) -> Result<(), EvalError> {
+    if capacity.updates != NON_TRAINED_UPDATE_BUDGET
+        || capacity.max_cases == 0
+        || capacity.max_cases > MAX_CASES_PER_RUN
+        || capacity.max_readout_scalars_per_case < 2
+        || capacity.max_readout_scalars_per_case > MAX_READOUT_SCALARS_PER_CASE
+    {
+        return Err(EvalError::InvalidBudget);
+    }
+    Ok(())
+}
+
+fn validate_capacity_carrier(capacity: ParameterReadoutCapacity) -> Result<(), EvalError> {
+    let accounting = carrier_accounting(capacity.arm);
+    if capacity.query_components != accounting.query_components as u64
+        || capacity.score_components != accounting.score_components as u64
+        || capacity.key_components != accounting.key_components as u64
+        || capacity.external_geometry_components != accounting.external_geometry_components as u64
+    {
+        return Err(EvalError::ContractMismatch(
+            "parameter_readout_carrier_accounting",
+        ));
+    }
+    Ok(())
+}
+
+/// Accept only matched parameter/readout configurations; reject mismatches
+/// fail-closed without silently padding or compensating.
+///
+/// Attribution pairs (T6↔G6, C6↔G6, T6↔C6) must agree on trainable/update
+/// counts, readout budget fields, and the matched query/score carrier widths.
+/// T6's extra key/external geometry remains declared via `carrier_accounting`
+/// and is not used to pad C6/G6.
+pub fn match_parameter_readouts(
+    left: ParameterReadoutCapacity,
+    right: ParameterReadoutCapacity,
+) -> Result<MatchedParameterReadout, EvalError> {
+    if left.matcher_contract != PARAMETER_READOUT_MATCHER_CONTRACT
+        || right.matcher_contract != PARAMETER_READOUT_MATCHER_CONTRACT
+    {
+        return Err(EvalError::ContractMismatch(
+            "parameter_readout_matcher_contract",
+        ));
+    }
+    if left.budget_contract != READOUT_BUDGET_CONTRACT
+        || right.budget_contract != READOUT_BUDGET_CONTRACT
+    {
+        return Err(EvalError::ContractMismatch("budget_contract"));
+    }
+    validate_capacity_budget(left)?;
+    validate_capacity_budget(right)?;
+    validate_capacity_carrier(left)?;
+    validate_capacity_carrier(right)?;
+    if left.arm == right.arm {
+        return Err(EvalError::ContractMismatch(
+            "parameter_readout_distinct_arms",
+        ));
+    }
+    if left.trainable_parameters != right.trainable_parameters
+        || left.updates != right.updates
+        || left.max_cases != right.max_cases
+        || left.max_readout_scalars_per_case != right.max_readout_scalars_per_case
+        || left.query_components != right.query_components
+        || left.score_components != right.score_components
+    {
+        return Err(EvalError::ParameterReadoutMismatch {
+            left_arm: left.arm,
+            right_arm: right.arm,
+            left_trainable: left.trainable_parameters,
+            right_trainable: right.trainable_parameters,
+            left_updates: left.updates,
+            right_updates: right.updates,
+            left_query_components: left.query_components,
+            right_query_components: right.query_components,
+        });
+    }
+    Ok(MatchedParameterReadout {
+        trainable_parameters: left.trainable_parameters,
+        updates: left.updates,
+        max_cases: left.max_cases,
+        max_readout_scalars_per_case: left.max_readout_scalars_per_case,
+        query_components: left.query_components,
+        score_components: left.score_components,
+        left_arm: left.arm,
+        right_arm: right.arm,
+        matcher_contract: PARAMETER_READOUT_MATCHER_CONTRACT,
+        budget_contract: READOUT_BUDGET_CONTRACT,
+    })
 }
 
 /// Immutable configuration for one Phase-C evaluator run.
@@ -618,6 +804,17 @@ pub enum EvalError {
     },
     CaseBudgetExceeded,
     Bridge(Tdi25Error),
+    /// Parameter/readout capacities are unmatched across paired arms.
+    ParameterReadoutMismatch {
+        left_arm: ComparisonArm,
+        right_arm: ComparisonArm,
+        left_trainable: u64,
+        right_trainable: u64,
+        left_updates: u64,
+        right_updates: u64,
+        left_query_components: u64,
+        right_query_components: u64,
+    },
 }
 
 impl fmt::Display for EvalError {
@@ -637,6 +834,27 @@ impl fmt::Display for EvalError {
                 formatter.write_str("TDI-25 evaluator case budget exceeded")
             }
             Self::Bridge(error) => write!(formatter, "TDI-25 evaluator bridge failure: {error}"),
+            Self::ParameterReadoutMismatch {
+                left_arm,
+                right_arm,
+                left_trainable,
+                right_trainable,
+                left_updates,
+                right_updates,
+                left_query_components,
+                right_query_components,
+            } => write!(
+                formatter,
+                "parameter/readout mismatch: {} trainable={} updates={} query={} vs {} trainable={} updates={} query={}",
+                left_arm.as_str(),
+                left_trainable,
+                left_updates,
+                left_query_components,
+                right_arm.as_str(),
+                right_trainable,
+                right_updates,
+                right_query_components
+            ),
         }
     }
 }
@@ -1148,6 +1366,159 @@ mod tests {
                 .unwrap()
                 .outcome
                 .matches_oracle
+        );
+    }
+
+    #[test]
+    fn parameter_readout_matcher_accepts_matched_reference_arms() {
+        assert_eq!(
+            PARAMETER_READOUT_MATCHER_CONTRACT,
+            "tdi25-parameter-readout-matcher-v1"
+        );
+        let t6 = ParameterReadoutCapacity::reference_t6();
+        let c6 = ParameterReadoutCapacity::reference_c6();
+        let g6 = ParameterReadoutCapacity::reference_g6();
+        assert_eq!(t6.trainable_parameters, 0);
+        assert_eq!(c6.updates, 0);
+        assert_eq!(g6.max_cases, MAX_CASES_PER_RUN);
+        assert_eq!(
+            g6.max_readout_scalars_per_case,
+            MAX_READOUT_SCALARS_PER_CASE
+        );
+        assert_eq!(t6.query_components, 6);
+        assert_eq!(c6.query_components, 6);
+        assert_eq!(g6.score_components, 1);
+        // T6 declares extra key/external geometry; C6/G6 do not.
+        assert_eq!(t6.key_components, 9);
+        assert_eq!(t6.external_geometry_components, 3);
+        assert_eq!(c6.key_components, 6);
+        assert_eq!(g6.external_geometry_components, 0);
+        assert_eq!(ComparisonArm::T6.as_str(), "t6");
+        assert_eq!(ComparisonArm::C6.as_str(), "c6");
+        assert_eq!(ComparisonArm::G6.as_str(), "g6");
+
+        for (left, right) in [(t6, g6), (c6, g6), (t6, c6)] {
+            let matched = match_parameter_readouts(left, right).unwrap();
+            assert_eq!(matched.trainable_parameters, 0);
+            assert_eq!(matched.updates, 0);
+            assert_eq!(matched.max_cases, MAX_CASES_PER_RUN);
+            assert_eq!(
+                matched.max_readout_scalars_per_case,
+                MAX_READOUT_SCALARS_PER_CASE
+            );
+            assert_eq!(matched.query_components, 6);
+            assert_eq!(matched.score_components, 1);
+            assert_eq!(matched.left_arm, left.arm);
+            assert_eq!(matched.right_arm, right.arm);
+            assert_eq!(matched.matcher_contract, PARAMETER_READOUT_MATCHER_CONTRACT);
+            assert_eq!(matched.budget_contract, READOUT_BUDGET_CONTRACT);
+        }
+    }
+
+    #[test]
+    fn parameter_readout_matcher_rejects_invalid_readout_budgets() {
+        let t6 = ParameterReadoutCapacity::reference_t6();
+        let mut inflated = ParameterReadoutCapacity::reference_g6();
+        inflated.updates = 4;
+        assert_eq!(
+            match_parameter_readouts(t6, inflated),
+            Err(EvalError::InvalidBudget)
+        );
+
+        let mut drifted_scalars = ParameterReadoutCapacity::reference_c6();
+        drifted_scalars.max_readout_scalars_per_case = 8;
+        assert_eq!(
+            match_parameter_readouts(t6, drifted_scalars),
+            Err(EvalError::InvalidBudget)
+        );
+
+        let mut drifted_cases = ParameterReadoutCapacity::reference_c6();
+        drifted_cases.max_cases = MAX_CASES_PER_RUN + 8;
+        assert_eq!(
+            match_parameter_readouts(ParameterReadoutCapacity::reference_g6(), drifted_cases),
+            Err(EvalError::InvalidBudget)
+        );
+
+        let mut oversized_left = ParameterReadoutCapacity::reference_t6();
+        let mut oversized_right = ParameterReadoutCapacity::reference_c6();
+        oversized_left.max_cases = MAX_CASES_PER_RUN + 1;
+        oversized_right.max_cases = MAX_CASES_PER_RUN + 1;
+        assert_eq!(
+            match_parameter_readouts(oversized_left, oversized_right),
+            Err(EvalError::InvalidBudget)
+        );
+
+        let mut wide_left = ParameterReadoutCapacity::reference_c6();
+        let mut wide_right = ParameterReadoutCapacity::reference_g6();
+        wide_left.max_readout_scalars_per_case = MAX_READOUT_SCALARS_PER_CASE + 1;
+        wide_right.max_readout_scalars_per_case = MAX_READOUT_SCALARS_PER_CASE + 1;
+        assert_eq!(
+            match_parameter_readouts(wide_left, wide_right),
+            Err(EvalError::InvalidBudget)
+        );
+    }
+
+    #[test]
+    fn parameter_readout_matcher_rejects_carrier_width_and_contract_drift() {
+        let c6 = ParameterReadoutCapacity::reference_c6();
+        let mut wide = ParameterReadoutCapacity::reference_g6();
+        wide.query_components = 8;
+        assert_eq!(
+            match_parameter_readouts(c6, wide),
+            Err(EvalError::ContractMismatch(
+                "parameter_readout_carrier_accounting"
+            ))
+        );
+
+        let mut score_drift = ParameterReadoutCapacity::reference_g6();
+        score_drift.score_components = 2;
+        assert_eq!(
+            match_parameter_readouts(c6, score_drift),
+            Err(EvalError::ContractMismatch(
+                "parameter_readout_carrier_accounting"
+            ))
+        );
+
+        let mut paired_drift_left = ParameterReadoutCapacity::reference_t6();
+        let mut paired_drift_right = ParameterReadoutCapacity::reference_c6();
+        paired_drift_left.key_components = 6;
+        paired_drift_left.external_geometry_components = 0;
+        paired_drift_right.key_components = 9;
+        paired_drift_right.external_geometry_components = 3;
+        assert_eq!(
+            match_parameter_readouts(paired_drift_left, paired_drift_right),
+            Err(EvalError::ContractMismatch(
+                "parameter_readout_carrier_accounting"
+            ))
+        );
+
+        for capacity in [
+            ParameterReadoutCapacity::reference_t6(),
+            ParameterReadoutCapacity::reference_c6(),
+            ParameterReadoutCapacity::reference_g6(),
+        ] {
+            assert_eq!(
+                match_parameter_readouts(capacity, capacity),
+                Err(EvalError::ContractMismatch(
+                    "parameter_readout_distinct_arms"
+                ))
+            );
+        }
+
+        let mut drifted = ParameterReadoutCapacity::reference_t6();
+        drifted.matcher_contract = "not-a-matcher";
+        assert_eq!(
+            match_parameter_readouts(drifted, ParameterReadoutCapacity::reference_g6()),
+            Err(EvalError::ContractMismatch(
+                "parameter_readout_matcher_contract"
+            ))
+        );
+
+        let mut budget_drift = ParameterReadoutCapacity::reference_t6();
+        budget_drift.budget_contract = "not-a-budget";
+        assert_eq!(
+            match_parameter_readouts(budget_drift, ParameterReadoutCapacity::reference_c6()),
+            Err(EvalError::ContractMismatch("budget_contract"))
         );
     }
 }
