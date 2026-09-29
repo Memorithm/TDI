@@ -553,8 +553,7 @@ pub fn parse_primary_family_metric_id(label: &str) -> Result<PrimaryFamilyMetric
 /// Mixed is the only family with both T6 and C6 evaluator paths. The other
 /// known family ids must not be frozen as paired metrics until matched paths
 /// exist; this prevents downstream synthesis from fabricating observations.
-pub const PINNED_PRIMARY_FAMILY_METRICS: &[PrimaryFamilyMetricId] =
-    &[PrimaryFamilyMetricId::Mixed];
+pub const PINNED_PRIMARY_FAMILY_METRICS: &[PrimaryFamilyMetricId] = &[PrimaryFamilyMetricId::Mixed];
 
 /// Closed-set cross-family summary metric for Stage-C evaluation.
 ///
@@ -2318,10 +2317,7 @@ mod tests {
             pinned.primary_family_metrics[0].as_str(),
             PRIMARY_FAMILY_MIXED
         );
-        assert_eq!(
-            pinned.primary_family_metrics[0].family(),
-            TaskFamily::Mixed
-        );
+        assert_eq!(pinned.primary_family_metrics[0].family(), TaskFamily::Mixed);
         assert_eq!(pinned.cross_family_summary, None);
         assert_eq!(
             pinned.secondaries[0].as_str(),
@@ -2374,11 +2370,7 @@ mod tests {
     #[test]
     fn metric_registry_rejects_empty_primary_duplicates_unknowns_and_sequence_drift() {
         assert_eq!(
-            freeze_metric_registry(
-                &[],
-                None,
-                PINNED_SECONDARY_DIAGNOSTICS,
-            ),
+            freeze_metric_registry(&[], None, PINNED_SECONDARY_DIAGNOSTICS,),
             Err(EvalError::MetricRegistryInvalid {
                 reason: "empty_primary",
             })
@@ -2430,26 +2422,16 @@ mod tests {
             SecondaryDiagnosticId::PairedOutcomeDifference,
         ];
         assert_eq!(
-            freeze_metric_registry(
-                PINNED_PRIMARY_FAMILY_METRICS,
-                None,
-                DUPLICATE_SECONDARIES,
-            ),
+            freeze_metric_registry(PINNED_PRIMARY_FAMILY_METRICS, None, DUPLICATE_SECONDARIES,),
             Err(EvalError::MetricRegistryInvalid {
                 reason: "duplicate_secondary",
             })
         );
 
-        const DUPLICATE_PRIMARIES: &[PrimaryFamilyMetricId] = &[
-            PrimaryFamilyMetricId::Mixed,
-            PrimaryFamilyMetricId::Mixed,
-        ];
+        const DUPLICATE_PRIMARIES: &[PrimaryFamilyMetricId] =
+            &[PrimaryFamilyMetricId::Mixed, PrimaryFamilyMetricId::Mixed];
         assert_eq!(
-            freeze_metric_registry(
-                DUPLICATE_PRIMARIES,
-                None,
-                PINNED_SECONDARY_DIAGNOSTICS,
-            ),
+            freeze_metric_registry(DUPLICATE_PRIMARIES, None, PINNED_SECONDARY_DIAGNOSTICS,),
             Err(EvalError::MetricRegistryInvalid {
                 reason: "duplicate_primary",
             })
@@ -2465,11 +2447,7 @@ mod tests {
             SecondaryDiagnosticId::PairedOutcomeDifference,
         ];
         assert_eq!(
-            freeze_metric_registry(
-                PINNED_PRIMARY_FAMILY_METRICS,
-                None,
-                OVERSIZED_SECONDARIES,
-            ),
+            freeze_metric_registry(PINNED_PRIMARY_FAMILY_METRICS, None, OVERSIZED_SECONDARIES,),
             Err(EvalError::MetricRegistryInvalid {
                 reason: "too_many_secondaries",
             })
@@ -2483,21 +2461,13 @@ mod tests {
             SecondaryDiagnosticId::CalibrationStability,
         ];
         assert_eq!(
-            freeze_metric_registry(
-                PINNED_PRIMARY_FAMILY_METRICS,
-                None,
-                TRUNCATED_SECONDARIES,
-            ),
+            freeze_metric_registry(PINNED_PRIMARY_FAMILY_METRICS, None, TRUNCATED_SECONDARIES,),
             Err(EvalError::MetricRegistryInvalid {
                 reason: "secondary_sequence_mismatch",
             })
         );
         assert_eq!(
-            freeze_metric_registry(
-                PINNED_PRIMARY_FAMILY_METRICS,
-                None,
-                &[],
-            ),
+            freeze_metric_registry(PINNED_PRIMARY_FAMILY_METRICS, None, &[],),
             Err(EvalError::MetricRegistryInvalid {
                 reason: "secondary_sequence_mismatch",
             })
@@ -2512,11 +2482,7 @@ mod tests {
             SecondaryDiagnosticId::OpCountMemoryRuntime,
         ];
         assert_eq!(
-            freeze_metric_registry(
-                PINNED_PRIMARY_FAMILY_METRICS,
-                None,
-                REORDERED_SECONDARIES,
-            ),
+            freeze_metric_registry(PINNED_PRIMARY_FAMILY_METRICS, None, REORDERED_SECONDARIES,),
             Err(EvalError::MetricRegistryInvalid {
                 reason: "secondary_sequence_mismatch",
             })
@@ -2527,11 +2493,7 @@ mod tests {
             PrimaryFamilyMetricId::Mixed,
         ];
         assert_eq!(
-            freeze_metric_registry(
-                UNMATCHED_PRIMARIES,
-                None,
-                PINNED_SECONDARY_DIAGNOSTICS,
-            ),
+            freeze_metric_registry(UNMATCHED_PRIMARIES, None, PINNED_SECONDARY_DIAGNOSTICS,),
             Err(EvalError::MetricRegistryInvalid {
                 reason: "unknown_primary",
             })
@@ -2540,11 +2502,7 @@ mod tests {
         const UNPAIRED_PRIMARY: &[PrimaryFamilyMetricId] =
             &[PrimaryFamilyMetricId::TorsorFavorable];
         assert_eq!(
-            freeze_metric_registry(
-                UNPAIRED_PRIMARY,
-                None,
-                PINNED_SECONDARY_DIAGNOSTICS,
-            ),
+            freeze_metric_registry(UNPAIRED_PRIMARY, None, PINNED_SECONDARY_DIAGNOSTICS,),
             Err(EvalError::MetricRegistryInvalid {
                 reason: "unknown_primary",
             })
