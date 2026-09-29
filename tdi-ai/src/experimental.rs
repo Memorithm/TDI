@@ -94,6 +94,8 @@ pub mod tdi24_tasks;
 pub mod tdi24_vector;
 #[path = "tdi25_eval.rs"]
 pub mod tdi25_eval;
+#[path = "tdi25_matched_matrix.rs"]
+pub mod tdi25_matched_matrix;
 #[path = "tdi25_tasks.rs"]
 pub mod tdi25_tasks;
 #[path = "tdi25_torsor_chiral.rs"]
