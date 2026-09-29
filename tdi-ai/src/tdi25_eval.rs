@@ -1555,6 +1555,54 @@ pub struct PairedEffectSummary {
     pub uncertainty_contract: &'static str,
     pub metric_registry_contract: &'static str,
     pub experimental_non_final: bool,
+    /// Private snapshot of every evidence-bearing field at construction.
+    ///
+    /// Public fields remain readable for reporting, but a cloned summary cannot
+    /// be mutated into stronger evidence and then accepted by synthesis.
+    integrity: Option<PairedEffectSummaryIntegrity>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct PairedEffectSummaryIntegrity {
+    split: DataSplit,
+    family: TaskFamily,
+    seed_block: u64,
+    n_pairs: u64,
+    t6_accuracy: f64,
+    c6_accuracy: f64,
+    paired_difference_mean: f64,
+    paired_difference_ci: ConfidenceInterval,
+    t6_accuracy_ci: ConfidenceInterval,
+    c6_accuracy_ci: ConfidenceInterval,
+    primary_family_metric: PrimaryFamilyMetricId,
+    cross_family_summary: CrossFamilySummaryMetricId,
+    secondary_paired_outcome_difference: SecondaryDiagnosticId,
+    uncertainty_contract: &'static str,
+    metric_registry_contract: &'static str,
+    experimental_non_final: bool,
+}
+
+impl PairedEffectSummaryIntegrity {
+    fn from_summary(summary: &PairedEffectSummary) -> Self {
+        Self {
+            split: summary.split,
+            family: summary.family,
+            seed_block: summary.seed_block,
+            n_pairs: summary.n_pairs,
+            t6_accuracy: summary.t6_accuracy,
+            c6_accuracy: summary.c6_accuracy,
+            paired_difference_mean: summary.paired_difference_mean,
+            paired_difference_ci: summary.paired_difference_ci,
+            t6_accuracy_ci: summary.t6_accuracy_ci,
+            c6_accuracy_ci: summary.c6_accuracy_ci,
+            primary_family_metric: summary.primary_family_metric,
+            cross_family_summary: summary.cross_family_summary,
+            secondary_paired_outcome_difference: summary.secondary_paired_outcome_difference,
+            uncertainty_contract: summary.uncertainty_contract,
+            metric_registry_contract: summary.metric_registry_contract,
+            experimental_non_final: summary.experimental_non_final,
+        }
+    }
 }
 
 /// Optional G6 attribution control retained as a secondary only.
@@ -1887,7 +1935,7 @@ fn summarize_paired_uncertainty_inner(
         });
     }
 
-    Ok(PairedEffectSummary {
+    let mut summary = PairedEffectSummary {
         split,
         family,
         seed_block,
@@ -1904,7 +1952,10 @@ fn summarize_paired_uncertainty_inner(
         uncertainty_contract: PAIRED_UNCERTAINTY_CONTRACT,
         metric_registry_contract: registry.registry_contract,
         experimental_non_final: true,
-    })
+        integrity: None,
+    };
+    summary.integrity = Some(PairedEffectSummaryIntegrity::from_summary(&summary));
+    Ok(summary)
 }
 
 /// Summarise paired T6/C6 match outcomes for one family seed block.
@@ -2388,6 +2439,12 @@ fn require_admissible_confidence_interval(
 fn family_signed_effect_from_summary(
     summary: &PairedEffectSummary,
 ) -> Result<FamilySignedEffect, EvalError> {
+    let expected_integrity = PairedEffectSummaryIntegrity::from_summary(summary);
+    if summary.integrity.as_ref() != Some(&expected_integrity) {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "summary_integrity_mismatch",
+        });
+    }
     if !summary.experimental_non_final {
         return Err(EvalError::FamilyStratifiedSynthesisInvalid {
             reason: "experimental_non_final_required",
@@ -4932,23 +4989,40 @@ mod tests {
     fn family_stratified_synthesis_rejects_tampered_positive_intervals() {
         let split = DataSplit::Development;
         let n = MAX_CASES_PER_RUN;
-        let ties: Vec<(u64, bool)> = (0..n).map(|case_id| (case_id, true)).collect();
+        let losses: Vec<(u64, bool)> = (0..n).map(|case_id| (case_id, false)).collect();
+        let mut one_c6_win = losses.clone();
+        one_c6_win[0].1 = true;
         let mut summaries = [
-            family_summary(split, TaskFamily::TorsorFavorable, 9, &ties, &ties),
-            family_summary(split, TaskFamily::ChiralFavorable, 9, &ties, &ties),
-            family_summary(split, TaskFamily::Mixed, 9, &ties, &ties),
-            family_summary(split, TaskFamily::Neutral, 9, &ties, &ties),
+            family_summary(
+                split,
+                TaskFamily::TorsorFavorable,
+                9,
+                &losses,
+                &one_c6_win,
+            ),
+            family_summary(
+                split,
+                TaskFamily::ChiralFavorable,
+                9,
+                &losses,
+                &one_c6_win,
+            ),
+            family_summary(split, TaskFamily::Mixed, 9, &losses, &one_c6_win),
+            family_summary(split, TaskFamily::Neutral, 9, &losses, &one_c6_win),
         ];
-        // Null family evidence upgraded by forging strictly-positive intervals.
+        // The forged interval contains the mean but is not the engine-produced interval.
         for summary in &mut summaries {
-            assert_eq!(summary.paired_difference_mean, 0.0);
-            summary.paired_difference_ci.lower = 0.1;
-            summary.paired_difference_ci.upper = 0.2;
+            assert!(approximately_equal(
+                summary.paired_difference_mean,
+                1.0 / n as f64
+            ));
+            summary.paired_difference_ci.lower = 0.001;
+            summary.paired_difference_ci.upper = 0.02;
         }
         assert_eq!(
             synthesize_family_stratified_effects(split, &summaries, &MetricRegistry::pinned()),
             Err(EvalError::FamilyStratifiedSynthesisInvalid {
-                reason: "mean_outside_interval",
+                reason: "summary_integrity_mismatch",
             })
         );
     }
