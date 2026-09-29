@@ -2905,12 +2905,7 @@ pub fn synthesize_family_stratified_from_revealed_outcomes(
                 .collect();
             seed_block_summaries.push(
                 summarize_paired_uncertainty_by_seed_block(
-                    split,
-                    family,
-                    *block,
-                    &t6_block,
-                    &c6_block,
-                    registry,
+                    split, family, *block, &t6_block, &c6_block, registry,
                 )
                 .map_err(|err| match err {
                     EvalError::PairedUncertaintyInvalid { reason } => {
