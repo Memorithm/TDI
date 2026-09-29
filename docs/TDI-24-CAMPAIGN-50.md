@@ -45,7 +45,7 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 | 25 | Optimizer/update-budget contract | **landed** in #659, exact head `922ffe5c1dabed26f8662b0be319466ef020e8a9`, merge `5f4bd6c51e81adb4ef831b3caf3aeb0db62ff498`; same examples, ordering, steps and stopping rule |
 | 26 | Metric registry | **landed** in #667, exact head `9d98deba309da78fb5f57930c980ea14041af434`, merge `277896b34d7a0f76af0d176ec4c9356a5b4e68cc`; primary metric + paired secondary diagnostics frozen |
 | 27 | Paired uncertainty engine | **landed** in #671, exact head `7c640354626de37400bf0f86655e6c0e21284d39`, merge `c547fa5f7f12e001f4437c3bb054d75b239099a7`; confidence intervals/effect summaries without label leakage |
-| 28 | Failure taxonomy | typed invalid/numerical/resource/task failures retained |
+| 28 | Failure taxonomy | **current stacked slice**; typed invalid/numerical/resource/task failures retained |
 | 29 | Provenance envelope | code/config/data/seed/toolchain identity per run |
 | 30 | Stage-C preflight | bounded smoke campaign; zero protected/final access |
 

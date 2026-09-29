@@ -15,8 +15,10 @@
 //! secondary diagnostics for Stage-C, experimental and non-final only. Slice 27
 //! adds the paired uncertainty engine: confidence intervals and effect
 //! summaries over already-revealed V6/C6 match outcomes without accepting raw
-//! protected labels. No training, confirmatory execution, protected/final
-//! evaluation, or scientific claim is authorised here.
+//! protected labels. Slice 28 introduces an explicit retained failure taxonomy:
+//! typed Invalid/Numerical/Resource/Task failures classified from EvalError and
+//! kept in a FailureRecord ledger rather than dropped. No training, confirmatory
+//! execution, protected/final evaluation, or scientific claim is authorised here.
 
 use core::fmt;
 
@@ -83,6 +85,9 @@ pub const MAX_SECONDARY_DIAGNOSTICS: usize = 6;
 /// Versioned paired uncertainty engine contract.
 pub const PAIRED_UNCERTAINTY_CONTRACT: &str = "tdi24-paired-uncertainty-v1";
 
+/// Versioned retained failure-taxonomy contract.
+pub const FAILURE_TAXONOMY_CONTRACT: &str = "tdi24-failure-taxonomy-v1";
+
 /// Nominal two-sided confidence level for Stage-C paired uncertainty summaries.
 pub const PAIRED_UNCERTAINTY_LEVEL: f64 = 0.95;
 
@@ -96,6 +101,9 @@ pub const HOEFFDING_LOG_40: f64 = 3.688_879_454_113_936_3;
 
 /// Maximum cases admitted to one non-final evaluator run.
 pub const MAX_CASES_PER_RUN: u64 = 64;
+
+/// Maximum typed failures retained in one non-final failure ledger.
+pub const MAX_FAILURES_PER_RUN: u64 = MAX_CASES_PER_RUN;
 
 /// Maximum scalar fields retained per case readout (score + correctness flag).
 pub const MAX_READOUT_SCALARS_PER_CASE: u64 = 2;
@@ -1486,6 +1494,317 @@ pub fn summarize_paired_uncertainty_from_records(
     summarize_paired_uncertainty_inner(split, &v6, &c6, registry, Some(cluster_sum_squares))
 }
 
+/// Closed retained failure class covering the campaign gate wording
+/// (invalid / numerical / resource / task).
+///
+/// Experimental and non-final only. Unknown class labels fail closed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FailureClass {
+    /// Contract, budget, registry, matcher, or other invalid configuration/input.
+    Invalid,
+    /// Arm arithmetic rejected a non-finite intermediate.
+    Numerical,
+    /// Readout or case / failure-ledger budget exhausted.
+    Resource,
+    /// Task, oracle, or case-split mapping could not be applied.
+    Task,
+}
+
+impl FailureClass {
+    /// Stable lowercase failure-class token.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Invalid => "invalid",
+            Self::Numerical => "numerical",
+            Self::Resource => "resource",
+            Self::Task => "task",
+        }
+    }
+}
+
+/// Parse a failure-class label; unknown tokens fail closed.
+pub fn parse_failure_class(label: &str) -> Result<FailureClass, EvalError> {
+    match label {
+        "invalid" => Ok(FailureClass::Invalid),
+        "numerical" => Ok(FailureClass::Numerical),
+        "resource" => Ok(FailureClass::Resource),
+        "task" => Ok(FailureClass::Task),
+        "" => Err(EvalError::FailureTaxonomyInvalid {
+            reason: "empty_class",
+        }),
+        _ => Err(EvalError::FailureTaxonomyInvalid {
+            reason: "unknown_class",
+        }),
+    }
+}
+
+/// One retained typed failure; never silently discarded once classified.
+///
+/// Bound to [`FAILURE_TAXONOMY_CONTRACT`]. Development/Validation only —
+/// constructing with a protected/final split is rejected by
+/// [`retain_failure`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FailureRecord {
+    pub class: FailureClass,
+    pub arm: EvalArm,
+    pub split: DataSplit,
+    pub case_id: Option<u64>,
+    pub message_code: &'static str,
+    pub taxonomy_contract: &'static str,
+}
+
+/// Accumulator that retains every classified failure for one non-final run.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FailureLedger {
+    split: DataSplit,
+    taxonomy_contract: &'static str,
+    records: Vec<FailureRecord>,
+}
+
+impl FailureLedger {
+    /// Open a bounded Development/Validation failure ledger.
+    pub fn open(split: DataSplit) -> Result<Self, EvalError> {
+        validate_non_final_split(split)?;
+        Ok(Self {
+            split,
+            taxonomy_contract: FAILURE_TAXONOMY_CONTRACT,
+            records: Vec::new(),
+        })
+    }
+
+    /// Borrow the split this ledger was opened under.
+    #[must_use]
+    pub const fn split(&self) -> DataSplit {
+        self.split
+    }
+
+    /// Borrow the taxonomy contract pin.
+    #[must_use]
+    pub const fn taxonomy_contract(&self) -> &'static str {
+        self.taxonomy_contract
+    }
+
+    /// Borrow retained failure records in admission order.
+    #[must_use]
+    pub fn records(&self) -> &[FailureRecord] {
+        &self.records
+    }
+
+    /// Classify and retain an [`EvalError`]; never silently discards.
+    pub fn retain_eval_error(
+        &mut self,
+        error: &EvalError,
+        arm: EvalArm,
+        case_id: Option<u64>,
+    ) -> Result<&FailureRecord, EvalError> {
+        let record = retain_eval_error(error, arm, self.split, case_id)?;
+        self.push_validated(record)
+    }
+
+    /// Map an evaluator-retained [`EvalFailure`] and keep it; never silently discards.
+    pub fn retain_eval_failure(
+        &mut self,
+        failure: EvalFailure,
+        arm: EvalArm,
+        case_id: Option<u64>,
+    ) -> Result<&FailureRecord, EvalError> {
+        let record = retain_eval_failure(failure, arm, self.split, case_id)?;
+        self.push_validated(record)
+    }
+
+    /// Retain an already-built record after validating pins and capacity.
+    pub fn retain(&mut self, record: FailureRecord) -> Result<&FailureRecord, EvalError> {
+        validate_failure_record(&record)?;
+        if record.split != self.split {
+            return Err(EvalError::SplitMismatch {
+                expected: self.split,
+                actual: record.split,
+            });
+        }
+        self.push_validated(record)
+    }
+
+    fn push_validated(&mut self, record: FailureRecord) -> Result<&FailureRecord, EvalError> {
+        if self.taxonomy_contract != FAILURE_TAXONOMY_CONTRACT {
+            return Err(EvalError::FailureTaxonomyInvalid {
+                reason: "contract_drift",
+            });
+        }
+        if record.taxonomy_contract != FAILURE_TAXONOMY_CONTRACT {
+            return Err(EvalError::FailureTaxonomyInvalid {
+                reason: "contract_drift",
+            });
+        }
+        if self.records.len() as u64 >= MAX_FAILURES_PER_RUN {
+            return Err(EvalError::FailureTaxonomyInvalid {
+                reason: "failure_budget_exceeded",
+            });
+        }
+        self.records.push(record);
+        Ok(self.records.last().expect("just pushed"))
+    }
+}
+
+/// Classify an [`EvalError`] into the closed [`FailureClass`] set.
+///
+/// Never silently discards: every admitted error maps to exactly one class.
+/// [`EvalError::ProtectedOrFinalSplit`] is not retained as a taxonomy class —
+/// it stays a hard rejection so this surface cannot authorise protected/final
+/// evaluation.
+pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError> {
+    match error {
+        EvalError::ProtectedOrFinalSplit => Err(EvalError::ProtectedOrFinalSplit),
+        EvalError::Numerical(_) | EvalError::ChiralNumerical(_) => Ok(FailureClass::Numerical),
+        EvalError::CaseBudgetExceeded => Ok(FailureClass::Resource),
+        EvalError::SplitMismatch { .. } => Ok(FailureClass::Task),
+        EvalError::ContractMismatch { .. }
+        | EvalError::InvalidBudget
+        | EvalError::UnsupportedArm
+        | EvalError::ParameterCountMismatch { .. }
+        | EvalError::InitializationMismatch { .. }
+        | EvalError::OptimizerUpdateBudgetMismatch { .. }
+        | EvalError::MetricRegistryInvalid { .. }
+        | EvalError::PairedUncertaintyInvalid { .. }
+        | EvalError::FailureTaxonomyInvalid { .. } => Ok(FailureClass::Invalid),
+    }
+}
+
+/// Map an evaluator-retained [`EvalFailure`] onto the closed taxonomy.
+#[must_use]
+pub const fn classify_eval_failure(failure: EvalFailure) -> FailureClass {
+    match failure {
+        EvalFailure::Numerical => FailureClass::Numerical,
+        EvalFailure::Task => FailureClass::Task,
+        EvalFailure::Resource => FailureClass::Resource,
+        // Contract/config failures land in the campaign "invalid" class.
+        EvalFailure::Contract => FailureClass::Invalid,
+    }
+}
+
+/// Stable message code for one [`EvalError`] variant.
+#[must_use]
+pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
+    match error {
+        EvalError::ProtectedOrFinalSplit => "protected_or_final_split",
+        EvalError::SplitMismatch { .. } => "split_mismatch",
+        EvalError::ContractMismatch { .. } => "contract_mismatch",
+        EvalError::InvalidBudget => "invalid_budget",
+        EvalError::UnsupportedArm => "unsupported_arm",
+        EvalError::CaseBudgetExceeded => "case_budget_exceeded",
+        EvalError::Numerical(_) => "numerical",
+        EvalError::ChiralNumerical(_) => "chiral_numerical",
+        EvalError::ParameterCountMismatch { .. } => "parameter_count_mismatch",
+        EvalError::InitializationMismatch { .. } => "initialization_mismatch",
+        EvalError::OptimizerUpdateBudgetMismatch { .. } => "optimizer_update_budget_mismatch",
+        EvalError::MetricRegistryInvalid { .. } => "metric_registry_invalid",
+        EvalError::PairedUncertaintyInvalid { .. } => "paired_uncertainty_invalid",
+        EvalError::FailureTaxonomyInvalid { .. } => "failure_taxonomy_invalid",
+    }
+}
+
+/// Stable message code for one evaluator-retained [`EvalFailure`].
+#[must_use]
+pub const fn eval_failure_message_code(failure: EvalFailure) -> &'static str {
+    match failure {
+        EvalFailure::Numerical => "eval_failure_numerical",
+        EvalFailure::Task => "eval_failure_task",
+        EvalFailure::Resource => "eval_failure_resource",
+        EvalFailure::Contract => "eval_failure_contract",
+    }
+}
+
+/// Validate a retained failure record against the closed taxonomy pin.
+pub fn validate_failure_record(record: &FailureRecord) -> Result<(), EvalError> {
+    validate_non_final_split(record.split)?;
+    if record.taxonomy_contract != FAILURE_TAXONOMY_CONTRACT {
+        return Err(EvalError::FailureTaxonomyInvalid {
+            reason: "contract_drift",
+        });
+    }
+    // Round-trip through the closed parser so invented class labels fail closed.
+    let parsed = parse_failure_class(record.class.as_str())?;
+    if parsed != record.class {
+        return Err(EvalError::FailureTaxonomyInvalid {
+            reason: "unknown_class",
+        });
+    }
+    if record.message_code.is_empty() {
+        return Err(EvalError::FailureTaxonomyInvalid {
+            reason: "empty_message_code",
+        });
+    }
+    Ok(())
+}
+
+/// Retain a classified failure; never silently discards.
+///
+/// Rejects protected/final splits, empty message codes, and class/contract
+/// drift. Successful returns always carry [`FAILURE_TAXONOMY_CONTRACT`].
+pub fn retain_failure(
+    class: FailureClass,
+    arm: EvalArm,
+    split: DataSplit,
+    case_id: Option<u64>,
+    message_code: &'static str,
+) -> Result<FailureRecord, EvalError> {
+    let record = FailureRecord {
+        class,
+        arm,
+        split,
+        case_id,
+        message_code,
+        taxonomy_contract: FAILURE_TAXONOMY_CONTRACT,
+    };
+    validate_failure_record(&record)?;
+    Ok(record)
+}
+
+/// Classify an [`EvalError`] and retain it as a [`FailureRecord`].
+///
+/// Never silently discards. Protected/final errors remain hard rejections.
+pub fn retain_eval_error(
+    error: &EvalError,
+    arm: EvalArm,
+    split: DataSplit,
+    case_id: Option<u64>,
+) -> Result<FailureRecord, EvalError> {
+    let class = classify_eval_error(error)?;
+    retain_failure(class, arm, split, case_id, eval_error_message_code(error))
+}
+
+/// Map an evaluator-retained [`EvalFailure`] into a [`FailureRecord`].
+pub fn retain_eval_failure(
+    failure: EvalFailure,
+    arm: EvalArm,
+    split: DataSplit,
+    case_id: Option<u64>,
+) -> Result<FailureRecord, EvalError> {
+    retain_failure(
+        classify_eval_failure(failure),
+        arm,
+        split,
+        case_id,
+        eval_failure_message_code(failure),
+    )
+}
+
+/// Extract a retained failure from an [`EvalRecord`] outcome when present.
+///
+/// Scored outcomes yield `Ok(None)`. Failure outcomes are classified and
+/// retained; they are never dropped.
+pub fn retain_from_eval_record(record: &EvalRecord) -> Result<Option<FailureRecord>, EvalError> {
+    match record.outcome {
+        EvalOutcome::Scored { .. } => Ok(None),
+        EvalOutcome::Failure(failure) => Ok(Some(retain_eval_failure(
+            failure,
+            record.arm,
+            record.split,
+            Some(record.case_id),
+        )?)),
+    }
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -1552,6 +1871,8 @@ pub enum EvalError {
     MetricRegistryInvalid { reason: &'static str },
     /// Paired uncertainty engine rejected inputs or produced non-finite stats.
     PairedUncertaintyInvalid { reason: &'static str },
+    /// Failure taxonomy rejected an unknown class, empty code, or contract drift.
+    FailureTaxonomyInvalid { reason: &'static str },
 }
 
 impl fmt::Display for EvalError {
@@ -1622,6 +1943,9 @@ impl fmt::Display for EvalError {
             }
             Self::PairedUncertaintyInvalid { reason } => {
                 write!(formatter, "paired uncertainty invalid: {reason}")
+            }
+            Self::FailureTaxonomyInvalid { reason } => {
+                write!(formatter, "failure taxonomy invalid: {reason}")
             }
         }
     }
@@ -2673,6 +2997,276 @@ mod tests {
             ),
             Err(EvalError::PairedUncertaintyInvalid {
                 reason: "duplicate_pair_identity",
+            })
+        );
+    }
+
+    #[test]
+    fn failure_taxonomy_retains_each_closed_class() {
+        assert_eq!(FAILURE_TAXONOMY_CONTRACT, "tdi24-failure-taxonomy-v1");
+        assert_eq!(MAX_FAILURES_PER_RUN, MAX_CASES_PER_RUN);
+
+        let cases = [
+            (
+                FailureClass::Invalid,
+                EvalError::ContractMismatch {
+                    field: "envelope_contract",
+                },
+                "contract_mismatch",
+            ),
+            (
+                FailureClass::Numerical,
+                EvalError::Numerical(Vector6Error::NonFiniteVector),
+                "numerical",
+            ),
+            (
+                FailureClass::Resource,
+                EvalError::CaseBudgetExceeded,
+                "case_budget_exceeded",
+            ),
+            (
+                FailureClass::Task,
+                EvalError::SplitMismatch {
+                    expected: DataSplit::Development,
+                    actual: DataSplit::Validation,
+                },
+                "split_mismatch",
+            ),
+        ];
+
+        let mut ledger = FailureLedger::open(DataSplit::Development).unwrap();
+        for (idx, (class, error, code)) in cases.into_iter().enumerate() {
+            assert_eq!(classify_eval_error(&error).unwrap(), class);
+            assert_eq!(eval_error_message_code(&error), code);
+            let record = ledger
+                .retain_eval_error(&error, EvalArm::V6, Some(idx as u64))
+                .unwrap()
+                .clone();
+            assert_eq!(record.class, class);
+            assert_eq!(record.arm, EvalArm::V6);
+            assert_eq!(record.split, DataSplit::Development);
+            assert_eq!(record.case_id, Some(idx as u64));
+            assert_eq!(record.message_code, code);
+            assert_eq!(record.taxonomy_contract, FAILURE_TAXONOMY_CONTRACT);
+            validate_failure_record(&record).unwrap();
+        }
+        assert_eq!(ledger.records().len(), 4);
+
+        // EvalFailure::Contract maps into the campaign Invalid class and is retained.
+        let contract = retain_eval_failure(
+            EvalFailure::Contract,
+            EvalArm::C6,
+            DataSplit::Validation,
+            Some(99),
+        )
+        .unwrap();
+        assert_eq!(contract.class, FailureClass::Invalid);
+        assert_eq!(contract.message_code, "eval_failure_contract");
+        assert_eq!(
+            classify_eval_failure(EvalFailure::Numerical),
+            FailureClass::Numerical
+        );
+        assert_eq!(classify_eval_failure(EvalFailure::Task), FailureClass::Task);
+        assert_eq!(
+            classify_eval_failure(EvalFailure::Resource),
+            FailureClass::Resource
+        );
+        assert_eq!(
+            classify_eval_failure(EvalFailure::Contract),
+            FailureClass::Invalid
+        );
+    }
+
+    #[test]
+    fn failure_taxonomy_rejects_unknown_class_contract_drift_and_protected() {
+        assert_eq!(
+            parse_failure_class("invented"),
+            Err(EvalError::FailureTaxonomyInvalid {
+                reason: "unknown_class",
+            })
+        );
+        assert_eq!(
+            parse_failure_class(""),
+            Err(EvalError::FailureTaxonomyInvalid {
+                reason: "empty_class",
+            })
+        );
+        for label in ["invalid", "numerical", "resource", "task"] {
+            assert_eq!(parse_failure_class(label).unwrap().as_str(), label);
+        }
+
+        assert_eq!(
+            retain_failure(
+                FailureClass::Invalid,
+                EvalArm::V6,
+                DataSplit::Development,
+                None,
+                "",
+            ),
+            Err(EvalError::FailureTaxonomyInvalid {
+                reason: "empty_message_code",
+            })
+        );
+
+        let drifted = FailureRecord {
+            class: FailureClass::Task,
+            arm: EvalArm::V6,
+            split: DataSplit::Development,
+            case_id: None,
+            message_code: "split_mismatch",
+            taxonomy_contract: "tdi24-failure-taxonomy-v0-drift",
+        };
+        assert_eq!(
+            validate_failure_record(&drifted),
+            Err(EvalError::FailureTaxonomyInvalid {
+                reason: "contract_drift",
+            })
+        );
+
+        assert_eq!(
+            classify_eval_error(&EvalError::ProtectedOrFinalSplit),
+            Err(EvalError::ProtectedOrFinalSplit)
+        );
+        assert_eq!(
+            retain_eval_error(
+                &EvalError::ProtectedOrFinalSplit,
+                EvalArm::V6,
+                DataSplit::Development,
+                None,
+            ),
+            Err(EvalError::ProtectedOrFinalSplit)
+        );
+        assert_eq!(
+            parse_non_final_split("protected"),
+            Err(EvalError::ProtectedOrFinalSplit)
+        );
+        assert_eq!(
+            parse_non_final_split("final"),
+            Err(EvalError::ProtectedOrFinalSplit)
+        );
+
+        // Chiral numerical errors classify as Numerical and retain.
+        let chiral = retain_eval_error(
+            &EvalError::ChiralNumerical(ChiralError::NonFiniteVector),
+            EvalArm::C6,
+            DataSplit::Validation,
+            Some(7),
+        )
+        .unwrap();
+        assert_eq!(chiral.class, FailureClass::Numerical);
+        assert_eq!(chiral.message_code, "chiral_numerical");
+        assert_eq!(chiral.arm, EvalArm::C6);
+
+        // Matcher / registry / uncertainty invalids land in Invalid and retain.
+        for error in [
+            EvalError::InvalidBudget,
+            EvalError::UnsupportedArm,
+            EvalError::ParameterCountMismatch {
+                left_arm: EvalArm::V6,
+                right_arm: EvalArm::C6,
+                left_parameters: 1,
+                right_parameters: 2,
+            },
+            EvalError::InitializationMismatch {
+                left_arm: EvalArm::V6,
+                right_arm: EvalArm::C6,
+                left_seed: 1,
+                right_seed: 2,
+            },
+            EvalError::OptimizerUpdateBudgetMismatch {
+                left_arm: EvalArm::V6,
+                right_arm: EvalArm::C6,
+                left_examples: 1,
+                right_examples: 2,
+                left_updates: 3,
+                right_updates: 4,
+            },
+            EvalError::MetricRegistryInvalid {
+                reason: "invented_primary",
+            },
+            EvalError::PairedUncertaintyInvalid {
+                reason: "empty_pairs",
+            },
+            EvalError::FailureTaxonomyInvalid {
+                reason: "unknown_class",
+            },
+        ] {
+            let record =
+                retain_eval_error(&error, EvalArm::V6, DataSplit::Development, None).unwrap();
+            assert_eq!(record.class, FailureClass::Invalid);
+            assert_eq!(record.taxonomy_contract, FAILURE_TAXONOMY_CONTRACT);
+        }
+    }
+
+    #[test]
+    fn failure_ledger_retains_eval_failures_and_rejects_capacity_drift() {
+        let mut ledger = FailureLedger::open(DataSplit::Validation).unwrap();
+        assert_eq!(ledger.split(), DataSplit::Validation);
+        assert_eq!(ledger.taxonomy_contract(), FAILURE_TAXONOMY_CONTRACT);
+
+        for failure in [
+            EvalFailure::Numerical,
+            EvalFailure::Task,
+            EvalFailure::Resource,
+            EvalFailure::Contract,
+        ] {
+            let record = ledger
+                .retain_eval_failure(failure, EvalArm::C6, Some(1))
+                .unwrap()
+                .clone();
+            assert_eq!(record.class, classify_eval_failure(failure));
+            assert_eq!(record.split, DataSplit::Validation);
+        }
+        assert_eq!(ledger.records().len(), 4);
+
+        let scored = EvalRecord {
+            arm: EvalArm::V6,
+            split: DataSplit::Development,
+            family: TaskFamily::ReflectionDiscriminative,
+            case_id: 1,
+            group_id: 1,
+            outcome: EvalOutcome::Scored {
+                score: 1.0,
+                correct: true,
+            },
+            canonical_digest: "unused".to_string(),
+            envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
+            arm_contract: V6_EVALUATOR_CONTRACT,
+            budget_contract: READOUT_BUDGET_CONTRACT,
+            metric_registry_contract: METRIC_REGISTRY_CONTRACT,
+            vector_contract: VECTOR6_CONTRACT,
+            label_contract: PROTECTED_LABEL_CONTRACT,
+        };
+        assert_eq!(retain_from_eval_record(&scored).unwrap(), None);
+
+        let failed = EvalRecord {
+            outcome: EvalOutcome::Failure(EvalFailure::Resource),
+            ..scored.clone()
+        };
+        let retained = retain_from_eval_record(&failed).unwrap().unwrap();
+        assert_eq!(retained.class, FailureClass::Resource);
+        assert_eq!(retained.case_id, Some(1));
+
+        // Split mismatch against the open ledger fails closed.
+        assert_eq!(
+            ledger.retain(retained),
+            Err(EvalError::SplitMismatch {
+                expected: DataSplit::Validation,
+                actual: DataSplit::Development,
+            })
+        );
+
+        // Fill a Development ledger to capacity and reject the next retain.
+        let mut full = FailureLedger::open(DataSplit::Development).unwrap();
+        for i in 0..MAX_FAILURES_PER_RUN {
+            full.retain_eval_error(&EvalError::InvalidBudget, EvalArm::V6, Some(i))
+                .unwrap();
+        }
+        assert_eq!(full.records().len() as u64, MAX_FAILURES_PER_RUN);
+        assert_eq!(
+            full.retain_eval_error(&EvalError::InvalidBudget, EvalArm::V6, None),
+            Err(EvalError::FailureTaxonomyInvalid {
+                reason: "failure_budget_exceeded",
             })
         );
     }
