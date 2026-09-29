@@ -157,8 +157,7 @@ pub fn matched_family_paths(family: TaskFamily) -> MatchedFamilyPaths {
 ///
 /// The current matrix intentionally returns an error. Callers must not proceed
 /// to four-family primary synthesis until real sealed paths have been added.
-pub fn require_complete_primary_matrix(
-) -> Result<[MatchedFamilyPaths; 4], MatchedMatrixError> {
+pub fn require_complete_primary_matrix() -> Result<[MatchedFamilyPaths; 4], MatchedMatrixError> {
     let families = REQUIRED_PRIMARY_FAMILIES.map(matched_family_paths);
     for paths in families {
         if paths.t6.is_none() {
