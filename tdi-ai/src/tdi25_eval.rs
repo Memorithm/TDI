@@ -912,19 +912,19 @@ pub struct T6Outcome {
 /// Immutable non-final T6 evaluation record.
 #[derive(Clone, Debug, PartialEq)]
 pub struct T6EvalRecord {
-    pub split: DataSplit,
-    pub family: TaskFamily,
-    pub case_id: u64,
+    split: DataSplit,
+    family: TaskFamily,
+    case_id: u64,
     /// Retained seed-block / pair identity from the sealed oracle.
-    pub seed_block: u64,
-    pub outcome: T6Outcome,
-    pub canonical_digest: String,
-    pub envelope_contract: &'static str,
-    pub arm_contract: &'static str,
-    pub budget_contract: &'static str,
-    pub metric_registry_contract: &'static str,
-    pub source_torsor_contract: &'static str,
-    pub label_contract: &'static str,
+    seed_block: u64,
+    outcome: T6Outcome,
+    canonical_digest: String,
+    envelope_contract: &'static str,
+    arm_contract: &'static str,
+    budget_contract: &'static str,
+    metric_registry_contract: &'static str,
+    source_torsor_contract: &'static str,
+    label_contract: &'static str,
 }
 
 /// Bounded accumulator for one deterministic non-final T6 run.
@@ -1072,19 +1072,19 @@ pub struct C6Outcome {
 /// Immutable non-final C6 evaluation record.
 #[derive(Clone, Debug, PartialEq)]
 pub struct C6EvalRecord {
-    pub split: DataSplit,
-    pub family: TaskFamily,
-    pub case_id: u64,
+    split: DataSplit,
+    family: TaskFamily,
+    case_id: u64,
     /// Retained seed-block / pair identity from the sealed oracle.
-    pub seed_block: u64,
-    pub outcome: C6Outcome,
-    pub canonical_digest: String,
-    pub envelope_contract: &'static str,
-    pub arm_contract: &'static str,
-    pub budget_contract: &'static str,
-    pub metric_registry_contract: &'static str,
-    pub source_chiral_contract: &'static str,
-    pub label_contract: &'static str,
+    seed_block: u64,
+    outcome: C6Outcome,
+    canonical_digest: String,
+    envelope_contract: &'static str,
+    arm_contract: &'static str,
+    budget_contract: &'static str,
+    metric_registry_contract: &'static str,
+    source_chiral_contract: &'static str,
+    label_contract: &'static str,
 }
 
 /// Bounded accumulator for one deterministic non-final C6 run.
@@ -1232,19 +1232,19 @@ pub struct G6Outcome {
 /// Immutable non-final G6 evaluation record.
 #[derive(Clone, Debug, PartialEq)]
 pub struct G6EvalRecord {
-    pub split: DataSplit,
-    pub family: TaskFamily,
-    pub case_id: u64,
+    split: DataSplit,
+    family: TaskFamily,
+    case_id: u64,
     /// Retained seed-block / pair identity from the sealed oracle.
-    pub seed_block: u64,
-    pub outcome: G6Outcome,
-    pub canonical_digest: String,
-    pub envelope_contract: &'static str,
-    pub arm_contract: &'static str,
-    pub budget_contract: &'static str,
-    pub metric_registry_contract: &'static str,
-    pub source_generic_contract: &'static str,
-    pub label_contract: &'static str,
+    seed_block: u64,
+    outcome: G6Outcome,
+    canonical_digest: String,
+    envelope_contract: &'static str,
+    arm_contract: &'static str,
+    budget_contract: &'static str,
+    metric_registry_contract: &'static str,
+    source_generic_contract: &'static str,
+    label_contract: &'static str,
 }
 
 /// Bounded accumulator for one deterministic non-final G6 run.
@@ -2223,7 +2223,7 @@ pub fn summarize_g6_attribution_contrast_by_seed_block(
 
 /// Extract revealed match bits from T6 evaluator records for one split.
 ///
-/// Seed-block identity is taken from retained [`T6EvalRecord::seed_block`]
+/// Seed-block identity is taken from retained opaque [`T6EvalRecord`] values
 /// (oracle `pair_id`). Does not accept [`super::tdi25_tasks::ProtectedLabel`].
 pub fn revealed_matches_from_t6_records(
     records: &[T6EvalRecord],
