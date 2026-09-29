@@ -12,4 +12,5 @@ grep -Fq 'OptimizerUpdateBudgetMismatch' tdi-ai/src/tdi25_eval.rs
 grep -Fq 'tdi25-parameter-readout-matcher-v1' tdi-ai/src/tdi25_eval.rs
 grep -Fq 'pub mod tdi25_eval;' tdi-ai/src/experimental.rs
 grep -Fq '| 24 | Parameter/readout matcher | **landed** in #669, exact head `69f5ec9c27ceeadd047fd196193131964b7a0023`, merge `32c02cb7625dae788dc5d44d4449447a408f0589`;' docs/TDI-25-CAMPAIGN-50.md
-grep -Fq '| 25 | Optimizer/update-budget matcher | **current candidate** in #' docs/TDI-25-CAMPAIGN-50.md
+grep -Fq '| 25 | Optimizer/update-budget matcher | **current candidate** in #673;' docs/TDI-25-CAMPAIGN-50.md
+! grep -Fq '#PRNUM' docs/TDI-25-CAMPAIGN-50.md

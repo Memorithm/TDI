@@ -42,7 +42,7 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | 22 | C6 evaluator | **landed** in #663, exact head `25ff8e020a0c784d3a52d021fb13d9fcc986702f`, merge `ae501e9b3941a293c3cb18f3450c3c077b25f48f`; consumes TDI-24 chiral contract unchanged |
 | 23 | G6 evaluator | **landed** in #666, exact head `3403b8768d24ac1543b75120d15a09dd5b58c50e`, merge `d6c8226025de1dbe4848f83d8092c316066f97b1`; same readout/evaluation envelope as T6/C6 |
 | 24 | Parameter/readout matcher | **landed** in #669, exact head `69f5ec9c27ceeadd047fd196193131964b7a0023`, merge `32c02cb7625dae788dc5d44d4449447a408f0589`; reject capacity mismatch rather than silently compensate |
-| 25 | Optimizer/update-budget matcher | **current candidate** in #PRNUM; same examples/order/steps/stopping rule where trained |
+| 25 | Optimizer/update-budget matcher | **current candidate** in #673; same examples/order/steps/stopping rule where trained |
 | 26 | Metric registry | primary family metrics and cross-family summary frozen |
 | 27 | Paired uncertainty engine | paired effect/interval computation by seed block |
 | 28 | Family-stratified synthesis | pooled summaries cannot hide sign reversals |
