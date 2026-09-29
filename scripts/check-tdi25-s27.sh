@@ -14,6 +14,6 @@ grep -Fq 'ClusterHoeffdingPairedDifference' tdi-ai/src/tdi25_eval.rs
 grep -Fq 'reason: "duplicate_pair_identity"' tdi-ai/src/tdi25_eval.rs
 grep -Fq 'g6_not_primary_reference' tdi-ai/src/tdi25_eval.rs
 grep -Fq '| 26 | Metric registry | **landed** in #679, exact head `c21c4463bb23eb8f078d1ec51612cd04def112d2`, merge `62b015cf3752835bda2f4f476f118118ef4208b6`;' docs/TDI-25-CAMPAIGN-50.md
-grep -Fq '| 27 | Paired uncertainty engine | **current candidate**' docs/TDI-25-CAMPAIGN-50.md
+grep -Fq '| 27 | Paired uncertainty engine | **current candidate** in #683;' docs/TDI-25-CAMPAIGN-50.md
 grep -Fq '**26/50 merged**' docs/TDI-25-CAMPAIGN-50.md
 ! grep -Fq '#PRNUM' docs/TDI-25-CAMPAIGN-50.md
