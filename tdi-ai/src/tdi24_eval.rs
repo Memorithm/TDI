@@ -85,9 +85,13 @@ pub const PAIRED_UNCERTAINTY_CONTRACT: &str = "tdi24-paired-uncertainty-v1";
 /// Nominal two-sided confidence level for Stage-C paired uncertainty summaries.
 pub const PAIRED_UNCERTAINTY_LEVEL: f64 = 0.95;
 
-/// Φ^{-1}(0.975) critical value for two-sided 95% normal / Wilson intervals.
+/// Φ^{-1}(0.975) critical value for two-sided 95% Wilson intervals.
 /// Deterministic constant; no RNG and no runtime table lookup.
 pub const NORMAL_CRITICAL_Z_95: f64 = 1.959_963_984_540_054;
+
+/// ln(2 / 0.05), used by deterministic two-sided 95% Hoeffding bounds.
+/// Kept as a literal so the uncertainty surface does not depend on runtime logs.
+pub const HOEFFDING_LOG_40: f64 = 3.688_879_454_113_936_3;
 
 /// Maximum cases admitted to one non-final evaluator run.
 pub const MAX_CASES_PER_RUN: u64 = 64;
@@ -955,21 +959,24 @@ pub fn validate_metric_registry(registry: &MetricRegistry) -> Result<(), EvalErr
 /// Interval construction method retained on every Stage-C uncertainty summary.
 ///
 /// Choice (documented, deterministic, no RNG):
-/// - [`UncertaintyMethod::WilsonScore`] for single-arm accuracy rates
-///   (binomial proportions). Wilson is preferred over the plain Wald interval
-///   near 0/1 and remains closed-form.
-/// - [`UncertaintyMethod::NormalApproxPairedDifference`] (Wald / normal
-///   approximation) for the mean of per-pair outcome differences
-///   `d_i = I(C6 matches) - I(V6 matches) ∈ {-1,0,1}`. The paired-difference
-///   mean equals `p_c6 - p_v6`; its sampling distribution is not a single
-///   binomial, so Wilson does not apply directly. Bootstrap is intentionally
-///   out of scope for this non-executing slice.
+/// - [`UncertaintyMethod::WilsonScore`] for single-arm accuracy rates when
+///   callers provide independent revealed match bits.
+/// - [`UncertaintyMethod::BoundedHoeffdingPairedDifference`] for direct paired
+///   differences in [-1, 1]. The finite-sample bound remains non-degenerate at
+///   all-tie and all-win boundaries.
+/// - The cluster-aware variants treat each record `group_id` as one independent
+///   unit and use the observed cluster sizes in the Hoeffding range term. This
+///   preserves related mirrored/reflected/reversal/nuisance cases as clusters.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum UncertaintyMethod {
-    /// Wilson score interval on a single-arm match-oracle accuracy rate.
+    /// Wilson score interval on an independent single-arm match-oracle rate.
     WilsonScore,
-    /// Normal approximation CI on the mean of paired V6/C6 outcome differences.
-    NormalApproxPairedDifference,
+    /// Bounded Hoeffding interval on independent paired differences.
+    BoundedHoeffdingPairedDifference,
+    /// Cluster-aware Hoeffding interval on a Bernoulli mean.
+    ClusterHoeffdingBernoulliMean,
+    /// Cluster-aware Hoeffding interval on paired differences.
+    ClusterHoeffdingPairedDifference,
 }
 
 impl UncertaintyMethod {
@@ -978,7 +985,13 @@ impl UncertaintyMethod {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::WilsonScore => "wilson_score",
-            Self::NormalApproxPairedDifference => "normal_approx_paired_difference",
+            Self::BoundedHoeffdingPairedDifference => {
+                "bounded_hoeffding_paired_difference"
+            }
+            Self::ClusterHoeffdingBernoulliMean => "cluster_hoeffding_bernoulli_mean",
+            Self::ClusterHoeffdingPairedDifference => {
+                "cluster_hoeffding_paired_difference"
+            }
         }
     }
 }
@@ -1093,55 +1106,86 @@ fn wilson_score_interval(successes: u64, n: u64) -> Result<ConfidenceInterval, E
     )
 }
 
-/// Normal-approximation CI on the mean of paired outcome differences.
-fn normal_approx_paired_difference_ci(
-    differences: &[f64],
-) -> Result<(f64, ConfidenceInterval), EvalError> {
-    let n = differences.len();
-    if n == 0 {
-        return Err(EvalError::PairedUncertaintyInvalid {
-            reason: "empty_pairs",
-        });
-    }
-    // Sample SD (Bessel) requires at least two pairs; a single observation
-    // cannot support a nominal 95% normal-approx interval.
+/// Distribution-free Hoeffding interval on a bounded mean.
+///
+/// `sum_squared_cluster_sizes` is `n` for independent rows and
+/// `sum_g n_g^2` for record groups. The paired-difference range is [-1, 1]
+/// (width two); Bernoulli means use [0, 1] (width one). Bounds are clipped to
+/// the natural range and remain non-degenerate at finite-sample boundaries.
+fn bounded_hoeffding_mean_interval(
+    mean: f64,
+    n: usize,
+    sum_squared_cluster_sizes: u64,
+    lower_bound: f64,
+    upper_bound: f64,
+    method: UncertaintyMethod,
+) -> Result<ConfidenceInterval, EvalError> {
     if n < 2 {
         return Err(EvalError::PairedUncertaintyInvalid {
             reason: "insufficient_pairs",
         });
     }
+    if !mean.is_finite() || lower_bound >= upper_bound {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "non_finite",
+        });
+    }
+    let n_u64 = n as u64;
+    if sum_squared_cluster_sizes < n_u64
+        || sum_squared_cluster_sizes > n_u64.saturating_mul(n_u64)
+    {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "invalid_cluster_sizes",
+        });
+    }
     let n_f = n as f64;
-    let mean = differences.iter().sum::<f64>() / n_f;
-    if !mean.is_finite() {
+    let range_width = upper_bound - lower_bound;
+    let margin = range_width
+        * ((sum_squared_cluster_sizes as f64 * HOEFFDING_LOG_40) / (2.0 * n_f * n_f))
+            .sqrt();
+    if !margin.is_finite() {
         return Err(EvalError::PairedUncertaintyInvalid {
             reason: "non_finite",
         });
     }
-    let variance = {
-        let mut ss = 0.0;
-        for d in differences {
-            let delta = d - mean;
-            ss += delta * delta;
-        }
-        ss / ((n - 1) as f64)
-    };
-    if !variance.is_finite() || variance < 0.0 {
-        return Err(EvalError::PairedUncertaintyInvalid {
-            reason: "non_finite",
-        });
-    }
-    let se = (variance / n_f).sqrt();
-    if !se.is_finite() {
-        return Err(EvalError::PairedUncertaintyInvalid {
-            reason: "non_finite",
-        });
-    }
-    let margin = NORMAL_CRITICAL_Z_95 * se;
-    let ci = ConfidenceInterval::checked(
-        mean - margin,
-        mean + margin,
+    ConfidenceInterval::checked(
+        (mean - margin).max(lower_bound),
+        (mean + margin).min(upper_bound),
         PAIRED_UNCERTAINTY_LEVEL,
-        UncertaintyMethod::NormalApproxPairedDifference,
+        method,
+    )
+}
+
+/// Bounded finite-sample CI on the mean of paired outcome differences.
+fn bounded_hoeffding_paired_difference_ci(
+    differences: &[f64],
+    sum_squared_cluster_sizes: u64,
+    cluster_aware: bool,
+) -> Result<(f64, ConfidenceInterval), EvalError> {
+    if differences.is_empty() {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "empty_pairs",
+        });
+    }
+    if differences.len() < 2 {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "insufficient_pairs",
+        });
+    }
+    let n_f = differences.len() as f64;
+    let mean = differences.iter().sum::<f64>() / n_f;
+    let method = if cluster_aware {
+        UncertaintyMethod::ClusterHoeffdingPairedDifference
+    } else {
+        UncertaintyMethod::BoundedHoeffdingPairedDifference
+    };
+    let ci = bounded_hoeffding_mean_interval(
+        mean,
+        differences.len(),
+        sum_squared_cluster_sizes,
+        -1.0,
+        1.0,
+        method,
     )?;
     Ok((mean, ci))
 }
@@ -1180,6 +1224,16 @@ pub fn summarize_paired_uncertainty(
     v6_matches: &[RevealedMatchOutcome],
     c6_matches: &[RevealedMatchOutcome],
     registry: &MetricRegistry,
+) -> Result<PairedEffectSummary, EvalError> {
+    summarize_paired_uncertainty_inner(split, v6_matches, c6_matches, registry, None)
+}
+
+fn summarize_paired_uncertainty_inner(
+    split: DataSplit,
+    v6_matches: &[RevealedMatchOutcome],
+    c6_matches: &[RevealedMatchOutcome],
+    registry: &MetricRegistry,
+    cluster_sum_squares: Option<u64>,
 ) -> Result<PairedEffectSummary, EvalError> {
     validate_non_final_split(split)?;
     require_pinned_metric_registry(registry)?;
@@ -1226,10 +1280,39 @@ pub fn summarize_paired_uncertainty(
         });
     }
 
-    let v6_accuracy_ci = wilson_score_interval(v6_successes, n as u64)?;
-    let c6_accuracy_ci = wilson_score_interval(c6_successes, n as u64)?;
+    let cluster_aware = cluster_sum_squares.is_some();
+    let sum_squared_cluster_sizes = cluster_sum_squares.unwrap_or(n as u64);
+    let (v6_accuracy_ci, c6_accuracy_ci) = if cluster_aware {
+        (
+            bounded_hoeffding_mean_interval(
+                v6_accuracy,
+                n,
+                sum_squared_cluster_sizes,
+                0.0,
+                1.0,
+                UncertaintyMethod::ClusterHoeffdingBernoulliMean,
+            )?,
+            bounded_hoeffding_mean_interval(
+                c6_accuracy,
+                n,
+                sum_squared_cluster_sizes,
+                0.0,
+                1.0,
+                UncertaintyMethod::ClusterHoeffdingBernoulliMean,
+            )?,
+        )
+    } else {
+        (
+            wilson_score_interval(v6_successes, n as u64)?,
+            wilson_score_interval(c6_successes, n as u64)?,
+        )
+    };
     let (paired_difference_mean, paired_difference_ci) =
-        normal_approx_paired_difference_ci(&differences)?;
+        bounded_hoeffding_paired_difference_ci(
+            &differences,
+            sum_squared_cluster_sizes,
+            cluster_aware,
+        )?;
 
     // Consistency: mean of paired differences must equal accuracy gap.
     let expected_gap = c6_accuracy - v6_accuracy;
@@ -1315,6 +1398,28 @@ pub fn revealed_matches_from_records(
     Ok(out)
 }
 
+/// Return sum_g n_g^2 for the record grouping, bounded by the evaluator cap.
+fn sum_squared_group_sizes(records: &[EvalRecord]) -> Result<u64, EvalError> {
+    let mut groups: Vec<(u64, u64)> = Vec::with_capacity(records.len());
+    for record in records {
+        if let Some((_, size)) = groups
+            .iter_mut()
+            .find(|(group_id, _)| *group_id == record.group_id)
+        {
+            *size += 1;
+        } else {
+            groups.push((record.group_id, 1));
+        }
+    }
+    groups.into_iter().try_fold(0_u64, |sum, (_, size)| {
+        size.checked_mul(size)
+            .and_then(|square| sum.checked_add(square))
+            .ok_or(EvalError::PairedUncertaintyInvalid {
+                reason: "invalid_cluster_sizes",
+            })
+    })
+}
+
 /// Summarise paired V6/C6 [`EvalRecord`] slices without re-entering label oracles.
 ///
 /// Records must be equal-length and identity-aligned in order: matching
@@ -1342,9 +1447,16 @@ pub fn summarize_paired_uncertainty_from_records(
             });
         }
     }
+    let cluster_sum_squares = sum_squared_group_sizes(v6_records)?;
     let v6 = revealed_matches_from_records(v6_records, EvalArm::V6, split)?;
     let c6 = revealed_matches_from_records(c6_records, EvalArm::C6, split)?;
-    summarize_paired_uncertainty(split, &v6, &c6, registry)
+    summarize_paired_uncertainty_inner(
+        split,
+        &v6,
+        &c6,
+        registry,
+        Some(cluster_sum_squares),
+    )
 }
 
 /// Reject any split identity outside Development/Validation.
@@ -2122,8 +2234,8 @@ mod tests {
         assert_eq!(PAIRED_UNCERTAINTY_CONTRACT, "tdi24-paired-uncertainty-v1");
         assert_eq!(UncertaintyMethod::WilsonScore.as_str(), "wilson_score");
         assert_eq!(
-            UncertaintyMethod::NormalApproxPairedDifference.as_str(),
-            "normal_approx_paired_difference"
+            UncertaintyMethod::BoundedHoeffdingPairedDifference.as_str(),
+            "bounded_hoeffding_paired_difference"
         );
 
         // V6: T T F F  -> accuracy 0.5
@@ -2149,7 +2261,7 @@ mod tests {
         assert!(summary.experimental_non_final);
         assert_eq!(
             summary.paired_difference_ci.method,
-            UncertaintyMethod::NormalApproxPairedDifference
+            UncertaintyMethod::BoundedHoeffdingPairedDifference
         );
         assert_eq!(
             summary.v6_accuracy_ci.method,
@@ -2161,12 +2273,42 @@ mod tests {
         );
         assert!(summary.paired_difference_ci.lower <= summary.paired_difference_mean);
         assert!(summary.paired_difference_ci.upper >= summary.paired_difference_mean);
+        assert!(summary.paired_difference_ci.lower < summary.paired_difference_ci.upper);
         assert!(summary.v6_accuracy_ci.lower <= summary.v6_accuracy);
         assert!(summary.v6_accuracy_ci.upper >= summary.v6_accuracy);
 
         let validation =
             summarize_paired_uncertainty(DataSplit::Validation, &v6, &c6, &registry).unwrap();
         assert_eq!(validation.split, DataSplit::Validation);
+    }
+
+    #[test]
+    fn paired_uncertainty_boundary_intervals_remain_non_degenerate() {
+        let registry = MetricRegistry::pinned();
+        let ties = matches(&[true; MAX_CASES_PER_RUN as usize]);
+        let all_ties = summarize_paired_uncertainty(
+            DataSplit::Development,
+            &ties,
+            &ties,
+            &registry,
+        )
+        .unwrap();
+        assert_eq!(all_ties.paired_difference_mean, 0.0);
+        assert!(all_ties.paired_difference_ci.lower < 0.0);
+        assert!(all_ties.paired_difference_ci.upper > 0.0);
+
+        let v6 = matches(&[false; MAX_CASES_PER_RUN as usize]);
+        let c6 = matches(&[true; MAX_CASES_PER_RUN as usize]);
+        let all_c6_wins = summarize_paired_uncertainty(
+            DataSplit::Development,
+            &v6,
+            &c6,
+            &registry,
+        )
+        .unwrap();
+        assert_eq!(all_c6_wins.paired_difference_mean, 1.0);
+        assert!(all_c6_wins.paired_difference_ci.lower < 1.0);
+        assert_eq!(all_c6_wins.paired_difference_ci.upper, 1.0);
     }
 
     #[test]
@@ -2214,7 +2356,7 @@ mod tests {
                 0.0,
                 f64::INFINITY,
                 PAIRED_UNCERTAINTY_LEVEL,
-                UncertaintyMethod::NormalApproxPairedDifference,
+                UncertaintyMethod::BoundedHoeffdingPairedDifference,
             ),
             Err(EvalError::PairedUncertaintyInvalid {
                 reason: "non_finite",
@@ -2364,6 +2506,20 @@ mod tests {
         assert!((summary.v6_accuracy - 0.5).abs() < 1e-12);
         assert!((summary.c6_accuracy - 1.0).abs() < 1e-12);
         assert!((summary.paired_difference_mean - 0.5).abs() < 1e-12);
+        assert_eq!(sum_squared_group_sizes(&v6_records).unwrap(), 4);
+        assert_eq!(
+            summary.v6_accuracy_ci.method,
+            UncertaintyMethod::ClusterHoeffdingBernoulliMean
+        );
+        assert_eq!(
+            summary.c6_accuracy_ci.method,
+            UncertaintyMethod::ClusterHoeffdingBernoulliMean
+        );
+        assert_eq!(
+            summary.paired_difference_ci.method,
+            UncertaintyMethod::ClusterHoeffdingPairedDifference
+        );
+        assert!(summary.paired_difference_ci.lower < summary.paired_difference_ci.upper);
 
         // Typed surface admits only RevealedMatchOutcome / EvalRecord scores —
         // there is no ProtectedLabel constructor on the uncertainty API.
