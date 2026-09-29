@@ -10,10 +10,10 @@ use core::fmt;
 
 use super::tdi22_torsor::TORSOR_CONTRACT;
 use super::tdi25_tasks::{
-    DataSplit, LabeledCase, MixedGeometryInput, MixedGeometryOracle, PROTECTED_LABEL_CONTRACT,
-    MIXED_GEOMETRY_TASK_CONTRACT, TORSOR_TRANSPORT_TASK_CONTRACT, TorsorTransportInput,
-    TorsorTransportOracle, canonicalize_mixed_geometry_input,
-    canonicalize_torsor_transport_input, run_inference_callback,
+    DataSplit, LabeledCase, MIXED_GEOMETRY_TASK_CONTRACT, MixedGeometryInput, MixedGeometryOracle,
+    PROTECTED_LABEL_CONTRACT, TORSOR_TRANSPORT_TASK_CONTRACT, TorsorTransportInput,
+    TorsorTransportOracle, canonicalize_mixed_geometry_input, canonicalize_torsor_transport_input,
+    run_inference_callback,
 };
 use super::tdi25_torsor_chiral::{
     PINNED_SOURCE_CONTRACTS, TaskFamily, Tdi25Error, torsor_arm_score, validate_source_contracts,
