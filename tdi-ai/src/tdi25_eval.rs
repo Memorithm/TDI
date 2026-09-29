@@ -30,7 +30,14 @@
 //! match bits only (no ProtectedLabel surface). Fail-closed on empty pairs,
 //! length/identity mismatch, non-finite statistics, registry drift, and
 //! protected/final splits. Family + seed-block tagging keeps later stratified
-//! synthesis (slice 28) from hiding reversals. All arms consume sealed
+//! synthesis (slice 28) from hiding reversals. Slice 28 adds family-stratified
+//! synthesis under `tdi25-family-stratified-synthesis-v1`: per-family signed
+//! effect / outcome class (positive/null/harmful/inconclusive) from paired
+//! effect summaries, with an optional pooled summary only when no family sign
+//! reversal is present versus the pooled sign; otherwise `sign_reversal_present`
+//! is set and a clean pooled win cannot be claimed. Fail-closed on missing
+//! required families, registry/contract drift, and protected/final. Deterministic;
+//! no RNG; no ProtectedLabel. All arms consume sealed
 //! Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
@@ -82,6 +89,17 @@ pub const METRIC_REGISTRY_CONTRACT: &str = "tdi25-metric-registry-v1";
 
 /// Versioned paired uncertainty engine contract.
 pub const PAIRED_UNCERTAINTY_CONTRACT: &str = "tdi25-paired-uncertainty-v1";
+
+/// Versioned family-stratified synthesis contract.
+pub const FAMILY_STRATIFIED_SYNTHESIS_CONTRACT: &str = "tdi25-family-stratified-synthesis-v1";
+
+/// Canonical ordered families required for a complete Stage-C stratified synthesis.
+pub const REQUIRED_SYNTHESIS_FAMILIES: &[TaskFamily] = &[
+    TaskFamily::TorsorFavorable,
+    TaskFamily::ChiralFavorable,
+    TaskFamily::Mixed,
+    TaskFamily::Neutral,
+];
 
 /// Nominal two-sided confidence level for Stage-C paired uncertainty summaries.
 pub const PAIRED_UNCERTAINTY_LEVEL: f64 = 0.95;
@@ -2201,6 +2219,398 @@ pub fn summarize_paired_uncertainty_from_records(
     summarize_paired_uncertainty_inner(split, family, seed_block, &t6, &c6, registry, None)
 }
 
+/// Signed effect class retained on family-stratified synthesis reports.
+///
+/// Classification uses the retained paired-difference CI:
+/// - [`SignedEffectClass::Positive`] when the interval lies entirely above zero
+/// - [`SignedEffectClass::Harmful`] when the interval lies entirely below zero
+/// - [`SignedEffectClass::Null`] when the interval contains zero
+/// - [`SignedEffectClass::Inconclusive`] reserved for non-classifiable finite cases
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SignedEffectClass {
+    /// Paired difference favors C6 (CI entirely above zero).
+    Positive,
+    /// No signed claim (CI contains zero).
+    Null,
+    /// Paired difference favors T6 / harms a C6-favoring claim (CI entirely below zero).
+    Harmful,
+    /// Finite but not classifiable under the closed Stage-C rules.
+    Inconclusive,
+}
+
+impl SignedEffectClass {
+    /// Stable lowercase class id.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Positive => "positive",
+            Self::Null => "null",
+            Self::Harmful => "harmful",
+            Self::Inconclusive => "inconclusive",
+        }
+    }
+}
+
+/// Algebraic sign of a paired difference mean, used for reversal detection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum EffectSign {
+    /// Strictly positive mean (`C6 - T6 > 0`).
+    Positive,
+    /// Strictly negative mean (`C6 - T6 < 0`).
+    Negative,
+    /// Exact zero mean.
+    Zero,
+}
+
+impl EffectSign {
+    /// Stable lowercase sign id.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Positive => "positive",
+            Self::Negative => "negative",
+            Self::Zero => "zero",
+        }
+    }
+}
+
+/// Per-family signed effect retained by stratified synthesis.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FamilySignedEffect {
+    pub family: TaskFamily,
+    pub seed_block: u64,
+    pub n_pairs: u64,
+    pub paired_difference_mean: f64,
+    pub paired_difference_ci: ConfidenceInterval,
+    pub effect_sign: EffectSign,
+    pub outcome_class: SignedEffectClass,
+    pub primary_family_metric: PrimaryFamilyMetricId,
+}
+
+/// Optional pooled summary admitted only when no family sign reversal is present.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PooledSynthesisSummary {
+    pub n_pairs: u64,
+    pub paired_difference_mean: f64,
+    pub effect_sign: EffectSign,
+    pub outcome_class: SignedEffectClass,
+    pub cross_family_summary: CrossFamilySummaryMetricId,
+}
+
+/// Family-stratified synthesis report. Pooled wins cannot hide family reversals.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FamilyStratifiedSynthesisReport {
+    pub split: DataSplit,
+    pub family_effects: Vec<FamilySignedEffect>,
+    /// True when at least one family is Positive and another is Negative.
+    pub sign_reversal_present: bool,
+    /// Present only when [`Self::sign_reversal_present`] is false.
+    pub pooled_summary: Option<PooledSynthesisSummary>,
+    /// True only when a pooled Positive claim is admitted without reversal.
+    pub claims_clean_pooled_win: bool,
+    pub synthesis_contract: &'static str,
+    pub uncertainty_contract: &'static str,
+    pub metric_registry_contract: &'static str,
+    pub cross_family_summary: CrossFamilySummaryMetricId,
+    pub experimental_non_final: bool,
+}
+
+/// Map a paired-difference mean onto its algebraic sign.
+#[must_use]
+pub fn effect_sign_from_mean(mean: f64) -> EffectSign {
+    if mean > 0.0 {
+        EffectSign::Positive
+    } else if mean < 0.0 {
+        EffectSign::Negative
+    } else {
+        EffectSign::Zero
+    }
+}
+
+/// Classify a paired-difference CI into a closed Stage-C outcome class.
+pub fn classify_signed_effect(
+    mean: f64,
+    ci: ConfidenceInterval,
+) -> Result<SignedEffectClass, EvalError> {
+    if !mean.is_finite() || !ci.lower.is_finite() || !ci.upper.is_finite() {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "non_finite",
+        });
+    }
+    if ci.lower > ci.upper {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "non_finite",
+        });
+    }
+    if ci.lower > 0.0 {
+        Ok(SignedEffectClass::Positive)
+    } else if ci.upper < 0.0 {
+        Ok(SignedEffectClass::Harmful)
+    } else {
+        // Interval contains zero: null rather than a signed claim.
+        Ok(SignedEffectClass::Null)
+    }
+}
+
+fn family_signed_effect_from_summary(
+    summary: &PairedEffectSummary,
+) -> Result<FamilySignedEffect, EvalError> {
+    if !summary.paired_difference_mean.is_finite() {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "non_finite",
+        });
+    }
+    if summary.uncertainty_contract != PAIRED_UNCERTAINTY_CONTRACT {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "uncertainty_contract_mismatch",
+        });
+    }
+    if summary.metric_registry_contract != METRIC_REGISTRY_CONTRACT {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "metric_registry_contract_mismatch",
+        });
+    }
+    if summary.primary_family_metric != primary_family_metric_for(summary.family) {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "primary_family_metric_mismatch",
+        });
+    }
+    let outcome_class =
+        classify_signed_effect(summary.paired_difference_mean, summary.paired_difference_ci)?;
+    Ok(FamilySignedEffect {
+        family: summary.family,
+        seed_block: summary.seed_block,
+        n_pairs: summary.n_pairs,
+        paired_difference_mean: summary.paired_difference_mean,
+        paired_difference_ci: summary.paired_difference_ci,
+        effect_sign: effect_sign_from_mean(summary.paired_difference_mean),
+        outcome_class,
+        primary_family_metric: summary.primary_family_metric,
+    })
+}
+
+fn detect_sign_reversal(effects: &[FamilySignedEffect]) -> bool {
+    let mut saw_positive = false;
+    let mut saw_negative = false;
+    for effect in effects {
+        match effect.effect_sign {
+            EffectSign::Positive => saw_positive = true,
+            EffectSign::Negative => saw_negative = true,
+            EffectSign::Zero => {}
+        }
+    }
+    saw_positive && saw_negative
+}
+
+fn pooled_summary_from_effects(
+    effects: &[FamilySignedEffect],
+    cross_family_summary: CrossFamilySummaryMetricId,
+) -> Result<PooledSynthesisSummary, EvalError> {
+    if effects.is_empty() {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "empty_families",
+        });
+    }
+    let mut total_pairs = 0_u64;
+    let mut weighted = 0.0_f64;
+    for effect in effects {
+        if effect.n_pairs == 0 {
+            return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+                reason: "empty_pairs",
+            });
+        }
+        total_pairs = total_pairs.checked_add(effect.n_pairs).ok_or(
+            EvalError::FamilyStratifiedSynthesisInvalid {
+                reason: "non_finite",
+            },
+        )?;
+        weighted += effect.paired_difference_mean * (effect.n_pairs as f64);
+    }
+    let mean = weighted / (total_pairs as f64);
+    if !mean.is_finite() {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "non_finite",
+        });
+    }
+    // Pooled outcome class uses the algebraic sign of the weighted mean only:
+    // family CIs are not fused here. Positive/Harmful/Null mirror the mean sign.
+    let outcome_class = match effect_sign_from_mean(mean) {
+        EffectSign::Positive => SignedEffectClass::Positive,
+        EffectSign::Negative => SignedEffectClass::Harmful,
+        EffectSign::Zero => SignedEffectClass::Null,
+    };
+    Ok(PooledSynthesisSummary {
+        n_pairs: total_pairs,
+        paired_difference_mean: mean,
+        effect_sign: effect_sign_from_mean(mean),
+        outcome_class,
+        cross_family_summary,
+    })
+}
+
+/// Synthesise family-stratified signed effects from per-family paired summaries.
+///
+/// Requires Development/Validation and the pinned metric registry. When
+/// `require_complete_families` is true, every family in
+/// [`REQUIRED_SYNTHESIS_FAMILIES`] must appear exactly once. A pooled summary is
+/// emitted only when no Positive/Negative family sign reversal is present;
+/// otherwise `sign_reversal_present` is set and `claims_clean_pooled_win` stays
+/// false so a pooled win cannot hide a family-specific reversal.
+pub fn synthesize_family_stratified_effects(
+    split: DataSplit,
+    family_summaries: &[PairedEffectSummary],
+    registry: &MetricRegistry,
+    require_complete_families: bool,
+) -> Result<FamilyStratifiedSynthesisReport, EvalError> {
+    validate_non_final_split(split)?;
+    require_pinned_metric_registry(registry)?;
+    if family_summaries.is_empty() {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "empty_families",
+        });
+    }
+
+    let mut effects = Vec::with_capacity(family_summaries.len());
+    for summary in family_summaries {
+        if summary.split != split {
+            return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+                reason: "split_mismatch",
+            });
+        }
+        if effects
+            .iter()
+            .any(|prior: &FamilySignedEffect| prior.family == summary.family)
+        {
+            return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+                reason: "duplicate_family",
+            });
+        }
+        effects.push(family_signed_effect_from_summary(summary)?);
+    }
+
+    // Emit families in the canonical Stage-C order when present.
+    effects.sort_by_key(|effect| {
+        REQUIRED_SYNTHESIS_FAMILIES
+            .iter()
+            .position(|family| *family == effect.family)
+            .unwrap_or(REQUIRED_SYNTHESIS_FAMILIES.len())
+    });
+
+    if require_complete_families {
+        for required in REQUIRED_SYNTHESIS_FAMILIES {
+            if !effects.iter().any(|effect| effect.family == *required) {
+                return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+                    reason: "missing_family",
+                });
+            }
+        }
+        if effects.len() != REQUIRED_SYNTHESIS_FAMILIES.len() {
+            return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+                reason: "missing_family",
+            });
+        }
+    }
+
+    let sign_reversal_present = detect_sign_reversal(&effects);
+    let cross_family_summary = registry.cross_family_summary;
+    let pooled_summary = if sign_reversal_present {
+        None
+    } else {
+        Some(pooled_summary_from_effects(&effects, cross_family_summary)?)
+    };
+    let claims_clean_pooled_win = matches!(
+        pooled_summary.as_ref().map(|pooled| pooled.outcome_class),
+        Some(SignedEffectClass::Positive)
+    );
+
+    Ok(FamilyStratifiedSynthesisReport {
+        split,
+        family_effects: effects,
+        sign_reversal_present,
+        pooled_summary,
+        claims_clean_pooled_win,
+        synthesis_contract: FAMILY_STRATIFIED_SYNTHESIS_CONTRACT,
+        uncertainty_contract: PAIRED_UNCERTAINTY_CONTRACT,
+        metric_registry_contract: registry.registry_contract,
+        cross_family_summary,
+        experimental_non_final: true,
+    })
+}
+
+/// Group revealed T6/C6 match outcomes by family, summarise each family seed
+/// block through the paired uncertainty engine, then run stratified synthesis.
+///
+/// All outcomes must share `split`. Each family present must form a single
+/// seed-block pair admitted by [`summarize_paired_uncertainty_by_seed_block`].
+/// Does not accept [`super::tdi25_tasks::ProtectedLabel`].
+pub fn synthesize_family_stratified_from_revealed_outcomes(
+    split: DataSplit,
+    t6_matches: &[RevealedMatchOutcome],
+    c6_matches: &[RevealedMatchOutcome],
+    registry: &MetricRegistry,
+    require_complete_families: bool,
+) -> Result<FamilyStratifiedSynthesisReport, EvalError> {
+    validate_non_final_split(split)?;
+    require_pinned_metric_registry(registry)?;
+    if t6_matches.is_empty() || c6_matches.is_empty() {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "empty_pairs",
+        });
+    }
+    require_pair_identity_alignment(t6_matches, c6_matches)?;
+
+    let mut families: Vec<TaskFamily> = Vec::new();
+    for outcome in t6_matches {
+        if outcome.split != split {
+            return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+                reason: "split_mismatch",
+            });
+        }
+        if !families.contains(&outcome.family) {
+            families.push(outcome.family);
+        }
+    }
+
+    let mut summaries = Vec::with_capacity(families.len());
+    for family in families {
+        let t6_family: Vec<RevealedMatchOutcome> = t6_matches
+            .iter()
+            .copied()
+            .filter(|outcome| outcome.family == family)
+            .collect();
+        let c6_family: Vec<RevealedMatchOutcome> = c6_matches
+            .iter()
+            .copied()
+            .filter(|outcome| outcome.family == family)
+            .collect();
+        if t6_family.is_empty() {
+            return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+                reason: "empty_pairs",
+            });
+        }
+        let seed_block = t6_family[0].seed_block;
+        for outcome in &t6_family {
+            if outcome.seed_block != seed_block {
+                return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+                    reason: "seed_block_mismatch",
+                });
+            }
+        }
+        let summary = summarize_paired_uncertainty_by_seed_block(
+            split, family, seed_block, &t6_family, &c6_family, registry,
+        )
+        .map_err(|err| match err {
+            EvalError::PairedUncertaintyInvalid { reason } => {
+                EvalError::FamilyStratifiedSynthesisInvalid { reason }
+            }
+            other => other,
+        })?;
+        summaries.push(summary);
+    }
+
+    synthesize_family_stratified_effects(split, &summaries, registry, require_complete_families)
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -2257,6 +2667,10 @@ pub enum EvalError {
     ProtectedOrFinalSplit,
     /// Paired uncertainty engine rejected the request fail-closed.
     PairedUncertaintyInvalid {
+        reason: &'static str,
+    },
+    /// Family-stratified synthesis rejected the request fail-closed.
+    FamilyStratifiedSynthesisInvalid {
         reason: &'static str,
     },
 }
@@ -2323,6 +2737,9 @@ impl fmt::Display for EvalError {
                 .write_str("TDI-25 evaluator rejected protected/final or unknown split identity"),
             Self::PairedUncertaintyInvalid { reason } => {
                 write!(formatter, "paired uncertainty invalid: {reason}")
+            }
+            Self::FamilyStratifiedSynthesisInvalid { reason } => {
+                write!(formatter, "family-stratified synthesis invalid: {reason}")
             }
         }
     }
@@ -4146,5 +4563,257 @@ mod tests {
             })
         );
         let _ = &mut validation_bits;
+    }
+
+    fn family_summary(
+        split: DataSplit,
+        family: TaskFamily,
+        seed_block: u64,
+        t6_bits: &[(u64, bool)],
+        c6_bits: &[(u64, bool)],
+    ) -> PairedEffectSummary {
+        let t6 = matches(split, family, seed_block, t6_bits);
+        let c6 = matches(split, family, seed_block, c6_bits);
+        summarize_paired_uncertainty_by_seed_block(
+            split,
+            family,
+            seed_block,
+            &t6,
+            &c6,
+            &MetricRegistry::pinned(),
+        )
+        .unwrap()
+    }
+
+    fn all_c6_win_bits(n: u64) -> Vec<(u64, bool)> {
+        (0..n).map(|case_id| (case_id, true)).collect()
+    }
+
+    fn all_t6_win_bits(n: u64) -> Vec<(u64, bool)> {
+        (0..n).map(|case_id| (case_id, true)).collect()
+    }
+
+    #[test]
+    fn family_stratified_synthesis_accepts_concordant_families() {
+        assert_eq!(
+            FAMILY_STRATIFIED_SYNTHESIS_CONTRACT,
+            "tdi25-family-stratified-synthesis-v1"
+        );
+        assert_eq!(SignedEffectClass::Positive.as_str(), "positive");
+        assert_eq!(SignedEffectClass::Null.as_str(), "null");
+        assert_eq!(SignedEffectClass::Harmful.as_str(), "harmful");
+        assert_eq!(EffectSign::Negative.as_str(), "negative");
+        assert_eq!(REQUIRED_SYNTHESIS_FAMILIES.len(), 4);
+
+        let split = DataSplit::Development;
+        let n = MAX_CASES_PER_RUN;
+        let t6_false: Vec<(u64, bool)> = (0..n).map(|case_id| (case_id, false)).collect();
+        let c6_true = all_c6_win_bits(n);
+        let summaries = [
+            family_summary(split, TaskFamily::TorsorFavorable, 1, &t6_false, &c6_true),
+            family_summary(split, TaskFamily::ChiralFavorable, 1, &t6_false, &c6_true),
+            family_summary(split, TaskFamily::Mixed, 1, &t6_false, &c6_true),
+            family_summary(split, TaskFamily::Neutral, 1, &t6_false, &c6_true),
+        ];
+        let report = synthesize_family_stratified_effects(
+            split,
+            &summaries,
+            &MetricRegistry::pinned(),
+            true,
+        )
+        .unwrap();
+
+        assert!(!report.sign_reversal_present);
+        assert!(report.claims_clean_pooled_win);
+        assert!(report.experimental_non_final);
+        assert_eq!(
+            report.synthesis_contract,
+            FAMILY_STRATIFIED_SYNTHESIS_CONTRACT
+        );
+        assert_eq!(report.uncertainty_contract, PAIRED_UNCERTAINTY_CONTRACT);
+        assert_eq!(report.metric_registry_contract, METRIC_REGISTRY_CONTRACT);
+        assert_eq!(
+            report.cross_family_summary,
+            CrossFamilySummaryMetricId::CrossFamilyPairedSummary
+        );
+        assert_eq!(report.family_effects.len(), 4);
+        for effect in &report.family_effects {
+            assert_eq!(effect.effect_sign, EffectSign::Positive);
+            assert_eq!(effect.outcome_class, SignedEffectClass::Positive);
+        }
+        let pooled = report
+            .pooled_summary
+            .expect("pooled admitted without reversal");
+        assert_eq!(pooled.effect_sign, EffectSign::Positive);
+        assert_eq!(pooled.outcome_class, SignedEffectClass::Positive);
+        assert_eq!(pooled.n_pairs, n * 4);
+        assert!((pooled.paired_difference_mean - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn family_stratified_synthesis_detects_torsor_positive_chiral_negative_reversal() {
+        let split = DataSplit::Validation;
+        let n = MAX_CASES_PER_RUN;
+        let t6_false: Vec<(u64, bool)> = (0..n).map(|case_id| (case_id, false)).collect();
+        let c6_true = all_c6_win_bits(n);
+        let t6_true = all_t6_win_bits(n);
+        let c6_false: Vec<(u64, bool)> = (0..n).map(|case_id| (case_id, false)).collect();
+
+        let ties_t6: Vec<(u64, bool)> = (0..n).map(|case_id| (case_id, true)).collect();
+        let ties_c6 = ties_t6.clone();
+        let summaries = [
+            family_summary(split, TaskFamily::TorsorFavorable, 2, &t6_false, &c6_true),
+            family_summary(split, TaskFamily::ChiralFavorable, 2, &t6_true, &c6_false),
+            family_summary(split, TaskFamily::Mixed, 2, &ties_t6, &ties_c6),
+            family_summary(split, TaskFamily::Neutral, 2, &ties_t6, &ties_c6),
+        ];
+        assert_eq!(summaries[0].family, TaskFamily::TorsorFavorable);
+        assert!(summaries[0].paired_difference_mean > 0.0);
+        assert_eq!(summaries[1].family, TaskFamily::ChiralFavorable);
+        assert!(summaries[1].paired_difference_mean < 0.0);
+
+        let report = synthesize_family_stratified_effects(
+            split,
+            &summaries,
+            &MetricRegistry::pinned(),
+            true,
+        )
+        .unwrap();
+
+        assert!(report.sign_reversal_present);
+        assert!(report.pooled_summary.is_none());
+        assert!(!report.claims_clean_pooled_win);
+        assert_eq!(
+            report.family_effects[0].outcome_class,
+            SignedEffectClass::Positive
+        );
+        assert_eq!(
+            report.family_effects[1].outcome_class,
+            SignedEffectClass::Harmful
+        );
+        assert_eq!(report.family_effects[0].effect_sign, EffectSign::Positive);
+        assert_eq!(report.family_effects[1].effect_sign, EffectSign::Negative);
+        assert_eq!(report.family_effects[2].effect_sign, EffectSign::Zero);
+        assert_eq!(report.family_effects[3].effect_sign, EffectSign::Zero);
+        assert_eq!(
+            report.family_effects[2].outcome_class,
+            SignedEffectClass::Null
+        );
+    }
+
+    #[test]
+    fn family_stratified_synthesis_rejects_incomplete_required_families() {
+        let split = DataSplit::Development;
+        let n = MAX_CASES_PER_RUN;
+        let t6_false: Vec<(u64, bool)> = (0..n).map(|case_id| (case_id, false)).collect();
+        let c6_true = all_c6_win_bits(n);
+        let incomplete = [
+            family_summary(split, TaskFamily::TorsorFavorable, 3, &t6_false, &c6_true),
+            family_summary(split, TaskFamily::ChiralFavorable, 3, &t6_false, &c6_true),
+            family_summary(split, TaskFamily::Mixed, 3, &t6_false, &c6_true),
+        ];
+        assert_eq!(
+            synthesize_family_stratified_effects(
+                split,
+                &incomplete,
+                &MetricRegistry::pinned(),
+                true,
+            ),
+            Err(EvalError::FamilyStratifiedSynthesisInvalid {
+                reason: "missing_family",
+            })
+        );
+
+        let partial = synthesize_family_stratified_effects(
+            split,
+            &incomplete,
+            &MetricRegistry::pinned(),
+            false,
+        )
+        .unwrap();
+        assert!(!partial.sign_reversal_present);
+        assert!(partial.claims_clean_pooled_win);
+        assert_eq!(partial.family_effects.len(), 3);
+
+        let duplicate = [
+            family_summary(split, TaskFamily::TorsorFavorable, 3, &t6_false, &c6_true),
+            family_summary(split, TaskFamily::TorsorFavorable, 4, &t6_false, &c6_true),
+        ];
+        assert_eq!(
+            synthesize_family_stratified_effects(
+                split,
+                &duplicate,
+                &MetricRegistry::pinned(),
+                false,
+            ),
+            Err(EvalError::FamilyStratifiedSynthesisInvalid {
+                reason: "duplicate_family",
+            })
+        );
+
+        assert_eq!(
+            synthesize_family_stratified_effects(split, &[], &MetricRegistry::pinned(), false,),
+            Err(EvalError::FamilyStratifiedSynthesisInvalid {
+                reason: "empty_families",
+            })
+        );
+    }
+
+    #[test]
+    fn family_stratified_synthesis_rejects_registry_drift_and_protected() {
+        let split = DataSplit::Development;
+        let n = MAX_CASES_PER_RUN;
+        let t6_false: Vec<(u64, bool)> = (0..n).map(|case_id| (case_id, false)).collect();
+        let c6_true = all_c6_win_bits(n);
+        let summaries = [
+            family_summary(split, TaskFamily::TorsorFavorable, 5, &t6_false, &c6_true),
+            family_summary(split, TaskFamily::ChiralFavorable, 5, &t6_false, &c6_true),
+            family_summary(split, TaskFamily::Mixed, 5, &t6_false, &c6_true),
+            family_summary(split, TaskFamily::Neutral, 5, &t6_false, &c6_true),
+        ];
+
+        let mut drifted = MetricRegistry::pinned();
+        drifted.registry_contract = "tdi25-metric-registry-drift";
+        assert_eq!(
+            synthesize_family_stratified_effects(split, &summaries, &drifted, true),
+            Err(EvalError::ContractMismatch("metric_registry_contract"))
+        );
+
+        assert_eq!(
+            parse_non_final_split("protected"),
+            Err(EvalError::ProtectedOrFinalSplit)
+        );
+        assert_eq!(
+            parse_non_final_split("final"),
+            Err(EvalError::ProtectedOrFinalSplit)
+        );
+
+        let mut t6_all = Vec::new();
+        let mut c6_all = Vec::new();
+        let torsor_t6: Vec<(u64, bool)> = (0..n).map(|case_id| (case_id, false)).collect();
+        let torsor_c6: Vec<(u64, bool)> = (0..n).map(|case_id| (case_id, true)).collect();
+        let chiral_t6: Vec<(u64, bool)> = (0..n).map(|case_id| (case_id, true)).collect();
+        let chiral_c6: Vec<(u64, bool)> = (0..n).map(|case_id| (case_id, false)).collect();
+        let tie: Vec<(u64, bool)> = (0..n).map(|case_id| (case_id, true)).collect();
+        for (family, t6_bits, c6_bits) in [
+            (TaskFamily::TorsorFavorable, &torsor_t6, &torsor_c6),
+            (TaskFamily::ChiralFavorable, &chiral_t6, &chiral_c6),
+            (TaskFamily::Mixed, &tie, &tie),
+            (TaskFamily::Neutral, &tie, &tie),
+        ] {
+            t6_all.extend(matches(split, family, 7, t6_bits));
+            c6_all.extend(matches(split, family, 7, c6_bits));
+        }
+        let from_outcomes = synthesize_family_stratified_from_revealed_outcomes(
+            split,
+            &t6_all,
+            &c6_all,
+            &MetricRegistry::pinned(),
+            true,
+        )
+        .unwrap();
+        assert!(from_outcomes.sign_reversal_present);
+        assert!(from_outcomes.pooled_summary.is_none());
+        assert!(!from_outcomes.claims_clean_pooled_win);
     }
 }
