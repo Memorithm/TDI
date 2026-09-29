@@ -4619,12 +4619,9 @@ mod tests {
             family_summary(split, TaskFamily::Mixed, 1, &t6_false, &c6_true),
             family_summary(split, TaskFamily::Neutral, 1, &t6_false, &c6_true),
         ];
-        let report = synthesize_family_stratified_effects(
-            split,
-            &summaries,
-            &MetricRegistry::pinned(),
-        )
-        .unwrap();
+        let report =
+            synthesize_family_stratified_effects(split, &summaries, &MetricRegistry::pinned())
+                .unwrap();
 
         assert!(!report.sign_reversal_present);
         assert!(report.claims_clean_pooled_win);
@@ -4675,12 +4672,9 @@ mod tests {
         assert_eq!(summaries[1].family, TaskFamily::ChiralFavorable);
         assert!(summaries[1].paired_difference_mean < 0.0);
 
-        let report = synthesize_family_stratified_effects(
-            split,
-            &summaries,
-            &MetricRegistry::pinned(),
-        )
-        .unwrap();
+        let report =
+            synthesize_family_stratified_effects(split, &summaries, &MetricRegistry::pinned())
+                .unwrap();
 
         assert!(report.sign_reversal_present);
         assert!(report.pooled_summary.is_none());
@@ -4714,21 +4708,22 @@ mod tests {
             family_summary(split, TaskFamily::Mixed, 8, &t6_false, &c6_true),
             family_summary(split, TaskFamily::Neutral, 8, &t6_false, &c6_true),
         ];
-        let report = synthesize_family_stratified_effects(
-            split,
-            &summaries,
-            &MetricRegistry::pinned(),
-        )
-        .unwrap();
+        let report =
+            synthesize_family_stratified_effects(split, &summaries, &MetricRegistry::pinned())
+                .unwrap();
 
-        assert!(report
-            .family_effects
-            .iter()
-            .all(|effect| effect.paired_difference_mean > 0.0));
-        assert!(report
-            .family_effects
-            .iter()
-            .all(|effect| effect.outcome_class == SignedEffectClass::Null));
+        assert!(
+            report
+                .family_effects
+                .iter()
+                .all(|effect| effect.paired_difference_mean > 0.0)
+        );
+        assert!(
+            report
+                .family_effects
+                .iter()
+                .all(|effect| effect.outcome_class == SignedEffectClass::Null)
+        );
         let pooled = report.pooled_summary.expect("no sign reversal");
         assert_eq!(pooled.outcome_class, SignedEffectClass::Null);
         assert!(!report.claims_clean_pooled_win);
@@ -4746,11 +4741,7 @@ mod tests {
             family_summary(split, TaskFamily::Mixed, 3, &t6_false, &c6_true),
         ];
         assert_eq!(
-            synthesize_family_stratified_effects(
-                split,
-                &incomplete,
-                &MetricRegistry::pinned(),
-            ),
+            synthesize_family_stratified_effects(split, &incomplete, &MetricRegistry::pinned(),),
             Err(EvalError::FamilyStratifiedSynthesisInvalid {
                 reason: "missing_family",
             })
@@ -4761,11 +4752,7 @@ mod tests {
             family_summary(split, TaskFamily::TorsorFavorable, 4, &t6_false, &c6_true),
         ];
         assert_eq!(
-            synthesize_family_stratified_effects(
-                split,
-                &duplicate,
-                &MetricRegistry::pinned(),
-            ),
+            synthesize_family_stratified_effects(split, &duplicate, &MetricRegistry::pinned(),),
             Err(EvalError::FamilyStratifiedSynthesisInvalid {
                 reason: "duplicate_family",
             })
