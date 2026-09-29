@@ -43,7 +43,7 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | 23 | G6 evaluator | **landed** in #666, exact head `3403b8768d24ac1543b75120d15a09dd5b58c50e`, merge `d6c8226025de1dbe4848f83d8092c316066f97b1`; same readout/evaluation envelope as T6/C6 |
 | 24 | Parameter/readout matcher | **landed** in #669, exact head `69f5ec9c27ceeadd047fd196193131964b7a0023`, merge `32c02cb7625dae788dc5d44d4449447a408f0589`; reject capacity mismatch rather than silently compensate |
 | 25 | Optimizer/update-budget matcher | **landed** in #673, exact head `d171ee9815813704b7214f5c812b2e6e864b6116`, merge `efb03b8c3e37bcb537952bdca2ce545765da29c8`; same examples/order/steps/stopping rule where trained |
-| 26 | Metric registry | **current candidate** in #PRNUM; primary family metrics and cross-family summary frozen |
+| 26 | Metric registry | **current candidate** in #679; primary family metrics and cross-family summary frozen |
 | 27 | Paired uncertainty engine | paired effect/interval computation by seed block |
 | 28 | Family-stratified synthesis | pooled summaries cannot hide sign reversals |
 | 29 | Typed failure/resource accounting | numerical/task/resource failures retained by arm |
