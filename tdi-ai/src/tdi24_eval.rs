@@ -26,7 +26,8 @@ use super::tdi24_chiral::{
 };
 use super::tdi24_tasks::{
     DataSplit, DirectionTarget, HandednessTarget, InferenceView, LabeledCase, NonChiralTarget,
-    ReflectionInvariantTarget, TaskFamily, canonicalize_inference_view, run_inference_callback,
+    PROTECTED_LABEL_CONTRACT, ReflectionInvariantTarget, TaskFamily, canonicalize_inference_view,
+    run_inference_callback,
 };
 use super::tdi24_vector::{VECTOR6_CONTRACT, VECTOR6_WIDTH, Vector6, Vector6Error, vector6_score};
 
@@ -1377,6 +1378,30 @@ pub fn revealed_matches_from_records(
                 field: "envelope_contract",
             });
         }
+        if record.arm_contract != expected_arm.evaluator_contract() {
+            return Err(EvalError::ContractMismatch {
+                field: "arm_contract",
+            });
+        }
+        if record.budget_contract != READOUT_BUDGET_CONTRACT {
+            return Err(EvalError::ContractMismatch {
+                field: "budget_contract",
+            });
+        }
+        let expected_vector_contract = match expected_arm {
+            EvalArm::V6 => VECTOR6_CONTRACT,
+            EvalArm::C6 => CHIRAL_CONTRACT,
+        };
+        if record.vector_contract != expected_vector_contract {
+            return Err(EvalError::ContractMismatch {
+                field: "vector_contract",
+            });
+        }
+        if record.label_contract != PROTECTED_LABEL_CONTRACT {
+            return Err(EvalError::ContractMismatch {
+                field: "label_contract",
+            });
+        }
         match record.outcome {
             EvalOutcome::Scored { correct, .. } => {
                 out.push(RevealedMatchOutcome::from_matches_oracle(correct));
@@ -2531,6 +2556,58 @@ mod tests {
             revealed_matches_from_records(&oversized_records, EvalArm::V6, DataSplit::Development,),
             Err(EvalError::PairedUncertaintyInvalid {
                 reason: "too_many_pairs",
+            })
+        );
+
+        let mut stale_arm_contract = v6_records.clone();
+        stale_arm_contract[0].arm_contract = "stale-v6-evaluator";
+        assert_eq!(
+            revealed_matches_from_records(
+                &stale_arm_contract,
+                EvalArm::V6,
+                DataSplit::Development,
+            ),
+            Err(EvalError::ContractMismatch {
+                field: "arm_contract",
+            })
+        );
+
+        let mut stale_budget_contract = v6_records.clone();
+        stale_budget_contract[0].budget_contract = "stale-readout-budget";
+        assert_eq!(
+            revealed_matches_from_records(
+                &stale_budget_contract,
+                EvalArm::V6,
+                DataSplit::Development,
+            ),
+            Err(EvalError::ContractMismatch {
+                field: "budget_contract",
+            })
+        );
+
+        let mut stale_vector_contract = c6_records.clone();
+        stale_vector_contract[0].vector_contract = VECTOR6_CONTRACT;
+        assert_eq!(
+            revealed_matches_from_records(
+                &stale_vector_contract,
+                EvalArm::C6,
+                DataSplit::Development,
+            ),
+            Err(EvalError::ContractMismatch {
+                field: "vector_contract",
+            })
+        );
+
+        let mut stale_label_contract = v6_records.clone();
+        stale_label_contract[0].label_contract = "stale-label-contract";
+        assert_eq!(
+            revealed_matches_from_records(
+                &stale_label_contract,
+                EvalArm::V6,
+                DataSplit::Development,
+            ),
+            Err(EvalError::ContractMismatch {
+                field: "label_contract",
             })
         );
 
