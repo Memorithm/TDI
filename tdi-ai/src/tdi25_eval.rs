@@ -2352,12 +2352,45 @@ pub fn classify_signed_effect(
     }
 }
 
+fn require_admissible_confidence_interval(
+    ci: ConfidenceInterval,
+    mean: f64,
+    admitted_methods: &[UncertaintyMethod],
+) -> Result<(), EvalError> {
+    if !ci.lower.is_finite() || !ci.upper.is_finite() || !ci.confidence.is_finite() {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "non_finite",
+        });
+    }
+    if ci.lower > ci.upper {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "non_finite",
+        });
+    }
+    if (ci.confidence - PAIRED_UNCERTAINTY_LEVEL).abs() > 1e-12 {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "confidence_level_mismatch",
+        });
+    }
+    if !admitted_methods.contains(&ci.method) {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "uncertainty_method_mismatch",
+        });
+    }
+    if mean < ci.lower - 1e-12 || mean > ci.upper + 1e-12 {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "mean_outside_interval",
+        });
+    }
+    Ok(())
+}
+
 fn family_signed_effect_from_summary(
     summary: &PairedEffectSummary,
 ) -> Result<FamilySignedEffect, EvalError> {
-    if !summary.paired_difference_mean.is_finite() {
+    if !summary.experimental_non_final {
         return Err(EvalError::FamilyStratifiedSynthesisInvalid {
-            reason: "non_finite",
+            reason: "experimental_non_final_required",
         });
     }
     if summary.uncertainty_contract != PAIRED_UNCERTAINTY_CONTRACT {
@@ -2375,6 +2408,78 @@ fn family_signed_effect_from_summary(
             reason: "primary_family_metric_mismatch",
         });
     }
+    if summary.cross_family_summary != CrossFamilySummaryMetricId::CrossFamilyPairedSummary {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "cross_family_summary_mismatch",
+        });
+    }
+    if summary.secondary_paired_outcome_difference != SecondaryDiagnosticId::PairedOutcomeDifference
+    {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "secondary_paired_outcome_mismatch",
+        });
+    }
+    if summary.n_pairs < 2 {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "insufficient_pairs",
+        });
+    }
+    if summary.n_pairs > MAX_CASES_PER_RUN {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "too_many_pairs",
+        });
+    }
+    if !summary.t6_accuracy.is_finite()
+        || !summary.c6_accuracy.is_finite()
+        || !summary.paired_difference_mean.is_finite()
+    {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "non_finite",
+        });
+    }
+    if !(0.0..=1.0).contains(&summary.t6_accuracy) || !(0.0..=1.0).contains(&summary.c6_accuracy) {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "accuracy_out_of_bounds",
+        });
+    }
+    let expected_gap = summary.c6_accuracy - summary.t6_accuracy;
+    if (summary.paired_difference_mean - expected_gap).abs() > 1e-12 {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "paired_difference_inconsistent",
+        });
+    }
+    if summary.paired_difference_mean < -1.0 - 1e-12 || summary.paired_difference_mean > 1.0 + 1e-12
+    {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "paired_difference_out_of_bounds",
+        });
+    }
+
+    require_admissible_confidence_interval(
+        summary.paired_difference_ci,
+        summary.paired_difference_mean,
+        &[
+            UncertaintyMethod::BoundedHoeffdingPairedDifference,
+            UncertaintyMethod::ClusterHoeffdingPairedDifference,
+        ],
+    )?;
+    require_admissible_confidence_interval(
+        summary.t6_accuracy_ci,
+        summary.t6_accuracy,
+        &[
+            UncertaintyMethod::WilsonScore,
+            UncertaintyMethod::ClusterHoeffdingBernoulliMean,
+        ],
+    )?;
+    require_admissible_confidence_interval(
+        summary.c6_accuracy_ci,
+        summary.c6_accuracy,
+        &[
+            UncertaintyMethod::WilsonScore,
+            UncertaintyMethod::ClusterHoeffdingBernoulliMean,
+        ],
+    )?;
+
     let outcome_class =
         classify_signed_effect(summary.paired_difference_mean, summary.paired_difference_ci)?;
     Ok(FamilySignedEffect {
@@ -4821,5 +4926,30 @@ mod tests {
         assert!(from_outcomes.sign_reversal_present);
         assert!(from_outcomes.pooled_summary.is_none());
         assert!(!from_outcomes.claims_clean_pooled_win);
+    }
+
+    #[test]
+    fn family_stratified_synthesis_rejects_tampered_positive_intervals() {
+        let split = DataSplit::Development;
+        let n = MAX_CASES_PER_RUN;
+        let ties: Vec<(u64, bool)> = (0..n).map(|case_id| (case_id, true)).collect();
+        let mut summaries = [
+            family_summary(split, TaskFamily::TorsorFavorable, 9, &ties, &ties),
+            family_summary(split, TaskFamily::ChiralFavorable, 9, &ties, &ties),
+            family_summary(split, TaskFamily::Mixed, 9, &ties, &ties),
+            family_summary(split, TaskFamily::Neutral, 9, &ties, &ties),
+        ];
+        // Null family evidence upgraded by forging strictly-positive intervals.
+        for summary in &mut summaries {
+            assert_eq!(summary.paired_difference_mean, 0.0);
+            summary.paired_difference_ci.lower = 0.1;
+            summary.paired_difference_ci.upper = 0.2;
+        }
+        assert_eq!(
+            synthesize_family_stratified_effects(split, &summaries, &MetricRegistry::pinned()),
+            Err(EvalError::FamilyStratifiedSynthesisInvalid {
+                reason: "mean_outside_interval",
+            })
+        );
     }
 }
