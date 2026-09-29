@@ -10,6 +10,7 @@ use core::fmt;
 
 use super::tdi22_torsor::TORSOR_CONTRACT;
 use super::tdi25_tasks::{
+    mixed_geometry_pair_in_split, torsor_transport_pair_in_split,
     DataSplit, LabeledCase, MIXED_GEOMETRY_TASK_CONTRACT, MixedGeometryInput, MixedGeometryOracle,
     PROTECTED_LABEL_CONTRACT, TORSOR_TRANSPORT_TASK_CONTRACT, TorsorTransportInput,
     TorsorTransportOracle, canonicalize_mixed_geometry_input, canonicalize_torsor_transport_input,
@@ -154,13 +155,20 @@ impl T6EvaluatorRun {
         self.reserve_case(case.inference_input().split)?;
         let input = case.inference_input();
         let oracle = case.protected_label().reveal_for_evaluation();
-        if case.inference_input().generator_contract != TORSOR_TRANSPORT_TASK_CONTRACT
+        if input.generator_contract != TORSOR_TRANSPORT_TASK_CONTRACT
             || oracle.generator_contract != TORSOR_TRANSPORT_TASK_CONTRACT
             || oracle.pair_id != input.case_id / 2
             || input.task_family != TaskFamily::TorsorFavorable
             || case.label_contract() != PROTECTED_LABEL_CONTRACT
         {
             return Err(EvalError::ContractMismatch("torsor_transport_case"));
+        }
+        let expected_pair = torsor_transport_pair_in_split(oracle.pair_id, input.split)
+            .map_err(|_| EvalError::ContractMismatch("torsor_transport_oracle"))?;
+        if (*input != expected_pair.original && *input != expected_pair.transported)
+            || oracle != expected_pair.oracle
+        {
+            return Err(EvalError::ContractMismatch("torsor_transport_oracle"));
         }
         let score =
             run_inference_callback(case, score_torsor_transport).map_err(EvalError::Bridge)?;
@@ -198,6 +206,16 @@ impl T6EvaluatorRun {
             || case.label_contract() != PROTECTED_LABEL_CONTRACT
         {
             return Err(EvalError::ContractMismatch("mixed_case"));
+        }
+        let expected_pair = mixed_geometry_pair_in_split(oracle.pair_id, input.split)
+            .map_err(|_| EvalError::ContractMismatch("mixed_oracle"))?;
+        let oracle_matches_pair = if input.case_id % 2 == 0 {
+            *input == expected_pair.base && oracle == expected_pair.base_oracle
+        } else {
+            *input == expected_pair.transformed && oracle == expected_pair.transformed_oracle
+        };
+        if !oracle_matches_pair {
+            return Err(EvalError::ContractMismatch("mixed_oracle"));
         }
         let score = run_inference_callback(case, score_mixed_torsor).map_err(EvalError::Bridge)?;
         let record = T6EvalRecord {
@@ -286,8 +304,7 @@ impl std::error::Error for EvalError {}
 mod tests {
     use super::*;
     use crate::experimental::tdi25_tasks::{
-        DataSplit, mixed_geometry_pair_in_split, seal_mixed_geometry, seal_torsor_transport,
-        torsor_transport_pair_in_split,
+        DataSplit, seal_mixed_geometry, seal_torsor_transport,
     };
 
     #[test]
@@ -396,6 +413,14 @@ mod tests {
             Err(EvalError::ContractMismatch("torsor_transport_case"))
         );
 
+        let mut altered_oracle = first_pair.oracle;
+        altered_oracle.expected_score += 1.0;
+        let altered = seal_torsor_transport(first_pair.original, altered_oracle);
+        assert_eq!(
+            run.evaluate_torsor_transport(&altered),
+            Err(EvalError::ContractMismatch("torsor_transport_oracle"))
+        );
+
         let mut wrong_family_input = first_pair.original;
         wrong_family_input.task_family = TaskFamily::Mixed;
         let wrong_family = seal_torsor_transport(wrong_family_input, first_pair.oracle);
@@ -404,7 +429,17 @@ mod tests {
             Err(EvalError::ContractMismatch("torsor_transport_case"))
         );
 
+        let mut wrong_mixed_oracle = mixed_geometry_pair_in_split(5, DataSplit::Development)
+            .unwrap()
+            .base_oracle;
+        wrong_mixed_oracle.expected_torsor_score += 1.0;
         let mixed_pair = mixed_geometry_pair_in_split(5, DataSplit::Development).unwrap();
+        let altered_mixed = seal_mixed_geometry(mixed_pair.base, wrong_mixed_oracle);
+        assert_eq!(
+            run.evaluate_mixed(&altered_mixed),
+            Err(EvalError::ContractMismatch("mixed_oracle"))
+        );
+
         let mut drifted_oracle = mixed_pair.base_oracle;
         drifted_oracle.generator_contract = "not-mixed";
         let drifted = seal_mixed_geometry(mixed_pair.base, drifted_oracle);
