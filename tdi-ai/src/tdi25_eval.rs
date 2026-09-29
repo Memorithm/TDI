@@ -15,12 +15,12 @@
 //! ordering identity, update steps, and stopping rule across paired arms so
 //! later trained paths cannot silently diverge; Phase-C references remain
 //! non-trained (`updates=0`, `ExhaustExamples`). Slice 26 freezes the Stage-C
-//! metric registry: only the mixed family is currently admitted as a paired
-//! T6-vs-C6 primary because both arms expose a matched scoring path for it.
-//! Torsor-favorable, chiral-favorable, and neutral identifiers remain known
-//! candidates but are not admitted as paired primaries, and the cross-family
-//! summary remains unavailable until at least two families have matched paths.
-//! The ordered closed registry fails closed on drift/empty/dupes/invention.
+//! metric registry: no paired primary is admitted yet because no task family
+//! exposes a common task-level oracle across T6 and C6. The known primary ids
+//! remain candidates only, and the cross-family summary remains unavailable.
+//! Likewise, G6 attribution is not admitted until one common family has matched
+//! T6/C6/G6 paths. The ordered closed registry fails closed on drift, premature
+//! pairing, duplicates, and invention.
 //! Evaluator open paths require the pinned registry. All arms consume
 //! sealed Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
@@ -550,10 +550,10 @@ pub fn parse_primary_family_metric_id(label: &str) -> Result<PrimaryFamilyMetric
 
 /// Canonical ordered paired primary metrics frozen for Stage-C.
 ///
-/// Mixed is the only family with both T6 and C6 evaluator paths. The other
-/// known family ids must not be frozen as paired metrics until matched paths
-/// exist; this prevents downstream synthesis from fabricating observations.
-pub const PINNED_PRIMARY_FAMILY_METRICS: &[PrimaryFamilyMetricId] = &[PrimaryFamilyMetricId::Mixed];
+/// Empty by design: Mixed has matched case identities but arm-specific oracles,
+/// while the remaining families lack matched T6/C6 paths. Candidate ids must
+/// remain unadmitted until a common task-level target exists.
+pub const PINNED_PRIMARY_FAMILY_METRICS: &[PrimaryFamilyMetricId] = &[];
 
 /// Closed-set cross-family summary metric for Stage-C evaluation.
 ///
@@ -653,10 +653,8 @@ pub fn parse_secondary_diagnostic_id(label: &str) -> Result<SecondaryDiagnosticI
 
 /// Canonical ordered secondary diagnostics frozen for Stage-C.
 pub const PINNED_SECONDARY_DIAGNOSTICS: &[SecondaryDiagnosticId] = &[
-    SecondaryDiagnosticId::PairedOutcomeDifference,
     SecondaryDiagnosticId::TorsorTransportReductionPointIdentityError,
     SecondaryDiagnosticId::ChiralMirrorSwapParityIdentityError,
-    SecondaryDiagnosticId::G6AttributionContrast,
     SecondaryDiagnosticId::CalibrationStability,
     SecondaryDiagnosticId::OpCountMemoryRuntime,
 ];
@@ -708,11 +706,6 @@ pub fn freeze_metric_registry(
     cross_family_summary: Option<CrossFamilySummaryMetricId>,
     secondaries: &'static [SecondaryDiagnosticId],
 ) -> Result<MetricRegistry, EvalError> {
-    if primary_family_metrics.is_empty() {
-        return Err(EvalError::MetricRegistryInvalid {
-            reason: "empty_primary",
-        });
-    }
     let registry = MetricRegistry {
         primary_family_metrics,
         cross_family_summary,
@@ -737,11 +730,6 @@ pub fn validate_metric_registry(registry: &MetricRegistry) -> Result<(), EvalErr
             reason: "experimental_non_final_required",
         });
     }
-    if registry.primary_family_metrics.is_empty() {
-        return Err(EvalError::MetricRegistryInvalid {
-            reason: "empty_primary",
-        });
-    }
     if registry.primary_family_metrics.len() > MAX_PRIMARY_FAMILY_METRICS {
         return Err(EvalError::MetricRegistryInvalid {
             reason: "too_many_primary_family_metrics",
@@ -756,6 +744,8 @@ pub fn validate_metric_registry(registry: &MetricRegistry) -> Result<(), EvalErr
                 });
             }
         }
+    }
+    for primary in registry.primary_family_metrics {
         if !PINNED_PRIMARY_FAMILY_METRICS.contains(primary) {
             return Err(EvalError::MetricRegistryInvalid {
                 reason: "unknown_primary",
@@ -2282,12 +2272,9 @@ mod tests {
             "family_paired_task_accuracy_torsor_favorable"
         );
         assert_eq!(CROSS_FAMILY_PAIRED_SUMMARY, "cross_family_paired_summary");
-        assert!(!PINNED_PRIMARY_FAMILY_METRICS.is_empty());
+        assert!(PINNED_PRIMARY_FAMILY_METRICS.is_empty());
         assert!(PINNED_PRIMARY_FAMILY_METRICS.len() <= MAX_PRIMARY_FAMILY_METRICS);
-        assert_eq!(
-            PINNED_SECONDARY_DIAGNOSTICS.len(),
-            MAX_SECONDARY_DIAGNOSTICS
-        );
+        assert!(PINNED_SECONDARY_DIAGNOSTICS.len() <= MAX_SECONDARY_DIAGNOSTICS);
         assert_eq!(
             PrimaryFamilyMetricId::admitted_set(),
             PINNED_PRIMARY_FAMILY_METRICS
@@ -2313,34 +2300,22 @@ mod tests {
         .unwrap();
         assert_eq!(frozen, pinned);
 
-        assert_eq!(
-            pinned.primary_family_metrics[0].as_str(),
-            PRIMARY_FAMILY_MIXED
-        );
-        assert_eq!(pinned.primary_family_metrics[0].family(), TaskFamily::Mixed);
+        assert!(pinned.primary_family_metrics.is_empty());
         assert_eq!(pinned.cross_family_summary, None);
         assert_eq!(
             pinned.secondaries[0].as_str(),
-            SECONDARY_PAIRED_OUTCOME_DIFFERENCE
-        );
-        assert_eq!(
-            pinned.secondaries[1].as_str(),
             SECONDARY_TORSOR_TRANSPORT_REDUCTION_POINT_IDENTITY_ERROR
         );
         assert_eq!(
-            pinned.secondaries[2].as_str(),
+            pinned.secondaries[1].as_str(),
             SECONDARY_CHIRAL_MIRROR_SWAP_PARITY_IDENTITY_ERROR
         );
         assert_eq!(
-            pinned.secondaries[3].as_str(),
-            SECONDARY_G6_ATTRIBUTION_CONTRAST
-        );
-        assert_eq!(
-            pinned.secondaries[4].as_str(),
+            pinned.secondaries[2].as_str(),
             SECONDARY_CALIBRATION_STABILITY
         );
         assert_eq!(
-            pinned.secondaries[5].as_str(),
+            pinned.secondaries[3].as_str(),
             SECONDARY_OP_COUNT_MEMORY_RUNTIME
         );
 
@@ -2370,10 +2345,8 @@ mod tests {
     #[test]
     fn metric_registry_rejects_empty_primary_duplicates_unknowns_and_sequence_drift() {
         assert_eq!(
-            freeze_metric_registry(&[], None, PINNED_SECONDARY_DIAGNOSTICS,),
-            Err(EvalError::MetricRegistryInvalid {
-                reason: "empty_primary",
-            })
+            freeze_metric_registry(&[], None, PINNED_SECONDARY_DIAGNOSTICS).unwrap(),
+            MetricRegistry::pinned()
         );
         assert_eq!(
             freeze_metric_registry(
@@ -2417,9 +2390,8 @@ mod tests {
         );
 
         const DUPLICATE_SECONDARIES: &[SecondaryDiagnosticId] = &[
-            SecondaryDiagnosticId::PairedOutcomeDifference,
             SecondaryDiagnosticId::TorsorTransportReductionPointIdentityError,
-            SecondaryDiagnosticId::PairedOutcomeDifference,
+            SecondaryDiagnosticId::TorsorTransportReductionPointIdentityError,
         ];
         assert_eq!(
             freeze_metric_registry(PINNED_PRIMARY_FAMILY_METRICS, None, DUPLICATE_SECONDARIES,),
@@ -2454,10 +2426,8 @@ mod tests {
         );
 
         const TRUNCATED_SECONDARIES: &[SecondaryDiagnosticId] = &[
-            SecondaryDiagnosticId::PairedOutcomeDifference,
             SecondaryDiagnosticId::TorsorTransportReductionPointIdentityError,
             SecondaryDiagnosticId::ChiralMirrorSwapParityIdentityError,
-            SecondaryDiagnosticId::G6AttributionContrast,
             SecondaryDiagnosticId::CalibrationStability,
         ];
         assert_eq!(
@@ -2474,10 +2444,8 @@ mod tests {
         );
 
         const REORDERED_SECONDARIES: &[SecondaryDiagnosticId] = &[
-            SecondaryDiagnosticId::TorsorTransportReductionPointIdentityError,
-            SecondaryDiagnosticId::PairedOutcomeDifference,
             SecondaryDiagnosticId::ChiralMirrorSwapParityIdentityError,
-            SecondaryDiagnosticId::G6AttributionContrast,
+            SecondaryDiagnosticId::TorsorTransportReductionPointIdentityError,
             SecondaryDiagnosticId::CalibrationStability,
             SecondaryDiagnosticId::OpCountMemoryRuntime,
         ];
@@ -2509,13 +2477,13 @@ mod tests {
         );
 
         let malformed = MetricRegistry {
-            primary_family_metrics: &[],
+            primary_family_metrics: &[PrimaryFamilyMetricId::Mixed],
             ..MetricRegistry::pinned()
         };
         assert_eq!(
             malformed.admit_split(DataSplit::Development),
             Err(EvalError::MetricRegistryInvalid {
-                reason: "empty_primary",
+                reason: "unknown_primary",
             })
         );
         let mut config = EvaluatorConfig::t6(DataSplit::Development);
@@ -2523,7 +2491,7 @@ mod tests {
         assert_eq!(
             T6EvaluatorRun::open(config),
             Err(EvalError::MetricRegistryInvalid {
-                reason: "empty_primary",
+                reason: "unknown_primary",
             })
         );
 
@@ -2551,17 +2519,12 @@ mod tests {
     }
 
     #[test]
-    fn pinned_paired_primary_has_both_t6_and_c6_scoring_paths() {
-        let pair = mixed_geometry_pair_in_split(27, DataSplit::Development).unwrap();
-        let sealed = seal_mixed_geometry(pair.base, pair.base_oracle);
-        let mut t6 = T6EvaluatorRun::open(EvaluatorConfig::t6(DataSplit::Development)).unwrap();
-        let mut c6 = C6EvaluatorRun::open(EvaluatorConfig::c6(DataSplit::Development)).unwrap();
-        let t6_record = t6.evaluate_mixed(&sealed).unwrap();
-        let c6_record = c6.evaluate_mixed(&sealed).unwrap();
-        assert_eq!(t6_record.family, TaskFamily::Mixed);
-        assert_eq!(c6_record.family, TaskFamily::Mixed);
-        assert_eq!(t6_record.case_id, c6_record.case_id);
-        assert_eq!(t6_record.canonical_digest, c6_record.canonical_digest);
+    fn paired_and_g6_candidate_metrics_remain_unadmitted_without_common_targets() {
+        assert!(PINNED_PRIMARY_FAMILY_METRICS.is_empty());
+        assert!(!PINNED_SECONDARY_DIAGNOSTICS
+            .contains(&SecondaryDiagnosticId::PairedOutcomeDifference));
+        assert!(!PINNED_SECONDARY_DIAGNOSTICS
+            .contains(&SecondaryDiagnosticId::G6AttributionContrast));
     }
 
     #[test]
