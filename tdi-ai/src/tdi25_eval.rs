@@ -14,7 +14,11 @@
 //! optimizer/update-budget matcher that requires identical examples count,
 //! ordering identity, update steps, and stopping rule across paired arms so
 //! later trained paths cannot silently diverge; Phase-C references remain
-//! non-trained (`updates=0`, `ExhaustExamples`). All arms consume
+//! non-trained (`updates=0`, `ExhaustExamples`). Slice 26 freezes the Stage-C
+//! metric registry: per-family primary paired-accuracy ids, one cross-family
+//! summary id, and an ordered closed secondary-diagnostic set under
+//! `tdi25-metric-registry-v1`, fail-closed on drift/empty/dupes/invention.
+//! Evaluator open paths require the pinned registry. All arms consume
 //! sealed Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
@@ -60,6 +64,50 @@ pub const PARAMETER_READOUT_MATCHER_CONTRACT: &str = "tdi25-parameter-readout-ma
 /// Versioned optimizer/update-budget matcher contract.
 pub const OPTIMIZER_UPDATE_BUDGET_MATCHER_CONTRACT: &str =
     "tdi25-optimizer-update-budget-matcher-v1";
+
+/// Versioned Stage-C metric-registry contract.
+pub const METRIC_REGISTRY_CONTRACT: &str = "tdi25-metric-registry-v1";
+
+/// Primary family metric: torsor-favorable paired accuracy / score-match vs oracle.
+pub const PRIMARY_FAMILY_TORSOR_FAVORABLE: &str = "family_paired_task_accuracy_torsor_favorable";
+
+/// Primary family metric: chiral-favorable paired accuracy / score-match vs oracle.
+pub const PRIMARY_FAMILY_CHIRAL_FAVORABLE: &str = "family_paired_task_accuracy_chiral_favorable";
+
+/// Primary family metric: mixed-geometry paired accuracy / score-match vs oracle.
+pub const PRIMARY_FAMILY_MIXED: &str = "family_paired_task_accuracy_mixed";
+
+/// Primary family metric: neutral-control paired accuracy / score-match vs oracle.
+pub const PRIMARY_FAMILY_NEUTRAL: &str = "family_paired_task_accuracy_neutral";
+
+/// Cross-family summary metric id (pooled view; cannot erase family reversals).
+pub const CROSS_FAMILY_PAIRED_SUMMARY: &str = "cross_family_paired_summary";
+
+/// Secondary diagnostic: paired task outcome difference (T6 vs C6).
+pub const SECONDARY_PAIRED_OUTCOME_DIFFERENCE: &str = "paired_outcome_difference";
+
+/// Secondary diagnostic: torsor transport / reduction-point identity error.
+pub const SECONDARY_TORSOR_TRANSPORT_REDUCTION_POINT_IDENTITY_ERROR: &str =
+    "torsor_transport_reduction_point_identity_error";
+
+/// Secondary diagnostic: chiral mirror-swap / parity identity error.
+pub const SECONDARY_CHIRAL_MIRROR_SWAP_PARITY_IDENTITY_ERROR: &str =
+    "chiral_mirror_swap_parity_identity_error";
+
+/// Secondary diagnostic: G6 attribution contrast versus T6/C6.
+pub const SECONDARY_G6_ATTRIBUTION_CONTRAST: &str = "g6_attribution_contrast";
+
+/// Secondary diagnostic: calibration / stability where scores are exposed.
+pub const SECONDARY_CALIBRATION_STABILITY: &str = "calibration_stability";
+
+/// Secondary diagnostic: operation / memory / runtime under a qualified env only.
+pub const SECONDARY_OP_COUNT_MEMORY_RUNTIME: &str = "op_count_memory_runtime";
+
+/// Maximum primary family metrics admitted in one frozen registry.
+pub const MAX_PRIMARY_FAMILY_METRICS: usize = 4;
+
+/// Maximum secondary diagnostics admitted in one frozen registry.
+pub const MAX_SECONDARY_DIAGNOSTICS: usize = 6;
 
 /// Shared ordering identity for non-trained Phase-C optimizer budgets.
 pub const NON_TRAINED_ORDERING_ID: u64 = 0;
@@ -432,6 +480,327 @@ pub fn match_optimizer_update_budgets(
     })
 }
 
+/// Closed-set primary family quality metric for Stage-C evaluation.
+///
+/// One id per task family: paired accuracy / score-match rate versus the sealed
+/// oracle on Development/Validation only.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum PrimaryFamilyMetricId {
+    /// TorsorFavorable family paired task accuracy.
+    TorsorFavorable,
+    /// ChiralFavorable family paired task accuracy.
+    ChiralFavorable,
+    /// Mixed family paired task accuracy.
+    Mixed,
+    /// Neutral family paired task accuracy.
+    Neutral,
+}
+
+impl PrimaryFamilyMetricId {
+    /// Stable lowercase metric id.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::TorsorFavorable => PRIMARY_FAMILY_TORSOR_FAVORABLE,
+            Self::ChiralFavorable => PRIMARY_FAMILY_CHIRAL_FAVORABLE,
+            Self::Mixed => PRIMARY_FAMILY_MIXED,
+            Self::Neutral => PRIMARY_FAMILY_NEUTRAL,
+        }
+    }
+
+    /// Task family this primary metric reports.
+    #[must_use]
+    pub const fn family(self) -> TaskFamily {
+        match self {
+            Self::TorsorFavorable => TaskFamily::TorsorFavorable,
+            Self::ChiralFavorable => TaskFamily::ChiralFavorable,
+            Self::Mixed => TaskFamily::Mixed,
+            Self::Neutral => TaskFamily::Neutral,
+        }
+    }
+
+    /// Canonical ordered Stage-C primary family metric set.
+    #[must_use]
+    pub const fn admitted_set() -> &'static [Self] {
+        PINNED_PRIMARY_FAMILY_METRICS
+    }
+}
+
+/// Parse a primary family metric id from the closed Stage-C set.
+pub fn parse_primary_family_metric_id(label: &str) -> Result<PrimaryFamilyMetricId, EvalError> {
+    match label {
+        PRIMARY_FAMILY_TORSOR_FAVORABLE => Ok(PrimaryFamilyMetricId::TorsorFavorable),
+        PRIMARY_FAMILY_CHIRAL_FAVORABLE => Ok(PrimaryFamilyMetricId::ChiralFavorable),
+        PRIMARY_FAMILY_MIXED => Ok(PrimaryFamilyMetricId::Mixed),
+        PRIMARY_FAMILY_NEUTRAL => Ok(PrimaryFamilyMetricId::Neutral),
+        "" => Err(EvalError::MetricRegistryInvalid {
+            reason: "empty_primary",
+        }),
+        _ => Err(EvalError::MetricRegistryInvalid {
+            reason: "unknown_primary",
+        }),
+    }
+}
+
+/// Canonical ordered primary family metrics frozen for Stage-C.
+pub const PINNED_PRIMARY_FAMILY_METRICS: &[PrimaryFamilyMetricId] = &[
+    PrimaryFamilyMetricId::TorsorFavorable,
+    PrimaryFamilyMetricId::ChiralFavorable,
+    PrimaryFamilyMetricId::Mixed,
+    PrimaryFamilyMetricId::Neutral,
+];
+
+/// Closed-set cross-family summary metric for Stage-C evaluation.
+///
+/// A pooled view only; family-stratified synthesis must still surface
+/// family-specific sign reversals (slice 28).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CrossFamilySummaryMetricId {
+    /// Cross-family paired summary over the four primary family metrics.
+    CrossFamilyPairedSummary,
+}
+
+impl CrossFamilySummaryMetricId {
+    /// Stable lowercase metric id.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::CrossFamilyPairedSummary => CROSS_FAMILY_PAIRED_SUMMARY,
+        }
+    }
+}
+
+/// Parse a cross-family summary metric id from the closed Stage-C set.
+pub fn parse_cross_family_summary_metric_id(
+    label: &str,
+) -> Result<CrossFamilySummaryMetricId, EvalError> {
+    match label {
+        CROSS_FAMILY_PAIRED_SUMMARY => Ok(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
+        "" => Err(EvalError::MetricRegistryInvalid {
+            reason: "empty_cross_family_summary",
+        }),
+        _ => Err(EvalError::MetricRegistryInvalid {
+            reason: "unknown_cross_family_summary",
+        }),
+    }
+}
+
+/// Closed-set secondary diagnostics admitted for Stage-C under the frozen registry.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SecondaryDiagnosticId {
+    /// Paired task outcome difference across matched arms (T6 vs C6).
+    PairedOutcomeDifference,
+    /// Torsor transport / reduction-point identity error.
+    TorsorTransportReductionPointIdentityError,
+    /// Chiral mirror-swap / parity identity error.
+    ChiralMirrorSwapParityIdentityError,
+    /// G6 attribution contrast versus the primary T6/C6 pair.
+    G6AttributionContrast,
+    /// Calibration / stability diagnostics when predictions expose scores.
+    CalibrationStability,
+    /// Operation count, memory, and runtime under an explicitly qualified environment.
+    OpCountMemoryRuntime,
+}
+
+impl SecondaryDiagnosticId {
+    /// Stable lowercase diagnostic id.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::PairedOutcomeDifference => SECONDARY_PAIRED_OUTCOME_DIFFERENCE,
+            Self::TorsorTransportReductionPointIdentityError => {
+                SECONDARY_TORSOR_TRANSPORT_REDUCTION_POINT_IDENTITY_ERROR
+            }
+            Self::ChiralMirrorSwapParityIdentityError => {
+                SECONDARY_CHIRAL_MIRROR_SWAP_PARITY_IDENTITY_ERROR
+            }
+            Self::G6AttributionContrast => SECONDARY_G6_ATTRIBUTION_CONTRAST,
+            Self::CalibrationStability => SECONDARY_CALIBRATION_STABILITY,
+            Self::OpCountMemoryRuntime => SECONDARY_OP_COUNT_MEMORY_RUNTIME,
+        }
+    }
+
+    /// Canonical ordered Stage-C secondary diagnostic set.
+    #[must_use]
+    pub const fn admitted_set() -> &'static [Self] {
+        PINNED_SECONDARY_DIAGNOSTICS
+    }
+}
+
+/// Parse a secondary diagnostic id from the closed Stage-C set.
+pub fn parse_secondary_diagnostic_id(label: &str) -> Result<SecondaryDiagnosticId, EvalError> {
+    match label {
+        SECONDARY_PAIRED_OUTCOME_DIFFERENCE => Ok(SecondaryDiagnosticId::PairedOutcomeDifference),
+        SECONDARY_TORSOR_TRANSPORT_REDUCTION_POINT_IDENTITY_ERROR => {
+            Ok(SecondaryDiagnosticId::TorsorTransportReductionPointIdentityError)
+        }
+        SECONDARY_CHIRAL_MIRROR_SWAP_PARITY_IDENTITY_ERROR => {
+            Ok(SecondaryDiagnosticId::ChiralMirrorSwapParityIdentityError)
+        }
+        SECONDARY_G6_ATTRIBUTION_CONTRAST => Ok(SecondaryDiagnosticId::G6AttributionContrast),
+        SECONDARY_CALIBRATION_STABILITY => Ok(SecondaryDiagnosticId::CalibrationStability),
+        SECONDARY_OP_COUNT_MEMORY_RUNTIME => Ok(SecondaryDiagnosticId::OpCountMemoryRuntime),
+        _ => Err(EvalError::MetricRegistryInvalid {
+            reason: "unknown_secondary",
+        }),
+    }
+}
+
+/// Canonical ordered secondary diagnostics frozen for Stage-C.
+pub const PINNED_SECONDARY_DIAGNOSTICS: &[SecondaryDiagnosticId] = &[
+    SecondaryDiagnosticId::PairedOutcomeDifference,
+    SecondaryDiagnosticId::TorsorTransportReductionPointIdentityError,
+    SecondaryDiagnosticId::ChiralMirrorSwapParityIdentityError,
+    SecondaryDiagnosticId::G6AttributionContrast,
+    SecondaryDiagnosticId::CalibrationStability,
+    SecondaryDiagnosticId::OpCountMemoryRuntime,
+];
+
+/// Frozen Stage-C metric registry: ordered primary family metrics, one
+/// cross-family summary, and ordered secondaries.
+///
+/// Experimental and non-final only; never authorises protected/final evaluation
+/// or a scientific superiority claim.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MetricRegistry {
+    /// Ordered primary family quality metrics frozen before evaluation.
+    pub primary_family_metrics: &'static [PrimaryFamilyMetricId],
+    /// Cross-family summary metric frozen before evaluation.
+    pub cross_family_summary: CrossFamilySummaryMetricId,
+    /// Ordered closed-set secondary diagnostics admitted for Stage-C.
+    pub secondaries: &'static [SecondaryDiagnosticId],
+    /// Registry contract pin.
+    pub registry_contract: &'static str,
+    /// Must remain true: registry is experimental and non-final only.
+    pub experimental_non_final: bool,
+}
+
+impl MetricRegistry {
+    /// Canonical frozen Stage-C metric registry under the versioned contract.
+    #[must_use]
+    pub const fn pinned() -> Self {
+        Self {
+            primary_family_metrics: PINNED_PRIMARY_FAMILY_METRICS,
+            cross_family_summary: CrossFamilySummaryMetricId::CrossFamilyPairedSummary,
+            secondaries: PINNED_SECONDARY_DIAGNOSTICS,
+            registry_contract: METRIC_REGISTRY_CONTRACT,
+            experimental_non_final: true,
+        }
+    }
+
+    /// Reject any registry that is not the exact pinned Stage-C set.
+    ///
+    /// TDI-25 `DataSplit` already admits only Development/Validation, so the
+    /// split gate is type-enforced; this still validates the registry itself.
+    pub fn admit_split(self, _split: DataSplit) -> Result<(), EvalError> {
+        validate_metric_registry(&self)
+    }
+}
+
+/// Freeze a metric registry under the versioned contract; fail-closed on invalid sets.
+pub fn freeze_metric_registry(
+    primary_family_metrics: &'static [PrimaryFamilyMetricId],
+    cross_family_summary: Option<CrossFamilySummaryMetricId>,
+    secondaries: &'static [SecondaryDiagnosticId],
+) -> Result<MetricRegistry, EvalError> {
+    if primary_family_metrics.is_empty() {
+        return Err(EvalError::MetricRegistryInvalid {
+            reason: "empty_primary",
+        });
+    }
+    let Some(cross_family_summary) = cross_family_summary else {
+        return Err(EvalError::MetricRegistryInvalid {
+            reason: "empty_cross_family_summary",
+        });
+    };
+    let registry = MetricRegistry {
+        primary_family_metrics,
+        cross_family_summary,
+        secondaries,
+        registry_contract: METRIC_REGISTRY_CONTRACT,
+        experimental_non_final: true,
+    };
+    validate_metric_registry(&registry)?;
+    Ok(registry)
+}
+
+/// Validate a metric registry: reject contract drift, empty primary, empty
+/// cross-family summary, duplicate secondaries, oversized sets, invented ids,
+/// non-experimental finals, and any primary/secondary sequence that is not the
+/// complete canonical ordered registry.
+pub fn validate_metric_registry(registry: &MetricRegistry) -> Result<(), EvalError> {
+    if registry.registry_contract != METRIC_REGISTRY_CONTRACT {
+        return Err(EvalError::ContractMismatch("metric_registry_contract"));
+    }
+    if !registry.experimental_non_final {
+        return Err(EvalError::MetricRegistryInvalid {
+            reason: "experimental_non_final_required",
+        });
+    }
+    if registry.primary_family_metrics.is_empty() {
+        return Err(EvalError::MetricRegistryInvalid {
+            reason: "empty_primary",
+        });
+    }
+    if registry.primary_family_metrics.len() > MAX_PRIMARY_FAMILY_METRICS {
+        return Err(EvalError::MetricRegistryInvalid {
+            reason: "too_many_primary_family_metrics",
+        });
+    }
+    for (index, primary) in registry.primary_family_metrics.iter().enumerate() {
+        parse_primary_family_metric_id(primary.as_str())?;
+        for prior in &registry.primary_family_metrics[..index] {
+            if prior == primary {
+                return Err(EvalError::MetricRegistryInvalid {
+                    reason: "duplicate_primary",
+                });
+            }
+        }
+        if !PINNED_PRIMARY_FAMILY_METRICS.contains(primary) {
+            return Err(EvalError::MetricRegistryInvalid {
+                reason: "unknown_primary",
+            });
+        }
+    }
+    if registry.primary_family_metrics != PINNED_PRIMARY_FAMILY_METRICS {
+        return Err(EvalError::MetricRegistryInvalid {
+            reason: "primary_sequence_mismatch",
+        });
+    }
+    parse_cross_family_summary_metric_id(registry.cross_family_summary.as_str())?;
+    if registry.cross_family_summary != CrossFamilySummaryMetricId::CrossFamilyPairedSummary {
+        return Err(EvalError::MetricRegistryInvalid {
+            reason: "unknown_cross_family_summary",
+        });
+    }
+    if registry.secondaries.len() > MAX_SECONDARY_DIAGNOSTICS {
+        return Err(EvalError::MetricRegistryInvalid {
+            reason: "too_many_secondaries",
+        });
+    }
+    for (index, secondary) in registry.secondaries.iter().enumerate() {
+        parse_secondary_diagnostic_id(secondary.as_str())?;
+        for prior in &registry.secondaries[..index] {
+            if prior == secondary {
+                return Err(EvalError::MetricRegistryInvalid {
+                    reason: "duplicate_secondary",
+                });
+            }
+        }
+        if !PINNED_SECONDARY_DIAGNOSTICS.contains(secondary) {
+            return Err(EvalError::MetricRegistryInvalid {
+                reason: "unknown_secondary",
+            });
+        }
+    }
+    if registry.secondaries != PINNED_SECONDARY_DIAGNOSTICS {
+        return Err(EvalError::MetricRegistryInvalid {
+            reason: "secondary_sequence_mismatch",
+        });
+    }
+    Ok(())
+}
+
 /// Immutable configuration for one Phase-C evaluator run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EvaluatorConfig {
@@ -439,6 +808,8 @@ pub struct EvaluatorConfig {
     pub budget: ReadoutBudget,
     pub envelope_contract: &'static str,
     pub arm_contract: &'static str,
+    /// Validated, exact Stage-C metric registry.
+    pub metric_registry: MetricRegistry,
 }
 
 impl EvaluatorConfig {
@@ -450,6 +821,7 @@ impl EvaluatorConfig {
             budget: ReadoutBudget::matched_non_trained(),
             envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
             arm_contract: T6_EVALUATOR_CONTRACT,
+            metric_registry: MetricRegistry::pinned(),
         }
     }
 
@@ -461,6 +833,7 @@ impl EvaluatorConfig {
             budget: ReadoutBudget::matched_non_trained(),
             envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
             arm_contract: C6_EVALUATOR_CONTRACT,
+            metric_registry: MetricRegistry::pinned(),
         }
     }
 
@@ -472,6 +845,7 @@ impl EvaluatorConfig {
             budget: ReadoutBudget::matched_non_trained(),
             envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
             arm_contract: G6_EVALUATOR_CONTRACT,
+            metric_registry: MetricRegistry::pinned(),
         }
     }
 }
@@ -494,6 +868,7 @@ pub struct T6EvalRecord {
     pub envelope_contract: &'static str,
     pub arm_contract: &'static str,
     pub budget_contract: &'static str,
+    pub metric_registry_contract: &'static str,
     pub source_torsor_contract: &'static str,
     pub label_contract: &'static str,
 }
@@ -508,6 +883,7 @@ pub struct T6EvaluatorRun {
 impl T6EvaluatorRun {
     /// Open a run only when every contract pin and budget is valid.
     pub fn open(config: EvaluatorConfig) -> Result<Self, EvalError> {
+        config.metric_registry.admit_split(config.split)?;
         if config.envelope_contract != EVALUATOR_ENVELOPE_CONTRACT {
             return Err(EvalError::ContractMismatch("envelope_contract"));
         }
@@ -571,6 +947,7 @@ impl T6EvaluatorRun {
             envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
             arm_contract: T6_EVALUATOR_CONTRACT,
             budget_contract: READOUT_BUDGET_CONTRACT,
+            metric_registry_contract: self.config.metric_registry.registry_contract,
             source_torsor_contract: TORSOR_CONTRACT,
             label_contract: PROTECTED_LABEL_CONTRACT,
         };
@@ -607,6 +984,7 @@ impl T6EvaluatorRun {
             envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
             arm_contract: T6_EVALUATOR_CONTRACT,
             budget_contract: READOUT_BUDGET_CONTRACT,
+            metric_registry_contract: self.config.metric_registry.registry_contract,
             source_torsor_contract: TORSOR_CONTRACT,
             label_contract: PROTECTED_LABEL_CONTRACT,
         };
@@ -646,6 +1024,7 @@ pub struct C6EvalRecord {
     pub envelope_contract: &'static str,
     pub arm_contract: &'static str,
     pub budget_contract: &'static str,
+    pub metric_registry_contract: &'static str,
     pub source_chiral_contract: &'static str,
     pub label_contract: &'static str,
 }
@@ -660,6 +1039,7 @@ pub struct C6EvaluatorRun {
 impl C6EvaluatorRun {
     /// Open a run only when every contract pin and budget is valid.
     pub fn open(config: EvaluatorConfig) -> Result<Self, EvalError> {
+        config.metric_registry.admit_split(config.split)?;
         if config.envelope_contract != EVALUATOR_ENVELOPE_CONTRACT {
             return Err(EvalError::ContractMismatch("envelope_contract"));
         }
@@ -723,6 +1103,7 @@ impl C6EvaluatorRun {
             envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
             arm_contract: C6_EVALUATOR_CONTRACT,
             budget_contract: READOUT_BUDGET_CONTRACT,
+            metric_registry_contract: self.config.metric_registry.registry_contract,
             source_chiral_contract: CHIRAL_CONTRACT,
             label_contract: PROTECTED_LABEL_CONTRACT,
         };
@@ -759,6 +1140,7 @@ impl C6EvaluatorRun {
             envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
             arm_contract: C6_EVALUATOR_CONTRACT,
             budget_contract: READOUT_BUDGET_CONTRACT,
+            metric_registry_contract: self.config.metric_registry.registry_contract,
             source_chiral_contract: CHIRAL_CONTRACT,
             label_contract: PROTECTED_LABEL_CONTRACT,
         };
@@ -798,6 +1180,7 @@ pub struct G6EvalRecord {
     pub envelope_contract: &'static str,
     pub arm_contract: &'static str,
     pub budget_contract: &'static str,
+    pub metric_registry_contract: &'static str,
     pub source_generic_contract: &'static str,
     pub label_contract: &'static str,
 }
@@ -812,6 +1195,7 @@ pub struct G6EvaluatorRun {
 impl G6EvaluatorRun {
     /// Open a run only when every contract pin and budget is valid.
     pub fn open(config: EvaluatorConfig) -> Result<Self, EvalError> {
+        config.metric_registry.admit_split(config.split)?;
         if config.envelope_contract != EVALUATOR_ENVELOPE_CONTRACT {
             return Err(EvalError::ContractMismatch("envelope_contract"));
         }
@@ -878,6 +1262,7 @@ impl G6EvaluatorRun {
             envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
             arm_contract: G6_EVALUATOR_CONTRACT,
             budget_contract: READOUT_BUDGET_CONTRACT,
+            metric_registry_contract: self.config.metric_registry.registry_contract,
             source_generic_contract: GENERIC6_CONTRACT,
             label_contract: PROTECTED_LABEL_CONTRACT,
         };
@@ -994,6 +1379,10 @@ pub enum EvalError {
         left_updates: u64,
         right_updates: u64,
     },
+    /// Metric registry is empty, drifted, duplicated, or invented.
+    MetricRegistryInvalid {
+        reason: &'static str,
+    },
 }
 
 impl fmt::Display for EvalError {
@@ -1051,6 +1440,9 @@ impl fmt::Display for EvalError {
                 right_examples,
                 right_updates
             ),
+            Self::MetricRegistryInvalid { reason } => {
+                write!(formatter, "metric registry invalid: {reason}")
+            }
         }
     }
 }
@@ -1881,5 +2273,370 @@ mod tests {
                 "optimizer_update_budget_matcher_contract"
             ))
         );
+    }
+
+    #[test]
+    fn metric_registry_pins_primary_families_cross_summary_and_secondaries() {
+        assert_eq!(METRIC_REGISTRY_CONTRACT, "tdi25-metric-registry-v1");
+        assert_eq!(
+            PRIMARY_FAMILY_TORSOR_FAVORABLE,
+            "family_paired_task_accuracy_torsor_favorable"
+        );
+        assert_eq!(CROSS_FAMILY_PAIRED_SUMMARY, "cross_family_paired_summary");
+        assert_eq!(
+            PINNED_PRIMARY_FAMILY_METRICS.len(),
+            MAX_PRIMARY_FAMILY_METRICS
+        );
+        assert_eq!(
+            PINNED_SECONDARY_DIAGNOSTICS.len(),
+            MAX_SECONDARY_DIAGNOSTICS
+        );
+        assert_eq!(
+            PrimaryFamilyMetricId::admitted_set(),
+            PINNED_PRIMARY_FAMILY_METRICS
+        );
+        assert_eq!(
+            SecondaryDiagnosticId::admitted_set(),
+            PINNED_SECONDARY_DIAGNOSTICS
+        );
+
+        let pinned = MetricRegistry::pinned();
+        assert_eq!(pinned.primary_family_metrics, PINNED_PRIMARY_FAMILY_METRICS);
+        assert_eq!(
+            pinned.cross_family_summary,
+            CrossFamilySummaryMetricId::CrossFamilyPairedSummary
+        );
+        assert_eq!(pinned.secondaries, PINNED_SECONDARY_DIAGNOSTICS);
+        assert_eq!(pinned.registry_contract, METRIC_REGISTRY_CONTRACT);
+        assert!(pinned.experimental_non_final);
+        validate_metric_registry(&pinned).unwrap();
+
+        let frozen = freeze_metric_registry(
+            PINNED_PRIMARY_FAMILY_METRICS,
+            Some(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
+            PINNED_SECONDARY_DIAGNOSTICS,
+        )
+        .unwrap();
+        assert_eq!(frozen, pinned);
+
+        assert_eq!(
+            pinned.primary_family_metrics[0].as_str(),
+            PRIMARY_FAMILY_TORSOR_FAVORABLE
+        );
+        assert_eq!(
+            pinned.primary_family_metrics[0].family(),
+            TaskFamily::TorsorFavorable
+        );
+        assert_eq!(
+            pinned.primary_family_metrics[1].as_str(),
+            PRIMARY_FAMILY_CHIRAL_FAVORABLE
+        );
+        assert_eq!(
+            pinned.primary_family_metrics[2].as_str(),
+            PRIMARY_FAMILY_MIXED
+        );
+        assert_eq!(
+            pinned.primary_family_metrics[3].as_str(),
+            PRIMARY_FAMILY_NEUTRAL
+        );
+        assert_eq!(
+            pinned.cross_family_summary.as_str(),
+            CROSS_FAMILY_PAIRED_SUMMARY
+        );
+        assert_eq!(
+            pinned.secondaries[0].as_str(),
+            SECONDARY_PAIRED_OUTCOME_DIFFERENCE
+        );
+        assert_eq!(
+            pinned.secondaries[1].as_str(),
+            SECONDARY_TORSOR_TRANSPORT_REDUCTION_POINT_IDENTITY_ERROR
+        );
+        assert_eq!(
+            pinned.secondaries[2].as_str(),
+            SECONDARY_CHIRAL_MIRROR_SWAP_PARITY_IDENTITY_ERROR
+        );
+        assert_eq!(
+            pinned.secondaries[3].as_str(),
+            SECONDARY_G6_ATTRIBUTION_CONTRAST
+        );
+        assert_eq!(
+            pinned.secondaries[4].as_str(),
+            SECONDARY_CALIBRATION_STABILITY
+        );
+        assert_eq!(
+            pinned.secondaries[5].as_str(),
+            SECONDARY_OP_COUNT_MEMORY_RUNTIME
+        );
+
+        for split in [DataSplit::Development, DataSplit::Validation] {
+            assert!(pinned.admit_split(split).is_ok());
+            let t6 = EvaluatorConfig::t6(split);
+            assert_eq!(t6.metric_registry, pinned);
+            assert!(T6EvaluatorRun::open(t6).is_ok());
+            assert!(C6EvaluatorRun::open(EvaluatorConfig::c6(split)).is_ok());
+            assert!(G6EvaluatorRun::open(EvaluatorConfig::g6(split)).is_ok());
+        }
+
+        assert_eq!(
+            parse_primary_family_metric_id(PRIMARY_FAMILY_MIXED).unwrap(),
+            PrimaryFamilyMetricId::Mixed
+        );
+        assert_eq!(
+            parse_cross_family_summary_metric_id(CROSS_FAMILY_PAIRED_SUMMARY).unwrap(),
+            CrossFamilySummaryMetricId::CrossFamilyPairedSummary
+        );
+        assert_eq!(
+            parse_secondary_diagnostic_id(SECONDARY_G6_ATTRIBUTION_CONTRAST).unwrap(),
+            SecondaryDiagnosticId::G6AttributionContrast
+        );
+    }
+
+    #[test]
+    fn metric_registry_rejects_empty_primary_duplicates_unknowns_and_sequence_drift() {
+        assert_eq!(
+            freeze_metric_registry(
+                &[],
+                Some(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
+                PINNED_SECONDARY_DIAGNOSTICS,
+            ),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "empty_primary",
+            })
+        );
+        assert_eq!(
+            freeze_metric_registry(
+                PINNED_PRIMARY_FAMILY_METRICS,
+                None,
+                PINNED_SECONDARY_DIAGNOSTICS,
+            ),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "empty_cross_family_summary",
+            })
+        );
+        assert_eq!(
+            parse_primary_family_metric_id(""),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "empty_primary",
+            })
+        );
+        assert_eq!(
+            parse_primary_family_metric_id("invented_primary"),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "unknown_primary",
+            })
+        );
+        assert_eq!(
+            parse_cross_family_summary_metric_id(""),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "empty_cross_family_summary",
+            })
+        );
+        assert_eq!(
+            parse_cross_family_summary_metric_id("invented_summary"),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "unknown_cross_family_summary",
+            })
+        );
+        assert_eq!(
+            parse_secondary_diagnostic_id("invented_secondary"),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "unknown_secondary",
+            })
+        );
+
+        const DUPLICATE_SECONDARIES: &[SecondaryDiagnosticId] = &[
+            SecondaryDiagnosticId::PairedOutcomeDifference,
+            SecondaryDiagnosticId::TorsorTransportReductionPointIdentityError,
+            SecondaryDiagnosticId::PairedOutcomeDifference,
+        ];
+        assert_eq!(
+            freeze_metric_registry(
+                PINNED_PRIMARY_FAMILY_METRICS,
+                Some(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
+                DUPLICATE_SECONDARIES,
+            ),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "duplicate_secondary",
+            })
+        );
+
+        const DUPLICATE_PRIMARIES: &[PrimaryFamilyMetricId] = &[
+            PrimaryFamilyMetricId::TorsorFavorable,
+            PrimaryFamilyMetricId::TorsorFavorable,
+            PrimaryFamilyMetricId::Mixed,
+            PrimaryFamilyMetricId::Neutral,
+        ];
+        assert_eq!(
+            freeze_metric_registry(
+                DUPLICATE_PRIMARIES,
+                Some(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
+                PINNED_SECONDARY_DIAGNOSTICS,
+            ),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "duplicate_primary",
+            })
+        );
+
+        const OVERSIZED_SECONDARIES: &[SecondaryDiagnosticId] = &[
+            SecondaryDiagnosticId::PairedOutcomeDifference,
+            SecondaryDiagnosticId::TorsorTransportReductionPointIdentityError,
+            SecondaryDiagnosticId::ChiralMirrorSwapParityIdentityError,
+            SecondaryDiagnosticId::G6AttributionContrast,
+            SecondaryDiagnosticId::CalibrationStability,
+            SecondaryDiagnosticId::OpCountMemoryRuntime,
+            SecondaryDiagnosticId::PairedOutcomeDifference,
+        ];
+        assert_eq!(
+            freeze_metric_registry(
+                PINNED_PRIMARY_FAMILY_METRICS,
+                Some(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
+                OVERSIZED_SECONDARIES,
+            ),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "too_many_secondaries",
+            })
+        );
+
+        const TRUNCATED_SECONDARIES: &[SecondaryDiagnosticId] = &[
+            SecondaryDiagnosticId::PairedOutcomeDifference,
+            SecondaryDiagnosticId::TorsorTransportReductionPointIdentityError,
+            SecondaryDiagnosticId::ChiralMirrorSwapParityIdentityError,
+            SecondaryDiagnosticId::G6AttributionContrast,
+            SecondaryDiagnosticId::CalibrationStability,
+        ];
+        assert_eq!(
+            freeze_metric_registry(
+                PINNED_PRIMARY_FAMILY_METRICS,
+                Some(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
+                TRUNCATED_SECONDARIES,
+            ),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "secondary_sequence_mismatch",
+            })
+        );
+        assert_eq!(
+            freeze_metric_registry(
+                PINNED_PRIMARY_FAMILY_METRICS,
+                Some(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
+                &[],
+            ),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "secondary_sequence_mismatch",
+            })
+        );
+
+        const REORDERED_SECONDARIES: &[SecondaryDiagnosticId] = &[
+            SecondaryDiagnosticId::TorsorTransportReductionPointIdentityError,
+            SecondaryDiagnosticId::PairedOutcomeDifference,
+            SecondaryDiagnosticId::ChiralMirrorSwapParityIdentityError,
+            SecondaryDiagnosticId::G6AttributionContrast,
+            SecondaryDiagnosticId::CalibrationStability,
+            SecondaryDiagnosticId::OpCountMemoryRuntime,
+        ];
+        assert_eq!(
+            freeze_metric_registry(
+                PINNED_PRIMARY_FAMILY_METRICS,
+                Some(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
+                REORDERED_SECONDARIES,
+            ),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "secondary_sequence_mismatch",
+            })
+        );
+
+        const REORDERED_PRIMARIES: &[PrimaryFamilyMetricId] = &[
+            PrimaryFamilyMetricId::ChiralFavorable,
+            PrimaryFamilyMetricId::TorsorFavorable,
+            PrimaryFamilyMetricId::Mixed,
+            PrimaryFamilyMetricId::Neutral,
+        ];
+        assert_eq!(
+            freeze_metric_registry(
+                REORDERED_PRIMARIES,
+                Some(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
+                PINNED_SECONDARY_DIAGNOSTICS,
+            ),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "primary_sequence_mismatch",
+            })
+        );
+
+        const TRUNCATED_PRIMARIES: &[PrimaryFamilyMetricId] = &[
+            PrimaryFamilyMetricId::TorsorFavorable,
+            PrimaryFamilyMetricId::ChiralFavorable,
+            PrimaryFamilyMetricId::Mixed,
+        ];
+        assert_eq!(
+            freeze_metric_registry(
+                TRUNCATED_PRIMARIES,
+                Some(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
+                PINNED_SECONDARY_DIAGNOSTICS,
+            ),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "primary_sequence_mismatch",
+            })
+        );
+
+        let malformed = MetricRegistry {
+            primary_family_metrics: &[],
+            ..MetricRegistry::pinned()
+        };
+        assert_eq!(
+            malformed.admit_split(DataSplit::Development),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "empty_primary",
+            })
+        );
+        let mut config = EvaluatorConfig::t6(DataSplit::Development);
+        config.metric_registry = malformed;
+        assert_eq!(
+            T6EvaluatorRun::open(config),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "empty_primary",
+            })
+        );
+
+        let mut drifted = MetricRegistry::pinned();
+        drifted.registry_contract = "not-a-metric-registry";
+        assert_eq!(
+            validate_metric_registry(&drifted),
+            Err(EvalError::ContractMismatch("metric_registry_contract"))
+        );
+        let mut config = EvaluatorConfig::c6(DataSplit::Validation);
+        config.metric_registry = drifted;
+        assert_eq!(
+            C6EvaluatorRun::open(config),
+            Err(EvalError::ContractMismatch("metric_registry_contract"))
+        );
+
+        let mut non_experimental = MetricRegistry::pinned();
+        non_experimental.experimental_non_final = false;
+        assert_eq!(
+            validate_metric_registry(&non_experimental),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "experimental_non_final_required",
+            })
+        );
+    }
+
+    #[test]
+    fn metric_registry_contract_is_retained_on_scored_records() {
+        let pair = torsor_transport_pair_in_split(26, DataSplit::Development).unwrap();
+        let sealed = seal_torsor_transport(pair.transported, pair.oracle);
+        let mut run = T6EvaluatorRun::open(EvaluatorConfig::t6(DataSplit::Development)).unwrap();
+        let record = run.evaluate_torsor_transport(&sealed).unwrap();
+        assert_eq!(record.metric_registry_contract, METRIC_REGISTRY_CONTRACT);
+
+        let chiral = chiral_reflection_pair_in_split(26, DataSplit::Development).unwrap();
+        let sealed = seal_chiral_reflection(chiral.left, chiral.left_oracle);
+        let mut c6 = C6EvaluatorRun::open(EvaluatorConfig::c6(DataSplit::Development)).unwrap();
+        let record = c6.evaluate_chiral_reflection(&sealed).unwrap();
+        assert_eq!(record.metric_registry_contract, METRIC_REGISTRY_CONTRACT);
+
+        let neutral = neutral_control_pair_in_split(26, DataSplit::Development).unwrap();
+        let sealed = seal_neutral_control(neutral.class_a, neutral.class_a_oracle);
+        let mut g6 = G6EvaluatorRun::open(EvaluatorConfig::g6(DataSplit::Development)).unwrap();
+        let record = g6.evaluate_neutral_control(&sealed).unwrap();
+        assert_eq!(record.metric_registry_contract, METRIC_REGISTRY_CONTRACT);
     }
 }
