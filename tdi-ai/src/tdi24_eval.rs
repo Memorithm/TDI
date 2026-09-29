@@ -1422,24 +1422,20 @@ fn sum_squared_group_sizes(records: &[EvalRecord]) -> Result<u64, EvalError> {
     for record in records {
         if let Some((_, _, size)) = groups
             .iter_mut()
-            .find(|(family, group_id, _)| {
-                *family == record.family && *group_id == record.group_id
-            })
+            .find(|(family, group_id, _)| *family == record.family && *group_id == record.group_id)
         {
             *size += 1;
         } else {
             groups.push((record.family, record.group_id, 1));
         }
     }
-    groups
-        .into_iter()
-        .try_fold(0_u64, |sum, (_, _, size)| {
+    groups.into_iter().try_fold(0_u64, |sum, (_, _, size)| {
         size.checked_mul(size)
             .and_then(|square| sum.checked_add(square))
             .ok_or(EvalError::PairedUncertaintyInvalid {
                 reason: "invalid_cluster_sizes",
             })
-        })
+    })
 }
 
 /// Summarise paired V6/C6 [`EvalRecord`] slices without re-entering label oracles.
@@ -2573,8 +2569,7 @@ mod tests {
                 reason: "too_many_pairs",
             })
         );
-        let oversized_c6_records =
-            vec![c6_records[0].clone(); MAX_CASES_PER_RUN as usize + 1];
+        let oversized_c6_records = vec![c6_records[0].clone(); MAX_CASES_PER_RUN as usize + 1];
         assert_eq!(
             summarize_paired_uncertainty_from_records(
                 DataSplit::Development,
