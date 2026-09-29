@@ -43,8 +43,8 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | 23 | G6 evaluator | **landed** in #666, exact head `3403b8768d24ac1543b75120d15a09dd5b58c50e`, merge `d6c8226025de1dbe4848f83d8092c316066f97b1`; same readout/evaluation envelope as T6/C6 |
 | 24 | Parameter/readout matcher | **landed** in #669, exact head `69f5ec9c27ceeadd047fd196193131964b7a0023`, merge `32c02cb7625dae788dc5d44d4449447a408f0589`; reject capacity mismatch rather than silently compensate |
 | 25 | Optimizer/update-budget matcher | **landed** in #673, exact head `d171ee9815813704b7214f5c812b2e6e864b6116`, merge `efb03b8c3e37bcb537952bdca2ce545765da29c8`; same examples/order/steps/stopping rule where trained |
-| 26 | Metric registry | primary family metrics and cross-family summary frozen |
-| 27 | Paired uncertainty engine | paired effect/interval computation by seed block |
+| 26 | Metric registry | **blocked** after exact-head review of closed, unmerged #676: no existing family exposes a common task-level target/readout computable independently by both T6 and C6; arm-specific oracle matches, cross-family comparisons and G6 controls are inadmissible substitutes |
+| 27 | Paired uncertainty engine | **blocked on slice 26**; no paired effects or intervals until at least one primary metric is computable under a common target |
 | 28 | Family-stratified synthesis | pooled summaries cannot hide sign reversals |
 | 29 | Typed failure/resource accounting | numerical/task/resource failures retained by arm |
 | 30 | Stage-C bounded preflight | Development/Validation only; no protected/final execution |
@@ -94,4 +94,4 @@ Pause the campaign when any of the following occurs:
 
 ## Progress accounting
 
-**25/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606, #607, #612, #654, #656, #658, #660, #661, #663, #666, #669, #673). Slice 26 is next. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**25/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606, #607, #612, #654, #656, #658, #660, #661, #663, #666, #669, #673). Slice 26 is blocked pending a common task-level target/readout computable independently by T6 and C6. Candidate #676 closed unmerged after its exact-head review established that an empty primary registry cannot satisfy the slice-26 Definition of Done; the successful dedicated software gate on head `86f429787bd9e8d8662504849fd720b405399802` does not override that semantic block. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
