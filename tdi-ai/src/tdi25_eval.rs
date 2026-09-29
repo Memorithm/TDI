@@ -2461,21 +2461,14 @@ pub fn classify_signed_effect(
     mean: f64,
     ci: ConfidenceInterval,
 ) -> Result<SignedEffectClass, EvalError> {
-    if !mean.is_finite() || !ci.lower.is_finite() || !ci.upper.is_finite() {
-        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
-            reason: "non_finite",
-        });
-    }
-    if ci.lower > ci.upper {
-        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
-            reason: "non_finite",
-        });
-    }
-    if mean < ci.lower - 1e-12 || mean > ci.upper + 1e-12 {
-        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
-            reason: "mean_outside_interval",
-        });
-    }
+    require_admissible_confidence_interval(
+        ci,
+        mean,
+        &[
+            UncertaintyMethod::BoundedHoeffdingPairedDifference,
+            UncertaintyMethod::ClusterHoeffdingPairedDifference,
+        ],
+    )?;
     if ci.lower > 0.0 {
         Ok(SignedEffectClass::Positive)
     } else if ci.upper < 0.0 {
@@ -5180,6 +5173,45 @@ mod tests {
             classify_signed_effect(-0.5, contradictory),
             Err(EvalError::FamilyStratifiedSynthesisInvalid {
                 reason: "mean_outside_interval",
+            })
+        );
+    }
+
+    #[test]
+    fn signed_effect_classifier_rejects_confidence_and_method_drift() {
+        let wrong_confidence = ConfidenceInterval {
+            lower: 0.1,
+            upper: 0.2,
+            confidence: 0.0,
+            method: UncertaintyMethod::BoundedHoeffdingPairedDifference,
+        };
+        assert_eq!(
+            classify_signed_effect(0.15, wrong_confidence),
+            Err(EvalError::FamilyStratifiedSynthesisInvalid {
+                reason: "confidence_level_mismatch",
+            })
+        );
+
+        let non_finite_confidence = ConfidenceInterval {
+            confidence: f64::NAN,
+            ..wrong_confidence
+        };
+        assert_eq!(
+            classify_signed_effect(0.15, non_finite_confidence),
+            Err(EvalError::FamilyStratifiedSynthesisInvalid {
+                reason: "non_finite",
+            })
+        );
+
+        let wrong_method = ConfidenceInterval {
+            confidence: PAIRED_UNCERTAINTY_LEVEL,
+            method: UncertaintyMethod::WilsonScore,
+            ..wrong_confidence
+        };
+        assert_eq!(
+            classify_signed_effect(0.15, wrong_method),
+            Err(EvalError::FamilyStratifiedSynthesisInvalid {
+                reason: "uncertainty_method_mismatch",
             })
         );
     }
