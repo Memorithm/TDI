@@ -71,8 +71,8 @@ pub const SECONDARY_CALIBRATION_CONFIDENCE_ERROR: &str = "calibration_confidence
 /// Secondary diagnostic: gradient / stability for trained arms.
 pub const SECONDARY_GRADIENT_STABILITY: &str = "gradient_stability";
 
-/// Secondary diagnostic: op-count / memory / latency under a qualified env only.
-pub const SECONDARY_OP_COUNT_MEMORY_LATENCY: &str = "op_count_memory_latency";
+/// Secondary diagnostic: op-count / memory / latency / throughput under a qualified env only.
+pub const SECONDARY_OP_COUNT_MEMORY_LATENCY_THROUGHPUT: &str = "op_count_memory_latency_throughput";
 
 /// Maximum secondary diagnostics admitted in one frozen registry.
 pub const MAX_SECONDARY_DIAGNOSTICS: usize = 6;
@@ -784,8 +784,8 @@ pub enum SecondaryDiagnosticId {
     CalibrationConfidenceError,
     /// Gradient / stability diagnostics for trained arms.
     GradientStability,
-    /// Operation count, memory, latency under an explicitly qualified environment.
-    OpCountMemoryLatency,
+    /// Operation count, memory, latency, throughput under an explicitly qualified environment.
+    OpCountMemoryLatencyThroughput,
 }
 
 impl SecondaryDiagnosticId {
@@ -800,7 +800,7 @@ impl SecondaryDiagnosticId {
             }
             Self::CalibrationConfidenceError => SECONDARY_CALIBRATION_CONFIDENCE_ERROR,
             Self::GradientStability => SECONDARY_GRADIENT_STABILITY,
-            Self::OpCountMemoryLatency => SECONDARY_OP_COUNT_MEMORY_LATENCY,
+            Self::OpCountMemoryLatencyThroughput => SECONDARY_OP_COUNT_MEMORY_LATENCY_THROUGHPUT,
         }
     }
 
@@ -823,7 +823,7 @@ pub fn parse_secondary_diagnostic_id(label: &str) -> Result<SecondaryDiagnosticI
             Ok(SecondaryDiagnosticId::CalibrationConfidenceError)
         }
         SECONDARY_GRADIENT_STABILITY => Ok(SecondaryDiagnosticId::GradientStability),
-        SECONDARY_OP_COUNT_MEMORY_LATENCY => Ok(SecondaryDiagnosticId::OpCountMemoryLatency),
+        SECONDARY_OP_COUNT_MEMORY_LATENCY_THROUGHPUT => Ok(SecondaryDiagnosticId::OpCountMemoryLatencyThroughput),
         _ => Err(EvalError::MetricRegistryInvalid {
             reason: "unknown_secondary",
         }),
@@ -837,7 +837,7 @@ pub const PINNED_SECONDARY_DIAGNOSTICS: &[SecondaryDiagnosticId] = &[
     SecondaryDiagnosticId::ParityEquivarianceInvarianceError,
     SecondaryDiagnosticId::CalibrationConfidenceError,
     SecondaryDiagnosticId::GradientStability,
-    SecondaryDiagnosticId::OpCountMemoryLatency,
+    SecondaryDiagnosticId::OpCountMemoryLatencyThroughput,
 ];
 
 /// Frozen Stage-C metric registry: one primary metric plus ordered secondaries.
@@ -1531,7 +1531,7 @@ mod tests {
         assert_eq!(pinned.secondaries[4].as_str(), SECONDARY_GRADIENT_STABILITY);
         assert_eq!(
             pinned.secondaries[5].as_str(),
-            SECONDARY_OP_COUNT_MEMORY_LATENCY
+            SECONDARY_OP_COUNT_MEMORY_LATENCY_THROUGHPUT
         );
 
         for split in [DataSplit::Development, DataSplit::Validation] {
@@ -1598,7 +1598,7 @@ mod tests {
             SecondaryDiagnosticId::ParityEquivarianceInvarianceError,
             SecondaryDiagnosticId::CalibrationConfidenceError,
             SecondaryDiagnosticId::GradientStability,
-            SecondaryDiagnosticId::OpCountMemoryLatency,
+            SecondaryDiagnosticId::OpCountMemoryLatencyThroughput,
             SecondaryDiagnosticId::PairedOutcomeDifference,
         ];
         assert_eq!(
@@ -1640,7 +1640,7 @@ mod tests {
             SecondaryDiagnosticId::ParityEquivarianceInvarianceError,
             SecondaryDiagnosticId::CalibrationConfidenceError,
             SecondaryDiagnosticId::GradientStability,
-            SecondaryDiagnosticId::OpCountMemoryLatency,
+            SecondaryDiagnosticId::OpCountMemoryLatencyThroughput,
         ];
         assert_eq!(
             freeze_metric_registry(
