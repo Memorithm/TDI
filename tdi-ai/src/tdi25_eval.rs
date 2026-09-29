@@ -177,8 +177,7 @@ fn validate_capacity_carrier(capacity: ParameterReadoutCapacity) -> Result<(), E
     if capacity.query_components != accounting.query_components as u64
         || capacity.score_components != accounting.score_components as u64
         || capacity.key_components != accounting.key_components as u64
-        || capacity.external_geometry_components
-            != accounting.external_geometry_components as u64
+        || capacity.external_geometry_components != accounting.external_geometry_components as u64
     {
         return Err(EvalError::ContractMismatch(
             "parameter_readout_carrier_accounting",
