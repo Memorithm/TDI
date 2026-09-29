@@ -2393,6 +2393,11 @@ pub fn classify_signed_effect(
             reason: "non_finite",
         });
     }
+    if mean < ci.lower - 1e-12 || mean > ci.upper + 1e-12 {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "mean_outside_interval",
+        });
+    }
     if ci.lower > 0.0 {
         Ok(SignedEffectClass::Positive)
     } else if ci.upper < 0.0 {
@@ -5011,6 +5016,22 @@ mod tests {
             synthesize_family_stratified_effects(split, &summaries, &MetricRegistry::pinned()),
             Err(EvalError::FamilyStratifiedSynthesisInvalid {
                 reason: "summary_integrity_mismatch",
+            })
+        );
+    }
+
+    #[test]
+    fn signed_effect_classifier_rejects_mean_outside_interval() {
+        let contradictory = ConfidenceInterval {
+            lower: 0.1,
+            upper: 0.2,
+            confidence: PAIRED_UNCERTAINTY_LEVEL,
+            method: UncertaintyMethod::BoundedHoeffdingPairedDifference,
+        };
+        assert_eq!(
+            classify_signed_effect(-0.5, contradictory),
+            Err(EvalError::FamilyStratifiedSynthesisInvalid {
+                reason: "mean_outside_interval",
             })
         );
     }
