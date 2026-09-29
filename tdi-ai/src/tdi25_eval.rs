@@ -1597,8 +1597,7 @@ impl PairedEffectSummaryIntegrity {
             c6_accuracy_ci: summary.c6_accuracy_ci,
             primary_family_metric: summary.primary_family_metric,
             cross_family_summary: summary.cross_family_summary,
-            secondary_paired_outcome_difference:
-                summary.secondary_paired_outcome_difference,
+            secondary_paired_outcome_difference: summary.secondary_paired_outcome_difference,
             uncertainty_contract: summary.uncertainty_contract,
             metric_registry_contract: summary.metric_registry_contract,
             experimental_non_final: summary.experimental_non_final,
@@ -4994,20 +4993,8 @@ mod tests {
         let mut one_c6_win = losses.clone();
         one_c6_win[0].1 = true;
         let mut summaries = [
-            family_summary(
-                split,
-                TaskFamily::TorsorFavorable,
-                9,
-                &losses,
-                &one_c6_win,
-            ),
-            family_summary(
-                split,
-                TaskFamily::ChiralFavorable,
-                9,
-                &losses,
-                &one_c6_win,
-            ),
+            family_summary(split, TaskFamily::TorsorFavorable, 9, &losses, &one_c6_win),
+            family_summary(split, TaskFamily::ChiralFavorable, 9, &losses, &one_c6_win),
             family_summary(split, TaskFamily::Mixed, 9, &losses, &one_c6_win),
             family_summary(split, TaskFamily::Neutral, 9, &losses, &one_c6_win),
         ];
