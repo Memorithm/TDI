@@ -290,7 +290,11 @@ impl EvaluatorRun {
                 field: "budget_contract",
             });
         }
-        if config.budget.max_cases == 0 || config.budget.max_readout_scalars_per_case == 0 {
+        if config.budget.max_cases == 0
+            || config.budget.max_cases > MAX_CASES_PER_RUN
+            || config.budget.max_readout_scalars_per_case == 0
+            || config.budget.max_readout_scalars_per_case > MAX_READOUT_SCALARS_PER_CASE
+        {
             return Err(EvalError::InvalidBudget);
         }
         Ok(Self {
@@ -3337,6 +3341,22 @@ mod tests {
             Err(EvalError::ContractMismatch {
                 field: "arm_contract",
             })
+        );
+    }
+    #[test]
+    fn evaluator_open_rejects_budgets_beyond_failure_ledger_capacity() {
+        let mut too_many_cases = EvaluatorConfig::v6(DataSplit::Development).unwrap();
+        too_many_cases.budget.max_cases = MAX_FAILURES_PER_RUN + 1;
+        assert_eq!(
+            EvaluatorRun::open(too_many_cases),
+            Err(EvalError::InvalidBudget)
+        );
+
+        let mut too_many_scalars = EvaluatorConfig::c6(DataSplit::Validation).unwrap();
+        too_many_scalars.budget.max_readout_scalars_per_case = MAX_READOUT_SCALARS_PER_CASE + 1;
+        assert_eq!(
+            EvaluatorRun::open(too_many_scalars),
+            Err(EvalError::InvalidBudget)
         );
     }
 }
