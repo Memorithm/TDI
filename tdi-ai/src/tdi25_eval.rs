@@ -360,13 +360,35 @@ pub struct MatchedOptimizerUpdateBudget {
     pub matcher_contract: &'static str,
 }
 
+fn validate_optimizer_update_budget(budget: OptimizerUpdateBudget) -> Result<(), EvalError> {
+    match budget.stopping {
+        StoppingRule::ExhaustExamples => {
+            // Non-trained / exhaust path: zero updates; examples may be 0
+            // (non-trained ref) or a sealed case count.
+            if budget.updates != NON_TRAINED_UPDATE_BUDGET {
+                return Err(EvalError::InvalidBudget);
+            }
+        }
+        StoppingRule::FixedUpdates => {
+            // Trained path: require a positive update count and at least one
+            // example so a matched witness cannot admit an unusable budget.
+            if budget.updates == 0 || budget.examples == 0 {
+                return Err(EvalError::InvalidBudget);
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Accept only matched optimizer/update budgets; reject unpaired examples,
 /// ordering, steps or stopping rules fail-closed without silent compensation.
 ///
 /// Attribution pairs (T6↔G6, C6↔G6, T6↔C6) must agree on examples count,
-/// ordering identity, update steps, and stopping rule. Later trained paths
-/// must still pass through this matcher so mismatched budgets cannot diverge
-/// silently.
+/// ordering identity, update steps, and stopping rule. Each arm's budget is
+/// validated against stopping-rule invariants before comparison so equal
+/// malformed trained budgets cannot produce a matched witness. Later trained
+/// paths must still pass through this matcher so mismatched budgets cannot
+/// diverge silently.
 pub fn match_optimizer_update_budgets(
     left: OptimizerUpdateBudget,
     right: OptimizerUpdateBudget,
@@ -378,6 +400,8 @@ pub fn match_optimizer_update_budgets(
             "optimizer_update_budget_matcher_contract",
         ));
     }
+    validate_optimizer_update_budget(left)?;
+    validate_optimizer_update_budget(right)?;
     if left.arm == right.arm {
         return Err(EvalError::ContractMismatch(
             "optimizer_update_budget_distinct_arms",
@@ -1748,6 +1772,7 @@ mod tests {
         );
 
         let mut other_updates = OptimizerUpdateBudget::reference_g6();
+        other_updates.examples = 8;
         other_updates.updates = 4;
         other_updates.stopping = StoppingRule::FixedUpdates;
         assert!(matches!(
@@ -1763,6 +1788,8 @@ mod tests {
         ));
 
         let mut other_stopping = OptimizerUpdateBudget::reference_g6();
+        other_stopping.examples = 8;
+        other_stopping.updates = 4;
         other_stopping.stopping = StoppingRule::FixedUpdates;
         assert!(matches!(
             match_optimizer_update_budgets(t6, other_stopping),
@@ -1792,6 +1819,43 @@ mod tests {
             match_optimizer_update_budgets(left_trained, right_trained),
             Err(EvalError::OptimizerUpdateBudgetMismatch { .. })
         ));
+    }
+
+    #[test]
+    fn optimizer_update_budget_matcher_rejects_internally_invalid_budgets() {
+        let mut left = OptimizerUpdateBudget::reference_t6();
+        let mut right = OptimizerUpdateBudget::reference_c6();
+        // FixedUpdates with zero updates is unusable even when paired equal.
+        left.stopping = StoppingRule::FixedUpdates;
+        right.stopping = StoppingRule::FixedUpdates;
+        left.examples = 16;
+        right.examples = 16;
+        left.updates = 0;
+        right.updates = 0;
+        assert_eq!(
+            match_optimizer_update_budgets(left, right),
+            Err(EvalError::InvalidBudget)
+        );
+
+        // FixedUpdates with zero examples is unusable.
+        left.updates = 8;
+        right.updates = 8;
+        left.examples = 0;
+        right.examples = 0;
+        assert_eq!(
+            match_optimizer_update_budgets(left, right),
+            Err(EvalError::InvalidBudget)
+        );
+
+        // ExhaustExamples cannot carry a non-zero update budget.
+        left = OptimizerUpdateBudget::reference_t6();
+        right = OptimizerUpdateBudget::reference_g6();
+        left.updates = 4;
+        right.updates = 4;
+        assert_eq!(
+            match_optimizer_update_budgets(left, right),
+            Err(EvalError::InvalidBudget)
+        );
     }
 
     #[test]
