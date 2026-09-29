@@ -2504,7 +2504,10 @@ fn family_signed_effect_from_summary(
     }
     if summary.seed_blocks.is_empty()
         || summary.seed_blocks[0] != summary.seed_block
-        || summary.seed_blocks.windows(2).any(|pair| pair[0] >= pair[1])
+        || summary
+            .seed_blocks
+            .windows(2)
+            .any(|pair| pair[0] >= pair[1])
     {
         return Err(EvalError::FamilyStratifiedSynthesisInvalid {
             reason: "seed_block_mismatch",
@@ -4897,12 +4900,7 @@ mod tests {
                     seed_block,
                     &[(0, false), (1, false)],
                 ));
-                c6.extend(matches(
-                    split,
-                    family,
-                    seed_block,
-                    &[(0, true), (1, true)],
-                ));
+                c6.extend(matches(split, family, seed_block, &[(0, true), (1, true)]));
             }
         }
 
