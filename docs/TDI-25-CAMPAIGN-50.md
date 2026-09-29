@@ -41,7 +41,7 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | 21 | T6 evaluator | **landed** in #661, exact head `6646886c7e749bf158714984ac4de92eec3228cb`, merge `8dfc513382f77308042f01ad2571cd1844c27d64`; consumes TDI-22 factorized torsor contract through a bounded non-final envelope |
 | 22 | C6 evaluator | **landed** in #663, exact head `25ff8e020a0c784d3a52d021fb13d9fcc986702f`, merge `ae501e9b3941a293c3cb18f3450c3c077b25f48f`; consumes TDI-24 chiral contract unchanged |
 | 23 | G6 evaluator | **landed** in #666, exact head `3403b8768d24ac1543b75120d15a09dd5b58c50e`, merge `d6c8226025de1dbe4848f83d8092c316066f97b1`; same readout/evaluation envelope as T6/C6 |
-| 24 | Parameter/readout matcher | **current candidate** in #669; reject capacity mismatch rather than silently compensate |
+| 24 | Parameter/readout matcher | **landed** in #669, exact head `69f5ec9c27ceeadd047fd196193131964b7a0023`, merge `32c02cb7625dae788dc5d44d4449447a408f0589`; reject capacity mismatch rather than silently compensate |
 | 25 | Optimizer/update-budget matcher | same examples/order/steps/stopping rule where trained |
 | 26 | Metric registry | primary family metrics and cross-family summary frozen |
 | 27 | Paired uncertainty engine | paired effect/interval computation by seed block |
@@ -94,4 +94,4 @@ Pause the campaign when any of the following occurs:
 
 ## Progress accounting
 
-**23/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606, #607, #612, #654, #656, #658, #660, #661, #663, #666). Slice 24 is the current candidate. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**24/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606, #607, #612, #654, #656, #658, #660, #661, #663, #666, #669). Slice 25 is next. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
