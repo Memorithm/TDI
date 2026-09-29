@@ -1549,12 +1549,13 @@ impl RevealedMatchOutcomeIntegrity {
 }
 
 impl RevealedMatchOutcome {
-    /// Build from an evaluator-retained correctness / match-oracle bit.
+    /// Build a synthetic match-oracle bit for module tests only.
     ///
-    /// Every identity field and the revealed bit are sealed at construction;
-    /// later mutation is rejected before pairing or synthesis.
+    /// Production evidence must originate from retained evaluator records;
+    /// this constructor is deliberately absent from non-test builds.
+    #[cfg(test)]
     #[must_use]
-    pub fn from_matches_oracle(
+    fn from_matches_oracle(
         split: DataSplit,
         family: TaskFamily,
         seed_block: u64,
