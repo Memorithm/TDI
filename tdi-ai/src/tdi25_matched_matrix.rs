@@ -151,7 +151,7 @@ impl MatchedFamilyPaths {
 
     /// Return a common target only when both sealed paths declare the same one.
     #[must_use]
-    pub const fn shared_target_contract(self) -> Option<&'static str> {
+    pub fn shared_target_contract(self) -> Option<&'static str> {
         match (self.t6, self.c6) {
             (Some(t6_path), Some(c6_path)) => match (
                 t6_path.shared_target_contract,
