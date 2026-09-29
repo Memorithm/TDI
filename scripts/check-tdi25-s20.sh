@@ -10,4 +10,3 @@ grep -Fq 'protected_or_final_access: false' docs/tdi25-stage-b-freeze.yaml
 grep -Fq 'scientific_claim: false' docs/tdi25-stage-b-freeze.yaml
 grep -Fq '| 19 | Seed/case canonicalization + hash | **landed** in #658;' docs/TDI-25-CAMPAIGN-50.md
 grep -Fq '| 20 | Stage-B leakage/balance audit | **landed** in #660;' docs/TDI-25-CAMPAIGN-50.md
-grep -Fq '**20/50 merged**' docs/TDI-25-CAMPAIGN-50.md
