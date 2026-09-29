@@ -233,10 +233,7 @@ impl T6EvaluatorRun {
     }
 }
 
-fn is_canonical_torsor_case(
-    input: &TorsorTransportInput,
-    oracle: &TorsorTransportOracle,
-) -> bool {
+fn is_canonical_torsor_case(input: &TorsorTransportInput, oracle: &TorsorTransportOracle) -> bool {
     let Ok(pair) = torsor_transport_pair_in_split(oracle.pair_id, input.split) else {
         return false;
     };
