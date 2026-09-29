@@ -109,8 +109,8 @@ pub const SECONDARY_CALIBRATION_STABILITY: &str = "calibration_stability";
 /// Secondary diagnostic: operation / memory / runtime under a qualified env only.
 pub const SECONDARY_OP_COUNT_MEMORY_RUNTIME: &str = "op_count_memory_runtime";
 
-/// Maximum currently computable paired primary family metrics.
-pub const MAX_PRIMARY_FAMILY_METRICS: usize = 1;
+/// Bounded capacity for future computable paired primary family metrics.
+pub const MAX_PRIMARY_FAMILY_METRICS: usize = 4;
 
 /// Maximum secondary diagnostics admitted in one frozen registry.
 pub const MAX_SECONDARY_DIAGNOSTICS: usize = 6;
@@ -2283,10 +2283,8 @@ mod tests {
             "family_paired_task_accuracy_torsor_favorable"
         );
         assert_eq!(CROSS_FAMILY_PAIRED_SUMMARY, "cross_family_paired_summary");
-        assert_eq!(
-            PINNED_PRIMARY_FAMILY_METRICS.len(),
-            MAX_PRIMARY_FAMILY_METRICS
-        );
+        assert!(!PINNED_PRIMARY_FAMILY_METRICS.is_empty());
+        assert!(PINNED_PRIMARY_FAMILY_METRICS.len() <= MAX_PRIMARY_FAMILY_METRICS);
         assert_eq!(
             PINNED_SECONDARY_DIAGNOSTICS.len(),
             MAX_SECONDARY_DIAGNOSTICS
@@ -2388,7 +2386,7 @@ mod tests {
         assert_eq!(
             freeze_metric_registry(
                 PINNED_PRIMARY_FAMILY_METRICS,
-                None,
+                Some(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
                 PINNED_SECONDARY_DIAGNOSTICS,
             ),
             Err(EvalError::MetricRegistryInvalid {
@@ -2535,7 +2533,7 @@ mod tests {
                 PINNED_SECONDARY_DIAGNOSTICS,
             ),
             Err(EvalError::MetricRegistryInvalid {
-                reason: "too_many_primary_family_metrics",
+                reason: "unknown_primary",
             })
         );
 
@@ -2592,6 +2590,20 @@ mod tests {
                 reason: "experimental_non_final_required",
             })
         );
+    }
+
+    #[test]
+    fn pinned_paired_primary_has_both_t6_and_c6_scoring_paths() {
+        let pair = mixed_geometry_pair_in_split(27, DataSplit::Development).unwrap();
+        let sealed = seal_mixed_geometry(pair.base, pair.base_oracle);
+        let mut t6 = T6EvaluatorRun::open(EvaluatorConfig::t6(DataSplit::Development)).unwrap();
+        let mut c6 = C6EvaluatorRun::open(EvaluatorConfig::c6(DataSplit::Development)).unwrap();
+        let t6_record = t6.evaluate_mixed(&sealed).unwrap();
+        let c6_record = c6.evaluate_mixed(&sealed).unwrap();
+        assert_eq!(t6_record.family, TaskFamily::Mixed);
+        assert_eq!(c6_record.family, TaskFamily::Mixed);
+        assert_eq!(t6_record.case_id, c6_record.case_id);
+        assert_eq!(t6_record.canonical_digest, c6_record.canonical_digest);
     }
 
     #[test]
