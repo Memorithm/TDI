@@ -1459,11 +1459,7 @@ pub fn summarize_paired_uncertainty_from_records(
             reason: "too_many_pairs",
         });
     }
-    for (index, (left, right)) in v6_records
-        .iter()
-        .zip(c6_records.iter())
-        .enumerate()
-    {
+    for (index, (left, right)) in v6_records.iter().zip(c6_records.iter()).enumerate() {
         if left.family != right.family
             || left.case_id != right.case_id
             || left.group_id != right.group_id
