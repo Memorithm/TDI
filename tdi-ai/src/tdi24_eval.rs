@@ -12,9 +12,11 @@
 //! optimizer/update-budget matcher requiring identical examples, ordering,
 //! steps and stopping rule across paired arms. Slice 26 freezes the versioned
 //! metric registry: one primary quality metric plus an ordered closed set of
-//! secondary diagnostics for Stage-C, experimental and non-final only. No
-//! training, confirmatory execution, protected/final evaluation, or scientific
-//! claim is authorised here.
+//! secondary diagnostics for Stage-C, experimental and non-final only. Slice 27
+//! adds the paired uncertainty engine: confidence intervals and effect
+//! summaries over already-revealed V6/C6 match outcomes without accepting raw
+//! protected labels. No training, confirmatory execution, protected/final
+//! evaluation, or scientific claim is authorised here.
 
 use core::fmt;
 
@@ -24,7 +26,8 @@ use super::tdi24_chiral::{
 };
 use super::tdi24_tasks::{
     DataSplit, DirectionTarget, HandednessTarget, InferenceView, LabeledCase, NonChiralTarget,
-    ReflectionInvariantTarget, TaskFamily, canonicalize_inference_view, run_inference_callback,
+    PROTECTED_LABEL_CONTRACT, ReflectionInvariantTarget, TaskFamily, canonicalize_inference_view,
+    run_inference_callback,
 };
 use super::tdi24_vector::{VECTOR6_CONTRACT, VECTOR6_WIDTH, Vector6, Vector6Error, vector6_score};
 
@@ -76,6 +79,20 @@ pub const SECONDARY_OP_COUNT_MEMORY_LATENCY_THROUGHPUT: &str = "op_count_memory_
 
 /// Maximum secondary diagnostics admitted in one frozen registry.
 pub const MAX_SECONDARY_DIAGNOSTICS: usize = 6;
+
+/// Versioned paired uncertainty engine contract.
+pub const PAIRED_UNCERTAINTY_CONTRACT: &str = "tdi24-paired-uncertainty-v1";
+
+/// Nominal two-sided confidence level for Stage-C paired uncertainty summaries.
+pub const PAIRED_UNCERTAINTY_LEVEL: f64 = 0.95;
+
+/// Φ^{-1}(0.975) critical value for two-sided 95% Wilson intervals.
+/// Deterministic constant; no RNG and no runtime table lookup.
+pub const NORMAL_CRITICAL_Z_95: f64 = 1.959_963_984_540_054;
+
+/// ln(2 / 0.05), used by deterministic two-sided 95% Hoeffding bounds.
+/// Kept as a literal so the uncertainty surface does not depend on runtime logs.
+pub const HOEFFDING_LOG_40: f64 = 3.688_879_454_113_936_3;
 
 /// Maximum cases admitted to one non-final evaluator run.
 pub const MAX_CASES_PER_RUN: u64 = 64;
@@ -940,6 +957,535 @@ pub fn validate_metric_registry(registry: &MetricRegistry) -> Result<(), EvalErr
     Ok(())
 }
 
+/// Interval construction method retained on every Stage-C uncertainty summary.
+///
+/// Choice (documented, deterministic, no RNG):
+/// - [`UncertaintyMethod::WilsonScore`] for single-arm accuracy rates when
+///   callers provide independent revealed match bits.
+/// - [`UncertaintyMethod::BoundedHoeffdingPairedDifference`] for direct paired
+///   differences in [-1, 1]. The finite-sample bound remains non-degenerate at
+///   all-tie and all-win boundaries.
+/// - The cluster-aware variants treat each record `group_id` as one independent
+///   unit and use the observed cluster sizes in the Hoeffding range term. This
+///   preserves related mirrored/reflected/reversal/nuisance cases as clusters.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum UncertaintyMethod {
+    /// Wilson score interval on an independent single-arm match-oracle rate.
+    WilsonScore,
+    /// Bounded Hoeffding interval on independent paired differences.
+    BoundedHoeffdingPairedDifference,
+    /// Cluster-aware Hoeffding interval on a Bernoulli mean.
+    ClusterHoeffdingBernoulliMean,
+    /// Cluster-aware Hoeffding interval on paired differences.
+    ClusterHoeffdingPairedDifference,
+}
+
+impl UncertaintyMethod {
+    /// Stable lowercase method id.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::WilsonScore => "wilson_score",
+            Self::BoundedHoeffdingPairedDifference => "bounded_hoeffding_paired_difference",
+            Self::ClusterHoeffdingBernoulliMean => "cluster_hoeffding_bernoulli_mean",
+            Self::ClusterHoeffdingPairedDifference => "cluster_hoeffding_paired_difference",
+        }
+    }
+}
+
+/// Closed confidence interval with retained method and nominal level.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ConfidenceInterval {
+    pub lower: f64,
+    pub upper: f64,
+    pub confidence: f64,
+    pub method: UncertaintyMethod,
+}
+
+impl ConfidenceInterval {
+    fn checked(
+        lower: f64,
+        upper: f64,
+        confidence: f64,
+        method: UncertaintyMethod,
+    ) -> Result<Self, EvalError> {
+        if !lower.is_finite() || !upper.is_finite() || !confidence.is_finite() {
+            return Err(EvalError::PairedUncertaintyInvalid {
+                reason: "non_finite",
+            });
+        }
+        if lower > upper {
+            return Err(EvalError::PairedUncertaintyInvalid {
+                reason: "non_finite",
+            });
+        }
+        Ok(Self {
+            lower,
+            upper,
+            confidence,
+            method,
+        })
+    }
+}
+
+/// Already-revealed match bit admitted into the uncertainty surface.
+///
+/// Construct only from evaluator-retained `matches_oracle` / `correct` flags
+/// (or synthetic test vectors of the same shape). There is intentionally no
+/// constructor from [`super::tdi24_tasks::ProtectedLabel`], raw sealed targets,
+/// or leak oracles beyond what [`EvalRecord`] already retained.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct RevealedMatchOutcome {
+    /// Whether the arm score matched the sealed oracle on the evaluation path.
+    pub matches_oracle: bool,
+}
+
+impl RevealedMatchOutcome {
+    /// Build from an evaluator-retained correctness / match-oracle bit.
+    #[must_use]
+    pub const fn from_matches_oracle(matches_oracle: bool) -> Self {
+        Self { matches_oracle }
+    }
+}
+
+/// Paired V6/C6 effect summary bound to the frozen metric registry.
+///
+/// Experimental and non-final only; never authorises protected/final evaluation
+/// or scientific claims.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PairedEffectSummary {
+    pub split: DataSplit,
+    pub n_pairs: u64,
+    pub v6_accuracy: f64,
+    pub c6_accuracy: f64,
+    /// Mean of per-pair differences `I(C6)-I(V6)`; equals `c6_accuracy - v6_accuracy`.
+    pub paired_difference_mean: f64,
+    pub paired_difference_ci: ConfidenceInterval,
+    pub v6_accuracy_ci: ConfidenceInterval,
+    pub c6_accuracy_ci: ConfidenceInterval,
+    pub primary_metric: PrimaryMetricId,
+    pub secondary_paired_outcome_difference: SecondaryDiagnosticId,
+    pub uncertainty_contract: &'static str,
+    pub metric_registry_contract: &'static str,
+    pub experimental_non_final: bool,
+}
+
+/// Wilson score interval for `successes` in `n` Bernoulli trials at 95%.
+fn wilson_score_interval(successes: u64, n: u64) -> Result<ConfidenceInterval, EvalError> {
+    if n == 0 {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "empty_pairs",
+        });
+    }
+    let n_f = n as f64;
+    let p = successes as f64 / n_f;
+    let z = NORMAL_CRITICAL_Z_95;
+    let z2 = z * z;
+    let denom = 1.0 + z2 / n_f;
+    if !denom.is_finite() || denom == 0.0 {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "non_finite",
+        });
+    }
+    let center = (p + z2 / (2.0 * n_f)) / denom;
+    let inner = p * (1.0 - p) / n_f + z2 / (4.0 * n_f * n_f);
+    if !inner.is_finite() || inner < 0.0 {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "non_finite",
+        });
+    }
+    let margin = z * inner.sqrt() / denom;
+    ConfidenceInterval::checked(
+        center - margin,
+        center + margin,
+        PAIRED_UNCERTAINTY_LEVEL,
+        UncertaintyMethod::WilsonScore,
+    )
+}
+
+/// Distribution-free Hoeffding interval on a bounded mean.
+///
+/// `sum_squared_cluster_sizes` is `n` for independent rows and
+/// `sum_g n_g^2` for record groups. The paired-difference range is [-1, 1]
+/// (width two); Bernoulli means use [0, 1] (width one). Bounds are clipped to
+/// the natural range and remain non-degenerate at finite-sample boundaries.
+fn bounded_hoeffding_mean_interval(
+    mean: f64,
+    n: usize,
+    sum_squared_cluster_sizes: u64,
+    lower_bound: f64,
+    upper_bound: f64,
+    method: UncertaintyMethod,
+) -> Result<ConfidenceInterval, EvalError> {
+    if n < 2 {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "insufficient_pairs",
+        });
+    }
+    if !mean.is_finite() || lower_bound >= upper_bound {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "non_finite",
+        });
+    }
+    let n_u64 = n as u64;
+    if sum_squared_cluster_sizes < n_u64 || sum_squared_cluster_sizes > n_u64.saturating_mul(n_u64)
+    {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "invalid_cluster_sizes",
+        });
+    }
+    let n_f = n as f64;
+    let range_width = upper_bound - lower_bound;
+    let margin = range_width
+        * ((sum_squared_cluster_sizes as f64 * HOEFFDING_LOG_40) / (2.0 * n_f * n_f)).sqrt();
+    if !margin.is_finite() {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "non_finite",
+        });
+    }
+    ConfidenceInterval::checked(
+        (mean - margin).max(lower_bound),
+        (mean + margin).min(upper_bound),
+        PAIRED_UNCERTAINTY_LEVEL,
+        method,
+    )
+}
+
+/// Bounded finite-sample CI on the mean of paired outcome differences.
+fn bounded_hoeffding_paired_difference_ci(
+    differences: &[f64],
+    sum_squared_cluster_sizes: u64,
+    cluster_aware: bool,
+) -> Result<(f64, ConfidenceInterval), EvalError> {
+    if differences.is_empty() {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "empty_pairs",
+        });
+    }
+    if differences.len() < 2 {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "insufficient_pairs",
+        });
+    }
+    let n_f = differences.len() as f64;
+    let mean = differences.iter().sum::<f64>() / n_f;
+    let method = if cluster_aware {
+        UncertaintyMethod::ClusterHoeffdingPairedDifference
+    } else {
+        UncertaintyMethod::BoundedHoeffdingPairedDifference
+    };
+    let ci = bounded_hoeffding_mean_interval(
+        mean,
+        differences.len(),
+        sum_squared_cluster_sizes,
+        -1.0,
+        1.0,
+        method,
+    )?;
+    Ok((mean, ci))
+}
+
+/// Bind a registry to the frozen Stage-C pin required by the uncertainty engine.
+fn require_pinned_metric_registry(registry: &MetricRegistry) -> Result<(), EvalError> {
+    validate_metric_registry(registry)?;
+    if *registry != MetricRegistry::pinned() {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "registry_not_pinned",
+        });
+    }
+    if registry.primary != PrimaryMetricId::PairedTaskAccuracy {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "primary_metric_mismatch",
+        });
+    }
+    if !registry
+        .secondaries
+        .contains(&SecondaryDiagnosticId::PairedOutcomeDifference)
+    {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "secondary_paired_outcome_missing",
+        });
+    }
+    Ok(())
+}
+
+/// Summarise paired V6/C6 match outcomes into accuracy rates, paired effect, and CIs.
+///
+/// Consumes only already-revealed [`RevealedMatchOutcome`] bits (evaluator-retained
+/// match-oracle / correctness flags). Rejects empty pairs, V6/C6 length mismatch,
+/// non-finite statistics, contract / registry pin drift, and protected/final splits.
+pub fn summarize_paired_uncertainty(
+    split: DataSplit,
+    v6_matches: &[RevealedMatchOutcome],
+    c6_matches: &[RevealedMatchOutcome],
+    registry: &MetricRegistry,
+) -> Result<PairedEffectSummary, EvalError> {
+    summarize_paired_uncertainty_inner(split, v6_matches, c6_matches, registry, None)
+}
+
+fn summarize_paired_uncertainty_inner(
+    split: DataSplit,
+    v6_matches: &[RevealedMatchOutcome],
+    c6_matches: &[RevealedMatchOutcome],
+    registry: &MetricRegistry,
+    cluster_sum_squares: Option<u64>,
+) -> Result<PairedEffectSummary, EvalError> {
+    validate_non_final_split(split)?;
+    require_pinned_metric_registry(registry)?;
+
+    if v6_matches.is_empty() || c6_matches.is_empty() {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "empty_pairs",
+        });
+    }
+    if v6_matches.len() != c6_matches.len() {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "length_mismatch",
+        });
+    }
+    if v6_matches.len() < 2 {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "insufficient_pairs",
+        });
+    }
+    if v6_matches.len() > MAX_CASES_PER_RUN as usize {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "too_many_pairs",
+        });
+    }
+
+    let n = v6_matches.len();
+    let mut v6_successes = 0_u64;
+    let mut c6_successes = 0_u64;
+    let mut differences = Vec::with_capacity(n);
+    for (v6, c6) in v6_matches.iter().zip(c6_matches.iter()) {
+        let v = u64::from(v6.matches_oracle);
+        let c = u64::from(c6.matches_oracle);
+        v6_successes += v;
+        c6_successes += c;
+        differences.push(c as f64 - v as f64);
+    }
+
+    let n_f = n as f64;
+    let v6_accuracy = v6_successes as f64 / n_f;
+    let c6_accuracy = c6_successes as f64 / n_f;
+    if !v6_accuracy.is_finite() || !c6_accuracy.is_finite() {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "non_finite",
+        });
+    }
+
+    let cluster_aware = cluster_sum_squares.is_some();
+    let sum_squared_cluster_sizes = cluster_sum_squares.unwrap_or(n as u64);
+    let (v6_accuracy_ci, c6_accuracy_ci) = if cluster_aware {
+        (
+            bounded_hoeffding_mean_interval(
+                v6_accuracy,
+                n,
+                sum_squared_cluster_sizes,
+                0.0,
+                1.0,
+                UncertaintyMethod::ClusterHoeffdingBernoulliMean,
+            )?,
+            bounded_hoeffding_mean_interval(
+                c6_accuracy,
+                n,
+                sum_squared_cluster_sizes,
+                0.0,
+                1.0,
+                UncertaintyMethod::ClusterHoeffdingBernoulliMean,
+            )?,
+        )
+    } else {
+        (
+            wilson_score_interval(v6_successes, n as u64)?,
+            wilson_score_interval(c6_successes, n as u64)?,
+        )
+    };
+    let (paired_difference_mean, paired_difference_ci) = bounded_hoeffding_paired_difference_ci(
+        &differences,
+        sum_squared_cluster_sizes,
+        cluster_aware,
+    )?;
+
+    // Consistency: mean of paired differences must equal accuracy gap.
+    let expected_gap = c6_accuracy - v6_accuracy;
+    if !paired_difference_mean.is_finite() || (paired_difference_mean - expected_gap).abs() > 1e-12
+    {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "non_finite",
+        });
+    }
+
+    Ok(PairedEffectSummary {
+        split,
+        n_pairs: n as u64,
+        v6_accuracy,
+        c6_accuracy,
+        paired_difference_mean,
+        paired_difference_ci,
+        v6_accuracy_ci,
+        c6_accuracy_ci,
+        primary_metric: registry.primary,
+        secondary_paired_outcome_difference: SecondaryDiagnosticId::PairedOutcomeDifference,
+        uncertainty_contract: PAIRED_UNCERTAINTY_CONTRACT,
+        metric_registry_contract: registry.registry_contract,
+        experimental_non_final: true,
+    })
+}
+
+/// Extract revealed match bits from evaluator records for one arm/split.
+///
+/// Accepts only [`EvalOutcome::Scored`] rows whose arm, split, and metric-registry
+/// contract match the expected pins. Failures and contract drift fail closed.
+/// Does not accept [`super::tdi24_tasks::ProtectedLabel`] or raw sealed targets.
+pub fn revealed_matches_from_records(
+    records: &[EvalRecord],
+    expected_arm: EvalArm,
+    expected_split: DataSplit,
+) -> Result<Vec<RevealedMatchOutcome>, EvalError> {
+    validate_non_final_split(expected_split)?;
+    if records.is_empty() {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "empty_pairs",
+        });
+    }
+    if records.len() > MAX_CASES_PER_RUN as usize {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "too_many_pairs",
+        });
+    }
+    let mut out = Vec::with_capacity(records.len());
+    for record in records {
+        if record.arm != expected_arm {
+            return Err(EvalError::PairedUncertaintyInvalid {
+                reason: "arm_mismatch",
+            });
+        }
+        if record.split != expected_split {
+            return Err(EvalError::SplitMismatch {
+                expected: expected_split,
+                actual: record.split,
+            });
+        }
+        if record.metric_registry_contract != METRIC_REGISTRY_CONTRACT {
+            return Err(EvalError::ContractMismatch {
+                field: "metric_registry_contract",
+            });
+        }
+        if record.envelope_contract != EVALUATOR_ENVELOPE_CONTRACT {
+            return Err(EvalError::ContractMismatch {
+                field: "envelope_contract",
+            });
+        }
+        if record.arm_contract != expected_arm.evaluator_contract() {
+            return Err(EvalError::ContractMismatch {
+                field: "arm_contract",
+            });
+        }
+        if record.budget_contract != READOUT_BUDGET_CONTRACT {
+            return Err(EvalError::ContractMismatch {
+                field: "budget_contract",
+            });
+        }
+        let expected_vector_contract = match expected_arm {
+            EvalArm::V6 => VECTOR6_CONTRACT,
+            EvalArm::C6 => CHIRAL_CONTRACT,
+        };
+        if record.vector_contract != expected_vector_contract {
+            return Err(EvalError::ContractMismatch {
+                field: "vector_contract",
+            });
+        }
+        if record.label_contract != PROTECTED_LABEL_CONTRACT {
+            return Err(EvalError::ContractMismatch {
+                field: "label_contract",
+            });
+        }
+        match record.outcome {
+            EvalOutcome::Scored { correct, .. } => {
+                out.push(RevealedMatchOutcome::from_matches_oracle(correct));
+            }
+            EvalOutcome::Failure(_) => {
+                return Err(EvalError::PairedUncertaintyInvalid {
+                    reason: "unscored_outcome",
+                });
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Return sum_g n_g^2 for the record grouping, bounded by the evaluator cap.
+fn sum_squared_group_sizes(records: &[EvalRecord]) -> Result<u64, EvalError> {
+    let mut groups: Vec<(TaskFamily, u64, u64)> = Vec::with_capacity(records.len());
+    for record in records {
+        if let Some((_, _, size)) = groups
+            .iter_mut()
+            .find(|(family, group_id, _)| *family == record.family && *group_id == record.group_id)
+        {
+            *size += 1;
+        } else {
+            groups.push((record.family, record.group_id, 1));
+        }
+    }
+    groups.into_iter().try_fold(0_u64, |sum, (_, _, size)| {
+        size.checked_mul(size)
+            .and_then(|square| sum.checked_add(square))
+            .ok_or(EvalError::PairedUncertaintyInvalid {
+                reason: "invalid_cluster_sizes",
+            })
+    })
+}
+
+/// Summarise paired V6/C6 [`EvalRecord`] slices without re-entering label oracles.
+///
+/// Records must be equal-length and identity-aligned in order: matching
+/// `family`, `case_id`, `group_id`, and `canonical_digest` at each index.
+/// Positional zip without identity checks is rejected fail-closed.
+pub fn summarize_paired_uncertainty_from_records(
+    split: DataSplit,
+    v6_records: &[EvalRecord],
+    c6_records: &[EvalRecord],
+    registry: &MetricRegistry,
+) -> Result<PairedEffectSummary, EvalError> {
+    if v6_records.len() != c6_records.len() {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "length_mismatch",
+        });
+    }
+    if v6_records.len() > MAX_CASES_PER_RUN as usize {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "too_many_pairs",
+        });
+    }
+    for (index, (left, right)) in v6_records.iter().zip(c6_records.iter()).enumerate() {
+        if left.family != right.family
+            || left.case_id != right.case_id
+            || left.group_id != right.group_id
+            || left.canonical_digest != right.canonical_digest
+        {
+            return Err(EvalError::PairedUncertaintyInvalid {
+                reason: "pair_identity_mismatch",
+            });
+        }
+        if v6_records[..index].iter().any(|prior| {
+            prior.family == left.family
+                && prior.case_id == left.case_id
+                && prior.group_id == left.group_id
+                && prior.canonical_digest == left.canonical_digest
+        }) {
+            return Err(EvalError::PairedUncertaintyInvalid {
+                reason: "duplicate_pair_identity",
+            });
+        }
+    }
+    let cluster_sum_squares = sum_squared_group_sizes(v6_records)?;
+    let v6 = revealed_matches_from_records(v6_records, EvalArm::V6, split)?;
+    let c6 = revealed_matches_from_records(c6_records, EvalArm::C6, split)?;
+    summarize_paired_uncertainty_inner(split, &v6, &c6, registry, Some(cluster_sum_squares))
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -1004,6 +1550,8 @@ pub enum EvalError {
     },
     /// Metric registry failed closed-set validation.
     MetricRegistryInvalid { reason: &'static str },
+    /// Paired uncertainty engine rejected inputs or produced non-finite stats.
+    PairedUncertaintyInvalid { reason: &'static str },
 }
 
 impl fmt::Display for EvalError {
@@ -1071,6 +1619,9 @@ impl fmt::Display for EvalError {
             ),
             Self::MetricRegistryInvalid { reason } => {
                 write!(formatter, "metric registry invalid: {reason}")
+            }
+            Self::PairedUncertaintyInvalid { reason } => {
+                write!(formatter, "paired uncertainty invalid: {reason}")
             }
         }
     }
@@ -1694,6 +2245,434 @@ mod tests {
             finalized.admit_split(DataSplit::Development),
             Err(EvalError::MetricRegistryInvalid {
                 reason: "experimental_non_final_required",
+            })
+        );
+    }
+
+    fn matches(bits: &[bool]) -> Vec<RevealedMatchOutcome> {
+        bits.iter()
+            .copied()
+            .map(RevealedMatchOutcome::from_matches_oracle)
+            .collect()
+    }
+
+    #[test]
+    fn paired_uncertainty_happy_path_on_synthetic_match_vectors() {
+        assert_eq!(PAIRED_UNCERTAINTY_CONTRACT, "tdi24-paired-uncertainty-v1");
+        assert_eq!(UncertaintyMethod::WilsonScore.as_str(), "wilson_score");
+        assert_eq!(
+            UncertaintyMethod::BoundedHoeffdingPairedDifference.as_str(),
+            "bounded_hoeffding_paired_difference"
+        );
+
+        // V6: T T F F  -> accuracy 0.5
+        // C6: T T T F  -> accuracy 0.75
+        // diffs: 0,0,1,0 -> mean 0.25
+        let v6 = matches(&[true, true, false, false]);
+        let c6 = matches(&[true, true, true, false]);
+        let registry = MetricRegistry::pinned();
+        let summary =
+            summarize_paired_uncertainty(DataSplit::Development, &v6, &c6, &registry).unwrap();
+
+        assert_eq!(summary.n_pairs, 4);
+        assert!((summary.v6_accuracy - 0.5).abs() < 1e-12);
+        assert!((summary.c6_accuracy - 0.75).abs() < 1e-12);
+        assert!((summary.paired_difference_mean - 0.25).abs() < 1e-12);
+        assert_eq!(summary.primary_metric, PrimaryMetricId::PairedTaskAccuracy);
+        assert_eq!(
+            summary.secondary_paired_outcome_difference,
+            SecondaryDiagnosticId::PairedOutcomeDifference
+        );
+        assert_eq!(summary.uncertainty_contract, PAIRED_UNCERTAINTY_CONTRACT);
+        assert_eq!(summary.metric_registry_contract, METRIC_REGISTRY_CONTRACT);
+        assert!(summary.experimental_non_final);
+        assert_eq!(
+            summary.paired_difference_ci.method,
+            UncertaintyMethod::BoundedHoeffdingPairedDifference
+        );
+        assert_eq!(
+            summary.v6_accuracy_ci.method,
+            UncertaintyMethod::WilsonScore
+        );
+        assert_eq!(
+            summary.c6_accuracy_ci.method,
+            UncertaintyMethod::WilsonScore
+        );
+        assert!(summary.paired_difference_ci.lower <= summary.paired_difference_mean);
+        assert!(summary.paired_difference_ci.upper >= summary.paired_difference_mean);
+        assert!(summary.paired_difference_ci.lower < summary.paired_difference_ci.upper);
+        assert!(summary.v6_accuracy_ci.lower <= summary.v6_accuracy);
+        assert!(summary.v6_accuracy_ci.upper >= summary.v6_accuracy);
+
+        let validation =
+            summarize_paired_uncertainty(DataSplit::Validation, &v6, &c6, &registry).unwrap();
+        assert_eq!(validation.split, DataSplit::Validation);
+    }
+
+    #[test]
+    fn paired_uncertainty_boundary_intervals_remain_non_degenerate() {
+        let registry = MetricRegistry::pinned();
+        let ties = matches(&[true; MAX_CASES_PER_RUN as usize]);
+        let all_ties =
+            summarize_paired_uncertainty(DataSplit::Development, &ties, &ties, &registry).unwrap();
+        assert_eq!(all_ties.paired_difference_mean, 0.0);
+        assert!(all_ties.paired_difference_ci.lower < 0.0);
+        assert!(all_ties.paired_difference_ci.upper > 0.0);
+
+        let v6 = matches(&[false; MAX_CASES_PER_RUN as usize]);
+        let c6 = matches(&[true; MAX_CASES_PER_RUN as usize]);
+        let all_c6_wins =
+            summarize_paired_uncertainty(DataSplit::Development, &v6, &c6, &registry).unwrap();
+        assert_eq!(all_c6_wins.paired_difference_mean, 1.0);
+        assert!(all_c6_wins.paired_difference_ci.lower < 1.0);
+        assert_eq!(all_c6_wins.paired_difference_ci.upper, 1.0);
+    }
+
+    #[test]
+    fn paired_uncertainty_rejects_empty_mismatch_nan_and_registry_drift() {
+        let registry = MetricRegistry::pinned();
+        let v6 = matches(&[true, false]);
+        let c6 = matches(&[true, true]);
+
+        assert_eq!(
+            summarize_paired_uncertainty(DataSplit::Development, &[], &c6, &registry),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "empty_pairs",
+            })
+        );
+        assert_eq!(
+            summarize_paired_uncertainty(DataSplit::Development, &v6, &[], &registry),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "empty_pairs",
+            })
+        );
+        assert_eq!(
+            summarize_paired_uncertainty(DataSplit::Development, &v6, &matches(&[true]), &registry),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "length_mismatch",
+            })
+        );
+        assert_eq!(
+            summarize_paired_uncertainty(DataSplit::Development, &v6, &c6, &registry).and_then(
+                |_| {
+                    // Direct non-finite gate on ConfidenceInterval::checked.
+                    ConfidenceInterval::checked(
+                        f64::NAN,
+                        1.0,
+                        PAIRED_UNCERTAINTY_LEVEL,
+                        UncertaintyMethod::WilsonScore,
+                    )
+                }
+            ),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "non_finite",
+            })
+        );
+        assert_eq!(
+            ConfidenceInterval::checked(
+                0.0,
+                f64::INFINITY,
+                PAIRED_UNCERTAINTY_LEVEL,
+                UncertaintyMethod::BoundedHoeffdingPairedDifference,
+            ),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "non_finite",
+            })
+        );
+
+        let mut drifted = MetricRegistry::pinned();
+        drifted.registry_contract = "not-paired-uncertainty-registry";
+        assert_eq!(
+            summarize_paired_uncertainty(DataSplit::Development, &v6, &c6, &drifted),
+            Err(EvalError::ContractMismatch {
+                field: "metric_registry_contract",
+            })
+        );
+
+        // Same contract pin but empty secondaries drifts away from MetricRegistry::pinned().
+        let malformed = MetricRegistry {
+            secondaries: &[],
+            ..MetricRegistry::pinned()
+        };
+        assert_eq!(
+            summarize_paired_uncertainty(DataSplit::Development, &v6, &c6, &malformed),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "secondary_sequence_mismatch",
+            })
+        );
+
+        assert_eq!(
+            summarize_paired_uncertainty(
+                DataSplit::Development,
+                &matches(&[true]),
+                &matches(&[false]),
+                &registry,
+            ),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "insufficient_pairs",
+            })
+        );
+
+        let oversized =
+            vec![RevealedMatchOutcome::from_matches_oracle(true); MAX_CASES_PER_RUN as usize + 1];
+        assert_eq!(
+            summarize_paired_uncertainty(DataSplit::Development, &oversized, &oversized, &registry,),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "too_many_pairs",
+            })
+        );
+
+        assert_eq!(
+            parse_non_final_split("protected"),
+            Err(EvalError::ProtectedOrFinalSplit)
+        );
+        assert_eq!(
+            parse_non_final_split("final"),
+            Err(EvalError::ProtectedOrFinalSplit)
+        );
+    }
+
+    #[test]
+    fn paired_uncertainty_from_records_accepts_scored_rejects_failures() {
+        let registry = MetricRegistry::pinned();
+        let v6_records = [
+            EvalRecord {
+                arm: EvalArm::V6,
+                split: DataSplit::Development,
+                family: TaskFamily::ReflectionDiscriminative,
+                case_id: 1,
+                group_id: 1,
+                outcome: EvalOutcome::Scored {
+                    score: 1.0,
+                    correct: true,
+                },
+                canonical_digest: "pair-a".into(),
+                envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
+                arm_contract: V6_EVALUATOR_CONTRACT,
+                budget_contract: READOUT_BUDGET_CONTRACT,
+                metric_registry_contract: METRIC_REGISTRY_CONTRACT,
+                vector_contract: VECTOR6_CONTRACT,
+                label_contract: PROTECTED_LABEL_CONTRACT,
+            },
+            EvalRecord {
+                arm: EvalArm::V6,
+                split: DataSplit::Development,
+                family: TaskFamily::ReflectionDiscriminative,
+                case_id: 2,
+                group_id: 1,
+                outcome: EvalOutcome::Scored {
+                    score: -1.0,
+                    correct: false,
+                },
+                canonical_digest: "pair-b".into(),
+                envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
+                arm_contract: V6_EVALUATOR_CONTRACT,
+                budget_contract: READOUT_BUDGET_CONTRACT,
+                metric_registry_contract: METRIC_REGISTRY_CONTRACT,
+                vector_contract: VECTOR6_CONTRACT,
+                label_contract: PROTECTED_LABEL_CONTRACT,
+            },
+        ];
+        let c6_records = [
+            EvalRecord {
+                arm: EvalArm::C6,
+                split: DataSplit::Development,
+                family: TaskFamily::ReflectionDiscriminative,
+                case_id: 1,
+                group_id: 1,
+                outcome: EvalOutcome::Scored {
+                    score: 1.0,
+                    correct: true,
+                },
+                canonical_digest: "pair-a".into(),
+                envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
+                arm_contract: C6_EVALUATOR_CONTRACT,
+                budget_contract: READOUT_BUDGET_CONTRACT,
+                metric_registry_contract: METRIC_REGISTRY_CONTRACT,
+                vector_contract: CHIRAL_CONTRACT,
+                label_contract: PROTECTED_LABEL_CONTRACT,
+            },
+            EvalRecord {
+                arm: EvalArm::C6,
+                split: DataSplit::Development,
+                family: TaskFamily::ReflectionDiscriminative,
+                case_id: 2,
+                group_id: 1,
+                outcome: EvalOutcome::Scored {
+                    score: 1.0,
+                    correct: true,
+                },
+                canonical_digest: "pair-b".into(),
+                envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
+                arm_contract: C6_EVALUATOR_CONTRACT,
+                budget_contract: READOUT_BUDGET_CONTRACT,
+                metric_registry_contract: METRIC_REGISTRY_CONTRACT,
+                vector_contract: CHIRAL_CONTRACT,
+                label_contract: PROTECTED_LABEL_CONTRACT,
+            },
+        ];
+
+        let summary = summarize_paired_uncertainty_from_records(
+            DataSplit::Development,
+            &v6_records,
+            &c6_records,
+            &registry,
+        )
+        .unwrap();
+        assert_eq!(summary.n_pairs, 2);
+        assert!((summary.v6_accuracy - 0.5).abs() < 1e-12);
+        assert!((summary.c6_accuracy - 1.0).abs() < 1e-12);
+        assert!((summary.paired_difference_mean - 0.5).abs() < 1e-12);
+        assert_eq!(sum_squared_group_sizes(&v6_records).unwrap(), 4);
+        let mut same_numeric_group_different_family = v6_records.clone();
+        same_numeric_group_different_family[1].family = TaskFamily::ReflectionNuisance;
+        assert_eq!(
+            sum_squared_group_sizes(&same_numeric_group_different_family).unwrap(),
+            2
+        );
+        assert_eq!(
+            summary.v6_accuracy_ci.method,
+            UncertaintyMethod::ClusterHoeffdingBernoulliMean
+        );
+        assert_eq!(
+            summary.c6_accuracy_ci.method,
+            UncertaintyMethod::ClusterHoeffdingBernoulliMean
+        );
+        assert_eq!(
+            summary.paired_difference_ci.method,
+            UncertaintyMethod::ClusterHoeffdingPairedDifference
+        );
+        assert!(summary.paired_difference_ci.lower < summary.paired_difference_ci.upper);
+
+        // Typed surface admits only RevealedMatchOutcome / EvalRecord scores —
+        // there is no ProtectedLabel constructor on the uncertainty API.
+        let _revealed = RevealedMatchOutcome::from_matches_oracle(true);
+        assert!(_revealed.matches_oracle);
+
+        let mut failed = c6_records.clone();
+        failed[1].outcome = EvalOutcome::Failure(EvalFailure::Task);
+        assert_eq!(
+            summarize_paired_uncertainty_from_records(
+                DataSplit::Development,
+                &v6_records,
+                &failed,
+                &registry,
+            ),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "unscored_outcome",
+            })
+        );
+
+        let mut wrong_arm = v6_records.clone();
+        wrong_arm[0].arm = EvalArm::C6;
+        assert_eq!(
+            revealed_matches_from_records(&wrong_arm, EvalArm::V6, DataSplit::Development),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "arm_mismatch",
+            })
+        );
+
+        let oversized_records = vec![v6_records[0].clone(); MAX_CASES_PER_RUN as usize + 1];
+        assert_eq!(
+            revealed_matches_from_records(&oversized_records, EvalArm::V6, DataSplit::Development,),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "too_many_pairs",
+            })
+        );
+        let oversized_c6_records = vec![c6_records[0].clone(); MAX_CASES_PER_RUN as usize + 1];
+        assert_eq!(
+            summarize_paired_uncertainty_from_records(
+                DataSplit::Development,
+                &oversized_records,
+                &oversized_c6_records,
+                &registry,
+            ),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "too_many_pairs",
+            })
+        );
+
+        let mut stale_arm_contract = v6_records.clone();
+        stale_arm_contract[0].arm_contract = "stale-v6-evaluator";
+        assert_eq!(
+            revealed_matches_from_records(&stale_arm_contract, EvalArm::V6, DataSplit::Development,),
+            Err(EvalError::ContractMismatch {
+                field: "arm_contract",
+            })
+        );
+
+        let mut stale_budget_contract = v6_records.clone();
+        stale_budget_contract[0].budget_contract = "stale-readout-budget";
+        assert_eq!(
+            revealed_matches_from_records(
+                &stale_budget_contract,
+                EvalArm::V6,
+                DataSplit::Development,
+            ),
+            Err(EvalError::ContractMismatch {
+                field: "budget_contract",
+            })
+        );
+
+        let mut stale_vector_contract = c6_records.clone();
+        stale_vector_contract[0].vector_contract = VECTOR6_CONTRACT;
+        assert_eq!(
+            revealed_matches_from_records(
+                &stale_vector_contract,
+                EvalArm::C6,
+                DataSplit::Development,
+            ),
+            Err(EvalError::ContractMismatch {
+                field: "vector_contract",
+            })
+        );
+
+        let mut stale_label_contract = v6_records.clone();
+        stale_label_contract[0].label_contract = "stale-label-contract";
+        assert_eq!(
+            revealed_matches_from_records(
+                &stale_label_contract,
+                EvalArm::V6,
+                DataSplit::Development,
+            ),
+            Err(EvalError::ContractMismatch {
+                field: "label_contract",
+            })
+        );
+
+        let mut mismatched = c6_records.clone();
+        mismatched[0].case_id = 99;
+        assert_eq!(
+            summarize_paired_uncertainty_from_records(
+                DataSplit::Development,
+                &v6_records,
+                &mismatched,
+                &registry,
+            ),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "pair_identity_mismatch",
+            })
+        );
+
+        let mut duplicate_v6 = v6_records.clone();
+        duplicate_v6[1].family = duplicate_v6[0].family;
+        duplicate_v6[1].case_id = duplicate_v6[0].case_id;
+        duplicate_v6[1].group_id = duplicate_v6[0].group_id;
+        duplicate_v6[1].canonical_digest = duplicate_v6[0].canonical_digest.clone();
+        let mut duplicate_c6 = c6_records.clone();
+        duplicate_c6[1].family = duplicate_c6[0].family;
+        duplicate_c6[1].case_id = duplicate_c6[0].case_id;
+        duplicate_c6[1].group_id = duplicate_c6[0].group_id;
+        duplicate_c6[1].canonical_digest = duplicate_c6[0].canonical_digest.clone();
+        assert_eq!(
+            summarize_paired_uncertainty_from_records(
+                DataSplit::Development,
+                &duplicate_v6,
+                &duplicate_c6,
+                &registry,
+            ),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "duplicate_pair_identity",
             })
         );
     }
