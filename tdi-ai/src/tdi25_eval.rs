@@ -15,9 +15,12 @@
 //! ordering identity, update steps, and stopping rule across paired arms so
 //! later trained paths cannot silently diverge; Phase-C references remain
 //! non-trained (`updates=0`, `ExhaustExamples`). Slice 26 freezes the Stage-C
-//! metric registry: per-family primary paired-accuracy ids, one cross-family
-//! summary id, and an ordered closed secondary-diagnostic set under
-//! `tdi25-metric-registry-v1`, fail-closed on drift/empty/dupes/invention.
+//! metric registry: only the mixed family is currently admitted as a paired
+//! T6-vs-C6 primary because both arms expose a matched scoring path for it.
+//! Torsor-favorable, chiral-favorable, and neutral identifiers remain known
+//! candidates but are not admitted as paired primaries, and the cross-family
+//! summary remains unavailable until at least two families have matched paths.
+//! The ordered closed registry fails closed on drift/empty/dupes/invention.
 //! Evaluator open paths require the pinned registry. All arms consume
 //! sealed Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
@@ -80,7 +83,10 @@ pub const PRIMARY_FAMILY_MIXED: &str = "family_paired_task_accuracy_mixed";
 /// Primary family metric: neutral-control paired accuracy / score-match vs oracle.
 pub const PRIMARY_FAMILY_NEUTRAL: &str = "family_paired_task_accuracy_neutral";
 
-/// Cross-family summary metric id (pooled view; cannot erase family reversals).
+/// Reserved future cross-family summary metric id.
+///
+/// This id is parsed for forward contract diagnostics but is not admitted by
+/// the v1 pinned registry until multiple families have matched T6/C6 paths.
 pub const CROSS_FAMILY_PAIRED_SUMMARY: &str = "cross_family_paired_summary";
 
 /// Secondary diagnostic: paired task outcome difference (T6 vs C6).
@@ -103,8 +109,8 @@ pub const SECONDARY_CALIBRATION_STABILITY: &str = "calibration_stability";
 /// Secondary diagnostic: operation / memory / runtime under a qualified env only.
 pub const SECONDARY_OP_COUNT_MEMORY_RUNTIME: &str = "op_count_memory_runtime";
 
-/// Maximum primary family metrics admitted in one frozen registry.
-pub const MAX_PRIMARY_FAMILY_METRICS: usize = 4;
+/// Maximum currently computable paired primary family metrics.
+pub const MAX_PRIMARY_FAMILY_METRICS: usize = 1;
 
 /// Maximum secondary diagnostics admitted in one frozen registry.
 pub const MAX_SECONDARY_DIAGNOSTICS: usize = 6;
@@ -542,13 +548,13 @@ pub fn parse_primary_family_metric_id(label: &str) -> Result<PrimaryFamilyMetric
     }
 }
 
-/// Canonical ordered primary family metrics frozen for Stage-C.
-pub const PINNED_PRIMARY_FAMILY_METRICS: &[PrimaryFamilyMetricId] = &[
-    PrimaryFamilyMetricId::TorsorFavorable,
-    PrimaryFamilyMetricId::ChiralFavorable,
-    PrimaryFamilyMetricId::Mixed,
-    PrimaryFamilyMetricId::Neutral,
-];
+/// Canonical ordered paired primary metrics frozen for Stage-C.
+///
+/// Mixed is the only family with both T6 and C6 evaluator paths. The other
+/// known family ids must not be frozen as paired metrics until matched paths
+/// exist; this prevents downstream synthesis from fabricating observations.
+pub const PINNED_PRIMARY_FAMILY_METRICS: &[PrimaryFamilyMetricId] =
+    &[PrimaryFamilyMetricId::Mixed];
 
 /// Closed-set cross-family summary metric for Stage-C evaluation.
 ///
@@ -656,8 +662,8 @@ pub const PINNED_SECONDARY_DIAGNOSTICS: &[SecondaryDiagnosticId] = &[
     SecondaryDiagnosticId::OpCountMemoryRuntime,
 ];
 
-/// Frozen Stage-C metric registry: ordered primary family metrics, one
-/// cross-family summary, and ordered secondaries.
+/// Frozen Stage-C metric registry: ordered computable paired primaries,
+/// an optional cross-family summary, and ordered secondaries.
 ///
 /// Experimental and non-final only; never authorises protected/final evaluation
 /// or a scientific superiority claim.
@@ -665,8 +671,8 @@ pub const PINNED_SECONDARY_DIAGNOSTICS: &[SecondaryDiagnosticId] = &[
 pub struct MetricRegistry {
     /// Ordered primary family quality metrics frozen before evaluation.
     pub primary_family_metrics: &'static [PrimaryFamilyMetricId],
-    /// Cross-family summary metric frozen before evaluation.
-    pub cross_family_summary: CrossFamilySummaryMetricId,
+    /// Cross-family summary, unavailable until multiple matched families exist.
+    pub cross_family_summary: Option<CrossFamilySummaryMetricId>,
     /// Ordered closed-set secondary diagnostics admitted for Stage-C.
     pub secondaries: &'static [SecondaryDiagnosticId],
     /// Registry contract pin.
@@ -681,7 +687,7 @@ impl MetricRegistry {
     pub const fn pinned() -> Self {
         Self {
             primary_family_metrics: PINNED_PRIMARY_FAMILY_METRICS,
-            cross_family_summary: CrossFamilySummaryMetricId::CrossFamilyPairedSummary,
+            cross_family_summary: None,
             secondaries: PINNED_SECONDARY_DIAGNOSTICS,
             registry_contract: METRIC_REGISTRY_CONTRACT,
             experimental_non_final: true,
@@ -708,11 +714,6 @@ pub fn freeze_metric_registry(
             reason: "empty_primary",
         });
     }
-    let Some(cross_family_summary) = cross_family_summary else {
-        return Err(EvalError::MetricRegistryInvalid {
-            reason: "empty_cross_family_summary",
-        });
-    };
     let registry = MetricRegistry {
         primary_family_metrics,
         cross_family_summary,
@@ -724,8 +725,8 @@ pub fn freeze_metric_registry(
     Ok(registry)
 }
 
-/// Validate a metric registry: reject contract drift, empty primary, empty
-/// cross-family summary, duplicate secondaries, oversized sets, invented ids,
+/// Validate a metric registry: reject contract drift, empty primary, any
+/// premature cross-family summary, duplicate secondaries, oversized sets, invented ids,
 /// non-experimental finals, and any primary/secondary sequence that is not the
 /// complete canonical ordered registry.
 pub fn validate_metric_registry(registry: &MetricRegistry) -> Result<(), EvalError> {
@@ -767,10 +768,9 @@ pub fn validate_metric_registry(registry: &MetricRegistry) -> Result<(), EvalErr
             reason: "primary_sequence_mismatch",
         });
     }
-    parse_cross_family_summary_metric_id(registry.cross_family_summary.as_str())?;
-    if registry.cross_family_summary != CrossFamilySummaryMetricId::CrossFamilyPairedSummary {
+    if registry.cross_family_summary.is_some() {
         return Err(EvalError::MetricRegistryInvalid {
-            reason: "unknown_cross_family_summary",
+            reason: "cross_family_summary_unavailable",
         });
     }
     if registry.secondaries.len() > MAX_SECONDARY_DIAGNOSTICS {
@@ -2302,10 +2302,7 @@ mod tests {
 
         let pinned = MetricRegistry::pinned();
         assert_eq!(pinned.primary_family_metrics, PINNED_PRIMARY_FAMILY_METRICS);
-        assert_eq!(
-            pinned.cross_family_summary,
-            CrossFamilySummaryMetricId::CrossFamilyPairedSummary
-        );
+        assert_eq!(pinned.cross_family_summary, None);
         assert_eq!(pinned.secondaries, PINNED_SECONDARY_DIAGNOSTICS);
         assert_eq!(pinned.registry_contract, METRIC_REGISTRY_CONTRACT);
         assert!(pinned.experimental_non_final);
@@ -2313,7 +2310,7 @@ mod tests {
 
         let frozen = freeze_metric_registry(
             PINNED_PRIMARY_FAMILY_METRICS,
-            Some(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
+            None,
             PINNED_SECONDARY_DIAGNOSTICS,
         )
         .unwrap();
@@ -2321,28 +2318,13 @@ mod tests {
 
         assert_eq!(
             pinned.primary_family_metrics[0].as_str(),
-            PRIMARY_FAMILY_TORSOR_FAVORABLE
-        );
-        assert_eq!(
-            pinned.primary_family_metrics[0].family(),
-            TaskFamily::TorsorFavorable
-        );
-        assert_eq!(
-            pinned.primary_family_metrics[1].as_str(),
-            PRIMARY_FAMILY_CHIRAL_FAVORABLE
-        );
-        assert_eq!(
-            pinned.primary_family_metrics[2].as_str(),
             PRIMARY_FAMILY_MIXED
         );
         assert_eq!(
-            pinned.primary_family_metrics[3].as_str(),
-            PRIMARY_FAMILY_NEUTRAL
+            pinned.primary_family_metrics[0].family(),
+            TaskFamily::Mixed
         );
-        assert_eq!(
-            pinned.cross_family_summary.as_str(),
-            CROSS_FAMILY_PAIRED_SUMMARY
-        );
+        assert_eq!(pinned.cross_family_summary, None);
         assert_eq!(
             pinned.secondaries[0].as_str(),
             SECONDARY_PAIRED_OUTCOME_DIFFERENCE
@@ -2396,7 +2378,7 @@ mod tests {
         assert_eq!(
             freeze_metric_registry(
                 &[],
-                Some(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
+                None,
                 PINNED_SECONDARY_DIAGNOSTICS,
             ),
             Err(EvalError::MetricRegistryInvalid {
@@ -2410,7 +2392,7 @@ mod tests {
                 PINNED_SECONDARY_DIAGNOSTICS,
             ),
             Err(EvalError::MetricRegistryInvalid {
-                reason: "empty_cross_family_summary",
+                reason: "cross_family_summary_unavailable",
             })
         );
         assert_eq!(
@@ -2452,7 +2434,7 @@ mod tests {
         assert_eq!(
             freeze_metric_registry(
                 PINNED_PRIMARY_FAMILY_METRICS,
-                Some(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
+                None,
                 DUPLICATE_SECONDARIES,
             ),
             Err(EvalError::MetricRegistryInvalid {
@@ -2461,15 +2443,13 @@ mod tests {
         );
 
         const DUPLICATE_PRIMARIES: &[PrimaryFamilyMetricId] = &[
-            PrimaryFamilyMetricId::TorsorFavorable,
-            PrimaryFamilyMetricId::TorsorFavorable,
             PrimaryFamilyMetricId::Mixed,
-            PrimaryFamilyMetricId::Neutral,
+            PrimaryFamilyMetricId::Mixed,
         ];
         assert_eq!(
             freeze_metric_registry(
                 DUPLICATE_PRIMARIES,
-                Some(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
+                None,
                 PINNED_SECONDARY_DIAGNOSTICS,
             ),
             Err(EvalError::MetricRegistryInvalid {
@@ -2489,7 +2469,7 @@ mod tests {
         assert_eq!(
             freeze_metric_registry(
                 PINNED_PRIMARY_FAMILY_METRICS,
-                Some(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
+                None,
                 OVERSIZED_SECONDARIES,
             ),
             Err(EvalError::MetricRegistryInvalid {
@@ -2507,7 +2487,7 @@ mod tests {
         assert_eq!(
             freeze_metric_registry(
                 PINNED_PRIMARY_FAMILY_METRICS,
-                Some(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
+                None,
                 TRUNCATED_SECONDARIES,
             ),
             Err(EvalError::MetricRegistryInvalid {
@@ -2517,7 +2497,7 @@ mod tests {
         assert_eq!(
             freeze_metric_registry(
                 PINNED_PRIMARY_FAMILY_METRICS,
-                Some(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
+                None,
                 &[],
             ),
             Err(EvalError::MetricRegistryInvalid {
@@ -2536,7 +2516,7 @@ mod tests {
         assert_eq!(
             freeze_metric_registry(
                 PINNED_PRIMARY_FAMILY_METRICS,
-                Some(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
+                None,
                 REORDERED_SECONDARIES,
             ),
             Err(EvalError::MetricRegistryInvalid {
@@ -2544,36 +2524,31 @@ mod tests {
             })
         );
 
-        const REORDERED_PRIMARIES: &[PrimaryFamilyMetricId] = &[
-            PrimaryFamilyMetricId::ChiralFavorable,
+        const UNMATCHED_PRIMARIES: &[PrimaryFamilyMetricId] = &[
             PrimaryFamilyMetricId::TorsorFavorable,
             PrimaryFamilyMetricId::Mixed,
-            PrimaryFamilyMetricId::Neutral,
         ];
         assert_eq!(
             freeze_metric_registry(
-                REORDERED_PRIMARIES,
-                Some(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
+                UNMATCHED_PRIMARIES,
+                None,
                 PINNED_SECONDARY_DIAGNOSTICS,
             ),
             Err(EvalError::MetricRegistryInvalid {
-                reason: "primary_sequence_mismatch",
+                reason: "too_many_primary_family_metrics",
             })
         );
 
-        const TRUNCATED_PRIMARIES: &[PrimaryFamilyMetricId] = &[
-            PrimaryFamilyMetricId::TorsorFavorable,
-            PrimaryFamilyMetricId::ChiralFavorable,
-            PrimaryFamilyMetricId::Mixed,
-        ];
+        const UNPAIRED_PRIMARY: &[PrimaryFamilyMetricId] =
+            &[PrimaryFamilyMetricId::TorsorFavorable];
         assert_eq!(
             freeze_metric_registry(
-                TRUNCATED_PRIMARIES,
-                Some(CrossFamilySummaryMetricId::CrossFamilyPairedSummary),
+                UNPAIRED_PRIMARY,
+                None,
                 PINNED_SECONDARY_DIAGNOSTICS,
             ),
             Err(EvalError::MetricRegistryInvalid {
-                reason: "primary_sequence_mismatch",
+                reason: "unknown_primary",
             })
         );
 
