@@ -10,8 +10,11 @@
 //! paired deterministic initialization-policy matcher so V6/C6 share one seed
 //! stream and kind, rejecting unpaired draws fail-closed. Slice 25 adds an
 //! optimizer/update-budget matcher requiring identical examples, ordering,
-//! steps and stopping rule across paired arms. No training, primary-metric
-//! freeze, confirmatory execution, or scientific claim is authorised here.
+//! steps and stopping rule across paired arms. Slice 26 freezes the versioned
+//! metric registry: one primary quality metric plus an ordered closed set of
+//! secondary diagnostics for Stage-C, experimental and non-final only. No
+//! training, confirmatory execution, protected/final evaluation, or scientific
+//! claim is authorised here.
 
 use core::fmt;
 
@@ -45,6 +48,34 @@ pub const INITIALIZATION_MATCHER_CONTRACT: &str = "tdi24-initialization-matcher-
 
 /// Versioned optimizer/update-budget matcher contract.
 pub const OPTIMIZER_UPDATE_BUDGET_CONTRACT: &str = "tdi24-optimizer-update-budget-v1";
+
+/// Versioned Stage-C metric-registry contract.
+pub const METRIC_REGISTRY_CONTRACT: &str = "tdi24-metric-registry-v1";
+
+/// Primary metric id: paired task accuracy / score-match rate vs oracle.
+pub const PRIMARY_METRIC_PAIRED_TASK_ACCURACY: &str = "paired_task_accuracy";
+
+/// Secondary diagnostic: paired task outcome difference (V6 vs C6).
+pub const SECONDARY_PAIRED_OUTCOME_DIFFERENCE: &str = "paired_outcome_difference";
+
+/// Secondary diagnostic: mirror-swap identity error.
+pub const SECONDARY_MIRROR_SWAP_IDENTITY_ERROR: &str = "mirror_swap_identity_error";
+
+/// Secondary diagnostic: parity-equivariance / invariance error.
+pub const SECONDARY_PARITY_EQUIVARIANCE_INVARIANCE_ERROR: &str =
+    "parity_equivariance_invariance_error";
+
+/// Secondary diagnostic: calibration / confidence error when scores are exposed.
+pub const SECONDARY_CALIBRATION_CONFIDENCE_ERROR: &str = "calibration_confidence_error";
+
+/// Secondary diagnostic: gradient / stability for trained arms.
+pub const SECONDARY_GRADIENT_STABILITY: &str = "gradient_stability";
+
+/// Secondary diagnostic: op-count / memory / latency under a qualified env only.
+pub const SECONDARY_OP_COUNT_MEMORY_LATENCY: &str = "op_count_memory_latency";
+
+/// Maximum secondary diagnostics admitted in one frozen registry.
+pub const MAX_SECONDARY_DIAGNOSTICS: usize = 6;
 
 /// Maximum cases admitted to one non-final evaluator run.
 pub const MAX_CASES_PER_RUN: u64 = 64;
@@ -702,6 +733,202 @@ pub fn match_optimizer_update_budgets(
     })
 }
 
+/// Closed-set primary quality metric for Stage-C evaluation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum PrimaryMetricId {
+    /// Paired task accuracy / score-match rate versus the sealed oracle on
+    /// Development/Validation only.
+    PairedTaskAccuracy,
+}
+
+impl PrimaryMetricId {
+    /// Stable lowercase metric id.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::PairedTaskAccuracy => PRIMARY_METRIC_PAIRED_TASK_ACCURACY,
+        }
+    }
+}
+
+/// Parse a primary metric id from the closed Stage-C set.
+pub fn parse_primary_metric_id(label: &str) -> Result<PrimaryMetricId, EvalError> {
+    match label {
+        PRIMARY_METRIC_PAIRED_TASK_ACCURACY => Ok(PrimaryMetricId::PairedTaskAccuracy),
+        "" => Err(EvalError::MetricRegistryInvalid {
+            reason: "empty_primary",
+        }),
+        _ => Err(EvalError::MetricRegistryInvalid {
+            reason: "unknown_primary",
+        }),
+    }
+}
+
+/// Closed-set secondary diagnostics admitted for Stage-C under the frozen registry.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SecondaryDiagnosticId {
+    /// Paired task outcome difference across matched arms.
+    PairedOutcomeDifference,
+    /// Mirror-swap identity error.
+    MirrorSwapIdentityError,
+    /// Parity-equivariance / invariance error where applicable.
+    ParityEquivarianceInvarianceError,
+    /// Calibration / confidence error when predictions expose scores.
+    CalibrationConfidenceError,
+    /// Gradient / stability diagnostics for trained arms.
+    GradientStability,
+    /// Operation count, memory, latency under an explicitly qualified environment.
+    OpCountMemoryLatency,
+}
+
+impl SecondaryDiagnosticId {
+    /// Stable lowercase diagnostic id.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::PairedOutcomeDifference => SECONDARY_PAIRED_OUTCOME_DIFFERENCE,
+            Self::MirrorSwapIdentityError => SECONDARY_MIRROR_SWAP_IDENTITY_ERROR,
+            Self::ParityEquivarianceInvarianceError => {
+                SECONDARY_PARITY_EQUIVARIANCE_INVARIANCE_ERROR
+            }
+            Self::CalibrationConfidenceError => SECONDARY_CALIBRATION_CONFIDENCE_ERROR,
+            Self::GradientStability => SECONDARY_GRADIENT_STABILITY,
+            Self::OpCountMemoryLatency => SECONDARY_OP_COUNT_MEMORY_LATENCY,
+        }
+    }
+
+    /// Canonical ordered Stage-C secondary diagnostic set.
+    #[must_use]
+    pub const fn admitted_set() -> &'static [Self] {
+        PINNED_SECONDARY_DIAGNOSTICS
+    }
+}
+
+/// Parse a secondary diagnostic id from the closed Stage-C set.
+pub fn parse_secondary_diagnostic_id(label: &str) -> Result<SecondaryDiagnosticId, EvalError> {
+    match label {
+        SECONDARY_PAIRED_OUTCOME_DIFFERENCE => Ok(SecondaryDiagnosticId::PairedOutcomeDifference),
+        SECONDARY_MIRROR_SWAP_IDENTITY_ERROR => Ok(SecondaryDiagnosticId::MirrorSwapIdentityError),
+        SECONDARY_PARITY_EQUIVARIANCE_INVARIANCE_ERROR => {
+            Ok(SecondaryDiagnosticId::ParityEquivarianceInvarianceError)
+        }
+        SECONDARY_CALIBRATION_CONFIDENCE_ERROR => {
+            Ok(SecondaryDiagnosticId::CalibrationConfidenceError)
+        }
+        SECONDARY_GRADIENT_STABILITY => Ok(SecondaryDiagnosticId::GradientStability),
+        SECONDARY_OP_COUNT_MEMORY_LATENCY => Ok(SecondaryDiagnosticId::OpCountMemoryLatency),
+        _ => Err(EvalError::MetricRegistryInvalid {
+            reason: "unknown_secondary",
+        }),
+    }
+}
+
+/// Canonical ordered secondary diagnostics frozen for Stage-C.
+pub const PINNED_SECONDARY_DIAGNOSTICS: &[SecondaryDiagnosticId] = &[
+    SecondaryDiagnosticId::PairedOutcomeDifference,
+    SecondaryDiagnosticId::MirrorSwapIdentityError,
+    SecondaryDiagnosticId::ParityEquivarianceInvarianceError,
+    SecondaryDiagnosticId::CalibrationConfidenceError,
+    SecondaryDiagnosticId::GradientStability,
+    SecondaryDiagnosticId::OpCountMemoryLatency,
+];
+
+/// Frozen Stage-C metric registry: one primary metric plus ordered secondaries.
+///
+/// Experimental and non-final only; never authorises protected/final evaluation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MetricRegistry {
+    /// Primary quality metric frozen before evaluation.
+    pub primary: PrimaryMetricId,
+    /// Ordered closed-set secondary diagnostics admitted for Stage-C.
+    pub secondaries: &'static [SecondaryDiagnosticId],
+    /// Registry contract pin.
+    pub registry_contract: &'static str,
+    /// Must remain true: registry is experimental and non-final only.
+    pub experimental_non_final: bool,
+}
+
+impl MetricRegistry {
+    /// Canonical frozen Stage-C metric registry under the versioned contract.
+    #[must_use]
+    pub const fn pinned() -> Self {
+        Self {
+            primary: PrimaryMetricId::PairedTaskAccuracy,
+            secondaries: PINNED_SECONDARY_DIAGNOSTICS,
+            registry_contract: METRIC_REGISTRY_CONTRACT,
+            experimental_non_final: true,
+        }
+    }
+
+    /// Reject protected/final splits; Development/Validation only.
+    pub fn admit_split(self, split: DataSplit) -> Result<(), EvalError> {
+        if !self.experimental_non_final {
+            return Err(EvalError::MetricRegistryInvalid {
+                reason: "experimental_non_final_required",
+            });
+        }
+        validate_non_final_split(split)
+    }
+}
+
+/// Freeze a metric registry under the versioned contract; fail-closed on invalid sets.
+pub fn freeze_metric_registry(
+    primary: Option<PrimaryMetricId>,
+    secondaries: &'static [SecondaryDiagnosticId],
+) -> Result<MetricRegistry, EvalError> {
+    let Some(primary) = primary else {
+        return Err(EvalError::MetricRegistryInvalid {
+            reason: "empty_primary",
+        });
+    };
+    let registry = MetricRegistry {
+        primary,
+        secondaries,
+        registry_contract: METRIC_REGISTRY_CONTRACT,
+        experimental_non_final: true,
+    };
+    validate_metric_registry(&registry)?;
+    Ok(registry)
+}
+
+/// Validate a metric registry: reject contract drift, empty primary, duplicate
+/// secondaries, oversized sets, invented ids, or non-experimental finals.
+pub fn validate_metric_registry(registry: &MetricRegistry) -> Result<(), EvalError> {
+    if registry.registry_contract != METRIC_REGISTRY_CONTRACT {
+        return Err(EvalError::ContractMismatch {
+            field: "metric_registry_contract",
+        });
+    }
+    if !registry.experimental_non_final {
+        return Err(EvalError::MetricRegistryInvalid {
+            reason: "experimental_non_final_required",
+        });
+    }
+    // Re-parse primary through the closed-set gate (guards future variants).
+    parse_primary_metric_id(registry.primary.as_str())?;
+    if registry.secondaries.len() > MAX_SECONDARY_DIAGNOSTICS {
+        return Err(EvalError::MetricRegistryInvalid {
+            reason: "too_many_secondaries",
+        });
+    }
+    for (index, secondary) in registry.secondaries.iter().enumerate() {
+        parse_secondary_diagnostic_id(secondary.as_str())?;
+        for prior in &registry.secondaries[..index] {
+            if prior == secondary {
+                return Err(EvalError::MetricRegistryInvalid {
+                    reason: "duplicate_secondary",
+                });
+            }
+        }
+        if !PINNED_SECONDARY_DIAGNOSTICS.contains(secondary) {
+            return Err(EvalError::MetricRegistryInvalid {
+                reason: "unknown_secondary",
+            });
+        }
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -764,6 +991,8 @@ pub enum EvalError {
         left_updates: u64,
         right_updates: u64,
     },
+    /// Metric registry failed closed-set validation.
+    MetricRegistryInvalid { reason: &'static str },
 }
 
 impl fmt::Display for EvalError {
@@ -829,6 +1058,9 @@ impl fmt::Display for EvalError {
                 right_examples,
                 right_updates
             ),
+            Self::MetricRegistryInvalid { reason } => {
+                write!(formatter, "metric registry invalid: {reason}")
+            }
         }
     }
 }
@@ -1239,6 +1471,139 @@ mod tests {
             match_optimizer_update_budgets(drifted, OptimizerUpdateBudget::reference_c6(8, 1)),
             Err(EvalError::ContractMismatch {
                 field: "optimizer_update_budget_contract",
+            })
+        );
+    }
+
+    #[test]
+    fn metric_registry_pins_primary_and_ordered_secondaries() {
+        assert_eq!(METRIC_REGISTRY_CONTRACT, "tdi24-metric-registry-v1");
+        assert_eq!(PRIMARY_METRIC_PAIRED_TASK_ACCURACY, "paired_task_accuracy");
+        assert_eq!(
+            PINNED_SECONDARY_DIAGNOSTICS.len(),
+            MAX_SECONDARY_DIAGNOSTICS
+        );
+        assert_eq!(
+            SecondaryDiagnosticId::admitted_set(),
+            PINNED_SECONDARY_DIAGNOSTICS
+        );
+
+        let pinned = MetricRegistry::pinned();
+        assert_eq!(pinned.primary, PrimaryMetricId::PairedTaskAccuracy);
+        assert_eq!(pinned.primary.as_str(), PRIMARY_METRIC_PAIRED_TASK_ACCURACY);
+        assert_eq!(pinned.secondaries, PINNED_SECONDARY_DIAGNOSTICS);
+        assert_eq!(pinned.registry_contract, METRIC_REGISTRY_CONTRACT);
+        assert!(pinned.experimental_non_final);
+        validate_metric_registry(&pinned).unwrap();
+
+        let frozen = freeze_metric_registry(
+            Some(PrimaryMetricId::PairedTaskAccuracy),
+            PINNED_SECONDARY_DIAGNOSTICS,
+        )
+        .unwrap();
+        assert_eq!(frozen, pinned);
+
+        assert_eq!(
+            pinned.secondaries[0].as_str(),
+            SECONDARY_PAIRED_OUTCOME_DIFFERENCE
+        );
+        assert_eq!(
+            pinned.secondaries[1].as_str(),
+            SECONDARY_MIRROR_SWAP_IDENTITY_ERROR
+        );
+        assert_eq!(
+            pinned.secondaries[2].as_str(),
+            SECONDARY_PARITY_EQUIVARIANCE_INVARIANCE_ERROR
+        );
+        assert_eq!(
+            pinned.secondaries[3].as_str(),
+            SECONDARY_CALIBRATION_CONFIDENCE_ERROR
+        );
+        assert_eq!(pinned.secondaries[4].as_str(), SECONDARY_GRADIENT_STABILITY);
+        assert_eq!(
+            pinned.secondaries[5].as_str(),
+            SECONDARY_OP_COUNT_MEMORY_LATENCY
+        );
+
+        for split in [DataSplit::Development, DataSplit::Validation] {
+            assert!(pinned.admit_split(split).is_ok());
+        }
+        // Protected/final labels are rejected by the non-final split gate.
+        assert!(parse_non_final_split("protected").is_err());
+        assert!(parse_non_final_split("final").is_err());
+        assert_eq!(
+            parse_primary_metric_id(PRIMARY_METRIC_PAIRED_TASK_ACCURACY).unwrap(),
+            PrimaryMetricId::PairedTaskAccuracy
+        );
+        assert_eq!(
+            parse_secondary_diagnostic_id(SECONDARY_PAIRED_OUTCOME_DIFFERENCE).unwrap(),
+            SecondaryDiagnosticId::PairedOutcomeDifference
+        );
+    }
+
+    #[test]
+    fn metric_registry_rejects_drift_duplicates_and_invention() {
+        assert_eq!(
+            freeze_metric_registry(None, PINNED_SECONDARY_DIAGNOSTICS),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "empty_primary",
+            })
+        );
+        assert_eq!(
+            parse_primary_metric_id(""),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "empty_primary",
+            })
+        );
+        assert_eq!(
+            parse_primary_metric_id("invented_primary"),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "unknown_primary",
+            })
+        );
+        assert_eq!(
+            parse_secondary_diagnostic_id("invented_secondary"),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "unknown_secondary",
+            })
+        );
+
+        const DUPLICATE_SECONDARIES: &[SecondaryDiagnosticId] = &[
+            SecondaryDiagnosticId::PairedOutcomeDifference,
+            SecondaryDiagnosticId::MirrorSwapIdentityError,
+            SecondaryDiagnosticId::PairedOutcomeDifference,
+        ];
+        assert_eq!(
+            freeze_metric_registry(
+                Some(PrimaryMetricId::PairedTaskAccuracy),
+                DUPLICATE_SECONDARIES
+            ),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "duplicate_secondary",
+            })
+        );
+
+        let mut drifted = MetricRegistry::pinned();
+        drifted.registry_contract = "not-a-metric-registry";
+        assert_eq!(
+            validate_metric_registry(&drifted),
+            Err(EvalError::ContractMismatch {
+                field: "metric_registry_contract",
+            })
+        );
+
+        let mut finalized = MetricRegistry::pinned();
+        finalized.experimental_non_final = false;
+        assert_eq!(
+            validate_metric_registry(&finalized),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "experimental_non_final_required",
+            })
+        );
+        assert_eq!(
+            finalized.admit_split(DataSplit::Development),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "experimental_non_final_required",
             })
         );
     }
