@@ -12,8 +12,13 @@ preregistered four-family protocol and does not create a scientific result.
 |---|---|---|---|
 | Torsor-favorable | sealed torsor-transport evaluator | absent | no |
 | Chiral-favorable | absent | sealed chiral-reflection evaluator | no |
-| Mixed | sealed mixed torsor view | sealed mixed chiral view | yes |
+| Mixed | sealed mixed torsor view; arm-specific target | sealed mixed chiral view; arm-specific target | no |
 | Neutral | absent | absent | no |
+
+The two Mixed paths are individually sealed, but T6 scores
+`expected_torsor_score` while C6 scores `expected_chiral_score`. Those
+arm-specific oracle fields are not one common target/scoring contract, so
+Mixed also remains incomplete.
 
 G6 has a sealed Neutral path, but remains a secondary attribution control. It
 cannot satisfy either missing T6 or C6 primary cell.
@@ -26,8 +31,9 @@ production evaluator matrix complete.
 
 The implementation in
 `experimental::tdi25_matched_matrix::require_complete_primary_matrix`
-returns the first missing primary path deterministically. It admits only the
-four paths already reachable from sealed production evaluators.
+returns the first missing primary path or common target deterministically. It
+records only the four paths already reachable from sealed production
+evaluators, and none currently carries a shared target contract.
 
 ## Required next freeze
 
