@@ -985,13 +985,9 @@ impl UncertaintyMethod {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::WilsonScore => "wilson_score",
-            Self::BoundedHoeffdingPairedDifference => {
-                "bounded_hoeffding_paired_difference"
-            }
+            Self::BoundedHoeffdingPairedDifference => "bounded_hoeffding_paired_difference",
             Self::ClusterHoeffdingBernoulliMean => "cluster_hoeffding_bernoulli_mean",
-            Self::ClusterHoeffdingPairedDifference => {
-                "cluster_hoeffding_paired_difference"
-            }
+            Self::ClusterHoeffdingPairedDifference => "cluster_hoeffding_paired_difference",
         }
     }
 }
@@ -1131,8 +1127,7 @@ fn bounded_hoeffding_mean_interval(
         });
     }
     let n_u64 = n as u64;
-    if sum_squared_cluster_sizes < n_u64
-        || sum_squared_cluster_sizes > n_u64.saturating_mul(n_u64)
+    if sum_squared_cluster_sizes < n_u64 || sum_squared_cluster_sizes > n_u64.saturating_mul(n_u64)
     {
         return Err(EvalError::PairedUncertaintyInvalid {
             reason: "invalid_cluster_sizes",
@@ -1141,8 +1136,7 @@ fn bounded_hoeffding_mean_interval(
     let n_f = n as f64;
     let range_width = upper_bound - lower_bound;
     let margin = range_width
-        * ((sum_squared_cluster_sizes as f64 * HOEFFDING_LOG_40) / (2.0 * n_f * n_f))
-            .sqrt();
+        * ((sum_squared_cluster_sizes as f64 * HOEFFDING_LOG_40) / (2.0 * n_f * n_f)).sqrt();
     if !margin.is_finite() {
         return Err(EvalError::PairedUncertaintyInvalid {
             reason: "non_finite",
@@ -1307,12 +1301,11 @@ fn summarize_paired_uncertainty_inner(
             wilson_score_interval(c6_successes, n as u64)?,
         )
     };
-    let (paired_difference_mean, paired_difference_ci) =
-        bounded_hoeffding_paired_difference_ci(
-            &differences,
-            sum_squared_cluster_sizes,
-            cluster_aware,
-        )?;
+    let (paired_difference_mean, paired_difference_ci) = bounded_hoeffding_paired_difference_ci(
+        &differences,
+        sum_squared_cluster_sizes,
+        cluster_aware,
+    )?;
 
     // Consistency: mean of paired differences must equal accuracy gap.
     let expected_gap = c6_accuracy - v6_accuracy;
@@ -1450,13 +1443,7 @@ pub fn summarize_paired_uncertainty_from_records(
     let cluster_sum_squares = sum_squared_group_sizes(v6_records)?;
     let v6 = revealed_matches_from_records(v6_records, EvalArm::V6, split)?;
     let c6 = revealed_matches_from_records(c6_records, EvalArm::C6, split)?;
-    summarize_paired_uncertainty_inner(
-        split,
-        &v6,
-        &c6,
-        registry,
-        Some(cluster_sum_squares),
-    )
+    summarize_paired_uncertainty_inner(split, &v6, &c6, registry, Some(cluster_sum_squares))
 }
 
 /// Reject any split identity outside Development/Validation.
@@ -2286,26 +2273,16 @@ mod tests {
     fn paired_uncertainty_boundary_intervals_remain_non_degenerate() {
         let registry = MetricRegistry::pinned();
         let ties = matches(&[true; MAX_CASES_PER_RUN as usize]);
-        let all_ties = summarize_paired_uncertainty(
-            DataSplit::Development,
-            &ties,
-            &ties,
-            &registry,
-        )
-        .unwrap();
+        let all_ties =
+            summarize_paired_uncertainty(DataSplit::Development, &ties, &ties, &registry).unwrap();
         assert_eq!(all_ties.paired_difference_mean, 0.0);
         assert!(all_ties.paired_difference_ci.lower < 0.0);
         assert!(all_ties.paired_difference_ci.upper > 0.0);
 
         let v6 = matches(&[false; MAX_CASES_PER_RUN as usize]);
         let c6 = matches(&[true; MAX_CASES_PER_RUN as usize]);
-        let all_c6_wins = summarize_paired_uncertainty(
-            DataSplit::Development,
-            &v6,
-            &c6,
-            &registry,
-        )
-        .unwrap();
+        let all_c6_wins =
+            summarize_paired_uncertainty(DataSplit::Development, &v6, &c6, &registry).unwrap();
         assert_eq!(all_c6_wins.paired_difference_mean, 1.0);
         assert!(all_c6_wins.paired_difference_ci.lower < 1.0);
         assert_eq!(all_c6_wins.paired_difference_ci.upper, 1.0);
