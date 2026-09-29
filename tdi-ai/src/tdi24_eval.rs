@@ -161,6 +161,8 @@ pub struct EvaluatorConfig {
     pub budget: ReadoutBudget,
     /// Shared envelope contract pin.
     pub envelope_contract: &'static str,
+    /// Validated, exact Stage-C metric registry.
+    pub metric_registry: MetricRegistry,
 }
 
 impl EvaluatorConfig {
@@ -172,6 +174,7 @@ impl EvaluatorConfig {
             arm: EvalArm::V6,
             budget: ReadoutBudget::matched_non_trained(),
             envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
+            metric_registry: MetricRegistry::pinned(),
         })
     }
 
@@ -183,6 +186,7 @@ impl EvaluatorConfig {
             arm: EvalArm::C6,
             budget: ReadoutBudget::matched_non_trained(),
             envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
+            metric_registry: MetricRegistry::pinned(),
         })
     }
 }
@@ -235,6 +239,7 @@ pub struct EvalRecord {
     pub envelope_contract: &'static str,
     pub arm_contract: &'static str,
     pub budget_contract: &'static str,
+    pub metric_registry_contract: &'static str,
     pub vector_contract: &'static str,
     pub label_contract: &'static str,
 }
@@ -249,7 +254,7 @@ pub struct EvaluatorRun {
 impl EvaluatorRun {
     /// Open a bounded non-final run.
     pub fn open(config: EvaluatorConfig) -> Result<Self, EvalError> {
-        validate_non_final_split(config.split)?;
+        config.metric_registry.admit_split(config.split)?;
         if config.envelope_contract != EVALUATOR_ENVELOPE_CONTRACT {
             return Err(EvalError::ContractMismatch {
                 field: "envelope_contract",
@@ -337,6 +342,7 @@ impl EvaluatorRun {
             envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
             arm_contract: V6_EVALUATOR_CONTRACT,
             budget_contract: READOUT_BUDGET_CONTRACT,
+            metric_registry_contract: self.config.metric_registry.registry_contract,
             vector_contract: VECTOR6_CONTRACT,
             label_contract: view.label_contract,
         });
@@ -393,6 +399,7 @@ impl EvaluatorRun {
             envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
             arm_contract: C6_EVALUATOR_CONTRACT,
             budget_contract: READOUT_BUDGET_CONTRACT,
+            metric_registry_contract: self.config.metric_registry.registry_contract,
             vector_contract: CHIRAL_CONTRACT,
             label_contract: view.label_contract,
         });
@@ -862,11 +869,7 @@ impl MetricRegistry {
 
     /// Reject protected/final splits; Development/Validation only.
     pub fn admit_split(self, split: DataSplit) -> Result<(), EvalError> {
-        if !self.experimental_non_final {
-            return Err(EvalError::MetricRegistryInvalid {
-                reason: "experimental_non_final_required",
-            });
-        }
+        validate_metric_registry(&self)?;
         validate_non_final_split(split)
     }
 }
@@ -892,7 +895,8 @@ pub fn freeze_metric_registry(
 }
 
 /// Validate a metric registry: reject contract drift, empty primary, duplicate
-/// secondaries, oversized sets, invented ids, or non-experimental finals.
+/// secondaries, oversized sets, invented ids, non-experimental finals, and any
+/// secondary sequence that is not the complete canonical ordered registry.
 pub fn validate_metric_registry(registry: &MetricRegistry) -> Result<(), EvalError> {
     if registry.registry_contract != METRIC_REGISTRY_CONTRACT {
         return Err(EvalError::ContractMismatch {
@@ -925,6 +929,11 @@ pub fn validate_metric_registry(registry: &MetricRegistry) -> Result<(), EvalErr
                 reason: "unknown_secondary",
             });
         }
+    }
+    if registry.secondaries != PINNED_SECONDARY_DIAGNOSTICS {
+        return Err(EvalError::MetricRegistryInvalid {
+            reason: "secondary_sequence_mismatch",
+        });
     }
     Ok(())
 }
@@ -1580,6 +1589,85 @@ mod tests {
             ),
             Err(EvalError::MetricRegistryInvalid {
                 reason: "duplicate_secondary",
+            })
+        );
+
+        const OVERSIZED_SECONDARIES: &[SecondaryDiagnosticId] = &[
+            SecondaryDiagnosticId::PairedOutcomeDifference,
+            SecondaryDiagnosticId::MirrorSwapIdentityError,
+            SecondaryDiagnosticId::ParityEquivarianceInvarianceError,
+            SecondaryDiagnosticId::CalibrationConfidenceError,
+            SecondaryDiagnosticId::GradientStability,
+            SecondaryDiagnosticId::OpCountMemoryLatency,
+            SecondaryDiagnosticId::PairedOutcomeDifference,
+        ];
+        assert_eq!(
+            freeze_metric_registry(
+                Some(PrimaryMetricId::PairedTaskAccuracy),
+                OVERSIZED_SECONDARIES
+            ),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "too_many_secondaries",
+            })
+        );
+
+        const TRUNCATED_SECONDARIES: &[SecondaryDiagnosticId] = &[
+            SecondaryDiagnosticId::PairedOutcomeDifference,
+            SecondaryDiagnosticId::MirrorSwapIdentityError,
+            SecondaryDiagnosticId::ParityEquivarianceInvarianceError,
+            SecondaryDiagnosticId::CalibrationConfidenceError,
+            SecondaryDiagnosticId::GradientStability,
+        ];
+        assert_eq!(
+            freeze_metric_registry(
+                Some(PrimaryMetricId::PairedTaskAccuracy),
+                TRUNCATED_SECONDARIES
+            ),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "secondary_sequence_mismatch",
+            })
+        );
+        assert_eq!(
+            freeze_metric_registry(Some(PrimaryMetricId::PairedTaskAccuracy), &[]),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "secondary_sequence_mismatch",
+            })
+        );
+
+        const REORDERED_SECONDARIES: &[SecondaryDiagnosticId] = &[
+            SecondaryDiagnosticId::MirrorSwapIdentityError,
+            SecondaryDiagnosticId::PairedOutcomeDifference,
+            SecondaryDiagnosticId::ParityEquivarianceInvarianceError,
+            SecondaryDiagnosticId::CalibrationConfidenceError,
+            SecondaryDiagnosticId::GradientStability,
+            SecondaryDiagnosticId::OpCountMemoryLatency,
+        ];
+        assert_eq!(
+            freeze_metric_registry(
+                Some(PrimaryMetricId::PairedTaskAccuracy),
+                REORDERED_SECONDARIES
+            ),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "secondary_sequence_mismatch",
+            })
+        );
+
+        let malformed = MetricRegistry {
+            secondaries: &[],
+            ..MetricRegistry::pinned()
+        };
+        assert_eq!(
+            malformed.admit_split(DataSplit::Development),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "secondary_sequence_mismatch",
+            })
+        );
+        let mut config = EvaluatorConfig::v6(DataSplit::Development).unwrap();
+        config.metric_registry = malformed;
+        assert_eq!(
+            EvaluatorRun::open(config),
+            Err(EvalError::MetricRegistryInvalid {
+                reason: "secondary_sequence_mismatch",
             })
         );
 
