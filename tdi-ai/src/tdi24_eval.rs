@@ -2562,11 +2562,7 @@ mod tests {
         let mut stale_arm_contract = v6_records.clone();
         stale_arm_contract[0].arm_contract = "stale-v6-evaluator";
         assert_eq!(
-            revealed_matches_from_records(
-                &stale_arm_contract,
-                EvalArm::V6,
-                DataSplit::Development,
-            ),
+            revealed_matches_from_records(&stale_arm_contract, EvalArm::V6, DataSplit::Development,),
             Err(EvalError::ContractMismatch {
                 field: "arm_contract",
             })
