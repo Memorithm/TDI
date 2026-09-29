@@ -172,6 +172,18 @@ pub struct MatchedParameterReadout {
     pub budget_contract: &'static str,
 }
 
+fn validate_capacity_budget(capacity: ParameterReadoutCapacity) -> Result<(), EvalError> {
+    if capacity.updates != NON_TRAINED_UPDATE_BUDGET
+        || capacity.max_cases == 0
+        || capacity.max_cases > MAX_CASES_PER_RUN
+        || capacity.max_readout_scalars_per_case < 2
+        || capacity.max_readout_scalars_per_case > MAX_READOUT_SCALARS_PER_CASE
+    {
+        return Err(EvalError::InvalidBudget);
+    }
+    Ok(())
+}
+
 fn validate_capacity_carrier(capacity: ParameterReadoutCapacity) -> Result<(), EvalError> {
     let accounting = carrier_accounting(capacity.arm);
     if capacity.query_components != accounting.query_components as u64
@@ -209,6 +221,8 @@ pub fn match_parameter_readouts(
     {
         return Err(EvalError::ContractMismatch("budget_contract"));
     }
+    validate_capacity_budget(left)?;
+    validate_capacity_budget(right)?;
     validate_capacity_carrier(left)?;
     validate_capacity_carrier(right)?;
     if left.arm == right.arm {
@@ -1402,38 +1416,46 @@ mod tests {
     }
 
     #[test]
-    fn parameter_readout_matcher_rejects_inflated_updates_and_drifted_readout() {
+    fn parameter_readout_matcher_rejects_invalid_readout_budgets() {
         let t6 = ParameterReadoutCapacity::reference_t6();
         let mut inflated = ParameterReadoutCapacity::reference_g6();
         inflated.updates = 4;
-        inflated.trainable_parameters = 4;
         assert_eq!(
             match_parameter_readouts(t6, inflated),
-            Err(EvalError::ParameterReadoutMismatch {
-                left_arm: ComparisonArm::T6,
-                right_arm: ComparisonArm::G6,
-                left_trainable: 0,
-                right_trainable: 4,
-                left_updates: 0,
-                right_updates: 4,
-                left_query_components: 6,
-                right_query_components: 6,
-            })
+            Err(EvalError::InvalidBudget)
         );
 
         let mut drifted_scalars = ParameterReadoutCapacity::reference_c6();
         drifted_scalars.max_readout_scalars_per_case = 8;
-        assert!(matches!(
+        assert_eq!(
             match_parameter_readouts(t6, drifted_scalars),
-            Err(EvalError::ParameterReadoutMismatch { .. })
-        ));
+            Err(EvalError::InvalidBudget)
+        );
 
         let mut drifted_cases = ParameterReadoutCapacity::reference_c6();
         drifted_cases.max_cases = MAX_CASES_PER_RUN + 8;
-        assert!(matches!(
+        assert_eq!(
             match_parameter_readouts(ParameterReadoutCapacity::reference_g6(), drifted_cases),
-            Err(EvalError::ParameterReadoutMismatch { .. })
-        ));
+            Err(EvalError::InvalidBudget)
+        );
+
+        let mut oversized_left = ParameterReadoutCapacity::reference_t6();
+        let mut oversized_right = ParameterReadoutCapacity::reference_c6();
+        oversized_left.max_cases = MAX_CASES_PER_RUN + 1;
+        oversized_right.max_cases = MAX_CASES_PER_RUN + 1;
+        assert_eq!(
+            match_parameter_readouts(oversized_left, oversized_right),
+            Err(EvalError::InvalidBudget)
+        );
+
+        let mut wide_left = ParameterReadoutCapacity::reference_c6();
+        let mut wide_right = ParameterReadoutCapacity::reference_g6();
+        wide_left.max_readout_scalars_per_case = MAX_READOUT_SCALARS_PER_CASE + 1;
+        wide_right.max_readout_scalars_per_case = MAX_READOUT_SCALARS_PER_CASE + 1;
+        assert_eq!(
+            match_parameter_readouts(wide_left, wide_right),
+            Err(EvalError::InvalidBudget)
+        );
     }
 
     #[test]
