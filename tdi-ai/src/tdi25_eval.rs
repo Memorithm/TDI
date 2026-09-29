@@ -159,6 +159,9 @@ pub const NON_TRAINED_ORDERING_ID: u64 = 0;
 /// Maximum cases admitted to one non-final evaluator run.
 pub const MAX_CASES_PER_RUN: u64 = 64;
 
+/// Maximum seed blocks admitted to one bounded family synthesis.
+pub const MAX_SEED_BLOCKS_PER_SYNTHESIS: usize = 64;
+
 /// Maximum retained scalar fields per case (score plus oracle-match flag).
 pub const MAX_READOUT_SCALARS_PER_CASE: u64 = 2;
 
@@ -1895,9 +1898,18 @@ fn summarize_paired_uncertainty_inner(
     require_pair_identity_alignment(t6_matches, c6_matches)?;
 
     let mut seed_blocks = Vec::new();
+    let mut seed_block_sizes: Vec<(u64, u64)> = Vec::new();
     for outcome in t6_matches {
         if !seed_blocks.contains(&outcome.seed_block) {
             seed_blocks.push(outcome.seed_block);
+        }
+        if let Some((_, size)) = seed_block_sizes
+            .iter_mut()
+            .find(|(seed_block, _)| *seed_block == outcome.seed_block)
+        {
+            *size += 1;
+        } else {
+            seed_block_sizes.push((outcome.seed_block, 1));
         }
     }
     seed_blocks.sort_unstable();
@@ -1908,13 +1920,31 @@ fn summarize_paired_uncertainty_inner(
             reason: "seed_block_mismatch",
         });
     }
+    if seed_blocks.len() > MAX_SEED_BLOCKS_PER_SYNTHESIS {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "too_many_seed_blocks",
+        });
+    }
+    if seed_block_sizes
+        .iter()
+        .any(|(_, size)| *size > MAX_CASES_PER_RUN)
+    {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "too_many_pairs",
+        });
+    }
 
     if t6_matches.len() < 2 {
         return Err(EvalError::PairedUncertaintyInvalid {
             reason: "insufficient_pairs",
         });
     }
-    if t6_matches.len() > MAX_CASES_PER_RUN as usize {
+    let max_pairs = (MAX_CASES_PER_RUN as usize)
+        .checked_mul(seed_blocks.len())
+        .ok_or(EvalError::PairedUncertaintyInvalid {
+            reason: "too_many_pairs",
+        })?;
+    if t6_matches.len() > max_pairs {
         return Err(EvalError::PairedUncertaintyInvalid {
             reason: "too_many_pairs",
         });
@@ -2545,7 +2575,17 @@ fn family_signed_effect_from_summary(
             reason: "insufficient_pairs",
         });
     }
-    if summary.n_pairs > MAX_CASES_PER_RUN {
+    if summary.seed_blocks.len() > MAX_SEED_BLOCKS_PER_SYNTHESIS {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "too_many_seed_blocks",
+        });
+    }
+    let max_pairs = MAX_CASES_PER_RUN
+        .checked_mul(summary.seed_blocks.len() as u64)
+        .ok_or(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "too_many_pairs",
+        })?;
+    if summary.n_pairs > max_pairs {
         return Err(EvalError::FamilyStratifiedSynthesisInvalid {
             reason: "too_many_pairs",
         });
@@ -4895,13 +4935,14 @@ mod tests {
         let mut c6 = Vec::new();
         for family in REQUIRED_SYNTHESIS_FAMILIES {
             for seed_block in [10, 11] {
-                t6.extend(matches(
-                    split,
-                    family,
-                    seed_block,
-                    &[(0, false), (1, false)],
-                ));
-                c6.extend(matches(split, family, seed_block, &[(0, true), (1, true)]));
+                let t6_bits: Vec<(u64, bool)> = (0..MAX_CASES_PER_RUN)
+                    .map(|case_id| (case_id, false))
+                    .collect();
+                let c6_bits: Vec<(u64, bool)> = (0..MAX_CASES_PER_RUN)
+                    .map(|case_id| (case_id, true))
+                    .collect();
+                t6.extend(matches(split, family, seed_block, &t6_bits));
+                c6.extend(matches(split, family, seed_block, &c6_bits));
             }
         }
 
@@ -4916,7 +4957,7 @@ mod tests {
         for effect in &report.family_effects {
             assert_eq!(effect.seed_block, 10);
             assert_eq!(effect.seed_blocks, vec![10, 11]);
-            assert_eq!(effect.n_pairs, 4);
+            assert_eq!(effect.n_pairs, 2 * MAX_CASES_PER_RUN);
             assert_eq!(
                 effect.paired_difference_ci.method,
                 UncertaintyMethod::ClusterHoeffdingPairedDifference
