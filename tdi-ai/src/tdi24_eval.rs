@@ -1103,6 +1103,13 @@ fn normal_approx_paired_difference_ci(
             reason: "empty_pairs",
         });
     }
+    // Sample SD (Bessel) requires at least two pairs; a single observation
+    // cannot support a nominal 95% normal-approx interval.
+    if n < 2 {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "insufficient_pairs",
+        });
+    }
     let n_f = n as f64;
     let mean = differences.iter().sum::<f64>() / n_f;
     if !mean.is_finite() {
@@ -1110,11 +1117,7 @@ fn normal_approx_paired_difference_ci(
             reason: "non_finite",
         });
     }
-    // Sample variance with Bessel correction when n >= 2; n == 1 yields a
-    // degenerate (zero-width) interval at the single observed difference.
-    let variance = if n == 1 {
-        0.0
-    } else {
+    let variance = {
         let mut ss = 0.0;
         for d in differences {
             let delta = d - mean;
@@ -1189,6 +1192,11 @@ pub fn summarize_paired_uncertainty(
     if v6_matches.len() != c6_matches.len() {
         return Err(EvalError::PairedUncertaintyInvalid {
             reason: "length_mismatch",
+        });
+    }
+    if v6_matches.len() < 2 {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "insufficient_pairs",
         });
     }
 
@@ -1298,12 +1306,32 @@ pub fn revealed_matches_from_records(
 }
 
 /// Summarise paired V6/C6 [`EvalRecord`] slices without re-entering label oracles.
+///
+/// Records must be equal-length and identity-aligned in order: matching
+/// `family`, `case_id`, `group_id`, and `canonical_digest` at each index.
+/// Positional zip without identity checks is rejected fail-closed.
 pub fn summarize_paired_uncertainty_from_records(
     split: DataSplit,
     v6_records: &[EvalRecord],
     c6_records: &[EvalRecord],
     registry: &MetricRegistry,
 ) -> Result<PairedEffectSummary, EvalError> {
+    if v6_records.len() != c6_records.len() {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "length_mismatch",
+        });
+    }
+    for (left, right) in v6_records.iter().zip(c6_records.iter()) {
+        if left.family != right.family
+            || left.case_id != right.case_id
+            || left.group_id != right.group_id
+            || left.canonical_digest != right.canonical_digest
+        {
+            return Err(EvalError::PairedUncertaintyInvalid {
+                reason: "pair_identity_mismatch",
+            });
+        }
+    }
     let v6 = revealed_matches_from_records(v6_records, EvalArm::V6, split)?;
     let c6 = revealed_matches_from_records(c6_records, EvalArm::C6, split)?;
     summarize_paired_uncertainty(split, &v6, &c6, registry)
@@ -2205,6 +2233,18 @@ mod tests {
         );
 
         assert_eq!(
+            summarize_paired_uncertainty(
+                DataSplit::Development,
+                &matches(&[true]),
+                &matches(&[false]),
+                &registry,
+            ),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "insufficient_pairs",
+            })
+        );
+
+        assert_eq!(
             parse_non_final_split("protected"),
             Err(EvalError::ProtectedOrFinalSplit)
         );
@@ -2228,7 +2268,7 @@ mod tests {
                     score: 1.0,
                     correct: true,
                 },
-                canonical_digest: "v6a".into(),
+                canonical_digest: "pair-a".into(),
                 envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
                 arm_contract: V6_EVALUATOR_CONTRACT,
                 budget_contract: READOUT_BUDGET_CONTRACT,
@@ -2246,7 +2286,7 @@ mod tests {
                     score: -1.0,
                     correct: false,
                 },
-                canonical_digest: "v6b".into(),
+                canonical_digest: "pair-b".into(),
                 envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
                 arm_contract: V6_EVALUATOR_CONTRACT,
                 budget_contract: READOUT_BUDGET_CONTRACT,
@@ -2266,7 +2306,7 @@ mod tests {
                     score: 1.0,
                     correct: true,
                 },
-                canonical_digest: "c6a".into(),
+                canonical_digest: "pair-a".into(),
                 envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
                 arm_contract: C6_EVALUATOR_CONTRACT,
                 budget_contract: READOUT_BUDGET_CONTRACT,
@@ -2284,7 +2324,7 @@ mod tests {
                     score: 1.0,
                     correct: true,
                 },
-                canonical_digest: "c6b".into(),
+                canonical_digest: "pair-b".into(),
                 envelope_contract: EVALUATOR_ENVELOPE_CONTRACT,
                 arm_contract: C6_EVALUATOR_CONTRACT,
                 budget_contract: READOUT_BUDGET_CONTRACT,
@@ -2331,6 +2371,20 @@ mod tests {
             revealed_matches_from_records(&wrong_arm, EvalArm::V6, DataSplit::Development),
             Err(EvalError::PairedUncertaintyInvalid {
                 reason: "arm_mismatch",
+            })
+        );
+
+        let mut mismatched = c6_records.clone();
+        mismatched[0].case_id = 99;
+        assert_eq!(
+            summarize_paired_uncertainty_from_records(
+                DataSplit::Development,
+                &v6_records,
+                &mismatched,
+                &registry,
+            ),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "pair_identity_mismatch",
             })
         );
     }
