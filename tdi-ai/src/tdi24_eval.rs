@@ -1418,24 +1418,28 @@ pub fn revealed_matches_from_records(
 
 /// Return sum_g n_g^2 for the record grouping, bounded by the evaluator cap.
 fn sum_squared_group_sizes(records: &[EvalRecord]) -> Result<u64, EvalError> {
-    let mut groups: Vec<(u64, u64)> = Vec::with_capacity(records.len());
+    let mut groups: Vec<(TaskFamily, u64, u64)> = Vec::with_capacity(records.len());
     for record in records {
-        if let Some((_, size)) = groups
+        if let Some((_, _, size)) = groups
             .iter_mut()
-            .find(|(group_id, _)| *group_id == record.group_id)
+            .find(|(family, group_id, _)| {
+                *family == record.family && *group_id == record.group_id
+            })
         {
             *size += 1;
         } else {
-            groups.push((record.group_id, 1));
+            groups.push((record.family, record.group_id, 1));
         }
     }
-    groups.into_iter().try_fold(0_u64, |sum, (_, size)| {
+    groups
+        .into_iter()
+        .try_fold(0_u64, |sum, (_, _, size)| {
         size.checked_mul(size)
             .and_then(|square| sum.checked_add(square))
             .ok_or(EvalError::PairedUncertaintyInvalid {
                 reason: "invalid_cluster_sizes",
             })
-    })
+        })
 }
 
 /// Summarise paired V6/C6 [`EvalRecord`] slices without re-entering label oracles.
@@ -1452,6 +1456,11 @@ pub fn summarize_paired_uncertainty_from_records(
     if v6_records.len() != c6_records.len() {
         return Err(EvalError::PairedUncertaintyInvalid {
             reason: "length_mismatch",
+        });
+    }
+    if v6_records.len() > MAX_CASES_PER_RUN as usize {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "too_many_pairs",
         });
     }
     for (left, right) in v6_records.iter().zip(c6_records.iter()) {
@@ -2509,6 +2518,12 @@ mod tests {
         assert!((summary.c6_accuracy - 1.0).abs() < 1e-12);
         assert!((summary.paired_difference_mean - 0.5).abs() < 1e-12);
         assert_eq!(sum_squared_group_sizes(&v6_records).unwrap(), 4);
+        let mut same_numeric_group_different_family = v6_records.clone();
+        same_numeric_group_different_family[1].family = TaskFamily::ReflectionNuisance;
+        assert_eq!(
+            sum_squared_group_sizes(&same_numeric_group_different_family).unwrap(),
+            2
+        );
         assert_eq!(
             summary.v6_accuracy_ci.method,
             UncertaintyMethod::ClusterHoeffdingBernoulliMean
@@ -2554,6 +2569,19 @@ mod tests {
         let oversized_records = vec![v6_records[0].clone(); MAX_CASES_PER_RUN as usize + 1];
         assert_eq!(
             revealed_matches_from_records(&oversized_records, EvalArm::V6, DataSplit::Development,),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "too_many_pairs",
+            })
+        );
+        let oversized_c6_records =
+            vec![c6_records[0].clone(); MAX_CASES_PER_RUN as usize + 1];
+        assert_eq!(
+            summarize_paired_uncertainty_from_records(
+                DataSplit::Development,
+                &oversized_records,
+                &oversized_c6_records,
+                &registry,
+            ),
             Err(EvalError::PairedUncertaintyInvalid {
                 reason: "too_many_pairs",
             })
