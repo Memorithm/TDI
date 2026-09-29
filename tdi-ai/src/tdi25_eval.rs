@@ -2521,10 +2521,12 @@ mod tests {
     #[test]
     fn paired_and_g6_candidate_metrics_remain_unadmitted_without_common_targets() {
         assert!(PINNED_PRIMARY_FAMILY_METRICS.is_empty());
-        assert!(!PINNED_SECONDARY_DIAGNOSTICS
-            .contains(&SecondaryDiagnosticId::PairedOutcomeDifference));
-        assert!(!PINNED_SECONDARY_DIAGNOSTICS
-            .contains(&SecondaryDiagnosticId::G6AttributionContrast));
+        assert!(
+            !PINNED_SECONDARY_DIAGNOSTICS.contains(&SecondaryDiagnosticId::PairedOutcomeDifference)
+        );
+        assert!(
+            !PINNED_SECONDARY_DIAGNOSTICS.contains(&SecondaryDiagnosticId::G6AttributionContrast)
+        );
     }
 
     #[test]
