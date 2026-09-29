@@ -2254,17 +2254,10 @@ mod tests {
             })
         );
 
-        let oversized = vec![
-            RevealedMatchOutcome::from_matches_oracle(true);
-            MAX_CASES_PER_RUN as usize + 1
-        ];
+        let oversized =
+            vec![RevealedMatchOutcome::from_matches_oracle(true); MAX_CASES_PER_RUN as usize + 1];
         assert_eq!(
-            summarize_paired_uncertainty(
-                DataSplit::Development,
-                &oversized,
-                &oversized,
-                &registry,
-            ),
+            summarize_paired_uncertainty(DataSplit::Development, &oversized, &oversized, &registry,),
             Err(EvalError::PairedUncertaintyInvalid {
                 reason: "too_many_pairs",
             })
@@ -2400,14 +2393,9 @@ mod tests {
             })
         );
 
-        let oversized_records =
-            vec![v6_records[0].clone(); MAX_CASES_PER_RUN as usize + 1];
+        let oversized_records = vec![v6_records[0].clone(); MAX_CASES_PER_RUN as usize + 1];
         assert_eq!(
-            revealed_matches_from_records(
-                &oversized_records,
-                EvalArm::V6,
-                DataSplit::Development,
-            ),
+            revealed_matches_from_records(&oversized_records, EvalArm::V6, DataSplit::Development,),
             Err(EvalError::PairedUncertaintyInvalid {
                 reason: "too_many_pairs",
             })
