@@ -894,6 +894,8 @@ pub struct T6EvalRecord {
     pub split: DataSplit,
     pub family: TaskFamily,
     pub case_id: u64,
+    /// Retained seed-block / pair identity from the sealed oracle.
+    pub seed_block: u64,
     pub outcome: T6Outcome,
     pub canonical_digest: String,
     pub envelope_contract: &'static str,
@@ -970,6 +972,7 @@ impl T6EvaluatorRun {
             split: input.split,
             family: input.task_family,
             case_id: input.case_id,
+            seed_block: oracle.pair_id,
             outcome: T6Outcome {
                 score,
                 matches_oracle: approximately_equal(score, oracle.expected_score),
@@ -1007,6 +1010,7 @@ impl T6EvaluatorRun {
             split: input.split,
             family: input.task_family,
             case_id: input.case_id,
+            seed_block: oracle.pair_id,
             outcome: T6Outcome {
                 score,
                 matches_oracle: approximately_equal(score, oracle.expected_torsor_score),
@@ -1050,6 +1054,8 @@ pub struct C6EvalRecord {
     pub split: DataSplit,
     pub family: TaskFamily,
     pub case_id: u64,
+    /// Retained seed-block / pair identity from the sealed oracle.
+    pub seed_block: u64,
     pub outcome: C6Outcome,
     pub canonical_digest: String,
     pub envelope_contract: &'static str,
@@ -1126,6 +1132,7 @@ impl C6EvaluatorRun {
             split: input.split,
             family: input.task_family,
             case_id: input.case_id,
+            seed_block: oracle.pair_id,
             outcome: C6Outcome {
                 score,
                 matches_oracle: approximately_equal(score, oracle.expected_score),
@@ -1163,6 +1170,7 @@ impl C6EvaluatorRun {
             split: input.split,
             family: input.task_family,
             case_id: input.case_id,
+            seed_block: oracle.pair_id,
             outcome: C6Outcome {
                 score,
                 matches_oracle: approximately_equal(score, oracle.expected_chiral_score),
@@ -1206,6 +1214,8 @@ pub struct G6EvalRecord {
     pub split: DataSplit,
     pub family: TaskFamily,
     pub case_id: u64,
+    /// Retained seed-block / pair identity from the sealed oracle.
+    pub seed_block: u64,
     pub outcome: G6Outcome,
     pub canonical_digest: String,
     pub envelope_contract: &'static str,
@@ -1285,6 +1295,7 @@ impl G6EvaluatorRun {
             split: input.split,
             family: input.task_family,
             case_id: input.case_id,
+            seed_block: oracle.pair_id,
             outcome: G6Outcome {
                 score,
                 matches_oracle: approximately_equal(score, oracle.expected_score),
@@ -1460,9 +1471,11 @@ impl ConfidenceInterval {
 /// paired seed-block / group identity used for stratified synthesis.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RevealedMatchOutcome {
+    /// Non-final split retained with the revealed bit.
+    pub split: DataSplit,
     /// Task family this outcome belongs to.
     pub family: TaskFamily,
-    /// Paired seed-block / group identity.
+    /// Paired seed-block / group identity retained from evaluator provenance.
     pub seed_block: u64,
     /// Case identity within the seed block.
     pub case_id: u64,
@@ -1474,12 +1487,14 @@ impl RevealedMatchOutcome {
     /// Build from an evaluator-retained correctness / match-oracle bit.
     #[must_use]
     pub const fn from_matches_oracle(
+        split: DataSplit,
         family: TaskFamily,
         seed_block: u64,
         case_id: u64,
         matches_oracle: bool,
     ) -> Self {
         Self {
+            split,
             family,
             seed_block,
             case_id,
@@ -1524,24 +1539,19 @@ pub struct PairedEffectSummary {
     pub experimental_non_final: bool,
 }
 
-/// Optional G6 attribution contrast retained as a secondary control only.
+/// Optional G6 attribution control retained as a secondary only.
 ///
-/// Never elevates G6 to a primary hypothesis; binds exclusively to
-/// [`SecondaryDiagnosticId::G6AttributionContrast`].
+/// Reports Neutral-family G6 accuracy/CIs by seed block under
+/// [`SecondaryDiagnosticId::G6AttributionContrast`]. Reachable from real
+/// [`G6EvaluatorRun`] outputs. Never elevates G6 to a primary T6/C6 hypothesis.
 #[derive(Clone, Debug, PartialEq)]
 pub struct G6AttributionContrastSummary {
     pub split: DataSplit,
     pub family: TaskFamily,
     pub seed_block: u64,
-    pub n_pairs: u64,
+    pub n_cases: u64,
     pub g6_accuracy: f64,
-    pub reference_arm: ComparisonArm,
-    pub reference_accuracy: f64,
-    /// Mean of per-pair differences `I(G6)-I(reference)`.
-    pub contrast_mean: f64,
-    pub contrast_ci: ConfidenceInterval,
     pub g6_accuracy_ci: ConfidenceInterval,
-    pub reference_accuracy_ci: ConfidenceInterval,
     pub secondary_g6_attribution_contrast: SecondaryDiagnosticId,
     pub uncertainty_contract: &'static str,
     pub metric_registry_contract: &'static str,
@@ -1685,12 +1695,18 @@ fn require_pinned_metric_registry(registry: &MetricRegistry) -> Result<(), EvalE
     Ok(())
 }
 
-fn require_family_seed_block_outcomes(
+fn require_split_family_seed_block_outcomes(
+    split: DataSplit,
     family: TaskFamily,
     seed_block: u64,
     outcomes: &[RevealedMatchOutcome],
 ) -> Result<(), EvalError> {
     for outcome in outcomes {
+        if outcome.split != split {
+            return Err(EvalError::PairedUncertaintyInvalid {
+                reason: "split_mismatch",
+            });
+        }
         if outcome.family != family {
             return Err(EvalError::PairedUncertaintyInvalid {
                 reason: "family_mismatch",
@@ -1715,13 +1731,18 @@ fn require_pair_identity_alignment(
         });
     }
     for (index, (a, b)) in left.iter().zip(right.iter()).enumerate() {
-        if a.family != b.family || a.seed_block != b.seed_block || a.case_id != b.case_id {
+        if a.split != b.split
+            || a.family != b.family
+            || a.seed_block != b.seed_block
+            || a.case_id != b.case_id
+        {
             return Err(EvalError::PairedUncertaintyInvalid {
                 reason: "pair_identity_mismatch",
             });
         }
         if left[..index].iter().any(|prior| {
-            prior.family == a.family
+            prior.split == a.split
+                && prior.family == a.family
                 && prior.seed_block == a.seed_block
                 && prior.case_id == a.case_id
         }) {
@@ -1734,6 +1755,7 @@ fn require_pair_identity_alignment(
 }
 
 /// Return sum_g n_g^2 for seed-block clustering, namespaced by family.
+#[allow(dead_code)]
 fn sum_squared_seed_block_sizes(outcomes: &[RevealedMatchOutcome]) -> Result<u64, EvalError> {
     let mut groups: Vec<(TaskFamily, u64, u64)> = Vec::with_capacity(outcomes.len());
     for outcome in outcomes {
@@ -1770,8 +1792,8 @@ fn summarize_paired_uncertainty_inner(
             reason: "empty_pairs",
         });
     }
-    require_family_seed_block_outcomes(family, seed_block, t6_matches)?;
-    require_family_seed_block_outcomes(family, seed_block, c6_matches)?;
+    require_split_family_seed_block_outcomes(split, family, seed_block, t6_matches)?;
+    require_split_family_seed_block_outcomes(split, family, seed_block, c6_matches)?;
     require_pair_identity_alignment(t6_matches, c6_matches)?;
 
     if t6_matches.len() < 2 {
@@ -1886,36 +1908,21 @@ pub fn summarize_paired_uncertainty_by_seed_block(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
-fn summarize_g6_attribution_inner(
+fn summarize_g6_control_inner(
     split: DataSplit,
-    family: TaskFamily,
     seed_block: u64,
     g6_matches: &[RevealedMatchOutcome],
-    reference_matches: &[RevealedMatchOutcome],
-    reference_arm: ComparisonArm,
     registry: &MetricRegistry,
-    cluster_sum_squares: Option<u64>,
 ) -> Result<G6AttributionContrastSummary, EvalError> {
     validate_non_final_split(split)?;
     require_pinned_metric_registry(registry)?;
-    match reference_arm {
-        ComparisonArm::T6 | ComparisonArm::C6 => {}
-        ComparisonArm::G6 => {
-            return Err(EvalError::PairedUncertaintyInvalid {
-                reason: "g6_not_primary_reference",
-            });
-        }
-    }
-    if g6_matches.is_empty() || reference_matches.is_empty() {
+    if g6_matches.is_empty() {
         return Err(EvalError::PairedUncertaintyInvalid {
             reason: "empty_pairs",
         });
     }
-    require_family_seed_block_outcomes(family, seed_block, g6_matches)?;
-    require_family_seed_block_outcomes(family, seed_block, reference_matches)?;
-    require_pair_identity_alignment(g6_matches, reference_matches)?;
-
+    // Real G6 evaluator emits Neutral only; bind the secondary control to that family.
+    require_split_family_seed_block_outcomes(split, TaskFamily::Neutral, seed_block, g6_matches)?;
     if g6_matches.len() < 2 {
         return Err(EvalError::PairedUncertaintyInvalid {
             reason: "insufficient_pairs",
@@ -1926,80 +1933,25 @@ fn summarize_g6_attribution_inner(
             reason: "too_many_pairs",
         });
     }
-
     let n = g6_matches.len();
-    let mut g6_successes = 0_u64;
-    let mut reference_successes = 0_u64;
-    let mut differences = Vec::with_capacity(n);
-    for (g6, reference) in g6_matches.iter().zip(reference_matches.iter()) {
-        let g = u64::from(g6.matches_oracle);
-        let r = u64::from(reference.matches_oracle);
-        g6_successes += g;
-        reference_successes += r;
-        differences.push(g as f64 - r as f64);
-    }
-
-    let n_f = n as f64;
-    let g6_accuracy = g6_successes as f64 / n_f;
-    let reference_accuracy = reference_successes as f64 / n_f;
-    if !g6_accuracy.is_finite() || !reference_accuracy.is_finite() {
+    let g6_successes = g6_matches
+        .iter()
+        .map(|outcome| u64::from(outcome.matches_oracle))
+        .sum::<u64>();
+    let g6_accuracy = g6_successes as f64 / n as f64;
+    if !g6_accuracy.is_finite() {
         return Err(EvalError::PairedUncertaintyInvalid {
             reason: "non_finite",
         });
     }
-
-    let cluster_aware = cluster_sum_squares.is_some();
-    let sum_squared_cluster_sizes = cluster_sum_squares.unwrap_or(n as u64);
-    let (g6_accuracy_ci, reference_accuracy_ci) = if cluster_aware {
-        (
-            bounded_hoeffding_mean_interval(
-                g6_accuracy,
-                n,
-                sum_squared_cluster_sizes,
-                0.0,
-                1.0,
-                UncertaintyMethod::ClusterHoeffdingBernoulliMean,
-            )?,
-            bounded_hoeffding_mean_interval(
-                reference_accuracy,
-                n,
-                sum_squared_cluster_sizes,
-                0.0,
-                1.0,
-                UncertaintyMethod::ClusterHoeffdingBernoulliMean,
-            )?,
-        )
-    } else {
-        (
-            wilson_score_interval(g6_successes, n as u64)?,
-            wilson_score_interval(reference_successes, n as u64)?,
-        )
-    };
-    let (contrast_mean, contrast_ci) = bounded_hoeffding_paired_difference_ci(
-        &differences,
-        sum_squared_cluster_sizes,
-        cluster_aware,
-    )?;
-
-    let expected_gap = g6_accuracy - reference_accuracy;
-    if !contrast_mean.is_finite() || (contrast_mean - expected_gap).abs() > 1e-12 {
-        return Err(EvalError::PairedUncertaintyInvalid {
-            reason: "non_finite",
-        });
-    }
-
+    let g6_accuracy_ci = wilson_score_interval(g6_successes, n as u64)?;
     Ok(G6AttributionContrastSummary {
         split,
-        family,
+        family: TaskFamily::Neutral,
         seed_block,
-        n_pairs: n as u64,
+        n_cases: n as u64,
         g6_accuracy,
-        reference_arm,
-        reference_accuracy,
-        contrast_mean,
-        contrast_ci,
         g6_accuracy_ci,
-        reference_accuracy_ci,
         secondary_g6_attribution_contrast: SecondaryDiagnosticId::G6AttributionContrast,
         uncertainty_contract: PAIRED_UNCERTAINTY_CONTRACT,
         metric_registry_contract: registry.registry_contract,
@@ -2007,49 +1959,32 @@ fn summarize_g6_attribution_inner(
     })
 }
 
-/// Summarise optional G6 attribution contrast for one family seed block.
+/// Summarise Neutral-family G6 attribution control accuracy for one seed block.
 ///
-/// Secondary control only — `reference_arm` must be T6 or C6. Never admits G6
-/// as a primary hypothesis arm.
+/// Secondary control only — reachable from real [`G6EvaluatorRun`] Neutral
+/// records. Does not pair against T6/C6 (those arms do not emit Neutral) and
+/// never promotes G6 to a primary hypothesis.
 pub fn summarize_g6_attribution_contrast_by_seed_block(
     split: DataSplit,
-    family: TaskFamily,
     seed_block: u64,
     g6_matches: &[RevealedMatchOutcome],
-    reference_matches: &[RevealedMatchOutcome],
-    reference_arm: ComparisonArm,
     registry: &MetricRegistry,
 ) -> Result<G6AttributionContrastSummary, EvalError> {
-    summarize_g6_attribution_inner(
-        split,
-        family,
-        seed_block,
-        g6_matches,
-        reference_matches,
-        reference_arm,
-        registry,
-        None,
-    )
+    summarize_g6_control_inner(split, seed_block, g6_matches, registry)
 }
 
 /// Extract revealed match bits from T6 evaluator records for one split.
 ///
-/// `seed_blocks` must be parallel to `records`. Accepts only contract-pinned
-/// scored rows; does not accept [`super::tdi25_tasks::ProtectedLabel`].
+/// Seed-block identity is taken from retained [`T6EvalRecord::seed_block`]
+/// (oracle `pair_id`). Does not accept [`super::tdi25_tasks::ProtectedLabel`].
 pub fn revealed_matches_from_t6_records(
     records: &[T6EvalRecord],
     expected_split: DataSplit,
-    seed_blocks: &[u64],
 ) -> Result<Vec<RevealedMatchOutcome>, EvalError> {
     validate_non_final_split(expected_split)?;
     if records.is_empty() {
         return Err(EvalError::PairedUncertaintyInvalid {
             reason: "empty_pairs",
-        });
-    }
-    if records.len() != seed_blocks.len() {
-        return Err(EvalError::PairedUncertaintyInvalid {
-            reason: "length_mismatch",
         });
     }
     if records.len() > MAX_CASES_PER_RUN as usize {
@@ -2058,7 +1993,7 @@ pub fn revealed_matches_from_t6_records(
         });
     }
     let mut out = Vec::with_capacity(records.len());
-    for (record, &seed_block) in records.iter().zip(seed_blocks.iter()) {
+    for record in records {
         if record.split != expected_split {
             return Err(EvalError::SplitMismatch {
                 expected: expected_split,
@@ -2084,8 +2019,9 @@ pub fn revealed_matches_from_t6_records(
             return Err(EvalError::ContractMismatch("label_contract"));
         }
         out.push(RevealedMatchOutcome::from_matches_oracle(
+            record.split,
             record.family,
-            seed_block,
+            record.seed_block,
             record.case_id,
             record.outcome.matches_oracle,
         ));
@@ -2097,17 +2033,11 @@ pub fn revealed_matches_from_t6_records(
 pub fn revealed_matches_from_c6_records(
     records: &[C6EvalRecord],
     expected_split: DataSplit,
-    seed_blocks: &[u64],
 ) -> Result<Vec<RevealedMatchOutcome>, EvalError> {
     validate_non_final_split(expected_split)?;
     if records.is_empty() {
         return Err(EvalError::PairedUncertaintyInvalid {
             reason: "empty_pairs",
-        });
-    }
-    if records.len() != seed_blocks.len() {
-        return Err(EvalError::PairedUncertaintyInvalid {
-            reason: "length_mismatch",
         });
     }
     if records.len() > MAX_CASES_PER_RUN as usize {
@@ -2116,7 +2046,7 @@ pub fn revealed_matches_from_c6_records(
         });
     }
     let mut out = Vec::with_capacity(records.len());
-    for (record, &seed_block) in records.iter().zip(seed_blocks.iter()) {
+    for record in records {
         if record.split != expected_split {
             return Err(EvalError::SplitMismatch {
                 expected: expected_split,
@@ -2142,8 +2072,9 @@ pub fn revealed_matches_from_c6_records(
             return Err(EvalError::ContractMismatch("label_contract"));
         }
         out.push(RevealedMatchOutcome::from_matches_oracle(
+            record.split,
             record.family,
-            seed_block,
+            record.seed_block,
             record.case_id,
             record.outcome.matches_oracle,
         ));
@@ -2155,17 +2086,11 @@ pub fn revealed_matches_from_c6_records(
 pub fn revealed_matches_from_g6_records(
     records: &[G6EvalRecord],
     expected_split: DataSplit,
-    seed_blocks: &[u64],
 ) -> Result<Vec<RevealedMatchOutcome>, EvalError> {
     validate_non_final_split(expected_split)?;
     if records.is_empty() {
         return Err(EvalError::PairedUncertaintyInvalid {
             reason: "empty_pairs",
-        });
-    }
-    if records.len() != seed_blocks.len() {
-        return Err(EvalError::PairedUncertaintyInvalid {
-            reason: "length_mismatch",
         });
     }
     if records.len() > MAX_CASES_PER_RUN as usize {
@@ -2174,7 +2099,7 @@ pub fn revealed_matches_from_g6_records(
         });
     }
     let mut out = Vec::with_capacity(records.len());
-    for (record, &seed_block) in records.iter().zip(seed_blocks.iter()) {
+    for record in records {
         if record.split != expected_split {
             return Err(EvalError::SplitMismatch {
                 expected: expected_split,
@@ -2200,8 +2125,9 @@ pub fn revealed_matches_from_g6_records(
             return Err(EvalError::ContractMismatch("label_contract"));
         }
         out.push(RevealedMatchOutcome::from_matches_oracle(
+            record.split,
             record.family,
-            seed_block,
+            record.seed_block,
             record.case_id,
             record.outcome.matches_oracle,
         ));
@@ -2209,23 +2135,26 @@ pub fn revealed_matches_from_g6_records(
     Ok(out)
 }
 
-/// Summarise paired T6/C6 [`T6EvalRecord`]/ [`C6EvalRecord`] slices without re-entering label oracles.
+/// Summarise paired T6/C6 records for one retained family seed block.
 ///
-/// Records must be equal-length and identity-aligned in order: matching
-/// `family`, `case_id`, and `canonical_digest` at each index. `seed_blocks` is
-/// parallel and defines the seed-block / cluster identity. Positional zip
-/// without identity checks is rejected fail-closed. Uses cluster-aware
-/// intervals namespaced by `(family, seed_block)`.
+/// Records must be equal-length and identity-aligned: matching `family`,
+/// `case_id`, `seed_block`, and `canonical_digest`. Seed-block identity is
+/// taken from retained evaluator provenance (`oracle.pair_id`), not caller
+/// relabeling. Uses within-block independent Wilson / Hoeffding intervals
+/// (informative at finite n). Cluster-aware multi-block synthesis is deferred
+/// to slice 28 so a single-block summary never substitutes `n²` into the
+/// Hoeffding margin. Phase-C matched T6/C6 record pairs are currently emitted
+/// for [`TaskFamily::Mixed`]; other families remain available on the revealed-bit
+/// API for later matched evaluator paths.
 pub fn summarize_paired_uncertainty_from_records(
     split: DataSplit,
     family: TaskFamily,
     seed_block: u64,
     t6_records: &[T6EvalRecord],
     c6_records: &[C6EvalRecord],
-    seed_blocks: &[u64],
     registry: &MetricRegistry,
 ) -> Result<PairedEffectSummary, EvalError> {
-    if t6_records.len() != c6_records.len() || t6_records.len() != seed_blocks.len() {
+    if t6_records.len() != c6_records.len() {
         return Err(EvalError::PairedUncertaintyInvalid {
             reason: "length_mismatch",
         });
@@ -2241,13 +2170,14 @@ pub fn summarize_paired_uncertainty_from_records(
                 reason: "family_mismatch",
             });
         }
-        if seed_blocks[index] != seed_block {
+        if left.seed_block != seed_block || right.seed_block != seed_block {
             return Err(EvalError::PairedUncertaintyInvalid {
                 reason: "seed_block_mismatch",
             });
         }
         if left.family != right.family
             || left.case_id != right.case_id
+            || left.seed_block != right.seed_block
             || left.canonical_digest != right.canonical_digest
         {
             return Err(EvalError::PairedUncertaintyInvalid {
@@ -2257,6 +2187,7 @@ pub fn summarize_paired_uncertainty_from_records(
         if t6_records[..index].iter().any(|prior| {
             prior.family == left.family
                 && prior.case_id == left.case_id
+                && prior.seed_block == left.seed_block
                 && prior.canonical_digest == left.canonical_digest
         }) {
             return Err(EvalError::PairedUncertaintyInvalid {
@@ -2264,18 +2195,10 @@ pub fn summarize_paired_uncertainty_from_records(
             });
         }
     }
-    let t6 = revealed_matches_from_t6_records(t6_records, split, seed_blocks)?;
-    let c6 = revealed_matches_from_c6_records(c6_records, split, seed_blocks)?;
-    let cluster_sum_squares = sum_squared_seed_block_sizes(&t6)?;
-    summarize_paired_uncertainty_inner(
-        split,
-        family,
-        seed_block,
-        &t6,
-        &c6,
-        registry,
-        Some(cluster_sum_squares),
-    )
+    let t6 = revealed_matches_from_t6_records(t6_records, split)?;
+    let c6 = revealed_matches_from_c6_records(c6_records, split)?;
+    // Independent within-block intervals — never cluster a solitary seed block as n².
+    summarize_paired_uncertainty_inner(split, family, seed_block, &t6, &c6, registry, None)
 }
 
 /// Reject any split identity outside Development/Validation.
@@ -3599,21 +3522,23 @@ mod tests {
     }
 
     fn revealed(
+        split: DataSplit,
         family: TaskFamily,
         seed_block: u64,
         case_id: u64,
         bit: bool,
     ) -> RevealedMatchOutcome {
-        RevealedMatchOutcome::from_matches_oracle(family, seed_block, case_id, bit)
+        RevealedMatchOutcome::from_matches_oracle(split, family, seed_block, case_id, bit)
     }
 
     fn matches(
+        split: DataSplit,
         family: TaskFamily,
         seed_block: u64,
         bits: &[(u64, bool)],
     ) -> Vec<RevealedMatchOutcome> {
         bits.iter()
-            .map(|(case_id, bit)| revealed(family, seed_block, *case_id, *bit))
+            .map(|(case_id, bit)| revealed(split, family, seed_block, *case_id, *bit))
             .collect()
     }
 
@@ -3636,11 +3561,13 @@ mod tests {
         let family = TaskFamily::TorsorFavorable;
         let seed_block = 17;
         let t6 = matches(
+            DataSplit::Development,
             family,
             seed_block,
             &[(1, true), (2, true), (3, false), (4, false)],
         );
         let c6 = matches(
+            DataSplit::Development,
             family,
             seed_block,
             &[(1, true), (2, true), (3, true), (4, false)],
@@ -3693,12 +3620,24 @@ mod tests {
         assert!(summary.paired_difference_ci.upper >= summary.paired_difference_mean);
         assert!(summary.paired_difference_ci.lower < summary.paired_difference_ci.upper);
 
+        let t6_val = matches(
+            DataSplit::Validation,
+            family,
+            seed_block,
+            &[(1, true), (2, true), (3, false), (4, false)],
+        );
+        let c6_val = matches(
+            DataSplit::Validation,
+            family,
+            seed_block,
+            &[(1, true), (2, true), (3, true), (4, false)],
+        );
         let validation = summarize_paired_uncertainty_by_seed_block(
             DataSplit::Validation,
             family,
             seed_block,
-            &t6,
-            &c6,
+            &t6_val,
+            &c6_val,
             &registry,
         )
         .unwrap();
@@ -3711,7 +3650,7 @@ mod tests {
         let family = TaskFamily::ChiralFavorable;
         let seed_block = 3;
         let ties: Vec<_> = (0..MAX_CASES_PER_RUN)
-            .map(|case_id| revealed(family, seed_block, case_id, true))
+            .map(|case_id| revealed(DataSplit::Development, family, seed_block, case_id, true))
             .collect();
         let all_ties = summarize_paired_uncertainty_by_seed_block(
             DataSplit::Development,
@@ -3727,10 +3666,10 @@ mod tests {
         assert!(all_ties.paired_difference_ci.upper > 0.0);
 
         let t6: Vec<_> = (0..MAX_CASES_PER_RUN)
-            .map(|case_id| revealed(family, seed_block, case_id, false))
+            .map(|case_id| revealed(DataSplit::Development, family, seed_block, case_id, false))
             .collect();
         let c6: Vec<_> = (0..MAX_CASES_PER_RUN)
-            .map(|case_id| revealed(family, seed_block, case_id, true))
+            .map(|case_id| revealed(DataSplit::Development, family, seed_block, case_id, true))
             .collect();
         let all_c6_wins = summarize_paired_uncertainty_by_seed_block(
             DataSplit::Development,
@@ -3751,8 +3690,18 @@ mod tests {
         let registry = MetricRegistry::pinned();
         let family = TaskFamily::Mixed;
         let seed_block = 9;
-        let t6 = matches(family, seed_block, &[(1, true), (2, false)]);
-        let c6 = matches(family, seed_block, &[(1, true), (2, true)]);
+        let t6 = matches(
+            DataSplit::Development,
+            family,
+            seed_block,
+            &[(1, true), (2, false)],
+        );
+        let c6 = matches(
+            DataSplit::Development,
+            family,
+            seed_block,
+            &[(1, true), (2, true)],
+        );
 
         assert_eq!(
             summarize_paired_uncertainty_by_seed_block(
@@ -3786,7 +3735,7 @@ mod tests {
                 family,
                 seed_block,
                 &t6,
-                &matches(family, seed_block, &[(1, true)]),
+                &matches(DataSplit::Development, family, seed_block, &[(1, true)]),
                 &registry,
             ),
             Err(EvalError::PairedUncertaintyInvalid {
@@ -3863,8 +3812,8 @@ mod tests {
                 DataSplit::Development,
                 family,
                 seed_block,
-                &matches(family, seed_block, &[(1, true)]),
-                &matches(family, seed_block, &[(1, false)]),
+                &matches(DataSplit::Development, family, seed_block, &[(1, true)]),
+                &matches(DataSplit::Development, family, seed_block, &[(1, false)]),
                 &registry,
             ),
             Err(EvalError::PairedUncertaintyInvalid {
@@ -3873,7 +3822,7 @@ mod tests {
         );
 
         let oversized: Vec<_> = (0..=MAX_CASES_PER_RUN)
-            .map(|case_id| revealed(family, seed_block, case_id, true))
+            .map(|case_id| revealed(DataSplit::Development, family, seed_block, case_id, true))
             .collect();
         assert_eq!(
             summarize_paired_uncertainty_by_seed_block(
@@ -3889,7 +3838,12 @@ mod tests {
             })
         );
 
-        let wrong_family = matches(TaskFamily::Neutral, seed_block, &[(1, true), (2, false)]);
+        let wrong_family = matches(
+            DataSplit::Development,
+            TaskFamily::Neutral,
+            seed_block,
+            &[(1, true), (2, false)],
+        );
         assert_eq!(
             summarize_paired_uncertainty_by_seed_block(
                 DataSplit::Development,
@@ -3904,7 +3858,12 @@ mod tests {
             })
         );
 
-        let wrong_seed = matches(family, seed_block + 1, &[(1, true), (2, true)]);
+        let wrong_seed = matches(
+            DataSplit::Development,
+            family,
+            seed_block + 1,
+            &[(1, true), (2, true)],
+        );
         assert_eq!(
             summarize_paired_uncertainty_by_seed_block(
                 DataSplit::Development,
@@ -3936,50 +3895,49 @@ mod tests {
     #[test]
     fn g6_attribution_contrast_is_secondary_only() {
         let registry = MetricRegistry::pinned();
-        let family = TaskFamily::Neutral;
         let seed_block = 5;
         let g6 = matches(
-            family,
+            DataSplit::Development,
+            TaskFamily::Neutral,
             seed_block,
             &[(1, true), (2, false), (3, true), (4, false)],
         );
-        let t6 = matches(
-            family,
-            seed_block,
-            &[(1, true), (2, true), (3, false), (4, false)],
-        );
         let summary = summarize_g6_attribution_contrast_by_seed_block(
             DataSplit::Development,
-            family,
             seed_block,
             &g6,
-            &t6,
-            ComparisonArm::T6,
             &registry,
         )
         .unwrap();
-        assert_eq!(summary.reference_arm, ComparisonArm::T6);
+        assert_eq!(summary.family, TaskFamily::Neutral);
+        assert_eq!(summary.n_cases, 4);
         assert_eq!(
             summary.secondary_g6_attribution_contrast,
             SecondaryDiagnosticId::G6AttributionContrast
         );
         assert!((summary.g6_accuracy - 0.5).abs() < 1e-12);
-        assert!((summary.reference_accuracy - 0.5).abs() < 1e-12);
-        assert_eq!(summary.contrast_mean, 0.0);
+        assert_eq!(
+            summary.g6_accuracy_ci.method,
+            UncertaintyMethod::WilsonScore
+        );
         assert!(summary.experimental_non_final);
 
+        // Non-Neutral family bits are rejected — G6 control is Neutral-only.
+        let wrong_family = matches(
+            DataSplit::Development,
+            TaskFamily::Mixed,
+            seed_block,
+            &[(1, true), (2, false)],
+        );
         assert_eq!(
             summarize_g6_attribution_contrast_by_seed_block(
                 DataSplit::Development,
-                family,
                 seed_block,
-                &g6,
-                &t6,
-                ComparisonArm::G6,
+                &wrong_family,
                 &registry,
             ),
             Err(EvalError::PairedUncertaintyInvalid {
-                reason: "g6_not_primary_reference",
+                reason: "family_mismatch",
             })
         );
     }
@@ -3987,13 +3945,14 @@ mod tests {
     #[test]
     fn paired_uncertainty_from_records_accepts_scored_rejects_failures() {
         let registry = MetricRegistry::pinned();
-        let family = TaskFamily::TorsorFavorable;
+        let family = TaskFamily::Mixed;
         let seed_block = 11_u64;
         let t6_records = [
             T6EvalRecord {
                 split: DataSplit::Development,
                 family,
                 case_id: 1,
+                seed_block,
                 outcome: T6Outcome {
                     score: 1.0,
                     matches_oracle: true,
@@ -4010,6 +3969,7 @@ mod tests {
                 split: DataSplit::Development,
                 family,
                 case_id: 2,
+                seed_block,
                 outcome: T6Outcome {
                     score: -1.0,
                     matches_oracle: false,
@@ -4028,6 +3988,7 @@ mod tests {
                 split: DataSplit::Development,
                 family,
                 case_id: 1,
+                seed_block,
                 outcome: C6Outcome {
                     score: 1.0,
                     matches_oracle: true,
@@ -4044,6 +4005,7 @@ mod tests {
                 split: DataSplit::Development,
                 family,
                 case_id: 2,
+                seed_block,
                 outcome: C6Outcome {
                     score: 1.0,
                     matches_oracle: true,
@@ -4057,15 +4019,12 @@ mod tests {
                 label_contract: PROTECTED_LABEL_CONTRACT,
             },
         ];
-        let seed_blocks = [seed_block, seed_block];
-
         let summary = summarize_paired_uncertainty_from_records(
             DataSplit::Development,
             family,
             seed_block,
             &t6_records,
             &c6_records,
-            &seed_blocks,
             &registry,
         )
         .unwrap();
@@ -4074,24 +4033,31 @@ mod tests {
         assert!((summary.c6_accuracy - 1.0).abs() < 1e-12);
         assert!((summary.paired_difference_mean - 0.5).abs() < 1e-12);
         let t6_revealed =
-            revealed_matches_from_t6_records(&t6_records, DataSplit::Development, &seed_blocks)
-                .unwrap();
-        assert_eq!(sum_squared_seed_block_sizes(&t6_revealed).unwrap(), 4);
+            revealed_matches_from_t6_records(&t6_records, DataSplit::Development).unwrap();
+        assert_eq!(t6_revealed[0].seed_block, seed_block);
+        assert_eq!(t6_revealed[0].split, DataSplit::Development);
+        // Single seed-block summaries use informative within-block Wilson/Hoeffding.
         assert_eq!(
             summary.t6_accuracy_ci.method,
-            UncertaintyMethod::ClusterHoeffdingBernoulliMean
+            UncertaintyMethod::WilsonScore
         );
         assert_eq!(
             summary.c6_accuracy_ci.method,
-            UncertaintyMethod::ClusterHoeffdingBernoulliMean
+            UncertaintyMethod::WilsonScore
         );
         assert_eq!(
             summary.paired_difference_ci.method,
-            UncertaintyMethod::ClusterHoeffdingPairedDifference
+            UncertaintyMethod::BoundedHoeffdingPairedDifference
         );
 
         // Typed surface admits only RevealedMatchOutcome — no ProtectedLabel ctor.
-        let _revealed = RevealedMatchOutcome::from_matches_oracle(family, seed_block, 0, true);
+        let _revealed = RevealedMatchOutcome::from_matches_oracle(
+            DataSplit::Development,
+            family,
+            seed_block,
+            0,
+            true,
+        );
         assert!(_revealed.matches_oracle);
 
         let mut mismatched = c6_records.clone();
@@ -4103,7 +4069,6 @@ mod tests {
                 seed_block,
                 &t6_records,
                 &mismatched,
-                &seed_blocks,
                 &registry,
             ),
             Err(EvalError::PairedUncertaintyInvalid {
@@ -4124,7 +4089,6 @@ mod tests {
                 seed_block,
                 &duplicate_t6,
                 &duplicate_c6,
-                &seed_blocks,
                 &registry,
             ),
             Err(EvalError::PairedUncertaintyInvalid {
@@ -4135,24 +4099,52 @@ mod tests {
         let mut stale_arm = t6_records.clone();
         stale_arm[0].arm_contract = "stale-t6-evaluator";
         assert_eq!(
-            revealed_matches_from_t6_records(&stale_arm, DataSplit::Development, &seed_blocks),
+            revealed_matches_from_t6_records(&stale_arm, DataSplit::Development),
             Err(EvalError::ContractMismatch("arm_contract"))
         );
 
-        let wrong_seed_blocks = [seed_block, seed_block + 1];
+        let mut wrong_seed = t6_records.clone();
+        wrong_seed[1].seed_block = seed_block + 1;
         assert_eq!(
             summarize_paired_uncertainty_from_records(
                 DataSplit::Development,
                 family,
                 seed_block,
-                &t6_records,
+                &wrong_seed,
                 &c6_records,
-                &wrong_seed_blocks,
                 &registry,
             ),
             Err(EvalError::PairedUncertaintyInvalid {
                 reason: "seed_block_mismatch",
             })
         );
+
+        // Split retained on revealed outcomes cannot be relabeled.
+        let mut validation_bits = matches(
+            DataSplit::Validation,
+            family,
+            seed_block,
+            &[(1, true), (2, false)],
+        );
+        let c6_dev = matches(
+            DataSplit::Development,
+            family,
+            seed_block,
+            &[(1, true), (2, true)],
+        );
+        assert_eq!(
+            summarize_paired_uncertainty_by_seed_block(
+                DataSplit::Development,
+                family,
+                seed_block,
+                &validation_bits,
+                &c6_dev,
+                &registry,
+            ),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "split_mismatch",
+            })
+        );
+        let _ = &mut validation_bits;
     }
 }
