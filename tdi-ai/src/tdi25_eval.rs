@@ -1540,7 +1540,10 @@ pub const fn primary_family_metric_for(family: TaskFamily) -> PrimaryFamilyMetri
 pub struct PairedEffectSummary {
     pub split: DataSplit,
     pub family: TaskFamily,
+    /// Canonical first block, retained for single-block API compatibility.
     pub seed_block: u64,
+    /// Complete sorted block provenance. Multi-block summaries use cluster-aware CIs.
+    pub seed_blocks: Vec<u64>,
     pub n_pairs: u64,
     pub t6_accuracy: f64,
     pub c6_accuracy: f64,
@@ -1567,6 +1570,7 @@ struct PairedEffectSummaryIntegrity {
     split: DataSplit,
     family: TaskFamily,
     seed_block: u64,
+    seed_blocks: Vec<u64>,
     n_pairs: u64,
     t6_accuracy: f64,
     c6_accuracy: f64,
@@ -1588,6 +1592,7 @@ impl PairedEffectSummaryIntegrity {
             split: summary.split,
             family: summary.family,
             seed_block: summary.seed_block,
+            seed_blocks: summary.seed_blocks.clone(),
             n_pairs: summary.n_pairs,
             t6_accuracy: summary.t6_accuracy,
             c6_accuracy: summary.c6_accuracy,
@@ -1787,6 +1792,26 @@ fn require_split_family_seed_block_outcomes(
     Ok(())
 }
 
+fn require_split_family_outcomes(
+    split: DataSplit,
+    family: TaskFamily,
+    outcomes: &[RevealedMatchOutcome],
+) -> Result<(), EvalError> {
+    for outcome in outcomes {
+        if outcome.split != split {
+            return Err(EvalError::PairedUncertaintyInvalid {
+                reason: "split_mismatch",
+            });
+        }
+        if outcome.family != family {
+            return Err(EvalError::PairedUncertaintyInvalid {
+                reason: "family_mismatch",
+            });
+        }
+    }
+    Ok(())
+}
+
 fn require_pair_identity_alignment(
     left: &[RevealedMatchOutcome],
     right: &[RevealedMatchOutcome],
@@ -1858,9 +1883,30 @@ fn summarize_paired_uncertainty_inner(
             reason: "empty_pairs",
         });
     }
-    require_split_family_seed_block_outcomes(split, family, seed_block, t6_matches)?;
-    require_split_family_seed_block_outcomes(split, family, seed_block, c6_matches)?;
+    let cluster_aware = cluster_sum_squares.is_some();
+    if cluster_aware {
+        require_split_family_outcomes(split, family, t6_matches)?;
+        require_split_family_outcomes(split, family, c6_matches)?;
+    } else {
+        require_split_family_seed_block_outcomes(split, family, seed_block, t6_matches)?;
+        require_split_family_seed_block_outcomes(split, family, seed_block, c6_matches)?;
+    }
     require_pair_identity_alignment(t6_matches, c6_matches)?;
+
+    let mut seed_blocks = Vec::new();
+    for outcome in t6_matches {
+        if !seed_blocks.contains(&outcome.seed_block) {
+            seed_blocks.push(outcome.seed_block);
+        }
+    }
+    seed_blocks.sort_unstable();
+    if seed_blocks.first().copied() != Some(seed_block)
+        || (!cluster_aware && seed_blocks.len() != 1)
+    {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "seed_block_mismatch",
+        });
+    }
 
     if t6_matches.len() < 2 {
         return Err(EvalError::PairedUncertaintyInvalid {
@@ -1894,7 +1940,6 @@ fn summarize_paired_uncertainty_inner(
         });
     }
 
-    let cluster_aware = cluster_sum_squares.is_some();
     let sum_squared_cluster_sizes = cluster_sum_squares.unwrap_or(n as u64);
     let (t6_accuracy_ci, c6_accuracy_ci) = if cluster_aware {
         (
@@ -1939,6 +1984,7 @@ fn summarize_paired_uncertainty_inner(
         split,
         family,
         seed_block,
+        seed_blocks,
         n_pairs: n as u64,
         t6_accuracy,
         c6_accuracy,
@@ -2330,6 +2376,7 @@ impl EffectSign {
 pub struct FamilySignedEffect {
     pub family: TaskFamily,
     pub seed_block: u64,
+    pub seed_blocks: Vec<u64>,
     pub n_pairs: u64,
     pub paired_difference_mean: f64,
     pub paired_difference_ci: ConfidenceInterval,
@@ -2455,6 +2502,14 @@ fn family_signed_effect_from_summary(
             reason: "experimental_non_final_required",
         });
     }
+    if summary.seed_blocks.is_empty()
+        || summary.seed_blocks[0] != summary.seed_block
+        || summary.seed_blocks.windows(2).any(|pair| pair[0] >= pair[1])
+    {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "seed_block_mismatch",
+        });
+    }
     if summary.uncertainty_contract != PAIRED_UNCERTAINTY_CONTRACT {
         return Err(EvalError::FamilyStratifiedSynthesisInvalid {
             reason: "uncertainty_contract_mismatch",
@@ -2547,6 +2602,7 @@ fn family_signed_effect_from_summary(
     Ok(FamilySignedEffect {
         family: summary.family,
         seed_block: summary.seed_block,
+        seed_blocks: summary.seed_blocks.clone(),
         n_pairs: summary.n_pairs,
         paired_difference_mean: summary.paired_difference_mean,
         paired_difference_ci: summary.paired_difference_ci,
@@ -2709,11 +2765,11 @@ pub fn synthesize_family_stratified_effects(
     })
 }
 
-/// Group revealed T6/C6 match outcomes by family, summarise each family seed
-/// block through the paired uncertainty engine, then run stratified synthesis.
+/// Group revealed T6/C6 match outcomes by family and seed block, aggregate each
+/// family with cluster-aware intervals, then run stratified synthesis.
 ///
-/// All outcomes must share `split`. Each family present must form a single
-/// seed-block pair admitted by [`summarize_paired_uncertainty_by_seed_block`].
+/// All outcomes must share `split`. A single block retains the within-block
+/// Wilson/Hoeffding path; multiple blocks use `sum_g n_g^2` cluster bounds.
 /// Does not accept [`super::tdi25_tasks::ProtectedLabel`].
 pub fn synthesize_family_stratified_from_revealed_outcomes(
     split: DataSplit,
@@ -2759,16 +2815,27 @@ pub fn synthesize_family_stratified_from_revealed_outcomes(
                 reason: "empty_pairs",
             });
         }
-        let seed_block = t6_family[0].seed_block;
+        let mut seed_blocks = Vec::new();
         for outcome in &t6_family {
-            if outcome.seed_block != seed_block {
-                return Err(EvalError::FamilyStratifiedSynthesisInvalid {
-                    reason: "seed_block_mismatch",
-                });
+            if !seed_blocks.contains(&outcome.seed_block) {
+                seed_blocks.push(outcome.seed_block);
             }
         }
-        let summary = summarize_paired_uncertainty_by_seed_block(
-            split, family, seed_block, &t6_family, &c6_family, registry,
+        seed_blocks.sort_unstable();
+        let seed_block = seed_blocks[0];
+        let cluster_sum_squares = if seed_blocks.len() > 1 {
+            Some(sum_squared_seed_block_sizes(&t6_family)?)
+        } else {
+            None
+        };
+        let summary = summarize_paired_uncertainty_inner(
+            split,
+            family,
+            seed_block,
+            &t6_family,
+            &c6_family,
+            registry,
+            cluster_sum_squares,
         )
         .map_err(|err| match err {
             EvalError::PairedUncertaintyInvalid { reason } => {
@@ -4815,6 +4882,47 @@ mod tests {
         assert_eq!(pooled.outcome_class, SignedEffectClass::Positive);
         assert_eq!(pooled.n_pairs, n * 4);
         assert!((pooled.paired_difference_mean - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn family_stratified_synthesis_aggregates_multiple_seed_blocks() {
+        let split = DataSplit::Development;
+        let mut t6 = Vec::new();
+        let mut c6 = Vec::new();
+        for family in REQUIRED_SYNTHESIS_FAMILIES {
+            for seed_block in [10, 11] {
+                t6.extend(matches(
+                    split,
+                    family,
+                    seed_block,
+                    &[(0, false), (1, false)],
+                ));
+                c6.extend(matches(
+                    split,
+                    family,
+                    seed_block,
+                    &[(0, true), (1, true)],
+                ));
+            }
+        }
+
+        let report = synthesize_family_stratified_from_revealed_outcomes(
+            split,
+            &t6,
+            &c6,
+            &MetricRegistry::pinned(),
+        )
+        .unwrap();
+        assert_eq!(report.family_effects.len(), 4);
+        for effect in &report.family_effects {
+            assert_eq!(effect.seed_block, 10);
+            assert_eq!(effect.seed_blocks, vec![10, 11]);
+            assert_eq!(effect.n_pairs, 4);
+            assert_eq!(
+                effect.paired_difference_ci.method,
+                UncertaintyMethod::ClusterHoeffdingPairedDifference
+            );
+        }
     }
 
     #[test]
