@@ -1505,6 +1505,47 @@ pub struct RevealedMatchOutcome {
     canonical_digest: String,
     /// Whether the arm score matched the sealed oracle on the evaluation path.
     pub matches_oracle: bool,
+    /// Private snapshot sealing every evidence-bearing field at construction.
+    integrity: RevealedMatchOutcomeIntegrity,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct RevealedMatchOutcomeIntegrity {
+    split: DataSplit,
+    family: TaskFamily,
+    seed_block: u64,
+    case_id: u64,
+    canonical_digest: String,
+    matches_oracle: bool,
+}
+
+impl RevealedMatchOutcomeIntegrity {
+    fn new(
+        split: DataSplit,
+        family: TaskFamily,
+        seed_block: u64,
+        case_id: u64,
+        canonical_digest: &str,
+        matches_oracle: bool,
+    ) -> Self {
+        Self {
+            split,
+            family,
+            seed_block,
+            case_id,
+            canonical_digest: canonical_digest.to_owned(),
+            matches_oracle,
+        }
+    }
+
+    fn matches(&self, outcome: &RevealedMatchOutcome) -> bool {
+        self.split == outcome.split
+            && self.family == outcome.family
+            && self.seed_block == outcome.seed_block
+            && self.case_id == outcome.case_id
+            && self.canonical_digest == outcome.canonical_digest
+            && self.matches_oracle == outcome.matches_oracle
+    }
 }
 
 impl RevealedMatchOutcome {
@@ -1517,13 +1558,23 @@ impl RevealedMatchOutcome {
         case_id: u64,
         matches_oracle: bool,
     ) -> Self {
+        let canonical_digest = format!("synthetic:{seed_block}:{case_id}");
+        let integrity = RevealedMatchOutcomeIntegrity::new(
+            split,
+            family,
+            seed_block,
+            case_id,
+            &canonical_digest,
+            matches_oracle,
+        );
         Self {
             split,
             family,
             seed_block,
             case_id,
-            canonical_digest: format!("synthetic:{seed_block}:{case_id}"),
+            canonical_digest,
             matches_oracle,
+            integrity,
         }
     }
 
@@ -1535,6 +1586,14 @@ impl RevealedMatchOutcome {
         canonical_digest: String,
         matches_oracle: bool,
     ) -> Self {
+        let integrity = RevealedMatchOutcomeIntegrity::new(
+            split,
+            family,
+            seed_block,
+            case_id,
+            &canonical_digest,
+            matches_oracle,
+        );
         Self {
             split,
             family,
@@ -1542,6 +1601,7 @@ impl RevealedMatchOutcome {
             case_id,
             canonical_digest,
             matches_oracle,
+            integrity,
         }
     }
 }
@@ -1792,6 +1852,17 @@ fn require_pinned_metric_registry(registry: &MetricRegistry) -> Result<(), EvalE
     Ok(())
 }
 
+fn require_revealed_match_outcome_integrity(
+    outcome: &RevealedMatchOutcome,
+) -> Result<(), EvalError> {
+    if !outcome.integrity.matches(outcome) {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "outcome_integrity_mismatch",
+        });
+    }
+    Ok(())
+}
+
 fn require_split_family_seed_block_outcomes(
     split: DataSplit,
     family: TaskFamily,
@@ -1799,6 +1870,7 @@ fn require_split_family_seed_block_outcomes(
     outcomes: &[RevealedMatchOutcome],
 ) -> Result<(), EvalError> {
     for outcome in outcomes {
+        require_revealed_match_outcome_integrity(outcome)?;
         if outcome.split != split {
             return Err(EvalError::PairedUncertaintyInvalid {
                 reason: "split_mismatch",
@@ -1824,6 +1896,7 @@ fn require_split_family_outcomes(
     outcomes: &[RevealedMatchOutcome],
 ) -> Result<(), EvalError> {
     for outcome in outcomes {
+        require_revealed_match_outcome_integrity(outcome)?;
         if outcome.split != split {
             return Err(EvalError::PairedUncertaintyInvalid {
                 reason: "split_mismatch",
@@ -1848,6 +1921,8 @@ fn require_pair_identity_alignment(
         });
     }
     for (index, (a, b)) in left.iter().zip(right.iter()).enumerate() {
+        require_revealed_match_outcome_integrity(a)?;
+        require_revealed_match_outcome_integrity(b)?;
         if a.split != b.split
             || a.family != b.family
             || a.seed_block != b.seed_block
@@ -4849,6 +4924,38 @@ mod tests {
             .n_pairs,
             2
         );
+
+        let assert_record_provenance_rejected = |tampered: &[RevealedMatchOutcome]| {
+            assert_eq!(
+                summarize_paired_uncertainty_by_seed_block(
+                    DataSplit::Development,
+                    family,
+                    seed_block,
+                    tampered,
+                    &c6_revealed,
+                    &registry,
+                ),
+                Err(EvalError::PairedUncertaintyInvalid {
+                    reason: "outcome_integrity_mismatch",
+                })
+            );
+        };
+        let mut tampered = t6_revealed.clone();
+        tampered[0].family = TaskFamily::TorsorFavorable;
+        assert_record_provenance_rejected(&tampered);
+        let mut tampered = t6_revealed.clone();
+        tampered[0].split = DataSplit::Validation;
+        assert_record_provenance_rejected(&tampered);
+        let mut tampered = t6_revealed.clone();
+        tampered[0].seed_block += 1;
+        assert_record_provenance_rejected(&tampered);
+        let mut tampered = t6_revealed.clone();
+        tampered[0].case_id += 1;
+        assert_record_provenance_rejected(&tampered);
+        let mut tampered = t6_revealed.clone();
+        tampered[0].matches_oracle = !tampered[0].matches_oracle;
+        assert_record_provenance_rejected(&tampered);
+
         // Single seed-block summaries use informative within-block Wilson/Hoeffding.
         assert_eq!(
             summary.t6_accuracy_ci.method,
