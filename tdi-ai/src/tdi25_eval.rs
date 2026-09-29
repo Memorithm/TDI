@@ -1492,6 +1492,8 @@ impl ConfidenceInterval {
 /// paired seed-block / group identity used for stratified synthesis.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RevealedMatchOutcome {
+    /// Sealed source arm; absent only for synthetic module-test vectors.
+    arm: Option<ComparisonArm>,
     /// Non-final split retained with the revealed bit.
     pub split: DataSplit,
     /// Task family this outcome belongs to.
@@ -1511,6 +1513,7 @@ pub struct RevealedMatchOutcome {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RevealedMatchOutcomeIntegrity {
+    arm: Option<ComparisonArm>,
     split: DataSplit,
     family: TaskFamily,
     seed_block: u64,
@@ -1521,6 +1524,7 @@ struct RevealedMatchOutcomeIntegrity {
 
 impl RevealedMatchOutcomeIntegrity {
     fn new(
+        arm: Option<ComparisonArm>,
         split: DataSplit,
         family: TaskFamily,
         seed_block: u64,
@@ -1529,6 +1533,7 @@ impl RevealedMatchOutcomeIntegrity {
         matches_oracle: bool,
     ) -> Self {
         Self {
+            arm,
             split,
             family,
             seed_block,
@@ -1539,7 +1544,8 @@ impl RevealedMatchOutcomeIntegrity {
     }
 
     fn matches(&self, outcome: &RevealedMatchOutcome) -> bool {
-        self.split == outcome.split
+        self.arm == outcome.arm
+            && self.split == outcome.split
             && self.family == outcome.family
             && self.seed_block == outcome.seed_block
             && self.case_id == outcome.case_id
@@ -1564,6 +1570,7 @@ impl RevealedMatchOutcome {
     ) -> Self {
         let canonical_digest = format!("synthetic:{seed_block}:{case_id}");
         let integrity = RevealedMatchOutcomeIntegrity::new(
+            None,
             split,
             family,
             seed_block,
@@ -1572,6 +1579,7 @@ impl RevealedMatchOutcome {
             matches_oracle,
         );
         Self {
+            arm: None,
             split,
             family,
             seed_block,
@@ -1583,6 +1591,7 @@ impl RevealedMatchOutcome {
     }
 
     fn from_evaluator_record(
+        arm: ComparisonArm,
         split: DataSplit,
         family: TaskFamily,
         seed_block: u64,
@@ -1591,6 +1600,7 @@ impl RevealedMatchOutcome {
         matches_oracle: bool,
     ) -> Self {
         let integrity = RevealedMatchOutcomeIntegrity::new(
+            Some(arm),
             split,
             family,
             seed_block,
@@ -1599,6 +1609,7 @@ impl RevealedMatchOutcome {
             matches_oracle,
         );
         Self {
+            arm: Some(arm),
             split,
             family,
             seed_block,
@@ -1867,6 +1878,25 @@ fn require_revealed_match_outcome_integrity(
     Ok(())
 }
 
+fn require_revealed_outcome_arm(
+    expected: ComparisonArm,
+    outcomes: &[RevealedMatchOutcome],
+) -> Result<(), EvalError> {
+    for outcome in outcomes {
+        if outcome.arm == Some(expected) {
+            continue;
+        }
+        #[cfg(test)]
+        if outcome.arm.is_none() {
+            continue;
+        }
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "arm_mismatch",
+        });
+    }
+    Ok(())
+}
+
 fn require_split_family_seed_block_outcomes(
     split: DataSplit,
     family: TaskFamily,
@@ -1997,6 +2027,8 @@ fn summarize_paired_uncertainty_inner(
         require_split_family_seed_block_outcomes(split, family, seed_block, t6_matches)?;
         require_split_family_seed_block_outcomes(split, family, seed_block, c6_matches)?;
     }
+    require_revealed_outcome_arm(ComparisonArm::T6, t6_matches)?;
+    require_revealed_outcome_arm(ComparisonArm::C6, c6_matches)?;
     require_pair_identity_alignment(t6_matches, c6_matches)?;
 
     let mut seed_blocks = Vec::new();
@@ -2171,6 +2203,7 @@ fn summarize_g6_control_inner(
     }
     // Real G6 evaluator emits Neutral only; bind the secondary control to that family.
     require_split_family_seed_block_outcomes(split, TaskFamily::Neutral, seed_block, g6_matches)?;
+    require_revealed_outcome_arm(ComparisonArm::G6, g6_matches)?;
     if g6_matches.len() < 2 {
         return Err(EvalError::PairedUncertaintyInvalid {
             reason: "insufficient_pairs",
@@ -2267,6 +2300,7 @@ pub fn revealed_matches_from_t6_records(
             return Err(EvalError::ContractMismatch("label_contract"));
         }
         out.push(RevealedMatchOutcome::from_evaluator_record(
+            ComparisonArm::T6,
             record.split,
             record.family,
             record.seed_block,
@@ -2321,6 +2355,7 @@ pub fn revealed_matches_from_c6_records(
             return Err(EvalError::ContractMismatch("label_contract"));
         }
         out.push(RevealedMatchOutcome::from_evaluator_record(
+            ComparisonArm::C6,
             record.split,
             record.family,
             record.seed_block,
@@ -2375,6 +2410,7 @@ pub fn revealed_matches_from_g6_records(
             return Err(EvalError::ContractMismatch("label_contract"));
         }
         out.push(RevealedMatchOutcome::from_evaluator_record(
+            ComparisonArm::G6,
             record.split,
             record.family,
             record.seed_block,
@@ -4927,6 +4963,19 @@ mod tests {
             .unwrap()
             .n_pairs,
             2
+        );
+        assert_eq!(
+            summarize_paired_uncertainty_by_seed_block(
+                DataSplit::Development,
+                family,
+                seed_block,
+                &c6_revealed,
+                &t6_revealed,
+                &registry,
+            ),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "arm_mismatch",
+            })
         );
 
         let assert_record_provenance_rejected = |tampered: &[RevealedMatchOutcome]| {
