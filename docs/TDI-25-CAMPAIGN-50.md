@@ -38,7 +38,7 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 
 | Slice | Deliverable | Gate / definition of done |
 | ---: | --- | --- |
-| 21 | T6 evaluator | **current candidate**; consumes TDI-22 factorized torsor contract through a bounded non-final envelope |
+| 21 | T6 evaluator | **current candidate** in #661; consumes TDI-22 factorized torsor contract through a bounded non-final envelope |
 | 22 | C6 evaluator | consumes TDI-24 chiral contract unchanged |
 | 23 | G6 evaluator | same readout/evaluation envelope |
 | 24 | Parameter/readout matcher | reject capacity mismatch rather than silently compensate |
