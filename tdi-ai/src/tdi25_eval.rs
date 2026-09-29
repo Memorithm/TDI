@@ -2432,12 +2432,21 @@ fn pooled_summary_from_effects(
             reason: "non_finite",
         });
     }
-    // Pooled outcome class uses the algebraic sign of the weighted mean only:
-    // family CIs are not fused here. Positive/Harmful/Null mirror the mean sign.
-    let outcome_class = match effect_sign_from_mean(mean) {
-        EffectSign::Positive => SignedEffectClass::Positive,
-        EffectSign::Negative => SignedEffectClass::Harmful,
-        EffectSign::Zero => SignedEffectClass::Null,
+    // A pooled directional class is admitted only when every family interval
+    // supports that same direction. A positive weighted mean alone is not
+    // evidence of a clean pooled win.
+    let all_positive = effects
+        .iter()
+        .all(|effect| effect.outcome_class == SignedEffectClass::Positive);
+    let all_harmful = effects
+        .iter()
+        .all(|effect| effect.outcome_class == SignedEffectClass::Harmful);
+    let outcome_class = if all_positive {
+        SignedEffectClass::Positive
+    } else if all_harmful {
+        SignedEffectClass::Harmful
+    } else {
+        SignedEffectClass::Null
     };
     Ok(PooledSynthesisSummary {
         n_pairs: total_pairs,
@@ -2450,9 +2459,8 @@ fn pooled_summary_from_effects(
 
 /// Synthesise family-stratified signed effects from per-family paired summaries.
 ///
-/// Requires Development/Validation and the pinned metric registry. When
-/// `require_complete_families` is true, every family in
-/// [`REQUIRED_SYNTHESIS_FAMILIES`] must appear exactly once. A pooled summary is
+/// Requires Development/Validation, the pinned metric registry, and every
+/// family in [`REQUIRED_SYNTHESIS_FAMILIES`] exactly once. A pooled summary is
 /// emitted only when no Positive/Negative family sign reversal is present;
 /// otherwise `sign_reversal_present` is set and `claims_clean_pooled_win` stays
 /// false so a pooled win cannot hide a family-specific reversal.
@@ -2460,7 +2468,6 @@ pub fn synthesize_family_stratified_effects(
     split: DataSplit,
     family_summaries: &[PairedEffectSummary],
     registry: &MetricRegistry,
-    require_complete_families: bool,
 ) -> Result<FamilyStratifiedSynthesisReport, EvalError> {
     validate_non_final_split(split)?;
     require_pinned_metric_registry(registry)?;
@@ -2496,19 +2503,17 @@ pub fn synthesize_family_stratified_effects(
             .unwrap_or(REQUIRED_SYNTHESIS_FAMILIES.len())
     });
 
-    if require_complete_families {
-        for required in REQUIRED_SYNTHESIS_FAMILIES {
-            if !effects.iter().any(|effect| effect.family == *required) {
-                return Err(EvalError::FamilyStratifiedSynthesisInvalid {
-                    reason: "missing_family",
-                });
-            }
-        }
-        if effects.len() != REQUIRED_SYNTHESIS_FAMILIES.len() {
+    for required in REQUIRED_SYNTHESIS_FAMILIES {
+        if !effects.iter().any(|effect| effect.family == *required) {
             return Err(EvalError::FamilyStratifiedSynthesisInvalid {
                 reason: "missing_family",
             });
         }
+    }
+    if effects.len() != REQUIRED_SYNTHESIS_FAMILIES.len() {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "missing_family",
+        });
     }
 
     let sign_reversal_present = detect_sign_reversal(&effects);
@@ -2548,7 +2553,6 @@ pub fn synthesize_family_stratified_from_revealed_outcomes(
     t6_matches: &[RevealedMatchOutcome],
     c6_matches: &[RevealedMatchOutcome],
     registry: &MetricRegistry,
-    require_complete_families: bool,
 ) -> Result<FamilyStratifiedSynthesisReport, EvalError> {
     validate_non_final_split(split)?;
     require_pinned_metric_registry(registry)?;
@@ -2608,7 +2612,7 @@ pub fn synthesize_family_stratified_from_revealed_outcomes(
         summaries.push(summary);
     }
 
-    synthesize_family_stratified_effects(split, &summaries, registry, require_complete_families)
+    synthesize_family_stratified_effects(split, &summaries, registry)
 }
 
 /// Reject any split identity outside Development/Validation.
@@ -4619,7 +4623,6 @@ mod tests {
             split,
             &summaries,
             &MetricRegistry::pinned(),
-            true,
         )
         .unwrap();
 
@@ -4676,7 +4679,6 @@ mod tests {
             split,
             &summaries,
             &MetricRegistry::pinned(),
-            true,
         )
         .unwrap();
 
@@ -4702,6 +4704,37 @@ mod tests {
     }
 
     #[test]
+    fn family_stratified_synthesis_does_not_claim_win_from_null_family_intervals() {
+        let split = DataSplit::Development;
+        let t6_false = [(0, false)];
+        let c6_true = [(0, true)];
+        let summaries = [
+            family_summary(split, TaskFamily::TorsorFavorable, 8, &t6_false, &c6_true),
+            family_summary(split, TaskFamily::ChiralFavorable, 8, &t6_false, &c6_true),
+            family_summary(split, TaskFamily::Mixed, 8, &t6_false, &c6_true),
+            family_summary(split, TaskFamily::Neutral, 8, &t6_false, &c6_true),
+        ];
+        let report = synthesize_family_stratified_effects(
+            split,
+            &summaries,
+            &MetricRegistry::pinned(),
+        )
+        .unwrap();
+
+        assert!(report
+            .family_effects
+            .iter()
+            .all(|effect| effect.paired_difference_mean > 0.0));
+        assert!(report
+            .family_effects
+            .iter()
+            .all(|effect| effect.outcome_class == SignedEffectClass::Null));
+        let pooled = report.pooled_summary.expect("no sign reversal");
+        assert_eq!(pooled.outcome_class, SignedEffectClass::Null);
+        assert!(!report.claims_clean_pooled_win);
+    }
+
+    #[test]
     fn family_stratified_synthesis_rejects_incomplete_required_families() {
         let split = DataSplit::Development;
         let n = MAX_CASES_PER_RUN;
@@ -4717,23 +4750,11 @@ mod tests {
                 split,
                 &incomplete,
                 &MetricRegistry::pinned(),
-                true,
             ),
             Err(EvalError::FamilyStratifiedSynthesisInvalid {
                 reason: "missing_family",
             })
         );
-
-        let partial = synthesize_family_stratified_effects(
-            split,
-            &incomplete,
-            &MetricRegistry::pinned(),
-            false,
-        )
-        .unwrap();
-        assert!(!partial.sign_reversal_present);
-        assert!(partial.claims_clean_pooled_win);
-        assert_eq!(partial.family_effects.len(), 3);
 
         let duplicate = [
             family_summary(split, TaskFamily::TorsorFavorable, 3, &t6_false, &c6_true),
@@ -4744,7 +4765,6 @@ mod tests {
                 split,
                 &duplicate,
                 &MetricRegistry::pinned(),
-                false,
             ),
             Err(EvalError::FamilyStratifiedSynthesisInvalid {
                 reason: "duplicate_family",
@@ -4752,7 +4772,7 @@ mod tests {
         );
 
         assert_eq!(
-            synthesize_family_stratified_effects(split, &[], &MetricRegistry::pinned(), false,),
+            synthesize_family_stratified_effects(split, &[], &MetricRegistry::pinned()),
             Err(EvalError::FamilyStratifiedSynthesisInvalid {
                 reason: "empty_families",
             })
@@ -4775,7 +4795,7 @@ mod tests {
         let mut drifted = MetricRegistry::pinned();
         drifted.registry_contract = "tdi25-metric-registry-drift";
         assert_eq!(
-            synthesize_family_stratified_effects(split, &summaries, &drifted, true),
+            synthesize_family_stratified_effects(split, &summaries, &drifted),
             Err(EvalError::ContractMismatch("metric_registry_contract"))
         );
 
@@ -4809,7 +4829,6 @@ mod tests {
             &t6_all,
             &c6_all,
             &MetricRegistry::pinned(),
-            true,
         )
         .unwrap();
         assert!(from_outcomes.sign_reversal_present);
