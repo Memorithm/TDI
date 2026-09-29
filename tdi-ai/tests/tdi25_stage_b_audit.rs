@@ -121,7 +121,10 @@ fn phase_b_contract_pins_and_fail_closed_split_labels_are_explicit() {
 fn stage_b_freeze_manifest_remains_non_authorizing() {
     let manifest = include_str!("../../docs/tdi25-stage-b-freeze.yaml");
     assert!(manifest.contains("stage: B"));
-    assert!(manifest.contains("status: candidate_pending_exact_head_qualification_and_merge"));
+    assert!(manifest.contains("status: qualified_merged_non_authorizing"));
+    assert!(manifest.contains("pull_request: 660"));
+    assert!(manifest.contains("qualified_head_sha: 787a138ea76ee1d375a1db67007bf7c6690fcce4"));
+    assert!(manifest.contains("merge_commit_sha: 2cc7c45d5cae6b9bfcd47bc679ea815199321fe9"));
     assert!(manifest.contains("protected_or_final_access: false"));
     assert!(manifest.contains("scientific_claim: false"));
     assert!(manifest.contains("training: false"));

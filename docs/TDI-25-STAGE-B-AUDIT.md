@@ -1,6 +1,8 @@
-# TDI-25 Stage-B leakage/balance audit candidate
+# TDI-25 Stage-B leakage/balance audit
 
-Status: **candidate pending exact-head qualification, material review, and merge**.
+Status: **qualified and merged, non-authorizing**. PR #660 was qualified at
+head `787a138ea76ee1d375a1db67007bf7c6690fcce4` and merged as
+`2cc7c45d5cae6b9bfcd47bc679ea815199321fe9` on 2026-09-28.
 
 This slice audits the merged Stage-B surfaces (campaign slices 11–19) as one
 bounded leakage, balance and provenance contract. It does not execute training,
@@ -17,10 +19,10 @@ The executable audit requires:
 - contract-version pins for every Phase-B generator and leakage-discipline
   surface.
 
-The candidate manifest is `docs/tdi25-stage-b-freeze.yaml`. It is deliberately
-non-authorizing. Stage B is not recorded as qualified merely because this file
-exists: qualification requires this candidate to land on `main` after all
-applicable exact-head CI and material review findings are green/resolved.
+The evidence manifest is `docs/tdi25-stage-b-freeze.yaml`. It remains
+deliberately non-authorizing: qualification of the Stage-B software contracts
+does not authorize training, Development/Validation evaluation, protected/final
+access, or scientific/performance claims.
 
 No scientific outcome, novelty, speedup, hardware behavior, trained-model
 quality, or downstream FLAT-ATTENTION readiness follows from this audit.

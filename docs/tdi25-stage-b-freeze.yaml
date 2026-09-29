@@ -1,7 +1,12 @@
 schema_version: 1
 programme: TDI-25
 stage: B
-status: candidate_pending_exact_head_qualification_and_merge
+status: qualified_merged_non_authorizing
+evidence:
+  pull_request: 660
+  qualified_head_sha: 787a138ea76ee1d375a1db67007bf7c6690fcce4
+  merge_commit_sha: 2cc7c45d5cae6b9bfcd47bc679ea815199321fe9
+  merged_at_utc: 2026-09-28T13:48:46Z
 contract_versions:
   torsor_transport: tdi25-torsor-transport-task-v1
   chiral_reflection: tdi25-chiral-reflection-task-v1
