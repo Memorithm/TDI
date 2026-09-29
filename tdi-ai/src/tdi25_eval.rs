@@ -4959,6 +4959,34 @@ mod tests {
         tampered[0].matches_oracle = !tampered[0].matches_oracle;
         assert_record_provenance_rejected(&tampered);
 
+        // A single real block cannot be cloned and relabeled into the four
+        // required strata after revelation.
+        let mut relabeled_t6 = Vec::new();
+        let mut relabeled_c6 = Vec::new();
+        for relabeled_family in REQUIRED_SYNTHESIS_FAMILIES {
+            let mut t6_block = t6_revealed.clone();
+            let mut c6_block = c6_revealed.clone();
+            for outcome in &mut t6_block {
+                outcome.family = *relabeled_family;
+            }
+            for outcome in &mut c6_block {
+                outcome.family = *relabeled_family;
+            }
+            relabeled_t6.extend(t6_block);
+            relabeled_c6.extend(c6_block);
+        }
+        assert_eq!(
+            synthesize_family_stratified_from_revealed_outcomes(
+                DataSplit::Development,
+                &relabeled_t6,
+                &relabeled_c6,
+                &registry,
+            ),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "outcome_integrity_mismatch",
+            })
+        );
+
         // Single seed-block summaries use informative within-block Wilson/Hoeffding.
         assert_eq!(
             summary.t6_accuracy_ci.method,
