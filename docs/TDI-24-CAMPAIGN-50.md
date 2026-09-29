@@ -46,7 +46,7 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 | 26 | Metric registry | **landed** in #667, exact head `9d98deba309da78fb5f57930c980ea14041af434`, merge `277896b34d7a0f76af0d176ec4c9356a5b4e68cc`; primary metric + paired secondary diagnostics frozen |
 | 27 | Paired uncertainty engine | **landed** in #671, exact head `7c640354626de37400bf0f86655e6c0e21284d39`, merge `c547fa5f7f12e001f4437c3bb054d75b239099a7`; confidence intervals/effect summaries without label leakage |
 | 28 | Failure taxonomy | **landed** in #677, exact head `c8bfb4aa82e6bbf9b0767ad0a3e73f93a98b6b85`, merge `b0f5c76c04fd2e67d22cad8a20aecbe825122d9d`; typed invalid/numerical/resource/task failures retained |
-| 29 | Provenance envelope | code/config/data/seed/toolchain identity per run |
+| 29 | Provenance envelope | **current stacked slice**; code/config/data/seed/toolchain identity per run |
 | 30 | Stage-C preflight | bounded smoke campaign; zero protected/final access |
 
 ## Phase D — attribution ablations (PR 31–40)
