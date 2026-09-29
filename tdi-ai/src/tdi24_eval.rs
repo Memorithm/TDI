@@ -3353,12 +3353,10 @@ mod tests {
         );
 
         let mut too_many_scalars = EvaluatorConfig::c6(DataSplit::Validation).unwrap();
-        too_many_scalars.budget.max_readout_scalars_per_case =
-            MAX_READOUT_SCALARS_PER_CASE + 1;
+        too_many_scalars.budget.max_readout_scalars_per_case = MAX_READOUT_SCALARS_PER_CASE + 1;
         assert_eq!(
             EvaluatorRun::open(too_many_scalars),
             Err(EvalError::InvalidBudget)
         );
     }
-
 }
