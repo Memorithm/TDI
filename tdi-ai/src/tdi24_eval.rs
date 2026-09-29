@@ -1199,6 +1199,11 @@ pub fn summarize_paired_uncertainty(
             reason: "insufficient_pairs",
         });
     }
+    if v6_matches.len() > MAX_CASES_PER_RUN as usize {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "too_many_pairs",
+        });
+    }
 
     let n = v6_matches.len();
     let mut v6_successes = 0_u64;
@@ -1266,6 +1271,11 @@ pub fn revealed_matches_from_records(
     if records.is_empty() {
         return Err(EvalError::PairedUncertaintyInvalid {
             reason: "empty_pairs",
+        });
+    }
+    if records.len() > MAX_CASES_PER_RUN as usize {
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "too_many_pairs",
         });
     }
     let mut out = Vec::with_capacity(records.len());
@@ -2244,6 +2254,22 @@ mod tests {
             })
         );
 
+        let oversized = vec![
+            RevealedMatchOutcome::from_matches_oracle(true);
+            MAX_CASES_PER_RUN as usize + 1
+        ];
+        assert_eq!(
+            summarize_paired_uncertainty(
+                DataSplit::Development,
+                &oversized,
+                &oversized,
+                &registry,
+            ),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "too_many_pairs",
+            })
+        );
+
         assert_eq!(
             parse_non_final_split("protected"),
             Err(EvalError::ProtectedOrFinalSplit)
@@ -2371,6 +2397,19 @@ mod tests {
             revealed_matches_from_records(&wrong_arm, EvalArm::V6, DataSplit::Development),
             Err(EvalError::PairedUncertaintyInvalid {
                 reason: "arm_mismatch",
+            })
+        );
+
+        let oversized_records =
+            vec![v6_records[0].clone(); MAX_CASES_PER_RUN as usize + 1];
+        assert_eq!(
+            revealed_matches_from_records(
+                &oversized_records,
+                EvalArm::V6,
+                DataSplit::Development,
+            ),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "too_many_pairs",
             })
         );
 
