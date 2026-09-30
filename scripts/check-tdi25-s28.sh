@@ -10,6 +10,7 @@ grep -Fq 'pub fn synthesize_family_stratified_from_revealed_outcomes' tdi-ai/src
 grep -Fq 'pub struct FamilyStratifiedSynthesisReport' tdi-ai/src/tdi25_eval.rs
 grep -Fq 'pub struct FamilySignedEffect' tdi-ai/src/tdi25_eval.rs
 grep -Fq 'pub enum SignedEffectClass' tdi-ai/src/tdi25_eval.rs
+! grep -Fq 'pub fn classify_signed_effect' tdi-ai/src/tdi25_eval.rs
 grep -Fq 'sign_reversal_present' tdi-ai/src/tdi25_eval.rs
 grep -Fq 'claims_clean_pooled_win' tdi-ai/src/tdi25_eval.rs
 grep -Fq 'reason: "missing_family"' tdi-ai/src/tdi25_eval.rs
