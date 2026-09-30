@@ -21,192 +21,46 @@ jobs:
         with:
           toolchain: 1.97.1
           components: rustfmt, clippy
-      - name: Wire the prospectively specified reference only
-        shell: bash
+      - name: Lock prospective population and format included Rust source
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD:tdi-ai/src/tdi25_eval.rs)" = 13d1475c92a634294657161431efba24e4cdde43
-          test "$(git rev-parse HEAD:tdi-ai/src/tdi25_matched_matrix.rs)" = 7b8afc9429d9e36dec978b621b98f060edfacee3
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('tdi-ai/src/tdi25_eval.rs')
+          p = Path('tdi-ai/src/tdi25_matched_reference.rs')
           text = p.read_text()
-          anchor = 'use core::fmt;\n'
+          anchor = '    #[test]\n    fn invalid_budgets_fail_before_scoring()'
           assert text.count(anchor) == 1
-          text = text.replace(anchor, '''/// Versioned common-population T6/C6 reference; non-final only.
-          pub mod matched_reference {
-              include!("tdi25_matched_reference.rs");
-          }
-
-          use core::fmt;
-          ''', 1)
-          p.write_text(text)
-          p = Path('tdi-ai/src/tdi25_matched_matrix.rs')
-          text = p.read_text()
-          anchor = 'use core::fmt;\n'
-          assert text.count(anchor) == 1
-          text = text.replace(anchor, '''use core::fmt;
-          use super::tdi25_eval::matched_reference::{
-              MATCHED_POPULATION_CONTRACT, MATCHED_T6_CONTRACT, MATCHED_C6_CONTRACT,
-              common_target_contract,
-          };
-          ''', 1)
-          text = text.replace('pub const MATCHED_EVALUATOR_MATRIX_CONTRACT: &str = "tdi25-matched-evaluator-matrix-v1";', '''pub const MATCHED_EVALUATOR_MATRIX_CONTRACT: &str = "tdi25-matched-evaluator-matrix-v2";
-          /// Historical negative-capability registry; never retroactively upgraded.
-          pub const LEGACY_MATRIX_CONTRACT: &str = "tdi25-matched-evaluator-matrix-v1";''', 1)
-          text = text.replace('/// current paths intentionally carry `None`.', '/// legacy paths intentionally carry `None`; new matched paths are versioned.', 1)
-          text = text.replace('pub const CURRENT_PRIMARY_PATHS: [PrimaryEvaluatorPath; 4]', 'pub const LEGACY_PRIMARY_PATHS: [PrimaryEvaluatorPath; 4]', 1)
-          a = text.index('pub const LEGACY_PRIMARY_PATHS:')
-          b = text.index('/// Paired capability view', a)
-          legacy = text[a:b].replace('matrix_contract: MATCHED_EVALUATOR_MATRIX_CONTRACT,', 'matrix_contract: LEGACY_MATRIX_CONTRACT,')
-          entries = ',\n'.join('    reference_path(TaskFamily::%s, PrimaryArm::%s)' % (family, arm)
-              for family in ('TorsorFavorable','ChiralFavorable','Mixed','Neutral') for arm in ('T6','C6'))
-          current = '''const fn reference_path(family: TaskFamily, arm: PrimaryArm) -> PrimaryEvaluatorPath {
-              PrimaryEvaluatorPath {
-                  family, arm,
-                  task_contract: MATCHED_POPULATION_CONTRACT,
-                  evaluator_contract: match arm { PrimaryArm::T6 => MATCHED_T6_CONTRACT, PrimaryArm::C6 => MATCHED_C6_CONTRACT },
-                  shared_target_contract: Some(common_target_contract(family)),
-                  matrix_contract: MATCHED_EVALUATOR_MATRIX_CONTRACT,
+          text = text.replace(anchor, '''    #[test]
+              fn generation_matches_the_prospective_known_answer() {
+                  assert_eq!(MAX_CASES_PER_RUN, 64);
+                  assert_eq!(MAX_SEED_BLOCKS_PER_SYNTHESIS, 64);
+                  let input = generate_input(DataSplit::Development, TaskFamily::TorsorFavorable, 0, 0);
+                  assert_eq!(input.query, [-0.5, 0.0, -1.5, 0.5, 0.5, -0.5]);
+                  assert_eq!(input.key, [-0.5, 1.5, 1.0, 0.0, 1.0, 0.5]);
+                  assert_eq!(input.key_position, [1.0, -2.0, 0.5]);
+                  assert_eq!(input.query_position, [-2.0, 0.5, 0.0]);
               }
-          }
-
-          /// Eight production paths of the explicitly versioned matched reference.
-          /// Each pair consumes the same population, numeric view and target.
-          pub const CURRENT_PRIMARY_PATHS: [PrimaryEvaluatorPath; 8] = [
-          ''' + entries + '\n];\n\n'
-          text = text[:a] + legacy + current + text[b:]
-          anchor = '/// Return the current paired capability view for one family.'
-          text = text.replace(anchor, '''fn legacy_primary_path(family: TaskFamily, arm: PrimaryArm) -> Option<PrimaryEvaluatorPath> {
-              LEGACY_PRIMARY_PATHS.iter().copied().find(|path| path.family == family && path.arm == arm)
-          }
-
-          /// Historical v1 capability view, with every missing/common-target gap retained.
-          #[must_use]
-          pub fn legacy_matched_family_paths(family: TaskFamily) -> MatchedFamilyPaths {
-              MatchedFamilyPaths {
-                  family,
-                  t6: legacy_primary_path(family, PrimaryArm::T6),
-                  c6: legacy_primary_path(family, PrimaryArm::C6),
-                  matrix_contract: LEGACY_MATRIX_CONTRACT,
-              }
-          }
 
           ''' + anchor, 1)
-          text = text.replace('/// The current matrix intentionally returns an error. Callers must not proceed\n/// to four-family primary synthesis until real sealed paths have been added.', '/// Only the new matched reference supplies a complete matrix. Legacy records\n/// remain inadmissible because their retained common-target field is absent.', 1)
-          old = '    let families = REQUIRED_PRIMARY_FAMILIES.map(matched_family_paths);\n    for paths in families {'
-          assert text.count(old) == 1
-          text = text.replace(old, '''    require_complete_matrix(REQUIRED_PRIMARY_FAMILIES.map(matched_family_paths))
-          }
-
-          fn require_complete_matrix(families: [MatchedFamilyPaths; 4]) -> Result<[MatchedFamilyPaths; 4], MatchedMatrixError> {
-              for paths in families {''', 1)
-          a = text.index('#[cfg(test)]')
-          unit = text[a:]
-          unit = unit.replace('CURRENT_PRIMARY_PATHS', 'LEGACY_PRIMARY_PATHS')
-          unit = unit.replace('primary_path(', 'legacy_primary_path(')
-          unit = unit.replace('matched_family_paths(', 'legacy_matched_family_paths(')
-          unit = unit.replace('require_complete_primary_matrix(),', 'require_complete_matrix(REQUIRED_PRIMARY_FAMILIES.map(legacy_matched_family_paths)),')
-          unit = unit.replace('path.matrix_contract, MATCHED_EVALUATOR_MATRIX_CONTRACT', 'path.matrix_contract, LEGACY_MATRIX_CONTRACT')
-          unit = unit.replace('fn current_matrix_records_only_real_sealed_paths()', 'fn legacy_matrix_records_only_original_sealed_paths()')
-          pos = unit.rfind('}')
-          unit = unit[:pos] + '''    #[test]
-              fn current_matrix_has_both_primary_paths_and_common_targets() {
-                  assert_eq!(CURRENT_PRIMARY_PATHS.len(), 8);
-                  let families = require_complete_primary_matrix().unwrap();
-                  for paths in families {
-                      assert!(paths.is_complete());
-                      assert_eq!(paths.shared_target_contract(), Some(common_target_contract(paths.family)));
-                      assert_eq!(paths.t6.unwrap().evaluator_contract, MATCHED_T6_CONTRACT);
-                      assert_eq!(paths.c6.unwrap().evaluator_contract, MATCHED_C6_CONTRACT);
-                      assert_eq!(paths.matrix_contract, MATCHED_EVALUATOR_MATRIX_CONTRACT);
-                  }
-              }
-          ''' + unit[pos:]
-          p.write_text(text[:a] + unit)
-          p = Path('tdi-ai/tests/tdi25_production_pairing.rs')
-          text = p.read_text().replace('use tdi_ai::experimental::tdi25_matched_matrix::matched_family_paths;', 'use tdi_ai::experimental::tdi25_matched_matrix::legacy_matched_family_paths as matched_family_paths;')
-          text = text.replace('fn no_existing_primary_family_has_a_common_target()', 'fn no_legacy_primary_family_has_a_common_target()')
-          p.write_text(text)
-          p = Path('tdi-ai/src/tdi25_matched_reference.rs')
-          text = p.read_text().replace('C6_EVALUATOR_CONTRACT, ', '').replace(' T6_EVALUATOR_CONTRACT,', '')
-          text = text.replace('{T6_EVALUATOR_CONTRACT}|{C6_EVALUATOR_CONTRACT}', '{MATCHED_T6_CONTRACT}|{MATCHED_C6_CONTRACT}')
           p.write_text(text)
           p = Path('scripts/check-tdi25-s28.sh')
           text = p.read_text()
-          anchor = 'cargo +1.97.1 test -p tdi-ai --features experimental --test tdi25_production_pairing\n'
+          anchor = 'cargo +1.97.1 fmt --all -- --check\n'
           assert text.count(anchor) == 1
-          text = text.replace(anchor, anchor + 'cargo +1.97.1 test -p tdi-ai --features experimental --test tdi25_matched_reference\n')
-          p.write_text(text)
-          p = Path('scripts/check-tdi25-matched-matrix.sh')
-          text = p.read_text().replace("grep -Fq 'tdi25-matched-evaluator-matrix-v1'", "grep -Fq 'tdi25-matched-evaluator-matrix-v2'")
-          text += 'cargo +1.97.1 test -p tdi-ai --features experimental --test tdi25_matched_reference\n'
-          p.write_text(text)
-          p = Path('docs/TDI-25-MATCHED-EVALUATOR-GATE.md')
-          text = p.read_text()
-          text = text.replace('Status: **negative capability evidence / implementation prerequisite**.', 'Status: **versioned matched reference implemented; legacy negative capability retained**.')
-          text = text.replace('## Current exact capability matrix', '## Legacy v1 capability matrix (unchanged)')
-          text = text.replace('## Consequence', '## Legacy consequence')
-          text = text.replace('Four-family primary synthesis must fail closed while this matrix is', 'Legacy four-family primary synthesis must fail closed while its matrix is')
-          text = text.replace('The implementation in\n`experimental::tdi25_matched_matrix::require_complete_primary_matrix`\nreturns the first missing primary path or common target deterministically. It\nrecords only the four paths already reachable from sealed production\nevaluators, and none currently carries a shared target contract.', 'The historical view `legacy_matched_family_paths` retains these four paths\nand their absent shared targets. `require_complete_primary_matrix` now checks\nthe separately versioned matched reference below. It does not upgrade legacy\nevaluator records; paired admission still refuses their absent target.')
-          text = text.replace('## Required next freeze', '## Required protocol before adding matched paths')
-          text = text.replace('The prerequisite freeze above and\nthe P1 blocker on #689 remain open; campaign progress remains 27/50.', 'That admission-only repair did not resolve the missing paths. The subsequent\nmatched-reference protocol and implementation below provide those paths.\nCampaign progress is recorded separately in TDI-25-CAMPAIGN-50.md.')
-          text += '''
-          ## Versioned matched reference
-
-          `docs/TDI-25-MATCHED-REFERENCE-V1.md` was committed before implementation
-          and execution. It specifies the new population, common targets, explicit
-          carrier materialisation, identical inference visibility, budgets and
-          provenance required above. No legacy task or target is silently changed.
-
-          Matrix contract `tdi25-matched-evaluator-matrix-v2` registers eight paths:
-          both T6 and C6 for TorsorFavorable, ChiralFavorable, Mixed and Neutral.
-          `tdi25_eval::matched_reference::MatchedPrimaryRun::evaluate` runs both
-          fixed upstream scorers against one evaluator-owned target per input.
-          The production constructor has no caller-supplied correctness bit,
-          target, arbitrary callback or family relabeling surface.
-
-          `tdi-ai/tests/tdi25_matched_reference.rs` exercises both public synthesis
-          entry points, all families, both non-final splits and two full 64-case
-          blocks per family. Independent arithmetic checks pin actual scores and
-          common-target correctness. Negative tests preserve missing-family,
-          swapped-arm, duplicate, population-mismatch and mutation rejection.
-          Legacy production-pairing tests continue to require rejection.
-
-          This completes a bounded software path, not a confirmatory campaign,
-          an architecture-quality result, random-sampling guarantee or measured
-          operation/memory/runtime comparison. Favorable targets are favorable
-          by construction. The four-family requirement is unchanged.
-          '''
-          p.write_text(text)
-          p = Path('AGENTS.md')
-          text = p.read_text()
-          text += '''
-          ## TDI-25 matched reference and legacy evidence
-
-          Before changing the paired T6/C6 reference, read
-          `docs/TDI-25-MATCHED-REFERENCE-V1.md` and
-          `docs/TDI-25-MATCHED-EVALUATOR-GATE.md`.
-          The common-population reference is separately versioned; it does not
-          upgrade legacy arm-specific targets. Keep four required families,
-          immutable evaluator-owned targets, identical inference views, fixed
-          family-independent C6 weights and explicit carrier/geometry accounting.
-          All new tests and runs are bounded Development/Validation software
-          qualification only. Favorable-by-construction scores are not evidence
-          of architecture superiority. No protected/final surface is authorized.
-          '''
+          text = text.replace(anchor, anchor + 'rustfmt +1.97.1 --edition 2024 --check tdi-ai/src/tdi25_matched_reference.rs\n', 1)
           p.write_text(text)
           PY
+          rustfmt +1.97.1 --edition 2024 tdi-ai/src/tdi25_matched_reference.rs
           cargo +1.97.1 fmt --all
           git diff --check
-      - name: Qualify the real source and both production synthesis paths
+      - name: Qualify final source without changing protocol or targets
         run: |
           set -euo pipefail
           bash scripts/check-tdi25-s28.sh
           bash scripts/check-tdi25-matched-matrix.sh
           cargo +1.97.1 test -p tdi-ai --features experimental --doc
-          echo TDI689_COMPLETE_MATCHED_REFERENCE_QUALIFIED
-      - name: Publish only validated source to the same PR
+          echo TDI689_FINAL_SOURCE_QUALIFIED
+      - name: Publish validated source only to the same PR
         env:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
@@ -217,13 +71,12 @@ jobs:
           test "$(git ls-remote origin "refs/heads/$branch" | cut -f1)" = "$EXPECTED_HEAD"
           python3 - <<'PY'
           import subprocess
-          paths = set(subprocess.check_output(['git','diff','--name-only'], text=True).splitlines())
-          allowed = {'tdi-ai/src/tdi25_eval.rs','tdi-ai/src/tdi25_matched_reference.rs','tdi-ai/src/tdi25_matched_matrix.rs','tdi-ai/tests/tdi25_matched_reference.rs','tdi-ai/tests/tdi25_production_pairing.rs','scripts/check-tdi25-s28.sh','scripts/check-tdi25-matched-matrix.sh','docs/TDI-25-MATCHED-EVALUATOR-GATE.md','AGENTS.md'}
-          assert paths == allowed, sorted(paths)
+          changed = set(subprocess.check_output(['git','diff','--name-only'],text=True).splitlines())
+          assert changed == {'tdi-ai/src/tdi25_matched_reference.rs','scripts/check-tdi25-s28.sh'}, sorted(changed)
           PY
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add tdi-ai/src/tdi25_eval.rs tdi-ai/src/tdi25_matched_reference.rs tdi-ai/src/tdi25_matched_matrix.rs tdi-ai/tests/tdi25_matched_reference.rs tdi-ai/tests/tdi25_production_pairing.rs scripts/check-tdi25-s28.sh scripts/check-tdi25-matched-matrix.sh docs/TDI-25-MATCHED-EVALUATOR-GATE.md AGENTS.md
-          git commit -m 'feat(tdi25): qualify common-target production paths for all four families'
+          git add tdi-ai/src/tdi25_matched_reference.rs scripts/check-tdi25-s28.sh
+          git commit -m 'test(tdi25): pin matched population known answer and source formatting'
           git push origin "HEAD:refs/heads/$branch"
-          printf 'TDI689_QUALIFIED_HEAD=%s\n' "$(git rev-parse HEAD)"
+          printf 'TDI689_FINAL_SOURCE_HEAD=%s\n' "$(git rev-parse HEAD)"
