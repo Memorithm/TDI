@@ -42,6 +42,11 @@
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
 
+/// Versioned common-population T6/C6 reference; non-final only.
+pub mod matched_reference {
+    include!("tdi25_matched_reference.rs");
+}
+
 use core::fmt;
 
 use super::tdi22_torsor::TORSOR_CONTRACT;

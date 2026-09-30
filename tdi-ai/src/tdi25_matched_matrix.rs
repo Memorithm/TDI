@@ -5,6 +5,9 @@
 //! conversions, relabel task families, or allow the secondary G6 control to
 //! satisfy a missing primary path.
 
+use super::tdi25_eval::matched_reference::{
+    MATCHED_C6_CONTRACT, MATCHED_POPULATION_CONTRACT, MATCHED_T6_CONTRACT, common_target_contract,
+};
 use core::fmt;
 
 use super::tdi25_eval::{C6_EVALUATOR_CONTRACT, G6_EVALUATOR_CONTRACT, T6_EVALUATOR_CONTRACT};
@@ -14,7 +17,9 @@ use super::tdi25_tasks::{
 use super::tdi25_torsor_chiral::TaskFamily;
 
 /// Versioned contract for the sealed primary evaluator capability matrix.
-pub const MATCHED_EVALUATOR_MATRIX_CONTRACT: &str = "tdi25-matched-evaluator-matrix-v1";
+pub const MATCHED_EVALUATOR_MATRIX_CONTRACT: &str = "tdi25-matched-evaluator-matrix-v2";
+/// Historical negative-capability registry; never retroactively upgraded.
+pub const LEGACY_MATRIX_CONTRACT: &str = "tdi25-matched-evaluator-matrix-v1";
 
 /// Primary arm identity. G6 is intentionally absent because it is a secondary
 /// attribution control, not a substitute for T6 or C6.
@@ -34,7 +39,7 @@ pub struct PrimaryEvaluatorPath {
     /// Common target/scoring contract shared by both primary arms.
     ///
     /// Existing arm-specific oracle fields are not a common target, so all
-    /// current paths intentionally carry `None`.
+    /// legacy paths intentionally carry `None`; new matched paths are versioned.
     shared_target_contract: Option<&'static str>,
     matrix_contract: &'static str,
 }
@@ -84,14 +89,14 @@ pub const REQUIRED_PRIMARY_FAMILIES: [TaskFamily; 4] = [
 /// T6 reaches torsor-favourable and mixed inputs. C6 reaches
 /// chiral-favourable and mixed inputs. Neutral is currently G6-only and G6 is
 /// not included here.
-pub const CURRENT_PRIMARY_PATHS: [PrimaryEvaluatorPath; 4] = [
+pub const LEGACY_PRIMARY_PATHS: [PrimaryEvaluatorPath; 4] = [
     PrimaryEvaluatorPath {
         family: TaskFamily::TorsorFavorable,
         arm: PrimaryArm::T6,
         task_contract: TORSOR_TRANSPORT_TASK_CONTRACT,
         evaluator_contract: T6_EVALUATOR_CONTRACT,
         shared_target_contract: None,
-        matrix_contract: MATCHED_EVALUATOR_MATRIX_CONTRACT,
+        matrix_contract: LEGACY_MATRIX_CONTRACT,
     },
     PrimaryEvaluatorPath {
         family: TaskFamily::Mixed,
@@ -99,7 +104,7 @@ pub const CURRENT_PRIMARY_PATHS: [PrimaryEvaluatorPath; 4] = [
         task_contract: MIXED_GEOMETRY_TASK_CONTRACT,
         evaluator_contract: T6_EVALUATOR_CONTRACT,
         shared_target_contract: None,
-        matrix_contract: MATCHED_EVALUATOR_MATRIX_CONTRACT,
+        matrix_contract: LEGACY_MATRIX_CONTRACT,
     },
     PrimaryEvaluatorPath {
         family: TaskFamily::ChiralFavorable,
@@ -107,7 +112,7 @@ pub const CURRENT_PRIMARY_PATHS: [PrimaryEvaluatorPath; 4] = [
         task_contract: CHIRAL_REFLECTION_TASK_CONTRACT,
         evaluator_contract: C6_EVALUATOR_CONTRACT,
         shared_target_contract: None,
-        matrix_contract: MATCHED_EVALUATOR_MATRIX_CONTRACT,
+        matrix_contract: LEGACY_MATRIX_CONTRACT,
     },
     PrimaryEvaluatorPath {
         family: TaskFamily::Mixed,
@@ -115,8 +120,35 @@ pub const CURRENT_PRIMARY_PATHS: [PrimaryEvaluatorPath; 4] = [
         task_contract: MIXED_GEOMETRY_TASK_CONTRACT,
         evaluator_contract: C6_EVALUATOR_CONTRACT,
         shared_target_contract: None,
-        matrix_contract: MATCHED_EVALUATOR_MATRIX_CONTRACT,
+        matrix_contract: LEGACY_MATRIX_CONTRACT,
     },
+];
+
+const fn reference_path(family: TaskFamily, arm: PrimaryArm) -> PrimaryEvaluatorPath {
+    PrimaryEvaluatorPath {
+        family,
+        arm,
+        task_contract: MATCHED_POPULATION_CONTRACT,
+        evaluator_contract: match arm {
+            PrimaryArm::T6 => MATCHED_T6_CONTRACT,
+            PrimaryArm::C6 => MATCHED_C6_CONTRACT,
+        },
+        shared_target_contract: Some(common_target_contract(family)),
+        matrix_contract: MATCHED_EVALUATOR_MATRIX_CONTRACT,
+    }
+}
+
+/// Eight production paths of the explicitly versioned matched reference.
+/// Each pair consumes the same population, numeric view and target.
+pub const CURRENT_PRIMARY_PATHS: [PrimaryEvaluatorPath; 8] = [
+    reference_path(TaskFamily::TorsorFavorable, PrimaryArm::T6),
+    reference_path(TaskFamily::TorsorFavorable, PrimaryArm::C6),
+    reference_path(TaskFamily::ChiralFavorable, PrimaryArm::T6),
+    reference_path(TaskFamily::ChiralFavorable, PrimaryArm::C6),
+    reference_path(TaskFamily::Mixed, PrimaryArm::T6),
+    reference_path(TaskFamily::Mixed, PrimaryArm::C6),
+    reference_path(TaskFamily::Neutral, PrimaryArm::T6),
+    reference_path(TaskFamily::Neutral, PrimaryArm::C6),
 ];
 
 /// Paired capability view for one declared task family.
@@ -218,6 +250,24 @@ pub fn primary_path(family: TaskFamily, arm: PrimaryArm) -> Option<PrimaryEvalua
         .find(|path| path.family == family && path.arm == arm)
 }
 
+fn legacy_primary_path(family: TaskFamily, arm: PrimaryArm) -> Option<PrimaryEvaluatorPath> {
+    LEGACY_PRIMARY_PATHS
+        .iter()
+        .copied()
+        .find(|path| path.family == family && path.arm == arm)
+}
+
+/// Historical v1 capability view, with every missing/common-target gap retained.
+#[must_use]
+pub fn legacy_matched_family_paths(family: TaskFamily) -> MatchedFamilyPaths {
+    MatchedFamilyPaths {
+        family,
+        t6: legacy_primary_path(family, PrimaryArm::T6),
+        c6: legacy_primary_path(family, PrimaryArm::C6),
+        matrix_contract: LEGACY_MATRIX_CONTRACT,
+    }
+}
+
 /// Return the current paired capability view for one family.
 #[must_use]
 pub fn matched_family_paths(family: TaskFamily) -> MatchedFamilyPaths {
@@ -231,10 +281,15 @@ pub fn matched_family_paths(family: TaskFamily) -> MatchedFamilyPaths {
 
 /// Require a complete four-family T6/C6 matrix.
 ///
-/// The current matrix intentionally returns an error. Callers must not proceed
-/// to four-family primary synthesis until real sealed paths have been added.
+/// Only the new matched reference supplies a complete matrix. Legacy records
+/// remain inadmissible because their retained common-target field is absent.
 pub fn require_complete_primary_matrix() -> Result<[MatchedFamilyPaths; 4], MatchedMatrixError> {
-    let families = REQUIRED_PRIMARY_FAMILIES.map(matched_family_paths);
+    require_complete_matrix(REQUIRED_PRIMARY_FAMILIES.map(matched_family_paths))
+}
+
+fn require_complete_matrix(
+    families: [MatchedFamilyPaths; 4],
+) -> Result<[MatchedFamilyPaths; 4], MatchedMatrixError> {
     for paths in families {
         if paths.t6.is_none() {
             return Err(MatchedMatrixError::MissingPrimaryPath {
@@ -271,37 +326,37 @@ mod tests {
     use super::*;
 
     #[test]
-    fn current_matrix_records_only_real_sealed_paths() {
-        assert_eq!(CURRENT_PRIMARY_PATHS.len(), 4);
+    fn legacy_matrix_records_only_original_sealed_paths() {
+        assert_eq!(LEGACY_PRIMARY_PATHS.len(), 4);
         assert_eq!(
-            primary_path(TaskFamily::TorsorFavorable, PrimaryArm::T6)
+            legacy_primary_path(TaskFamily::TorsorFavorable, PrimaryArm::T6)
                 .unwrap()
                 .task_contract,
             TORSOR_TRANSPORT_TASK_CONTRACT
         );
         assert_eq!(
-            primary_path(TaskFamily::ChiralFavorable, PrimaryArm::C6)
+            legacy_primary_path(TaskFamily::ChiralFavorable, PrimaryArm::C6)
                 .unwrap()
                 .task_contract,
             CHIRAL_REFLECTION_TASK_CONTRACT
         );
-        let mixed = matched_family_paths(TaskFamily::Mixed);
+        let mixed = legacy_matched_family_paths(TaskFamily::Mixed);
         assert!(!mixed.is_complete());
         assert_eq!(mixed.shared_target_contract(), None);
     }
 
     #[test]
     fn asymmetric_and_neutral_primary_paths_are_absent() {
-        assert!(primary_path(TaskFamily::TorsorFavorable, PrimaryArm::C6).is_none());
-        assert!(primary_path(TaskFamily::ChiralFavorable, PrimaryArm::T6).is_none());
-        assert!(primary_path(TaskFamily::Neutral, PrimaryArm::T6).is_none());
-        assert!(primary_path(TaskFamily::Neutral, PrimaryArm::C6).is_none());
+        assert!(legacy_primary_path(TaskFamily::TorsorFavorable, PrimaryArm::C6).is_none());
+        assert!(legacy_primary_path(TaskFamily::ChiralFavorable, PrimaryArm::T6).is_none());
+        assert!(legacy_primary_path(TaskFamily::Neutral, PrimaryArm::T6).is_none());
+        assert!(legacy_primary_path(TaskFamily::Neutral, PrimaryArm::C6).is_none());
     }
 
     #[test]
     fn incomplete_matrix_fails_closed_before_synthesis() {
         assert_eq!(
-            require_complete_primary_matrix(),
+            require_complete_matrix(REQUIRED_PRIMARY_FAMILIES.map(legacy_matched_family_paths)),
             Err(MatchedMatrixError::MissingPrimaryPath {
                 family: TaskFamily::TorsorFavorable,
                 arm: PrimaryArm::C6,
@@ -322,13 +377,28 @@ mod tests {
 
     #[test]
     fn every_path_binds_exact_contracts() {
-        for path in CURRENT_PRIMARY_PATHS {
-            assert_eq!(path.matrix_contract, MATCHED_EVALUATOR_MATRIX_CONTRACT);
+        for path in LEGACY_PRIMARY_PATHS {
+            assert_eq!(path.matrix_contract, LEGACY_MATRIX_CONTRACT);
             assert_eq!(path.shared_target_contract, None);
             match path.arm {
                 PrimaryArm::T6 => assert_eq!(path.evaluator_contract, T6_EVALUATOR_CONTRACT),
                 PrimaryArm::C6 => assert_eq!(path.evaluator_contract, C6_EVALUATOR_CONTRACT),
             }
+        }
+    }
+    #[test]
+    fn current_matrix_has_both_primary_paths_and_common_targets() {
+        assert_eq!(CURRENT_PRIMARY_PATHS.len(), 8);
+        let families = require_complete_primary_matrix().unwrap();
+        for paths in families {
+            assert!(paths.is_complete());
+            assert_eq!(
+                paths.shared_target_contract(),
+                Some(common_target_contract(paths.family))
+            );
+            assert_eq!(paths.t6.unwrap().evaluator_contract, MATCHED_T6_CONTRACT);
+            assert_eq!(paths.c6.unwrap().evaluator_contract, MATCHED_C6_CONTRACT);
+            assert_eq!(paths.matrix_contract, MATCHED_EVALUATOR_MATRIX_CONTRACT);
         }
     }
 }

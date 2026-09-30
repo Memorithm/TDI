@@ -3,8 +3,8 @@
 // docs/TDI-25-MATCHED-REFERENCE-V1.md. Development/Validation only.
 
 use super::{
-    C6_EVALUATOR_CONTRACT, ComparisonArm, DataSplit, EvalError, MAX_CASES_PER_RUN,
-    MAX_SEED_BLOCKS_PER_SYNTHESIS, RevealedMatchOutcome, T6_EVALUATOR_CONTRACT,
+    ComparisonArm, DataSplit, EvalError, MAX_CASES_PER_RUN,
+    MAX_SEED_BLOCKS_PER_SYNTHESIS, RevealedMatchOutcome,
     TaskFamily, Tdi25Error,
 };
 use crate::experimental::tdi22_torsor::{Torsor3, Twist3, Vec3, direct_pairing};
@@ -239,7 +239,7 @@ fn shared_match(score: f64, target: f64) -> bool {
 fn canonical_identity(split: DataSplit, family: TaskFamily, block: u64, case_id: u64, input: &MatchedInput) -> String {
     // Lossless canonical encoding avoids treating a noncryptographic hash as
     // collision-free. The target value itself never enters this input identity.
-    let mut identity = format!("{MATCHED_POPULATION_CONTRACT}|{MATCHED_REFERENCE_CONTRACT}|{}|{:?}|{block}|{case_id}|{}|{T6_EVALUATOR_CONTRACT}|{C6_EVALUATOR_CONTRACT}", split.as_str(), family, common_target_contract(family));
+    let mut identity = format!("{MATCHED_POPULATION_CONTRACT}|{MATCHED_REFERENCE_CONTRACT}|{}|{:?}|{block}|{case_id}|{}|{MATCHED_T6_CONTRACT}|{MATCHED_C6_CONTRACT}", split.as_str(), family, common_target_contract(family));
     for value in input.query.iter().chain(&input.key).chain(&input.key_position).chain(&input.query_position) {
         use core::fmt::Write as _;
         write!(&mut identity, "|{:016x}", value.to_bits()).expect("String formatting cannot fail");

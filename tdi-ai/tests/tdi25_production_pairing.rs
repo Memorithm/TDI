@@ -10,7 +10,7 @@ use tdi_ai::experimental::tdi25_eval::{
     summarize_paired_uncertainty_by_seed_block, summarize_paired_uncertainty_from_records,
     synthesize_family_stratified_from_revealed_outcomes,
 };
-use tdi_ai::experimental::tdi25_matched_matrix::matched_family_paths;
+use tdi_ai::experimental::tdi25_matched_matrix::legacy_matched_family_paths as matched_family_paths;
 use tdi_ai::experimental::tdi25_tasks::{
     DataSplit, mixed_geometry_pair_in_split, neutral_control_pair_in_split, seal_mixed_geometry,
     seal_neutral_control,
@@ -210,7 +210,7 @@ fn genuine_g6_attribution_is_retained_but_never_primary() {
 }
 
 #[test]
-fn no_existing_primary_family_has_a_common_target() {
+fn no_legacy_primary_family_has_a_common_target() {
     assert_eq!(REQUIRED_SYNTHESIS_FAMILIES.len(), 4);
     for family in REQUIRED_SYNTHESIS_FAMILIES {
         let paths = matched_family_paths(*family);
