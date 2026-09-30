@@ -1,21 +1,21 @@
-name: TDI-25 matched evaluator matrix gate
+name: TDI-25 slice 28 family-stratified synthesis
 on:
   pull_request:
     paths:
-      - 'tdi-ai/src/experimental.rs'
       - 'tdi-ai/src/tdi25_eval.rs'
       - 'tdi-ai/src/tdi25_matched_reference.rs'
-      - 'tdi-ai/src/tdi25_matched_matrix.rs'
       - 'tdi-ai/tests/tdi25_matched_reference.rs'
       - 'tdi-ai/tests/tdi25_production_pairing.rs'
+      - 'tdi-ai/src/tdi25_matched_matrix.rs'
       - 'docs/TDI-25-MATCHED-REFERENCE-V1.md'
       - 'docs/TDI-25-MATCHED-EVALUATOR-GATE.md'
-      - 'scripts/check-tdi25-matched-matrix.sh'
-      - '.github/workflows/tdi25-matched-evaluator-matrix.yml'
+      - 'docs/TDI-25-CAMPAIGN-50.md'
+      - 'scripts/check-tdi25-s28.sh'
+      - '.github/workflows/tdi25-s28-family-stratified-synthesis.yml'
 permissions:
   contents: read
 jobs:
-  matched-evaluator-matrix:
+  family-stratified-synthesis:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -26,4 +26,4 @@ jobs:
         with:
           toolchain: 1.97.1
           components: rustfmt, clippy
-      - run: bash scripts/check-tdi25-matched-matrix.sh
+      - run: bash scripts/check-tdi25-s28.sh

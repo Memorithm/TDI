@@ -226,3 +226,16 @@ bash scripts/check-tdi27-bootstrap.sh
 Required CI must be green on the exact PR head before merge. TDI-27 remains
 isolated from protected/final surfaces of all earlier TDI series.
 
+
+## TDI-25 matched reference and legacy evidence
+
+Before changing the paired T6/C6 reference, read
+`docs/TDI-25-MATCHED-REFERENCE-V1.md` and
+`docs/TDI-25-MATCHED-EVALUATOR-GATE.md`.
+The common-population reference is separately versioned; it does not
+upgrade legacy arm-specific targets. Keep four required families,
+immutable evaluator-owned targets, identical inference views, fixed
+family-independent C6 weights and explicit carrier/geometry accounting.
+All new tests and runs are bounded Development/Validation software
+qualification only. Favorable-by-construction scores are not evidence
+of architecture superiority. No protected/final surface is authorized.

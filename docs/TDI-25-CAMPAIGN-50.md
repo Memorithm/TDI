@@ -45,7 +45,7 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | 25 | Optimizer/update-budget matcher | **landed** in #673, exact head `d171ee9815813704b7214f5c812b2e6e864b6116`, merge `efb03b8c3e37bcb537952bdca2ce545765da29c8`; same examples/order/steps/stopping rule where trained |
 | 26 | Metric registry | **landed** in #679, exact head `c21c4463bb23eb8f078d1ec51612cd04def112d2`, merge `62b015cf3752835bda2f4f476f118118ef4208b6`; primary family metrics and cross-family summary frozen |
 | 27 | Paired uncertainty engine | **landed** in #683, exact head `9bf33373630ea7b7bdc338da359c9eb1fcc845d9`, merge `ff7de14f6f3968f2fb5679e96d962a5f651d43b4`; paired effect/interval computation by seed block |
-| 28 | Family-stratified synthesis | pooled summaries cannot hide sign reversals |
+| 28 | Family-stratified synthesis | **current candidate** in #689; pooled summaries cannot hide sign reversals |
 | 29 | Typed failure/resource accounting | numerical/task/resource failures retained by arm |
 | 30 | Stage-C bounded preflight | Development/Validation only; no protected/final execution |
 
