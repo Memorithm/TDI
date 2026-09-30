@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cargo +1.97.1 fmt --all -- --check
+rustfmt +1.97.1 --edition 2024 --check tdi-ai/src/tdi25_matched_reference.rs
 cargo +1.97.1 clippy -p tdi-ai --features experimental --all-targets -- -D warnings
 cargo +1.97.1 test -p tdi-ai --features experimental --lib tdi25_eval
 cargo +1.97.1 test -p tdi-ai --features experimental --test tdi25_production_pairing

@@ -3,9 +3,8 @@
 // docs/TDI-25-MATCHED-REFERENCE-V1.md. Development/Validation only.
 
 use super::{
-    ComparisonArm, DataSplit, EvalError, MAX_CASES_PER_RUN,
-    MAX_SEED_BLOCKS_PER_SYNTHESIS, RevealedMatchOutcome,
-    TaskFamily, Tdi25Error,
+    ComparisonArm, DataSplit, EvalError, MAX_CASES_PER_RUN, MAX_SEED_BLOCKS_PER_SYNTHESIS,
+    RevealedMatchOutcome, TaskFamily, Tdi25Error,
 };
 use crate::experimental::tdi22_torsor::{Torsor3, Twist3, Vec3, direct_pairing};
 use crate::experimental::tdi24_chiral::{Chiral6, ChiralScoreWeights};
@@ -54,13 +53,21 @@ pub struct MatchedInput {
 
 impl MatchedInput {
     #[must_use]
-    pub const fn query(&self) -> [f64; 6] { self.query }
+    pub const fn query(&self) -> [f64; 6] {
+        self.query
+    }
     #[must_use]
-    pub const fn key(&self) -> [f64; 6] { self.key }
+    pub const fn key(&self) -> [f64; 6] {
+        self.key
+    }
     #[must_use]
-    pub const fn key_position(&self) -> [f64; 3] { self.key_position }
+    pub const fn key_position(&self) -> [f64; 3] {
+        self.key_position
+    }
     #[must_use]
-    pub const fn query_position(&self) -> [f64; 3] { self.query_position }
+    pub const fn query_position(&self) -> [f64; 3] {
+        self.query_position
+    }
 }
 
 /// A complete bounded run of both fixed primary scorers on one common block.
@@ -95,7 +102,9 @@ impl MatchedPrimaryRun {
         }
         validate_source_contracts().map_err(EvalError::Bridge)?;
         let mut run = Self {
-            split, family, seed_block,
+            split,
+            family,
+            seed_block,
             inputs: Vec::with_capacity(n_cases as usize),
             t6_scores: Vec::with_capacity(n_cases as usize),
             c6_scores: Vec::with_capacity(n_cases as usize),
@@ -111,7 +120,12 @@ impl MatchedPrimaryRun {
             let identity = canonical_identity(split, family, seed_block, case_id, &input);
             let seal = |arm, score| {
                 let mut outcome = RevealedMatchOutcome::from_evaluator_record(
-                    arm, split, family, seed_block, case_id, identity.clone(),
+                    arm,
+                    split,
+                    family,
+                    seed_block,
+                    case_id,
+                    identity.clone(),
                     shared_match(score, target),
                 );
                 outcome.shared_target_contract = Some(common_target_contract(family));
@@ -128,21 +142,37 @@ impl MatchedPrimaryRun {
     }
 
     #[must_use]
-    pub const fn split(&self) -> DataSplit { self.split }
+    pub const fn split(&self) -> DataSplit {
+        self.split
+    }
     #[must_use]
-    pub const fn family(&self) -> TaskFamily { self.family }
+    pub const fn family(&self) -> TaskFamily {
+        self.family
+    }
     #[must_use]
-    pub const fn seed_block(&self) -> u64 { self.seed_block }
+    pub const fn seed_block(&self) -> u64 {
+        self.seed_block
+    }
     #[must_use]
-    pub fn inputs(&self) -> &[MatchedInput] { &self.inputs }
+    pub fn inputs(&self) -> &[MatchedInput] {
+        &self.inputs
+    }
     #[must_use]
-    pub fn t6_scores(&self) -> &[f64] { &self.t6_scores }
+    pub fn t6_scores(&self) -> &[f64] {
+        &self.t6_scores
+    }
     #[must_use]
-    pub fn c6_scores(&self) -> &[f64] { &self.c6_scores }
+    pub fn c6_scores(&self) -> &[f64] {
+        &self.c6_scores
+    }
     #[must_use]
-    pub fn t6_outcomes(&self) -> &[RevealedMatchOutcome] { &self.t6_outcomes }
+    pub fn t6_outcomes(&self) -> &[RevealedMatchOutcome] {
+        &self.t6_outcomes
+    }
     #[must_use]
-    pub fn c6_outcomes(&self) -> &[RevealedMatchOutcome] { &self.c6_outcomes }
+    pub fn c6_outcomes(&self) -> &[RevealedMatchOutcome] {
+        &self.c6_outcomes
+    }
     /// Numeric input payload only; not resident/peak process memory.
     #[must_use]
     pub const fn shared_input_bytes_per_case(&self) -> usize {
@@ -152,8 +182,11 @@ impl MatchedPrimaryRun {
 
 fn generate_input(split: DataSplit, family: TaskFamily, block: u64, case_id: u64) -> MatchedInput {
     // Caller validates block < 64 and case_id < 64, so the index cannot overflow.
-    let mut state = mix_registered_seed(SeedDomain::from_split(split), family, block * 64 + case_id);
-    if state == 0 { state = 1; }
+    let mut state =
+        mix_registered_seed(SeedDomain::from_split(split), family, block * 64 + case_id);
+    if state == 0 {
+        state = 1;
+    }
     let mut draw = || {
         state ^= state >> 12;
         state ^= state << 25;
@@ -169,30 +202,43 @@ fn generate_input(split: DataSplit, family: TaskFamily, block: u64, case_id: u64
         key_position = [0.0; 3];
         query_position = [0.0; 3];
     }
-    MatchedInput { query, key, key_position, query_position }
+    MatchedInput {
+        query,
+        key,
+        key_position,
+        query_position,
+    }
 }
 
 fn vec3(data: [f64; 3]) -> Result<Vec3, EvalError> {
     Vec3::new(data[0], data[1], data[2])
-        .map_err(Tdi25Error::Torsor).map_err(EvalError::Bridge)
+        .map_err(Tdi25Error::Torsor)
+        .map_err(EvalError::Bridge)
 }
 
 fn torsor_carriers(input: &MatchedInput) -> Result<(Twist3, Torsor3, Vec3), EvalError> {
     let q = input.query;
     let k = input.key;
     let query = Twist3::new(vec3([q[0], q[1], q[2]])?, vec3([q[3], q[4], q[5]])?)
-        .map_err(Tdi25Error::Torsor).map_err(EvalError::Bridge)?;
+        .map_err(Tdi25Error::Torsor)
+        .map_err(EvalError::Bridge)?;
     let key = Torsor3::new(
-        vec3([k[0], k[1], k[2]])?, vec3([k[3], k[4], k[5]])?, vec3(input.key_position)?,
-    ).map_err(Tdi25Error::Torsor).map_err(EvalError::Bridge)?;
+        vec3([k[0], k[1], k[2]])?,
+        vec3([k[3], k[4], k[5]])?,
+        vec3(input.key_position)?,
+    )
+    .map_err(Tdi25Error::Torsor)
+    .map_err(EvalError::Bridge)?;
     Ok((query, key, vec3(input.query_position)?))
 }
 
 fn chiral_carriers(input: &MatchedInput) -> Result<(Chiral6, Chiral6), EvalError> {
     let query = Chiral6::from_array(input.query)
-        .map_err(Tdi25Error::Chiral).map_err(EvalError::Bridge)?;
+        .map_err(Tdi25Error::Chiral)
+        .map_err(EvalError::Bridge)?;
     let key = Chiral6::from_array(input.key)
-        .map_err(Tdi25Error::Chiral).map_err(EvalError::Bridge)?;
+        .map_err(Tdi25Error::Chiral)
+        .map_err(EvalError::Bridge)?;
     Ok((query, key))
 }
 
@@ -211,36 +257,68 @@ fn common_target(input: &MatchedInput, family: TaskFamily) -> Result<f64, EvalEr
         let (q, k, position) = torsor_carriers(input)?;
         // Independent upstream direct oracle, not the factorized candidate.
         direct_pairing(q, k, position)
-            .map_err(Tdi25Error::Torsor).map_err(EvalError::Bridge)
+            .map_err(Tdi25Error::Torsor)
+            .map_err(EvalError::Bridge)
     };
     let chiral_target = || {
         let (q, k) = chiral_carriers(input)?;
-        let direct = q.dot(k).map_err(Tdi25Error::Chiral).map_err(EvalError::Bridge)?;
-        let chi = q.chiral_pairing(k).map_err(Tdi25Error::Chiral).map_err(EvalError::Bridge)?;
+        let direct = q
+            .dot(k)
+            .map_err(Tdi25Error::Chiral)
+            .map_err(EvalError::Bridge)?;
+        let chi = q
+            .chiral_pairing(k)
+            .map_err(Tdi25Error::Chiral)
+            .map_err(EvalError::Bridge)?;
         Ok::<f64, EvalError>(direct + chi)
     };
     let target = match family {
         TaskFamily::TorsorFavorable => torsor_target()?,
         TaskFamily::ChiralFavorable => chiral_target()?,
         TaskFamily::Mixed => (torsor_target()? + chiral_target()?) / 2.0,
-        TaskFamily::Neutral => input.query.iter().zip(input.key).map(|(q, k)| (q - k) * (q - k)).sum(),
+        TaskFamily::Neutral => input
+            .query
+            .iter()
+            .zip(input.key)
+            .map(|(q, k)| (q - k) * (q - k))
+            .sum(),
     };
     if !target.is_finite() {
-        return Err(EvalError::PairedUncertaintyInvalid { reason: "non_finite" });
+        return Err(EvalError::PairedUncertaintyInvalid {
+            reason: "non_finite",
+        });
     }
     Ok(target)
 }
 
 fn shared_match(score: f64, target: f64) -> bool {
-    score.is_finite() && target.is_finite()
+    score.is_finite()
+        && target.is_finite()
         && (score - target).abs() <= 1e-12 * (1.0 + score.abs().max(target.abs()))
 }
 
-fn canonical_identity(split: DataSplit, family: TaskFamily, block: u64, case_id: u64, input: &MatchedInput) -> String {
+fn canonical_identity(
+    split: DataSplit,
+    family: TaskFamily,
+    block: u64,
+    case_id: u64,
+    input: &MatchedInput,
+) -> String {
     // Lossless canonical encoding avoids treating a noncryptographic hash as
     // collision-free. The target value itself never enters this input identity.
-    let mut identity = format!("{MATCHED_POPULATION_CONTRACT}|{MATCHED_REFERENCE_CONTRACT}|{}|{:?}|{block}|{case_id}|{}|{MATCHED_T6_CONTRACT}|{MATCHED_C6_CONTRACT}", split.as_str(), family, common_target_contract(family));
-    for value in input.query.iter().chain(&input.key).chain(&input.key_position).chain(&input.query_position) {
+    let mut identity = format!(
+        "{MATCHED_POPULATION_CONTRACT}|{MATCHED_REFERENCE_CONTRACT}|{}|{:?}|{block}|{case_id}|{}|{MATCHED_T6_CONTRACT}|{MATCHED_C6_CONTRACT}",
+        split.as_str(),
+        family,
+        common_target_contract(family)
+    );
+    for value in input
+        .query
+        .iter()
+        .chain(&input.key)
+        .chain(&input.key_position)
+        .chain(&input.query_position)
+    {
         use core::fmt::Write as _;
         write!(&mut identity, "|{:016x}", value.to_bits()).expect("String formatting cannot fail");
     }
@@ -250,17 +328,26 @@ fn canonical_identity(split: DataSplit, family: TaskFamily, block: u64, case_id:
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::experimental::tdi25_eval::{MetricRegistry, summarize_paired_uncertainty_by_seed_block};
+    use crate::experimental::tdi25_eval::{
+        MetricRegistry, summarize_paired_uncertainty_by_seed_block,
+    };
 
     #[test]
     fn independent_targets_have_hand_calculated_values() {
         let input = MatchedInput {
             query: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
             key: [2.0, 0.0, -1.0, 1.0, 3.0, 2.0],
-            key_position: [1.0, 0.0, 0.0], query_position: [0.0, 1.0, 0.0],
+            key_position: [1.0, 0.0, 0.0],
+            query_position: [0.0, 1.0, 0.0],
         };
-        assert_eq!(common_target(&input, TaskFamily::TorsorFavorable).unwrap(), 51.0);
-        assert_eq!(common_target(&input, TaskFamily::ChiralFavorable).unwrap(), 41.0);
+        assert_eq!(
+            common_target(&input, TaskFamily::TorsorFavorable).unwrap(),
+            51.0
+        );
+        assert_eq!(
+            common_target(&input, TaskFamily::ChiralFavorable).unwrap(),
+            41.0
+        );
         assert_eq!(common_target(&input, TaskFamily::Mixed).unwrap(), 46.0);
         assert_eq!(common_target(&input, TaskFamily::Neutral).unwrap(), 50.0);
         assert_eq!(score_t6(&input).unwrap(), 51.0);
@@ -275,10 +362,17 @@ mod tests {
             assert_eq!(a.inputs(), &b.inputs()[..2]);
             assert_eq!(a.t6_outcomes(), &b.t6_outcomes()[..2]);
             assert_eq!(a.c6_outcomes(), &b.c6_outcomes()[..2]);
-            assert_eq!(a, MatchedPrimaryRun::evaluate(DataSplit::Development, *family, 0, 2).unwrap());
-            let validation = MatchedPrimaryRun::evaluate(DataSplit::Validation, *family, 0, 2).unwrap();
+            assert_eq!(
+                a,
+                MatchedPrimaryRun::evaluate(DataSplit::Development, *family, 0, 2).unwrap()
+            );
+            let validation =
+                MatchedPrimaryRun::evaluate(DataSplit::Validation, *family, 0, 2).unwrap();
             assert_ne!(a.inputs(), validation.inputs());
-            assert_ne!(a.t6_outcomes()[0].canonical_digest, validation.t6_outcomes()[0].canonical_digest);
+            assert_ne!(
+                a.t6_outcomes()[0].canonical_digest,
+                validation.t6_outcomes()[0].canonical_digest
+            );
             let render = format!("{:?}", a.inputs());
             for forbidden in ["target", "family", "split", "seed", "oracle", "matches"] {
                 assert!(!render.contains(forbidden));
@@ -287,12 +381,29 @@ mod tests {
     }
 
     #[test]
+    fn generation_matches_the_prospective_known_answer() {
+        assert_eq!(MAX_CASES_PER_RUN, 64);
+        assert_eq!(MAX_SEED_BLOCKS_PER_SYNTHESIS, 64);
+        let input = generate_input(DataSplit::Development, TaskFamily::TorsorFavorable, 0, 0);
+        assert_eq!(input.query, [-0.5, 0.0, -1.5, 0.5, 0.5, -0.5]);
+        assert_eq!(input.key, [-0.5, 1.5, 1.0, 0.0, 1.0, 0.5]);
+        assert_eq!(input.key_position, [1.0, -2.0, 0.5]);
+        assert_eq!(input.query_position, [-2.0, 0.5, 0.0]);
+    }
+
+    #[test]
     fn invalid_budgets_fail_before_scoring() {
         for count in [0, 1, 65, u64::MAX] {
-            assert_eq!(MatchedPrimaryRun::evaluate(DataSplit::Development, TaskFamily::Mixed, 0, count), Err(EvalError::InvalidBudget));
+            assert_eq!(
+                MatchedPrimaryRun::evaluate(DataSplit::Development, TaskFamily::Mixed, 0, count),
+                Err(EvalError::InvalidBudget)
+            );
         }
         for block in [64, u64::MAX] {
-            assert_eq!(MatchedPrimaryRun::evaluate(DataSplit::Development, TaskFamily::Mixed, block, 2), Err(EvalError::InvalidBudget));
+            assert_eq!(
+                MatchedPrimaryRun::evaluate(DataSplit::Development, TaskFamily::Mixed, block, 2),
+                Err(EvalError::InvalidBudget)
+            );
         }
     }
 
@@ -301,30 +412,59 @@ mod tests {
         let original = generate_input(DataSplit::Development, TaskFamily::Mixed, 1, 0);
         let (q, key, position) = torsor_carriers(&original).unwrap();
         let transported = key.transport(Vec3::zero()).unwrap();
-        assert_eq!(torsor_arm_score(q, key, position).unwrap(), torsor_arm_score(q, transported, position).unwrap());
+        assert_eq!(
+            torsor_arm_score(q, key, position).unwrap(),
+            torsor_arm_score(q, transported, position).unwrap()
+        );
         let (q, k) = chiral_carriers(&original).unwrap();
         assert_eq!(q.dot(k).unwrap(), q.mirror().dot(k.mirror()).unwrap());
-        assert_eq!(q.chiral_pairing(k).unwrap(), -q.mirror().chiral_pairing(k.mirror()).unwrap());
+        assert_eq!(
+            q.chiral_pairing(k).unwrap(),
+            -q.mirror().chiral_pairing(k.mirror()).unwrap()
+        );
     }
 
     #[test]
     fn stale_common_targets_and_arm_provenance_fail_closed() {
-        let run = MatchedPrimaryRun::evaluate(DataSplit::Development, TaskFamily::Mixed, 0, 2).unwrap();
+        let run =
+            MatchedPrimaryRun::evaluate(DataSplit::Development, TaskFamily::Mixed, 0, 2).unwrap();
         let registry = MetricRegistry::pinned();
         let call = |left: &[RevealedMatchOutcome], right: &[RevealedMatchOutcome]| {
-            summarize_paired_uncertainty_by_seed_block(DataSplit::Development, TaskFamily::Mixed, 0, left, right, &registry)
+            summarize_paired_uncertainty_by_seed_block(
+                DataSplit::Development,
+                TaskFamily::Mixed,
+                0,
+                left,
+                right,
+                &registry,
+            )
         };
-        assert_eq!(call(run.c6_outcomes(), run.t6_outcomes()), Err(EvalError::PairedUncertaintyInvalid { reason: "arm_mismatch" }));
+        assert_eq!(
+            call(run.c6_outcomes(), run.t6_outcomes()),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "arm_mismatch"
+            })
+        );
         let mut left = run.t6_outcomes().to_vec();
         let mut right = run.c6_outcomes().to_vec();
         left[0].shared_target_contract = Some("stale");
-        assert_eq!(call(&left, &right), Err(EvalError::PairedUncertaintyInvalid { reason: "outcome_integrity_mismatch" }));
+        assert_eq!(
+            call(&left, &right),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "outcome_integrity_mismatch"
+            })
+        );
         // Only a module test can alter this private snapshot. Even with an
         // internally consistent seal, unregistered targets must be refused.
         for outcome in left.iter_mut().chain(&mut right) {
             outcome.shared_target_contract = Some("stale");
             outcome.integrity.shared_target_contract = Some("stale");
         }
-        assert_eq!(call(&left, &right), Err(EvalError::PairedUncertaintyInvalid { reason: "unregistered_common_target_contract" }));
+        assert_eq!(
+            call(&left, &right),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "unregistered_common_target_contract"
+            })
+        );
     }
 }
