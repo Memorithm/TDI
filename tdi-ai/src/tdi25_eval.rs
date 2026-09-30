@@ -2654,8 +2654,11 @@ pub fn effect_sign_from_mean(mean: f64) -> Result<EffectSign, EvalError> {
     }
 }
 
-/// Classify a paired-difference CI into a closed Stage-C outcome class.
-pub fn classify_signed_effect(
+/// Internally classify an engine-derived paired-difference CI.
+///
+/// This remains private because a bare mean and interval do not carry the
+/// sufficient statistics needed to prove that the engine derived the bounds.
+fn classify_signed_effect(
     mean: f64,
     ci: ConfidenceInterval,
 ) -> Result<SignedEffectClass, EvalError> {
