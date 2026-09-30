@@ -2539,13 +2539,13 @@ pub fn summarize_paired_uncertainty_from_records(
 /// Classification uses the retained paired-difference CI:
 /// - [`SignedEffectClass::Positive`] when the interval lies entirely above zero
 /// - [`SignedEffectClass::Harmful`] when the interval lies entirely below zero
-/// - [`SignedEffectClass::Null`] when the interval contains zero
-/// - [`SignedEffectClass::Inconclusive`] reserved for non-classifiable finite cases
+/// - [`SignedEffectClass::Inconclusive`] when the interval contains zero
+/// - [`SignedEffectClass::Null`] reserved for a future explicit equivalence/null test
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SignedEffectClass {
     /// Paired difference favors C6 (CI entirely above zero).
     Positive,
-    /// No signed claim (CI contains zero).
+    /// Explicit null/equivalence result from a dedicated test (not emitted by this classifier).
     Null,
     /// Paired difference favors T6 / harms a C6-favoring claim (CI entirely below zero).
     Harmful,
@@ -2683,8 +2683,8 @@ fn classify_signed_effect(
     } else if ci.upper < 0.0 {
         Ok(SignedEffectClass::Harmful)
     } else {
-        // Interval contains zero: null rather than a signed claim.
-        Ok(SignedEffectClass::Null)
+        // A zero-crossing interval establishes neither direction nor equivalence.
+        Ok(SignedEffectClass::Inconclusive)
     }
 }
 
@@ -2932,7 +2932,7 @@ fn pooled_summary_from_effects(
     } else if all_harmful {
         SignedEffectClass::Harmful
     } else {
-        SignedEffectClass::Null
+        SignedEffectClass::Inconclusive
     };
     Ok(PooledSynthesisSummary {
         n_pairs: total_pairs,
@@ -5459,12 +5459,12 @@ mod tests {
         assert_eq!(report.family_effects[3].effect_sign, EffectSign::Zero);
         assert_eq!(
             report.family_effects[2].outcome_class,
-            SignedEffectClass::Null
+            SignedEffectClass::Inconclusive
         );
     }
 
     #[test]
-    fn family_stratified_synthesis_does_not_claim_win_from_null_family_intervals() {
+    fn family_stratified_synthesis_does_not_claim_win_from_inconclusive_family_intervals() {
         let split = DataSplit::Development;
         let t6_false = [(0, false), (1, false)];
         let c6_mixed = [(0, true), (1, false)];
@@ -5488,10 +5488,10 @@ mod tests {
             report
                 .family_effects
                 .iter()
-                .all(|effect| effect.outcome_class == SignedEffectClass::Null)
+                .all(|effect| effect.outcome_class == SignedEffectClass::Inconclusive)
         );
         let pooled = report.pooled_summary.expect("no sign reversal");
-        assert_eq!(pooled.outcome_class, SignedEffectClass::Null);
+        assert_eq!(pooled.outcome_class, SignedEffectClass::Inconclusive);
         assert!(!report.claims_clean_pooled_win);
     }
 
