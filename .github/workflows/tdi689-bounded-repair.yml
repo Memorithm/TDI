@@ -3,32 +3,382 @@ on:
   pull_request:
     paths: ['.github/workflows/tdi689-bounded-repair.yml']
 permissions:
-  contents: read
+  contents: write
+concurrency:
+  group: tdi689-bounded-repair
+  cancel-in-progress: false
 jobs:
-  inspect:
-    if: github.repository == 'Memorithm/TDI' && github.event.pull_request.number == 689 && github.event.pull_request.head.repo.full_name == 'Memorithm/TDI'
+  repair:
+    if: github.actor == 'CHECKUPAUTO' && github.repository == 'Memorithm/TDI' && github.event.pull_request.number == 689 && github.event.pull_request.head.repo.full_name == 'Memorithm/TDI' && github.event.pull_request.head.ref == 'agent/tdi25-s28-family-stratified-synthesis'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
-      - name: Inspect only the non-final TDI25 repair surface
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+      - name: Apply exact-source non-final repair
         shell: bash
         run: |
           set -euo pipefail
-          git rev-parse HEAD
-          echo '--- imports ---'
-          sed -n '40,90p' tdi-ai/src/tdi25_eval.rs
-          echo '--- inner paired engine ---'
-          sed -n '1960,2285p' tdi-ai/src/tdi25_eval.rs
-          echo '--- test names ---'
-          grep -nE '^    fn .*(paired|reveal|synthes|record|arm)' tdi-ai/src/tdi25_eval.rs
-          echo '--- integration targets ---'
-          ls tdi-ai/tests
-          echo '--- experimental exports ---'
-          grep -nE '(tdi25|experimental)' tdi-ai/src/lib.rs tdi-ai/Cargo.toml
-          echo '--- seed API ---'
-          grep -nE '(pub fn (generate|seal|derive)|struct Seed|impl Seed)' tdi-ai/src/tdi25_tasks.rs
-          echo 'TDI689_HOSTED_INSPECTION_OK'
+          test "$(git rev-parse HEAD:tdi-ai/src/tdi25_eval.rs)" = 61c540bc2adfab1a098414fbf9ddca09bda4d8ac
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('tdi-ai/src/tdi25_eval.rs')
+          text = p.read_text()
+          def replace(old, new):
+              global text
+              assert text.count(old) == 1, (old[:100], text.count(old))
+              text = text.replace(old, new, 1)
+          replace('use super::tdi24_chiral::CHIRAL_CONTRACT;\n', 'use super::tdi24_chiral::CHIRAL_CONTRACT;\nuse super::tdi25_matched_matrix::matched_family_paths;\n')
+          replace('    arm: Option<ComparisonArm>,\n    /// Non-final split retained with the revealed bit.', '''    arm: Option<ComparisonArm>,
+              /// Evaluator-owned common target, never inferred from a family label.
+              /// All existing v1 evaluator records have arm-specific targets only.
+              shared_target_contract: Option<&'static str>,
+              /// Non-final split retained with the revealed bit.''')
+          replace('struct RevealedMatchOutcomeIntegrity {\n    arm: Option<ComparisonArm>,', "struct RevealedMatchOutcomeIntegrity {\n    arm: Option<ComparisonArm>,\n    shared_target_contract: Option<&'static str>,")
+          start = text.index('impl RevealedMatchOutcomeIntegrity {')
+          end = text.index('impl RevealedMatchOutcome {', start)
+          integrity = text[start:end]
+          assert integrity.count('            arm,\n') == 1
+          integrity = integrity.replace('            arm,\n', '            arm,\n            shared_target_contract: None,\n', 1)
+          integrity = integrity.replace('        self.arm == outcome.arm\n', '        self.arm == outcome.arm\n            && self.shared_target_contract == outcome.shared_target_contract\n', 1)
+          text = text[:start] + integrity + text[end:]
+          start = text.index('    fn from_matches_oracle(')
+          end = text.index('    fn from_evaluator_record(', start)
+          synthetic = text[start:end]
+          synthetic = synthetic.replace('let integrity = RevealedMatchOutcomeIntegrity::new(', 'let mut integrity = RevealedMatchOutcomeIntegrity::new(', 1)
+          synthetic = synthetic.replace('        Self {\n            arm: None,', '''        integrity.shared_target_contract = Some("tdi25-unit-test-shared-target");
+                  Self {
+                      arm: None,
+                      shared_target_contract: integrity.shared_target_contract,''', 1)
+          text = text[:start] + synthetic + text[end:]
+          replace('        Self {\n            arm: Some(arm),', '''        Self {
+                      arm: Some(arm),
+                      // V1 record correctness is relative to an arm-specific oracle.
+                      // A future matrix entry cannot retroactively requalify it.
+                      shared_target_contract: None,''')
+          replace('/// Return sum_g n_g^2 for seed-block clustering, namespaced by family.', '''/// Admit only a common target retained by both outcome constructors.
+          /// The capability matrix is necessary but cannot upgrade legacy evidence.
+          /// Synthetic targets exist only in private module-test constructors.
+          fn require_shared_paired_target(
+              family: TaskFamily,
+              t6_matches: &[RevealedMatchOutcome],
+              c6_matches: &[RevealedMatchOutcome],
+          ) -> Result<(), EvalError> {
+              for (t6, c6) in t6_matches.iter().zip(c6_matches) {
+                  let (Some(t6_target), Some(c6_target)) =
+                      (t6.shared_target_contract, c6.shared_target_contract)
+                  else {
+                      return Err(EvalError::PairedUncertaintyInvalid {
+                          reason: "missing_common_target_contract",
+                      });
+                  };
+                  if t6_target != c6_target {
+                      return Err(EvalError::PairedUncertaintyInvalid {
+                          reason: "common_target_contract_mismatch",
+                      });
+                  }
+                  if (t6.arm.is_some() || c6.arm.is_some())
+                      && matched_family_paths(family).shared_target_contract() != Some(t6_target)
+                  {
+                      return Err(EvalError::PairedUncertaintyInvalid {
+                          reason: "unregistered_common_target_contract",
+                      });
+                  }
+              }
+              Ok(())
+          }
+
+          /// Return sum_g n_g^2 for seed-block clustering, namespaced by family.''')
+          replace('    require_pair_identity_alignment(t6_matches, c6_matches)?;\n\n    let mut seed_blocks = Vec::new();', '    require_pair_identity_alignment(t6_matches, c6_matches)?;\n    require_shared_paired_target(family, t6_matches, c6_matches)?;\n\n    let mut seed_blocks = Vec::new();')
+          replace('/// Hoeffding margin. Phase-C matched T6/C6 record pairs are currently emitted\n/// for [`TaskFamily::Mixed`]; other families remain available on the revealed-bit\n/// API for later matched evaluator paths.', '''/// Hoeffding margin. Existing Mixed T6/C6 records share input identities, but
+          /// score different arm-specific targets. They are rejected with
+          /// `missing_common_target_contract`, not admitted as primary evidence.
+          /// A later versioned common-target evaluator is required for every family.''')
+          replace('fn paired_uncertainty_from_records_accepts_scored_rejects_failures()', 'fn paired_uncertainty_from_records_rejects_unmatched_targets_and_provenance()')
+          start = text.index('        let summary = summarize_paired_uncertainty_from_records(', text.index('fn paired_uncertainty_from_records_rejects_unmatched_targets_and_provenance()'))
+          end = text.index('        let t6_revealed =', start)
+          text = text[:start] + '''        assert_eq!(
+                      summarize_paired_uncertainty_from_records(
+                          DataSplit::Development, family, seed_block,
+                          &t6_records, &c6_records, &registry,
+                      ),
+                      Err(EvalError::PairedUncertaintyInvalid {
+                          reason: "missing_common_target_contract",
+                      })
+                  );
+          ''' + text[end:]
+          start = text.index('fn paired_uncertainty_from_records_rejects_unmatched_targets_and_provenance()')
+          end = text.index('    fn family_summary(', start)
+          unit = text[start:end]
+          old = '''            )
+                      .unwrap()
+                      .n_pairs,
+                      2
+                  );'''
+          # Match original indentation, before rustfmt normalises inserted code.
+          old = '            )\n            .unwrap()\n            .n_pairs,\n            2\n        );'
+          assert unit.count(old) == 1
+          unit = unit.replace(old, '''            ),
+                      Err(EvalError::PairedUncertaintyInvalid {
+                          reason: "missing_common_target_contract",
+                      })
+                  );''', 1)
+          a = unit.index('        // Single seed-block summaries use informative within-block Wilson/Hoeffding.')
+          b = unit.index('        // Typed surface admits only RevealedMatchOutcome', a)
+          unit = unit[:a] + unit[b:]
+          text = text[:start] + unit + text[end:]
+          replace('    fn family_summary(\n', '''    #[test]
+              fn paired_targets_are_integrity_bound_and_cannot_drift() {
+                  let family = TaskFamily::Mixed;
+                  let left = matches(DataSplit::Development, family, 11, &[(1, true), (2, false)]);
+                  let mut right = matches(DataSplit::Development, family, 11, &[(1, true), (2, true)]);
+                  right[0].shared_target_contract = Some("different-test-target");
+                  let classify = |right: &[RevealedMatchOutcome]| {
+                      summarize_paired_uncertainty_by_seed_block(
+                          DataSplit::Development, family, 11, &left, right, &MetricRegistry::pinned(),
+                      )
+                  };
+                  assert_eq!(classify(&right), Err(EvalError::PairedUncertaintyInvalid {
+                      reason: "outcome_integrity_mismatch",
+                  }));
+                  right[0].integrity.shared_target_contract = right[0].shared_target_contract;
+                  assert_eq!(classify(&right), Err(EvalError::PairedUncertaintyInvalid {
+                      reason: "common_target_contract_mismatch",
+                  }));
+              }
+
+              fn family_summary(
+          ''')
+          p.write_text(text)
+          test = Path('tdi-ai/tests/tdi25_production_pairing.rs')
+          assert not test.exists()
+          test.write_text('''//! Production-API regressions: the library is compiled without cfg(test).
+          //! No synthetic outcome constructor, record mutation or oracle access is used.
+          #![cfg(feature = "experimental")]
+
+          use tdi_ai::experimental::tdi25_eval::{
+              C6EvaluatorRun, EvalError, EvaluatorConfig, G6EvaluatorRun, MetricRegistry,
+              RevealedMatchOutcome, T6EvaluatorRun, REQUIRED_SYNTHESIS_FAMILIES,
+              revealed_matches_from_c6_records, revealed_matches_from_g6_records,
+              revealed_matches_from_t6_records, summarize_g6_attribution_contrast_by_seed_block,
+              summarize_paired_uncertainty_by_seed_block, summarize_paired_uncertainty_from_records,
+              synthesize_family_stratified_from_revealed_outcomes,
+          };
+          use tdi_ai::experimental::tdi25_matched_matrix::matched_family_paths;
+          use tdi_ai::experimental::tdi25_tasks::{
+              DataSplit, mixed_geometry_pair_in_split, neutral_control_pair_in_split,
+              seal_mixed_geometry, seal_neutral_control,
+          };
+          use tdi_ai::experimental::tdi25_torsor_chiral::TaskFamily;
+
+          fn mixed_runs(split: DataSplit, seed: u64) -> (T6EvaluatorRun, C6EvaluatorRun) {
+              let pair = mixed_geometry_pair_in_split(seed, split).unwrap();
+              let cases = [
+                  seal_mixed_geometry(pair.base, pair.base_oracle),
+                  seal_mixed_geometry(pair.transformed, pair.transformed_oracle),
+              ];
+              let mut t6 = T6EvaluatorRun::open(EvaluatorConfig::t6(split)).unwrap();
+              let mut c6 = C6EvaluatorRun::open(EvaluatorConfig::c6(split)).unwrap();
+              for case in &cases {
+                  t6.evaluate_mixed(case).unwrap();
+                  c6.evaluate_mixed(case).unwrap();
+              }
+              (t6, c6)
+          }
+
+          fn mixed_outcomes(split: DataSplit, seed: u64) -> (Vec<RevealedMatchOutcome>, Vec<RevealedMatchOutcome>) {
+              let (t6, c6) = mixed_runs(split, seed);
+              (
+                  revealed_matches_from_t6_records(t6.records(), split).unwrap(),
+                  revealed_matches_from_c6_records(c6.records(), split).unwrap(),
+              )
+          }
+
+          #[test]
+          fn genuine_mixed_records_cannot_become_a_primary_comparison() {
+              for split in [DataSplit::Development, DataSplit::Validation] {
+                  let (t6, c6) = mixed_runs(split, 5);
+                  let left = revealed_matches_from_t6_records(t6.records(), split).unwrap();
+                  let right = revealed_matches_from_c6_records(c6.records(), split).unwrap();
+                  assert_eq!(left.len(), 2);
+                  assert!(left.iter().chain(&right).all(|outcome| outcome.matches_oracle));
+                  let block = left[0].seed_block;
+                  let registry = MetricRegistry::pinned();
+                  assert_eq!(
+                      summarize_paired_uncertainty_from_records(split, TaskFamily::Mixed, block, t6.records(), c6.records(), &registry),
+                      Err(EvalError::PairedUncertaintyInvalid { reason: "missing_common_target_contract" }),
+                  );
+                  assert_eq!(
+                      summarize_paired_uncertainty_by_seed_block(split, TaskFamily::Mixed, block, &left, &right, &registry),
+                      Err(EvalError::PairedUncertaintyInvalid { reason: "missing_common_target_contract" }),
+                  );
+              }
+          }
+
+          #[test]
+          fn replicated_real_blocks_do_not_hide_the_missing_target() {
+              for split in [DataSplit::Development, DataSplit::Validation] {
+                  let (mut left, mut right) = mixed_outcomes(split, 5);
+                  let (left_next, right_next) = mixed_outcomes(split, 6);
+                  left.extend(left_next);
+                  right.extend(right_next);
+                  assert_eq!(
+                      synthesize_family_stratified_from_revealed_outcomes(split, &left, &right, &MetricRegistry::pinned()),
+                      Err(EvalError::FamilyStratifiedSynthesisInvalid { reason: "missing_common_target_contract" }),
+                  );
+              }
+          }
+
+          #[test]
+          fn real_arm_swaps_still_fail_before_target_admission() {
+              let split = DataSplit::Development;
+              let (left, right) = mixed_outcomes(split, 5);
+              assert_eq!(
+                  summarize_paired_uncertainty_by_seed_block(split, TaskFamily::Mixed, left[0].seed_block, &right, &left, &MetricRegistry::pinned()),
+                  Err(EvalError::PairedUncertaintyInvalid { reason: "arm_mismatch" }),
+              );
+          }
+
+          #[test]
+          fn real_block_cannot_be_relabeled_as_four_genuine_families() {
+              let split = DataSplit::Development;
+              let (left, right) = mixed_outcomes(split, 5);
+              let mut relabeled_left = Vec::new();
+              let mut relabeled_right = Vec::new();
+              for family in REQUIRED_SYNTHESIS_FAMILIES {
+                  for (source, destination) in [(&left, &mut relabeled_left), (&right, &mut relabeled_right)] {
+                      let mut outcomes = source.clone();
+                      for outcome in &mut outcomes {
+                          outcome.family = *family;
+                      }
+                      destination.extend(outcomes);
+                  }
+              }
+              assert_eq!(
+                  synthesize_family_stratified_from_revealed_outcomes(split, &relabeled_left, &relabeled_right, &MetricRegistry::pinned()),
+                  Err(EvalError::PairedUncertaintyInvalid { reason: "outcome_integrity_mismatch" }),
+              );
+          }
+
+          #[test]
+          fn different_real_populations_remain_unpairable() {
+              let split = DataSplit::Validation;
+              let (left, _) = mixed_outcomes(split, 5);
+              let (_, right) = mixed_outcomes(split, 6);
+              assert_eq!(
+                  synthesize_family_stratified_from_revealed_outcomes(split, &left, &right, &MetricRegistry::pinned()),
+                  Err(EvalError::PairedUncertaintyInvalid { reason: "pair_identity_mismatch" }),
+              );
+          }
+
+          #[test]
+          fn genuine_g6_attribution_is_retained_but_never_primary() {
+              for split in [DataSplit::Development, DataSplit::Validation] {
+                  let pair = neutral_control_pair_in_split(7, split).unwrap();
+                  let cases = [
+                      seal_neutral_control(pair.class_a, pair.class_a_oracle),
+                      seal_neutral_control(pair.class_b, pair.class_b_oracle),
+                  ];
+                  let mut run = G6EvaluatorRun::open(EvaluatorConfig::g6(split)).unwrap();
+                  for case in &cases {
+                      run.evaluate_neutral_control(case).unwrap();
+                  }
+                  let outcomes = revealed_matches_from_g6_records(run.records(), split).unwrap();
+                  let block = outcomes[0].seed_block;
+                  let registry = MetricRegistry::pinned();
+                  let summary = summarize_g6_attribution_contrast_by_seed_block(split, block, &outcomes, &registry).unwrap();
+                  assert_eq!(summary.n_cases, 2);
+                  assert_eq!(summary.g6_accuracy, 1.0);
+                  assert_eq!(
+                      summarize_paired_uncertainty_by_seed_block(split, TaskFamily::Neutral, block, &outcomes, &outcomes, &registry),
+                      Err(EvalError::PairedUncertaintyInvalid { reason: "arm_mismatch" }),
+                  );
+              }
+          }
+
+          #[test]
+          fn no_existing_primary_family_has_a_common_target() {
+              assert_eq!(REQUIRED_SYNTHESIS_FAMILIES.len(), 4);
+              for family in REQUIRED_SYNTHESIS_FAMILIES {
+                  let paths = matched_family_paths(*family);
+                  assert!(!paths.is_complete());
+                  assert_eq!(paths.shared_target_contract(), None);
+              }
+          }
+          ''')
+          gate = Path('scripts/check-tdi25-s28.sh')
+          old = 'cargo +1.97.1 test -p tdi-ai --features experimental --lib tdi25_eval\n'
+          assert gate.read_text().count(old) == 1
+          gate.write_text(gate.read_text().replace(old, old + 'cargo +1.97.1 test -p tdi-ai --features experimental --test tdi25_production_pairing\n'))
+          workflow = Path('.github/workflows/tdi25-s28-family-stratified-synthesis.yml')
+          old = "      - 'tdi-ai/src/tdi25_eval.rs'\n"
+          assert workflow.read_text().count(old) == 1
+          workflow.write_text(workflow.read_text().replace(old, old + "      - 'tdi-ai/tests/tdi25_production_pairing.rs'\n      - 'tdi-ai/src/tdi25_matched_matrix.rs'\n"))
+          doc = Path('docs/TDI-25-MATCHED-EVALUATOR-GATE.md')
+          doc.write_text(doc.read_text() + '''
+          ## Slice 28 paired-admission repair
+
+          A matching input digest is necessary but not a shared target. The v1
+          evaluator adapters now retain an explicitly absent common-target contract
+          in the integrity-bound revealed outcome. Neither changing the capability
+          matrix later nor relabeling a family can upgrade these legacy records.
+
+          The paired engine rejects them with `missing_common_target_contract`
+          before computing a primary difference or interval. Any later target must
+          be identical across arms and registered by the matched evaluator matrix.
+          Single-block and replicated family synthesis use the same check. G6's
+          separate, non-primary attribution summary remains available.
+
+          `tdi-ai/tests/tdi25_production_pairing.rs` exercises the public API against
+          genuine sealed Development/Validation evaluator runs. The library in
+          that integration target is compiled without `cfg(test)`. These are
+          negative admission regressions, not a complete production matrix or
+          a scientific result. Private synthetic unit fixtures remain restricted
+          to testing the statistical machinery. The prerequisite freeze above and
+          the P1 blocker on #689 remain open; campaign progress remains 27/50.
+          ''')
+          PY
+          cargo +1.97.1 fmt --all
+          git diff --check
+      - name: Validate actual Rust changes and production API regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/check-tdi25-s28.sh
+          cargo +1.97.1 test -p tdi-ai --features experimental --lib tdi25_matched_matrix
+          echo TDI689_SHARED_TARGET_TESTS_OK
+      - name: Push validated changes to the existing PR only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch=agent/tdi25-s28-family-stratified-synthesis
+          gh auth setup-git
+          test "$(git ls-remote origin "refs/heads/$branch" | cut -f1)" = "$EXPECTED_HEAD"
+          python3 - <<'PY'
+          import subprocess
+          allowed = {
+              'tdi-ai/src/tdi25_eval.rs',
+              'tdi-ai/tests/tdi25_production_pairing.rs',
+              'scripts/check-tdi25-s28.sh',
+              '.github/workflows/tdi25-s28-family-stratified-synthesis.yml',
+              'docs/TDI-25-MATCHED-EVALUATOR-GATE.md',
+          }
+          changed = set(subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines())
+          changed.update(subprocess.check_output(['git', 'ls-files', '--others', '--exclude-standard'], text=True).splitlines())
+          assert changed == allowed, sorted(changed)
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tdi-ai/src/tdi25_eval.rs tdi-ai/tests/tdi25_production_pairing.rs scripts/check-tdi25-s28.sh .github/workflows/tdi25-s28-family-stratified-synthesis.yml docs/TDI-25-MATCHED-EVALUATOR-GATE.md
+          git commit -m 'fix(tdi25): reject unmatched primary targets with production API regressions'
+          git push origin "HEAD:refs/heads/$branch"
+          printf 'TDI689_REPAIR_HEAD=%s\n' "$(git rev-parse HEAD)"
