@@ -53,3 +53,24 @@ forbidden. No accuracy, superiority, novelty or performance claim is made.
 
 Tracking: [#691](https://github.com/Memorithm/TDI/issues/691) and blocked
 candidate [#689](https://github.com/Memorithm/TDI/pull/689).
+
+## Slice 28 paired-admission repair
+
+A matching input digest is necessary but not a shared target. The v1
+evaluator adapters now retain an explicitly absent common-target contract
+in the integrity-bound revealed outcome. Neither changing the capability
+matrix later nor relabeling a family can upgrade these legacy records.
+
+The paired engine rejects them with `missing_common_target_contract`
+before computing a primary difference or interval. Any later target must
+be identical across arms and registered by the matched evaluator matrix.
+Single-block and replicated family synthesis use the same check. G6's
+separate, non-primary attribution summary remains available.
+
+`tdi-ai/tests/tdi25_production_pairing.rs` exercises the public API against
+genuine sealed Development/Validation evaluator runs. The library in
+that integration target is compiled without `cfg(test)`. These are
+negative admission regressions, not a complete production matrix or
+a scientific result. Private synthetic unit fixtures remain restricted
+to testing the statistical machinery. The prerequisite freeze above and
+the P1 blocker on #689 remain open; campaign progress remains 27/50.

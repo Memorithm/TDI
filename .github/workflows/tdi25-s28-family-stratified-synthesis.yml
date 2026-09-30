@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'tdi-ai/src/tdi25_eval.rs'
+      - 'tdi-ai/tests/tdi25_production_pairing.rs'
+      - 'tdi-ai/src/tdi25_matched_matrix.rs'
       - 'docs/TDI-25-CAMPAIGN-50.md'
       - 'scripts/check-tdi25-s28.sh'
       - '.github/workflows/tdi25-s28-family-stratified-synthesis.yml'

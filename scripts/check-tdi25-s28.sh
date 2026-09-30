@@ -3,6 +3,7 @@ set -euo pipefail
 cargo +1.97.1 fmt --all -- --check
 cargo +1.97.1 clippy -p tdi-ai --features experimental --all-targets -- -D warnings
 cargo +1.97.1 test -p tdi-ai --features experimental --lib tdi25_eval
+cargo +1.97.1 test -p tdi-ai --features experimental --test tdi25_production_pairing
 grep -Fq 'tdi25-family-stratified-synthesis-v1' tdi-ai/src/tdi25_eval.rs
 grep -Fq 'pub fn synthesize_family_stratified_effects' tdi-ai/src/tdi25_eval.rs
 grep -Fq 'pub fn synthesize_family_stratified_from_revealed_outcomes' tdi-ai/src/tdi25_eval.rs

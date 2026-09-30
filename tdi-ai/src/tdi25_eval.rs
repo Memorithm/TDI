@@ -46,6 +46,7 @@ use core::fmt;
 
 use super::tdi22_torsor::TORSOR_CONTRACT;
 use super::tdi24_chiral::CHIRAL_CONTRACT;
+use super::tdi25_matched_matrix::matched_family_paths;
 use super::tdi25_tasks::{
     CHIRAL_REFLECTION_TASK_CONTRACT, ChiralReflectionInput, ChiralReflectionOracle, DataSplit,
     LabeledCase, MIXED_GEOMETRY_TASK_CONTRACT, MixedGeometryInput, MixedGeometryOracle,
@@ -1494,6 +1495,9 @@ impl ConfidenceInterval {
 pub struct RevealedMatchOutcome {
     /// Sealed source arm; absent only for synthetic module-test vectors.
     arm: Option<ComparisonArm>,
+    /// Evaluator-owned common target, never inferred from a family label.
+    /// All existing v1 evaluator records have arm-specific targets only.
+    shared_target_contract: Option<&'static str>,
     /// Non-final split retained with the revealed bit.
     pub split: DataSplit,
     /// Task family this outcome belongs to.
@@ -1514,6 +1518,7 @@ pub struct RevealedMatchOutcome {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RevealedMatchOutcomeIntegrity {
     arm: Option<ComparisonArm>,
+    shared_target_contract: Option<&'static str>,
     split: DataSplit,
     family: TaskFamily,
     seed_block: u64,
@@ -1534,6 +1539,7 @@ impl RevealedMatchOutcomeIntegrity {
     ) -> Self {
         Self {
             arm,
+            shared_target_contract: None,
             split,
             family,
             seed_block,
@@ -1545,6 +1551,7 @@ impl RevealedMatchOutcomeIntegrity {
 
     fn matches(&self, outcome: &RevealedMatchOutcome) -> bool {
         self.arm == outcome.arm
+            && self.shared_target_contract == outcome.shared_target_contract
             && self.split == outcome.split
             && self.family == outcome.family
             && self.seed_block == outcome.seed_block
@@ -1569,7 +1576,7 @@ impl RevealedMatchOutcome {
         matches_oracle: bool,
     ) -> Self {
         let canonical_digest = format!("synthetic:{seed_block}:{case_id}");
-        let integrity = RevealedMatchOutcomeIntegrity::new(
+        let mut integrity = RevealedMatchOutcomeIntegrity::new(
             None,
             split,
             family,
@@ -1578,8 +1585,10 @@ impl RevealedMatchOutcome {
             &canonical_digest,
             matches_oracle,
         );
+        integrity.shared_target_contract = Some("tdi25-unit-test-shared-target");
         Self {
             arm: None,
+            shared_target_contract: integrity.shared_target_contract,
             split,
             family,
             seed_block,
@@ -1610,6 +1619,9 @@ impl RevealedMatchOutcome {
         );
         Self {
             arm: Some(arm),
+            // V1 record correctness is relative to an arm-specific oracle.
+            // A future matrix entry cannot retroactively requalify it.
+            shared_target_contract: None,
             split,
             family,
             seed_block,
@@ -1981,6 +1993,38 @@ fn require_pair_identity_alignment(
     Ok(())
 }
 
+/// Admit only a common target retained by both outcome constructors.
+/// The capability matrix is necessary but cannot upgrade legacy evidence.
+/// Synthetic targets exist only in private module-test constructors.
+fn require_shared_paired_target(
+    family: TaskFamily,
+    t6_matches: &[RevealedMatchOutcome],
+    c6_matches: &[RevealedMatchOutcome],
+) -> Result<(), EvalError> {
+    for (t6, c6) in t6_matches.iter().zip(c6_matches) {
+        let (Some(t6_target), Some(c6_target)) =
+            (t6.shared_target_contract, c6.shared_target_contract)
+        else {
+            return Err(EvalError::PairedUncertaintyInvalid {
+                reason: "missing_common_target_contract",
+            });
+        };
+        if t6_target != c6_target {
+            return Err(EvalError::PairedUncertaintyInvalid {
+                reason: "common_target_contract_mismatch",
+            });
+        }
+        if (t6.arm.is_some() || c6.arm.is_some())
+            && matched_family_paths(family).shared_target_contract() != Some(t6_target)
+        {
+            return Err(EvalError::PairedUncertaintyInvalid {
+                reason: "unregistered_common_target_contract",
+            });
+        }
+    }
+    Ok(())
+}
+
 /// Return sum_g n_g^2 for seed-block clustering, namespaced by family.
 #[allow(dead_code)]
 fn sum_squared_seed_block_sizes(outcomes: &[RevealedMatchOutcome]) -> Result<u64, EvalError> {
@@ -2030,6 +2074,7 @@ fn summarize_paired_uncertainty_inner(
     require_revealed_outcome_arm(ComparisonArm::T6, t6_matches)?;
     require_revealed_outcome_arm(ComparisonArm::C6, c6_matches)?;
     require_pair_identity_alignment(t6_matches, c6_matches)?;
+    require_shared_paired_target(family, t6_matches, c6_matches)?;
 
     let mut seed_blocks = Vec::new();
     let mut seed_block_sizes: Vec<(u64, u64)> = Vec::new();
@@ -2430,9 +2475,10 @@ pub fn revealed_matches_from_g6_records(
 /// relabeling. Uses within-block independent Wilson / Hoeffding intervals
 /// (informative at finite n). Cluster-aware multi-block synthesis is deferred
 /// to slice 28 so a single-block summary never substitutes `n²` into the
-/// Hoeffding margin. Phase-C matched T6/C6 record pairs are currently emitted
-/// for [`TaskFamily::Mixed`]; other families remain available on the revealed-bit
-/// API for later matched evaluator paths.
+/// Hoeffding margin. Existing Mixed T6/C6 records share input identities, but
+/// score different arm-specific targets. They are rejected with
+/// `missing_common_target_contract`, not admitted as primary evidence.
+/// A later versioned common-target evaluator is required for every family.
 pub fn summarize_paired_uncertainty_from_records(
     split: DataSplit,
     family: TaskFamily,
@@ -4864,7 +4910,7 @@ mod tests {
     }
 
     #[test]
-    fn paired_uncertainty_from_records_accepts_scored_rejects_failures() {
+    fn paired_uncertainty_from_records_rejects_unmatched_targets_and_provenance() {
         let registry = MetricRegistry::pinned();
         let family = TaskFamily::Mixed;
         let seed_block = 11_u64;
@@ -4940,19 +4986,19 @@ mod tests {
                 label_contract: PROTECTED_LABEL_CONTRACT,
             },
         ];
-        let summary = summarize_paired_uncertainty_from_records(
-            DataSplit::Development,
-            family,
-            seed_block,
-            &t6_records,
-            &c6_records,
-            &registry,
-        )
-        .unwrap();
-        assert_eq!(summary.n_pairs, 2);
-        assert!((summary.t6_accuracy - 0.5).abs() < 1e-12);
-        assert!((summary.c6_accuracy - 1.0).abs() < 1e-12);
-        assert!((summary.paired_difference_mean - 0.5).abs() < 1e-12);
+        assert_eq!(
+            summarize_paired_uncertainty_from_records(
+                DataSplit::Development,
+                family,
+                seed_block,
+                &t6_records,
+                &c6_records,
+                &registry,
+            ),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "missing_common_target_contract",
+            })
+        );
         let t6_revealed =
             revealed_matches_from_t6_records(&t6_records, DataSplit::Development).unwrap();
         let c6_revealed =
@@ -4967,10 +5013,10 @@ mod tests {
                 &t6_revealed,
                 &c6_revealed,
                 &registry,
-            )
-            .unwrap()
-            .n_pairs,
-            2
+            ),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "missing_common_target_contract",
+            })
         );
         assert_eq!(
             summarize_paired_uncertainty_by_seed_block(
@@ -5043,20 +5089,6 @@ mod tests {
             Err(EvalError::PairedUncertaintyInvalid {
                 reason: "outcome_integrity_mismatch",
             })
-        );
-
-        // Single seed-block summaries use informative within-block Wilson/Hoeffding.
-        assert_eq!(
-            summary.t6_accuracy_ci.method,
-            UncertaintyMethod::WilsonScore
-        );
-        assert_eq!(
-            summary.c6_accuracy_ci.method,
-            UncertaintyMethod::WilsonScore
-        );
-        assert_eq!(
-            summary.paired_difference_ci.method,
-            UncertaintyMethod::BoundedHoeffdingPairedDifference
         );
 
         // Typed surface admits only RevealedMatchOutcome — no ProtectedLabel ctor.
@@ -5171,6 +5203,37 @@ mod tests {
             })
         );
         let _ = &mut validation_bits;
+    }
+
+    #[test]
+    fn paired_targets_are_integrity_bound_and_cannot_drift() {
+        let family = TaskFamily::Mixed;
+        let left = matches(DataSplit::Development, family, 11, &[(1, true), (2, false)]);
+        let mut right = matches(DataSplit::Development, family, 11, &[(1, true), (2, true)]);
+        right[0].shared_target_contract = Some("different-test-target");
+        let classify = |right: &[RevealedMatchOutcome]| {
+            summarize_paired_uncertainty_by_seed_block(
+                DataSplit::Development,
+                family,
+                11,
+                &left,
+                right,
+                &MetricRegistry::pinned(),
+            )
+        };
+        assert_eq!(
+            classify(&right),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "outcome_integrity_mismatch",
+            })
+        );
+        right[0].integrity.shared_target_contract = right[0].shared_target_contract;
+        assert_eq!(
+            classify(&right),
+            Err(EvalError::PairedUncertaintyInvalid {
+                reason: "common_target_contract_mismatch",
+            })
+        );
     }
 
     fn family_summary(
