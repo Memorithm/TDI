@@ -20,8 +20,13 @@ jobs:
           python3 - <<'PY'
           import json, subprocess
           from pathlib import Path
-          old = "${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-24.04' }}"
-          new = "${{ vars.TDI_LOCAL_RUNNERS_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-24.04' }}"
+          # Build expression delimiters separately so Actions cannot evaluate
+          # the source patterns before Python sees the checkout's literal text.
+          prefix = '$' + '{{ '
+          suffix = ' }}'
+          condition = "(github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-24.04'"
+          old = prefix + condition + suffix
+          new = prefix + "vars.TDI_LOCAL_RUNNERS_ENABLED == 'true' && " + condition + suffix
           entries = []
           for path in sorted(Path('.github/workflows').glob('*.yml')):
               text = path.read_text()
