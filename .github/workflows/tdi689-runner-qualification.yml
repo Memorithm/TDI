@@ -1,0 +1,76 @@
+name: TDI689 runner qualification
+on:
+  pull_request:
+    paths: ['.github/workflows/tdi689-runner-qualification.yml']
+permissions:
+  contents: write
+jobs:
+  prepare:
+    if: github.actor == 'CHECKUPAUTO' && github.repository == 'Memorithm/TDI' && github.event.pull_request.number == 689 && github.event.pull_request.head.repo.full_name == 'Memorithm/TDI'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Prepare only runner routing changes without altering job steps
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          old = "${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-24.04' }}"
+          new = "${{ vars.TDI_LOCAL_RUNNERS_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-24.04' }}"
+          entries = []
+          for path in sorted(Path('.github/workflows').glob('*.yml')):
+              text = path.read_text()
+              if old not in text:
+                  continue
+              if any(token in path.name for token in ('tdi5-', 'tdi6-', 'tdi7.2', 'tdi8.2', 'tdi9.2', 'holdout', 'confirmatory', 'final')):
+                  raise SystemExit('Refusing change to a frozen/final workflow: ' + str(path))
+              for line in text.splitlines():
+                  if old in line:
+                      assert line.strip() == 'runs-on: ' + old, str(path)
+              revised = text.replace(old, new)
+              assert revised.replace(new, old) == text
+              print(str(path) + ' : ' + str(text.count(old)) + ' runner selectors; commands unchanged')
+              entries.append({'path': str(path), 'mode':'100644', 'type':'blob', 'content':revised})
+          assert 1 <= len(entries) <= 30, len(entries)
+          doc = 'docs/engineering/CI_RUNNER_SELECTION.md'
+          assert not Path(doc).exists()
+          entries.append({'path':doc, 'mode':'100644', 'type':'blob', 'content':'''# Software CI runner selection
+
+          The standard non-final software gates that previously selected the
+          local `tdi` runner for all same-repository PRs now default to the
+          existing `ubuntu-24.04` hosted execution path. This avoids indefinite
+          queueing when the local executor is unavailable.
+
+          Set repository variable `TDI_LOCAL_RUNNERS_ENABLED` to the literal
+          string `true` only when the local runner is qualified and available.
+          Fork PRs still use hosted execution even when that opt-in is enabled.
+          This is explicit runner selection, not automatic liveness detection.
+
+          Commands, job names, dependencies, timeouts, checkout semantics,
+          permissions, protected/final boundaries and scientific gates are
+          unchanged. No failing test is skipped and no status is fabricated.
+          The change was prompted by PR #689 jobs remaining queued with label
+          `tdi`, runner_id 0, while their hosted counterparts completed.
+          Hardware-specific measurements and protected/final jobs are not
+          qualified or enabled by this setting. RemoteOps remains the host
+          control plane; these hosted runs establish software evidence only.
+          '''})
+          entries.append({'path':'.github/workflows/tdi689-runner-qualification.yml','mode':'100644','type':'blob','sha':None})
+          payload = {'base_tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(), 'tree':entries}
+          Path('/tmp/tdi689-runner-tree.json').write_text(json.dumps(payload))
+          print('TDI689_ROUTED_WORKFLOWS=' + str(len(entries)-2))
+          PY
+      - name: Store reviewed tree only; do not move any branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tree=$(gh api --method POST repos/Memorithm/TDI/git/trees --input /tmp/tdi689-runner-tree.json --jq .sha)
+          test "${#tree}" = 40
+          printf 'TDI689_RUNNER_TREE=%s\n' "$tree"
+          printf 'TDI689_RUNNER_PARENT=%s\n' "$(git rev-parse HEAD)"
