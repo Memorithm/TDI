@@ -2621,6 +2621,14 @@ pub fn classify_signed_effect(
             UncertaintyMethod::ClusterHoeffdingPairedDifference,
         ],
     )?;
+    if !(-1.0..=1.0).contains(&mean)
+        || !(-1.0..=1.0).contains(&ci.lower)
+        || !(-1.0..=1.0).contains(&ci.upper)
+    {
+        return Err(EvalError::FamilyStratifiedSynthesisInvalid {
+            reason: "paired_difference_out_of_bounds",
+        });
+    }
     if ci.lower > 0.0 {
         Ok(SignedEffectClass::Positive)
     } else if ci.upper < 0.0 {
@@ -5557,6 +5565,35 @@ mod tests {
             classify_signed_effect(-0.5, contradictory),
             Err(EvalError::FamilyStratifiedSynthesisInvalid {
                 reason: "mean_outside_interval",
+            })
+        );
+    }
+
+    #[test]
+    fn signed_effect_classifier_rejects_values_outside_paired_support() {
+        let too_large = ConfidenceInterval {
+            lower: 1.5,
+            upper: 2.5,
+            confidence: PAIRED_UNCERTAINTY_LEVEL,
+            method: UncertaintyMethod::BoundedHoeffdingPairedDifference,
+        };
+        assert_eq!(
+            classify_signed_effect(2.0, too_large),
+            Err(EvalError::FamilyStratifiedSynthesisInvalid {
+                reason: "paired_difference_out_of_bounds",
+            })
+        );
+
+        let too_small = ConfidenceInterval {
+            lower: -2.5,
+            upper: -1.5,
+            confidence: PAIRED_UNCERTAINTY_LEVEL,
+            method: UncertaintyMethod::ClusterHoeffdingPairedDifference,
+        };
+        assert_eq!(
+            classify_signed_effect(-2.0, too_small),
+            Err(EvalError::FamilyStratifiedSynthesisInvalid {
+                reason: "paired_difference_out_of_bounds",
             })
         );
     }
