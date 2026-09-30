@@ -3,7 +3,12 @@ on:
   pull_request:
     paths:
       - 'tdi-ai/src/experimental.rs'
+      - 'tdi-ai/src/tdi25_eval.rs'
+      - 'tdi-ai/src/tdi25_matched_reference.rs'
       - 'tdi-ai/src/tdi25_matched_matrix.rs'
+      - 'tdi-ai/tests/tdi25_matched_reference.rs'
+      - 'tdi-ai/tests/tdi25_production_pairing.rs'
+      - 'docs/TDI-25-MATCHED-REFERENCE-V1.md'
       - 'docs/TDI-25-MATCHED-EVALUATOR-GATE.md'
       - 'scripts/check-tdi25-matched-matrix.sh'
       - '.github/workflows/tdi25-matched-evaluator-matrix.yml'
