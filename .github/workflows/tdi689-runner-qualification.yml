@@ -14,42 +14,43 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
-      - name: Prepare only runner routing changes without altering job steps
+      - name: Prepare only inspected runner selectors without altering commands
         run: |
           set -euo pipefail
           python3 - <<'PY'
           import json, subprocess
           from pathlib import Path
-          # Build expression delimiters separately so Actions cannot evaluate
-          # the source patterns before Python sees the checkout's literal text.
           prefix = '$' + '{{ '
           suffix = ' }}'
           condition = "(github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'tdi' || 'ubuntu-24.04'"
           old = prefix + condition + suffix
           new = prefix + "vars.TDI_LOCAL_RUNNERS_ENABLED == 'true' && " + condition + suffix
+          expected = set('''tdi-artifact-contract.yml tdi-forge-partner-contract.yml tdi-freeze-progress-summary.yml tdi-hub-edge-contract.yml tdi-observability.yml tdi-partner-adapter-contract.yml tdi-research-analysis.yml tdi11-model-observation-freeze.yml tdi11.2-readiness.yml tdi23-stage0-bootstrap.yml tdi23.1-equivalence.yml tdi23.1-ir.yml tdi23.1-provenance.yml tdi7-hosted-software.yml tdi7-prearm-ci.yml tdi7-v73-bounded.yml tdi7-v74-bounded.yml tdi7-v74-identifiability.yml tdi71-ci.yml tdi8-a0-a1-adapter.yml tdi8-a2-adapter.yml tdi8-a3-adapter.yml tdi8-a3-atomic-store-gate.yml tdi8-a3-atomic-store.yml tdi8-a3-routing.yml tdi8-configuration-freeze.yml tdi8-evaluable-predictions.yml tdi8-exact-readout.yml tdi8-operation-accounting.yml tdi8-percentile-interval.yml tdi8-readiness.yml tdi8-symbolic-rejections.yml tdi8-task-encoding.yml tdi9-configuration-freeze.yml tdi9-readiness.yml tdi9.1-reference-evaluator.yml tdi9.1-reference-rejections.yml'''.split())
+          assert len(expected) == 37
           entries = []
+          found = set()
           for path in sorted(Path('.github/workflows').glob('*.yml')):
               text = path.read_text()
               if old not in text:
                   continue
-              if any(token in path.name for token in ('tdi5-', 'tdi6-', 'tdi7.2', 'tdi8.2', 'tdi9.2', 'holdout', 'confirmatory', 'final')):
-                  raise SystemExit('Refusing change to a frozen/final workflow: ' + str(path))
+              assert path.name in expected, str(path)
               for line in text.splitlines():
                   if old in line:
                       assert line.strip() == 'runs-on: ' + old, str(path)
               revised = text.replace(old, new)
               assert revised.replace(new, old) == text
+              found.add(path.name)
               print(str(path) + ' : ' + str(text.count(old)) + ' runner selectors; commands unchanged')
               entries.append({'path': str(path), 'mode':'100644', 'type':'blob', 'content':revised})
-          assert 1 <= len(entries) <= 30, len(entries)
+          assert found == expected, sorted(found ^ expected)
           doc = 'docs/engineering/CI_RUNNER_SELECTION.md'
           assert not Path(doc).exists()
           entries.append({'path':doc, 'mode':'100644', 'type':'blob', 'content':'''# Software CI runner selection
 
-          The standard non-final software gates that previously selected the
-          local `tdi` runner for all same-repository PRs now default to the
-          existing `ubuntu-24.04` hosted execution path. This avoids indefinite
-          queueing when the local executor is unavailable.
+          The 37 standard software-gate workflows that previously selected the
+          local `tdi` runner for same-repository PRs now default to their existing
+          `ubuntu-24.04` hosted execution path. This avoids indefinite queueing
+          when the local executor is unavailable.
 
           Set repository variable `TDI_LOCAL_RUNNERS_ENABLED` to the literal
           string `true` only when the local runner is qualified and available.
@@ -60,15 +61,15 @@ jobs:
           permissions, protected/final boundaries and scientific gates are
           unchanged. No failing test is skipped and no status is fabricated.
           The change was prompted by PR #689 jobs remaining queued with label
-          `tdi`, runner_id 0, while their hosted counterparts completed.
+          `tdi`, runner_id 0, while other software gates completed.
           Hardware-specific measurements and protected/final jobs are not
           qualified or enabled by this setting. RemoteOps remains the host
-          control plane; these hosted runs establish software evidence only.
+          control plane; hosted runs establish software evidence only.
           '''})
           entries.append({'path':'.github/workflows/tdi689-runner-qualification.yml','mode':'100644','type':'blob','sha':None})
           payload = {'base_tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(), 'tree':entries}
           Path('/tmp/tdi689-runner-tree.json').write_text(json.dumps(payload))
-          print('TDI689_ROUTED_WORKFLOWS=' + str(len(entries)-2))
+          print('TDI689_ROUTED_WORKFLOWS=' + str(len(found)))
           PY
       - name: Store reviewed tree only; do not move any branch
         env:
