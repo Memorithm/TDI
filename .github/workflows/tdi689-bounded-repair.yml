@@ -1,0 +1,34 @@
+name: TDI-25 PR689 bounded repair
+on:
+  pull_request:
+    paths: ['.github/workflows/tdi689-bounded-repair.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.repository == 'Memorithm/TDI' && github.event.pull_request.number == 689 && github.event.pull_request.head.repo.full_name == 'Memorithm/TDI'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Inspect only the non-final TDI25 repair surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          echo '--- imports ---'
+          sed -n '40,90p' tdi-ai/src/tdi25_eval.rs
+          echo '--- inner paired engine ---'
+          sed -n '1960,2285p' tdi-ai/src/tdi25_eval.rs
+          echo '--- test names ---'
+          grep -nE '^    fn .*(paired|reveal|synthes|record|arm)' tdi-ai/src/tdi25_eval.rs
+          echo '--- integration targets ---'
+          ls tdi-ai/tests
+          echo '--- experimental exports ---'
+          grep -nE '(tdi25|experimental)' tdi-ai/src/lib.rs tdi-ai/Cargo.toml
+          echo '--- seed API ---'
+          grep -nE '(pub fn (generate|seal|derive)|struct Seed|impl Seed)' tdi-ai/src/tdi25_tasks.rs
+          echo 'TDI689_HOSTED_INSPECTION_OK'
