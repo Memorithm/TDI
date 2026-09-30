@@ -14,7 +14,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
-      - name: Prepare only inspected runner selectors without altering commands
+      - name: Prepare bounded blobs only; connector owns workflow publication
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -27,7 +29,7 @@ jobs:
           new = prefix + "vars.TDI_LOCAL_RUNNERS_ENABLED == 'true' && " + condition + suffix
           expected = set('''tdi-artifact-contract.yml tdi-forge-partner-contract.yml tdi-freeze-progress-summary.yml tdi-hub-edge-contract.yml tdi-observability.yml tdi-partner-adapter-contract.yml tdi-research-analysis.yml tdi11-model-observation-freeze.yml tdi11.2-readiness.yml tdi23-stage0-bootstrap.yml tdi23.1-equivalence.yml tdi23.1-ir.yml tdi23.1-provenance.yml tdi7-hosted-software.yml tdi7-prearm-ci.yml tdi7-v73-bounded.yml tdi7-v74-bounded.yml tdi7-v74-identifiability.yml tdi71-ci.yml tdi8-a0-a1-adapter.yml tdi8-a2-adapter.yml tdi8-a3-adapter.yml tdi8-a3-atomic-store-gate.yml tdi8-a3-atomic-store.yml tdi8-a3-routing.yml tdi8-configuration-freeze.yml tdi8-evaluable-predictions.yml tdi8-exact-readout.yml tdi8-operation-accounting.yml tdi8-percentile-interval.yml tdi8-readiness.yml tdi8-symbolic-rejections.yml tdi8-task-encoding.yml tdi9-configuration-freeze.yml tdi9-readiness.yml tdi9.1-reference-evaluator.yml tdi9.1-reference-rejections.yml'''.split())
           assert len(expected) == 37
-          entries = []
+          contents = []
           found = set()
           for path in sorted(Path('.github/workflows').glob('*.yml')):
               text = path.read_text()
@@ -40,12 +42,11 @@ jobs:
               revised = text.replace(old, new)
               assert revised.replace(new, old) == text
               found.add(path.name)
-              print(str(path) + ' : ' + str(text.count(old)) + ' runner selectors; commands unchanged')
-              entries.append({'path': str(path), 'mode':'100644', 'type':'blob', 'content':revised})
+              contents.append((str(path), revised))
           assert found == expected, sorted(found ^ expected)
           doc = 'docs/engineering/CI_RUNNER_SELECTION.md'
           assert not Path(doc).exists()
-          entries.append({'path':doc, 'mode':'100644', 'type':'blob', 'content':'''# Software CI runner selection
+          contents.append((doc, '''# Software CI runner selection
 
           The 37 standard software-gate workflows that previously selected the
           local `tdi` runner for same-repository PRs now default to their existing
@@ -65,18 +66,22 @@ jobs:
           Hardware-specific measurements and protected/final jobs are not
           qualified or enabled by this setting. RemoteOps remains the host
           control plane; hosted runs establish software evidence only.
-          '''})
+          '''))
+          entries = []
+          for path, content in contents:
+              result = subprocess.run(
+                  ['gh','api','--method','POST','repos/Memorithm/TDI/git/blobs','--input','-'],
+                  input=json.dumps({'content':content,'encoding':'utf-8'}),
+                  text=True,capture_output=True,check=True,
+              )
+              sha = json.loads(result.stdout)['sha']
+              assert len(sha) == 40
+              entries.append({'path':path,'mode':'100644','type':'blob','sha':sha})
           entries.append({'path':'.github/workflows/tdi689-runner-qualification.yml','mode':'100644','type':'blob','sha':None})
-          payload = {'base_tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(), 'tree':entries}
-          Path('/tmp/tdi689-runner-tree.json').write_text(json.dumps(payload))
-          print('TDI689_ROUTED_WORKFLOWS=' + str(len(found)))
+          # Only unattached content blobs are staged. No tree, commit or ref is
+          # published with this token. Authorized connector must review and
+          # publish the bounded manifest, then ordinary CI runs on that head.
+          print('TDI689_STAGED_MANIFEST=' + json.dumps(entries))
+          print('TDI689_BASE_TREE=' + subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip())
+          print('TDI689_PARENT=' + subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip())
           PY
-      - name: Store reviewed tree only; do not move any branch
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          tree=$(gh api --method POST repos/Memorithm/TDI/git/trees --input /tmp/tdi689-runner-tree.json --jq .sha)
-          test "${#tree}" = 40
-          printf 'TDI689_RUNNER_TREE=%s\n' "$tree"
-          printf 'TDI689_RUNNER_PARENT=%s\n' "$(git rev-parse HEAD)"
