@@ -25,24 +25,24 @@ jobs:
       CARGO_BUILD_JOBS: '2'
       RUSTFLAGS: '-C debuginfo=0'
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
           path: integration-tdi
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Memorithm/ElasticXxx
           ref: f5af4f3129100f4bb52d47d1adfc202347d0b098
           persist-credentials: false
           path: integration-elastic
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Memorithm/scirust-hub
           ref: ccdcb99a4573dbefb944af0df713101b100b5f78
           persist-credentials: false
           path: integration-hub
-      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067
         with:
           toolchain: 1.89.0
       - name: Build the pinned controller in its own Cargo context
@@ -82,7 +82,7 @@ jobs:
             --hub-source ccdcb99a4573dbefb944af0df713101b100b5f78 \
             --elastic-source f5af4f3129100f4bb52d47d1adfc202347d0b098 \
             --widths 1 2 --trials 2 --repeats 2 --output elastic-admission-benchmark
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: elastic-admission-benchmark
