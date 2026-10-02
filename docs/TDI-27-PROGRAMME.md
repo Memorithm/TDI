@@ -108,6 +108,23 @@ statistical thresholds.
 - no FLAT-ATTENTION, NNIS, SciRust or ElasticXxx performance claim from TDI
   geometry alone.
 
+## Affective-causality application track
+
+The [affective representation, causal choice and recovery track](TDI-27-AFFECTIVE-CAUSALITY.md)
+extends this programme with six Development questions grounded in Tagliabue,
+Dung and Berg, *The Pain Axis*, arXiv:2609.16247v2 (2026-09-25). It distinguishes
+negative and independently extracted positive valence, self/other attribution,
+choice changes, effective versus sham stopping, and recovery with explicit
+history/KV semantics. It does not infer phenomenal suffering from these measures.
+
+This application preserves H27-A–E and the 27.0–27.8 ladder. Its first Rust
+surface (`tdi-bench/src/affect_v27.rs`) qualifies a complete synthetic factorial
+skeleton with independent injection, wording, order and stop-contingency factors.
+It is neither a neural experiment nor a new execution authorization. Real-model
+work remains behind a separately frozen 27.6 adapter gate; confirmation and
+final execution remain unauthorized. The application document owns its detailed
+controls, staged implementation roadmap and evidence-limited reuse boundaries.
+
 ## Ordered research programme
 
 ### TDI-27.0 — bootstrap and synthetic falsification
