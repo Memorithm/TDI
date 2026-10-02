@@ -11,6 +11,7 @@
 //! latent concept-geometry diagnostics for mean contrasts, orthogonal innovation,
 //! sequential residual rank, and causal-control summaries.
 
+pub mod affect_v27;
 pub mod attention_v7;
 pub mod concept_geometry_v27;
 pub mod decision_v8;

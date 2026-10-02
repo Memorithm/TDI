@@ -3,6 +3,8 @@ set -euo pipefail
 
 required=(
   "docs/TDI-27-PROGRAMME.md"
+  "docs/TDI-27-AFFECTIVE-CAUSALITY.md"
+  "tdi-bench/src/affect_v27.rs"
   "tdi-bench/src/concept_geometry_v27.rs"
   "tdi-bench/src/bin/tdi27_concept_geometry.rs"
 )
@@ -26,3 +28,9 @@ if git ls-files | grep -E '(^|/)(TDI-27|tdi27).*(FINAL|final).*(RESULT|result)' 
 fi
 
 cargo test --locked -p tdi-bench concept_geometry_v27
+
+# The application track remains synthetic and independently guarded.
+grep -Fq "real_model_execution_authorized: false" docs/TDI-27-AFFECTIVE-CAUSALITY.md
+grep -Fq "confirmatory_execution_authorized: false" docs/TDI-27-AFFECTIVE-CAUSALITY.md
+grep -Fq "final_execution_authorized: false" docs/TDI-27-AFFECTIVE-CAUSALITY.md
+cargo test --locked -p tdi-bench --lib affect_v27

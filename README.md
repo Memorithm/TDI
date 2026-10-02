@@ -45,6 +45,16 @@ The core rules are simple:
 | **Sparse recurrent topology** | [TDI-26.x](docs/V888_CONNECTOME_BOOTSTRAP.md) | Does V888-derived sparse structure add predictive or computational value beyond progressively stronger matched graph controls? | Stage-0 |
 | **Latent concept geometry** | [TDI-27.x](docs/TDI-27-PROGRAMME.md) | After removing known subspaces, is the remaining latent innovation stable, causal and sequentially independent? | Active Development |
 
+## TDI-27 affective representation and causal choice
+
+TDI-27 now includes a [paper-grounded affective-causality track](docs/TDI-27-AFFECTIVE-CAUSALITY.md):
+negative/positive valence, self/other attribution, controlled choice effects and
+recovery after verified signal cessation. The reference is Tagliabue, Dung and
+Berg, *The Pain Axis*, arXiv:2609.16247v2. The first addition is a Rust synthetic
+factorial/contingency module, not a real-model result or evidence of subjective
+experience. Model execution, confirmation and final evaluation remain gated.
+See the linked track for controls, implementation order and reuse boundaries.
+
 ## Mathematical atlas
 
 These equations are orientation landmarks, not substitutes for the frozen protocols.

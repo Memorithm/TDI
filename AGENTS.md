@@ -201,7 +201,8 @@ TDI-27.x is the Development-first latent concept-geometry research line. Before
 TDI-27 work, read:
 
 1. `docs/TDI-27-PROGRAMME.md`;
-2. `tdi-bench/src/concept_geometry_v27.rs` when changing numerical semantics.
+2. `tdi-bench/src/concept_geometry_v27.rs` when changing numerical semantics;
+3. `docs/TDI-27-AFFECTIVE-CAUSALITY.md` for affect, valence, choice or recovery work.
 
 Stage 0 may implement and execute only synthetic Development geometry,
 residualisation, null/control, stability, interaction and causal-summary
@@ -216,6 +217,16 @@ intervention controls -> cross-layer transport -> sequential effective-rank
 tests -> real-model Development adapters -> evidence-gated downstream
 promotion. A large residual norm alone never authorizes FLAT-ATTENTION, NNIS,
 SciRust or ElasticXxx promotion.
+
+The affective-causality application uses the versioned scientific article as
+its research reference. Keep representation, expression, operational choice
+and phenomenal experience separate. Actual injection and stopping must
+remain independent of visible framing; positive valence is not the assumed
+negative pole of pain. Semantic controls must not be silently orthogonalized.
+Only the synthetic design and simulation layer is authorized now; no model,
+training, production actuation or protected population is authorized. Preserve
+all failed attempts and do not count repeated deterministic prompts as
+independent observations. Follow the application roadmap within 27.0–27.8.
 
 Before a TDI-27 PR or merge decision, run:
 

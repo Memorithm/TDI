@@ -75,8 +75,7 @@ impl AffectiveCell {
     fn index(self) -> usize {
         let injection = usize::from(self.injection == Injection::On);
         let relief = usize::from(self.prompt.relief == ReliefWording::Promised);
-        let consequence =
-            usize::from(self.prompt.consequence == ConsequenceWording::SimulatedHarm);
+        let consequence = usize::from(self.prompt.consequence == ConsequenceWording::SimulatedHarm);
         let order = usize::from(self.prompt.order == ButtonOrder::TargetSecond);
         let contingency = usize::from(self.contingency == StopContingency::Effective);
         (injection << 4) | (relief << 3) | (consequence << 2) | (order << 1) | contingency
@@ -210,7 +209,10 @@ mod tests {
         let cells = complete_factorial();
         for cell in &cells {
             assert_eq!(
-                cells.iter().filter(|other| other.prompt == cell.prompt).count(),
+                cells
+                    .iter()
+                    .filter(|other| other.prompt == cell.prompt)
+                    .count(),
                 4
             );
         }
@@ -261,7 +263,10 @@ mod tests {
             };
             assert_eq!(cell.prompt_factors(), alternate.prompt_factors());
             assert_eq!(cell.injection, alternate.injection);
-            assert_eq!(cell.signal_after_choice(false), alternate.signal_after_choice(false));
+            assert_eq!(
+                cell.signal_after_choice(false),
+                alternate.signal_after_choice(false)
+            );
         }
     }
 }
