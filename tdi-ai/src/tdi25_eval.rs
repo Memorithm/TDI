@@ -44,7 +44,14 @@
 //! matched readout resources only through evaluator-backed paths, and
 //! `require_complete_primary_accounting`, which refuses a clean T6-vs-C6
 //! summary when the primaries attempted different cases or retained failures.
-//! Protected/final errors are never retained as a class. All arms consume sealed
+//! Protected/final errors are never retained as a class. Slice 30 adds the
+//! Stage-C bounded preflight under `tdi25-stage-c-preflight-v1`: a bounded
+//! smoke run that exercises the complete matched evaluator matrix, matched
+//! primary blocks for every required family, the failure/resource ledger, the
+//! paired uncertainty engine, and family-stratified synthesis end to end on
+//! Development/Validation only. It refuses to report when any primary failure
+//! is retained, never emits a scientific claim, and records zero protected/final
+//! access. All arms consume sealed
 //! Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
@@ -58,7 +65,9 @@ use core::fmt;
 
 use super::tdi22_torsor::TORSOR_CONTRACT;
 use super::tdi24_chiral::CHIRAL_CONTRACT;
-use super::tdi25_matched_matrix::matched_family_paths;
+use super::tdi25_matched_matrix::{
+    MATCHED_EVALUATOR_MATRIX_CONTRACT, matched_family_paths, require_complete_primary_matrix,
+};
 use super::tdi25_tasks::{
     CHIRAL_REFLECTION_TASK_CONTRACT, ChiralReflectionInput, ChiralReflectionOracle, DataSplit,
     LabeledCase, MIXED_GEOMETRY_TASK_CONTRACT, MixedGeometryInput, MixedGeometryOracle,
@@ -110,6 +119,15 @@ pub const FAMILY_STRATIFIED_SYNTHESIS_CONTRACT: &str = "tdi25-family-stratified-
 pub const FAILURE_RESOURCE_ACCOUNTING_CONTRACT: &str = "tdi25-failure-resource-accounting-v1";
 
 /// Canonical accounted arms: T6/C6 primaries plus the G6 attribution control.
+/// Stage-C bounded preflight contract pin (slice 30).
+pub const STAGE_C_PREFLIGHT_CONTRACT: &str = "tdi25-stage-c-preflight-v1";
+
+/// Maximum seed blocks per family in one Stage-C preflight.
+pub const MAX_PREFLIGHT_SEED_BLOCKS: u64 = 2;
+
+/// Maximum matched cases per `(family, seed_block)` in one Stage-C preflight.
+pub const MAX_PREFLIGHT_CASES_PER_BLOCK: u64 = 16;
+
 pub const ACCOUNTED_ARMS: &[ComparisonArm] =
     &[ComparisonArm::T6, ComparisonArm::C6, ComparisonArm::G6];
 
@@ -3277,7 +3295,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::MetricRegistryInvalid { .. }
         | EvalError::PairedUncertaintyInvalid { .. }
         | EvalError::FamilyStratifiedSynthesisInvalid { .. }
-        | EvalError::FailureResourceAccountingInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::FailureResourceAccountingInvalid { .. }
+        | EvalError::StageCPreflightInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -3311,6 +3330,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::PairedUncertaintyInvalid { .. } => "paired_uncertainty_invalid",
         EvalError::FamilyStratifiedSynthesisInvalid { .. } => "family_stratified_synthesis_invalid",
         EvalError::FailureResourceAccountingInvalid { .. } => "failure_resource_accounting_invalid",
+        EvalError::StageCPreflightInvalid { .. } => "stage_c_preflight_invalid",
     }
 }
 
@@ -3816,6 +3836,174 @@ pub fn require_complete_primary_accounting(
     Ok(())
 }
 
+/// Bounded Stage-C preflight budget: seed blocks per family and matched cases
+/// per block. Both are strictly bounded; this is a smoke run, not a campaign.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StageCPreflightBudget {
+    pub seed_blocks: u64,
+    pub cases_per_block: u64,
+}
+
+impl StageCPreflightBudget {
+    /// Smallest admissible smoke budget: two seed blocks of eight cases.
+    #[must_use]
+    pub const fn smoke() -> Self {
+        Self {
+            seed_blocks: MAX_PREFLIGHT_SEED_BLOCKS,
+            cases_per_block: 8,
+        }
+    }
+
+    /// Reject empty, single-case, or over-budget preflights fail-closed.
+    pub const fn validate(self) -> Result<(), EvalError> {
+        if self.seed_blocks == 0 || self.seed_blocks > MAX_PREFLIGHT_SEED_BLOCKS {
+            return Err(EvalError::StageCPreflightInvalid {
+                reason: "seed_block_budget",
+            });
+        }
+        if self.cases_per_block < 2 || self.cases_per_block > MAX_PREFLIGHT_CASES_PER_BLOCK {
+            return Err(EvalError::StageCPreflightInvalid {
+                reason: "case_budget",
+            });
+        }
+        Ok(())
+    }
+
+    /// Matched cases scored per primary arm across all required families.
+    #[must_use]
+    pub const fn cases_per_arm(self) -> u64 {
+        REQUIRED_SYNTHESIS_FAMILIES.len() as u64 * self.seed_blocks * self.cases_per_block
+    }
+}
+
+/// Immutable Stage-C bounded preflight report (Development/Validation only).
+#[derive(Clone, Debug, PartialEq)]
+pub struct StageCPreflightReport {
+    pub split: DataSplit,
+    pub preflight_contract: &'static str,
+    pub matrix_contract: &'static str,
+    pub budget: StageCPreflightBudget,
+    /// Matched T6/C6 pairs revealed and consumed by the synthesis.
+    pub matched_pairs: u64,
+    pub accounting: FailureResourceReport,
+    pub synthesis: FamilyStratifiedSynthesisReport,
+    /// Must remain false: the preflight never opens protected/final data.
+    pub protected_or_final_access: bool,
+    /// Must remain false: a smoke run carries no scientific claim.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+/// Run one bounded Stage-C preflight over every required family.
+///
+/// Composes slices 21-29 end to end: the complete matched evaluator matrix,
+/// matched primary blocks accounted by arm, paired uncertainty by seed block,
+/// and family-stratified synthesis. Any retained primary failure aborts the
+/// preflight fail-closed rather than producing a partial report.
+pub fn run_stage_c_preflight(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<StageCPreflightReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.validate()?;
+    require_complete_primary_matrix().map_err(|_| EvalError::StageCPreflightInvalid {
+        reason: "incomplete_primary_matrix",
+    })?;
+    let mut ledger = FailureResourceLedger::open(split)?;
+    let mut t6_matches = Vec::new();
+    let mut c6_matches = Vec::new();
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..budget.seed_blocks {
+            if let Some(run) =
+                ledger.account_matched_primary_block(*family, seed_block, budget.cases_per_block)?
+            {
+                t6_matches.extend_from_slice(run.t6_outcomes());
+                c6_matches.extend_from_slice(run.c6_outcomes());
+            }
+        }
+    }
+    let accounting = ledger.report()?;
+    require_complete_primary_accounting(&accounting)?;
+    let synthesis = synthesize_family_stratified_from_revealed_outcomes(
+        split,
+        &t6_matches,
+        &c6_matches,
+        &MetricRegistry::pinned(),
+    )?;
+    let report = StageCPreflightReport {
+        split,
+        preflight_contract: STAGE_C_PREFLIGHT_CONTRACT,
+        matrix_contract: MATCHED_EVALUATOR_MATRIX_CONTRACT,
+        budget,
+        matched_pairs: t6_matches.len() as u64,
+        accounting,
+        synthesis,
+        protected_or_final_access: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_stage_c_preflight_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first, so protected/final labels never start a run.
+pub fn run_stage_c_preflight_for_label(
+    label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<StageCPreflightReport, EvalError> {
+    run_stage_c_preflight(parse_non_final_split(label)?, budget)
+}
+
+/// Validate a preflight report: pins, bounded budget, split agreement,
+/// complete primary accounting, full family/seed-block coverage, and the
+/// zero-access / no-claim invariants.
+pub fn validate_stage_c_preflight_report(report: &StageCPreflightReport) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    let invalid = |reason| Err(EvalError::StageCPreflightInvalid { reason });
+    if report.preflight_contract != STAGE_C_PREFLIGHT_CONTRACT {
+        return invalid("preflight_contract");
+    }
+    if report.matrix_contract != MATCHED_EVALUATOR_MATRIX_CONTRACT {
+        return invalid("matrix_contract");
+    }
+    report.budget.validate()?;
+    if report.accounting.split != report.split || report.synthesis.split != report.split {
+        return invalid("split_mismatch");
+    }
+    require_complete_primary_accounting(&report.accounting)?;
+    let expected = report.budget.cases_per_arm();
+    if report.matched_pairs != expected {
+        return invalid("matched_pairs_mismatch");
+    }
+    for arm in [ComparisonArm::T6, ComparisonArm::C6] {
+        let account = &report.accounting.arms[accounted_arm_index(arm)];
+        if account.scored_cases != expected || account.attempted_cases() != expected {
+            return invalid("scored_cases_mismatch");
+        }
+    }
+    let families = REQUIRED_SYNTHESIS_FAMILIES.len();
+    if report.synthesis.family_effects.len() != families
+        || report.synthesis.seed_block_effects.len() as u64
+            != families as u64 * report.budget.seed_blocks
+    {
+        return invalid("synthesis_coverage");
+    }
+    if report.synthesis.synthesis_contract != FAMILY_STRATIFIED_SYNTHESIS_CONTRACT {
+        return invalid("synthesis_contract");
+    }
+    if report.protected_or_final_access {
+        return invalid("protected_or_final_access");
+    }
+    if report.scientific_claim {
+        return invalid("scientific_claim");
+    }
+    if !report.experimental_non_final || !report.synthesis.experimental_non_final {
+        return invalid("experimental_non_final");
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -3880,6 +4068,10 @@ pub enum EvalError {
     },
     /// Failure/resource accounting rejected drift, capacity or dropped failures.
     FailureResourceAccountingInvalid {
+        reason: &'static str,
+    },
+    /// Stage-C bounded preflight rejected budget, matrix, drift or claims.
+    StageCPreflightInvalid {
         reason: &'static str,
     },
 }
@@ -3952,6 +4144,9 @@ impl fmt::Display for EvalError {
             }
             Self::FailureResourceAccountingInvalid { reason } => {
                 write!(formatter, "failure/resource accounting invalid: {reason}")
+            }
+            Self::StageCPreflightInvalid { reason } => {
+                write!(formatter, "Stage-C preflight invalid: {reason}")
             }
         }
     }
