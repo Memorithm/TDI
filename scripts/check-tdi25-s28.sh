@@ -17,6 +17,8 @@ grep -Fq 'sign_reversal_present' tdi-ai/src/tdi25_eval.rs
 grep -Fq 'claims_clean_pooled_win' tdi-ai/src/tdi25_eval.rs
 grep -Fq 'reason: "missing_family"' tdi-ai/src/tdi25_eval.rs
 grep -Fq '| 27 | Paired uncertainty engine | **landed** in #683, exact head `9bf33373630ea7b7bdc338da359c9eb1fcc845d9`, merge `ff7de14f6f3968f2fb5679e96d962a5f651d43b4`;' docs/TDI-25-CAMPAIGN-50.md
-grep -Fq '| 28 | Family-stratified synthesis | **current candidate**' docs/TDI-25-CAMPAIGN-50.md
-grep -Fq '**27/50 merged**' docs/TDI-25-CAMPAIGN-50.md
+grep -Fq '| 28 | Family-stratified synthesis | **landed** in #689, exact head `e34411b6b6e2e23bf36374bdd07368c2b9bf3121`, merge `14102d8745b79d41aca821a37c81c90077ea77d2`;' docs/TDI-25-CAMPAIGN-50.md
+# Monotone: later qualified slices must be able to advance the merged count.
+merged_count="$(grep -Eo '\*\*[0-9]+/50 merged\*\*' docs/TDI-25-CAMPAIGN-50.md | head -n 1 | tr -dc '0-9/' | cut -d/ -f1)"
+test "${merged_count:-0}" -ge 28
 ! grep -Fq '#PRNUM' docs/TDI-25-CAMPAIGN-50.md
