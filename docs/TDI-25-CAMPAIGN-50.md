@@ -46,7 +46,7 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | 26 | Metric registry | **landed** in #679, exact head `c21c4463bb23eb8f078d1ec51612cd04def112d2`, merge `62b015cf3752835bda2f4f476f118118ef4208b6`; primary family metrics and cross-family summary frozen |
 | 27 | Paired uncertainty engine | **landed** in #683, exact head `9bf33373630ea7b7bdc338da359c9eb1fcc845d9`, merge `ff7de14f6f3968f2fb5679e96d962a5f651d43b4`; paired effect/interval computation by seed block |
 | 28 | Family-stratified synthesis | **landed** in #689, exact head `e34411b6b6e2e23bf36374bdd07368c2b9bf3121`, merge `14102d8745b79d41aca821a37c81c90077ea77d2`; pooled summaries cannot hide sign reversals |
-| 29 | Typed failure/resource accounting | numerical/task/resource failures retained by arm |
+| 29 | Typed failure/resource accounting | **current candidate** in #699; numerical/task/resource failures retained by arm |
 | 30 | Stage-C bounded preflight | Development/Validation only; no protected/final execution |
 
 ## Phase D — structure attribution and geometry ablations (PR 31–40)
