@@ -17,5 +17,5 @@ grep -Fq 'open_with_provenance' tdi-ai/src/tdi24_eval.rs
 grep -Fq 'for_pinned_stage_c_run' tdi-ai/src/tdi24_eval.rs
 grep -Fq 'fn provenance_envelope_accepts_pinned_non_final_run' tdi-ai/src/tdi24_eval.rs
 grep -Fq '| 28 | Failure taxonomy | **landed** in #677, exact head `c8bfb4aa82e6bbf9b0767ad0a3e73f93a98b6b85`, merge `b0f5c76c04fd2e67d22cad8a20aecbe825122d9d`;' docs/TDI-24-CAMPAIGN-50.md
-grep -Fq '| 29 | Provenance envelope | **current stacked slice**;' docs/TDI-24-CAMPAIGN-50.md
+grep -Fq '| 29 | Provenance envelope | **landed** in #687, exact head `cd098d81ccbedce5f0a75a9216b4d72350729f14`, merge `11245ad9e4ba93cd0580a82e1a78aa2d11760a34`;' docs/TDI-24-CAMPAIGN-50.md
 # Do not pin the global merged count here: later qualified slices must advance it.
