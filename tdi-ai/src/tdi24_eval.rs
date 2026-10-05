@@ -19,7 +19,10 @@
 //! typed Invalid/Numerical/Resource/Task failures classified from EvalError and
 //! kept in a FailureRecord ledger rather than dropped. Slice 29 adds the
 //! provenance envelope: code/config/data/seed/toolchain identity retained per
-//! non-final run, validated fail-closed without inventing freeze pins. No training,
+//! non-final run, validated fail-closed without inventing freeze pins. Slice 30
+//! closes Phase C with a bounded Stage-C preflight smoke campaign: slices 21–29
+//! run end-to-end on synthetic Development/Validation cases under a capped
+//! budget, every outcome is retained, and no protected/final path exists. No training,
 //! confirmatory execution, protected/final evaluation, or scientific claim is
 //! authorised here.
 
@@ -33,7 +36,11 @@ use super::tdi24_tasks::{
     DATASET_CANONICALIZATION_CONTRACT, DataSplit, DirectionTarget, HandednessTarget, InferenceView,
     LabeledCase, NonChiralTarget, PROTECTED_LABEL_CONTRACT, ReflectionInvariantTarget,
     RegisteredSeed, SEED_REGISTRY_CONTRACT, SPLIT_MANIFEST_CONTRACT, SeedDomain, TaskFamily,
-    canonicalize_inference_view, run_inference_callback,
+    canonicalize_inference_view, direction_reversal_pair_in_split,
+    non_chiral_control_case_in_split, reflection_discriminative_pair_in_split,
+    reflection_nuisance_pair_in_split, register_seed, run_inference_callback,
+    seal_direction_reversal, seal_non_chiral_control, seal_reflection_discriminative,
+    seal_reflection_nuisance,
 };
 use super::tdi24_vector::{VECTOR6_CONTRACT, VECTOR6_WIDTH, Vector6, Vector6Error, vector6_score};
 
@@ -94,6 +101,9 @@ pub const FAILURE_TAXONOMY_CONTRACT: &str = "tdi24-failure-taxonomy-v1";
 
 /// Versioned provenance-envelope contract: code/config/data/seed/toolchain identity.
 pub const PROVENANCE_ENVELOPE_CONTRACT: &str = "tdi24-provenance-envelope-v1";
+
+/// Versioned Stage-C bounded preflight contract (slice 30).
+pub const STAGE_C_PREFLIGHT_CONTRACT: &str = "tdi24-stage-c-preflight-v1";
 
 /// Declared rustc channel string for Stage-C provenance (matches CI gate `1.97.1`).
 ///
@@ -1732,7 +1742,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::MetricRegistryInvalid { .. }
         | EvalError::PairedUncertaintyInvalid { .. }
         | EvalError::FailureTaxonomyInvalid { .. }
-        | EvalError::ProvenanceEnvelopeInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::ProvenanceEnvelopeInvalid { .. }
+        | EvalError::StageCPreflightInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -1767,6 +1778,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::PairedUncertaintyInvalid { .. } => "paired_uncertainty_invalid",
         EvalError::FailureTaxonomyInvalid { .. } => "failure_taxonomy_invalid",
         EvalError::ProvenanceEnvelopeInvalid { .. } => "provenance_envelope_invalid",
+        EvalError::StageCPreflightInvalid { .. } => "stage_c_preflight_invalid",
     }
 }
 
@@ -2130,6 +2142,504 @@ pub fn stage_c_seed_identity(registered: &RegisteredSeed, group_id: u64) -> Stri
     )
 }
 
+/// Canonical ordered Phase-B families exercised by the Stage-C preflight.
+pub const STAGE_C_PREFLIGHT_FAMILIES: &[TaskFamily] = &[
+    TaskFamily::ReflectionDiscriminative,
+    TaskFamily::ReflectionNuisance,
+    TaskFamily::DirectionReversal,
+    TaskFamily::NonChiralControl,
+];
+
+/// Members emitted per declared pair (mirrored / reflected / reversed / nuisance twin).
+pub const STAGE_C_PREFLIGHT_MEMBERS_PER_PAIR: u64 = 2;
+
+/// Maximum pairs per family so one preflight never exceeds [`MAX_CASES_PER_RUN`].
+///
+/// `4 families × 2 members × 8 pairs = 64` cases per arm.
+pub const MAX_PREFLIGHT_PAIRS_PER_FAMILY: u64 = MAX_CASES_PER_RUN / 8;
+
+/// Bounded Stage-C preflight budget: pairs per family plus the first pair id.
+///
+/// Software smoke budget only — not a freeze pin and not a confirmatory
+/// population. Every case is derived from already-landed Phase-B generators.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StageCPreflightBudget {
+    /// Pairs generated per Phase-B family (`1..=MAX_PREFLIGHT_PAIRS_PER_FAMILY`).
+    pub pairs_per_family: u64,
+    /// First deterministic pair id (registered local seed for provenance).
+    pub first_pair_id: u64,
+    /// Preflight contract pin.
+    pub preflight_contract: &'static str,
+}
+
+impl StageCPreflightBudget {
+    /// Construct a bounded preflight budget under the versioned contract.
+    #[must_use]
+    pub const fn bounded(pairs_per_family: u64, first_pair_id: u64) -> Self {
+        Self {
+            pairs_per_family,
+            first_pair_id,
+            preflight_contract: STAGE_C_PREFLIGHT_CONTRACT,
+        }
+    }
+
+    /// Cases evaluated per arm under this budget; fail-closed when unbounded.
+    pub fn cases_per_arm(self) -> Result<u64, EvalError> {
+        validate_stage_c_preflight_budget(self)?;
+        Ok(self.pairs_per_family
+            * STAGE_C_PREFLIGHT_MEMBERS_PER_PAIR
+            * STAGE_C_PREFLIGHT_FAMILIES.len() as u64)
+    }
+}
+
+/// Validate a preflight budget: contract pin, non-empty, capped, no id overflow.
+pub fn validate_stage_c_preflight_budget(budget: StageCPreflightBudget) -> Result<(), EvalError> {
+    if budget.preflight_contract != STAGE_C_PREFLIGHT_CONTRACT {
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "contract_drift",
+        });
+    }
+    if budget.pairs_per_family == 0 {
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "empty_budget",
+        });
+    }
+    if budget.pairs_per_family > MAX_PREFLIGHT_PAIRS_PER_FAMILY {
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "budget_exceeds_case_cap",
+        });
+    }
+    if budget
+        .first_pair_id
+        .checked_add(budget.pairs_per_family)
+        .is_none()
+    {
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "pair_id_overflow",
+        });
+    }
+    Ok(())
+}
+
+/// Immutable report of one bounded Stage-C preflight on one non-final split.
+///
+/// Exercises slices 21–29 end-to-end (V6/C6 evaluators, parameter-count,
+/// initialization and optimizer/update-budget matchers, pinned metric
+/// registry, paired uncertainty, failure taxonomy and provenance envelopes) on
+/// synthetic Development/Validation cases. Never trains, never touches a
+/// protected/final population and never authorises a scientific claim.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StageCPreflightReport {
+    pub preflight_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    pub cases_per_arm: u64,
+    pub matched_parameters: MatchedParameterCount,
+    pub matched_initialization: MatchedInitialization,
+    pub matched_optimizer_budget: MatchedOptimizerUpdateBudget,
+    pub metric_registry: MetricRegistry,
+    pub v6_provenance: ProvenanceEnvelope,
+    pub c6_provenance: ProvenanceEnvelope,
+    pub v6_records: Vec<EvalRecord>,
+    pub c6_records: Vec<EvalRecord>,
+    pub v6_failures: FailureLedger,
+    pub c6_failures: FailureLedger,
+    /// Present only when every case scored on both arms (no retained failure).
+    pub paired_summary: Option<PairedEffectSummary>,
+    /// Must remain false: the preflight has no protected/final access path.
+    pub protected_or_final_access: bool,
+    /// Must remain false: reference arms are non-trained.
+    pub training_executed: bool,
+    /// Must remain false: smoke qualification only.
+    pub scientific_claim: bool,
+    /// Must remain true: experimental and non-final only.
+    pub experimental_non_final: bool,
+}
+
+/// Retain an evaluator outcome (scored or failed) without silently dropping it.
+fn retain_preflight_outcome(
+    outcome: Result<&EvalRecord, EvalError>,
+    arm: EvalArm,
+    case_id: u64,
+    ledger: &mut FailureLedger,
+) -> Result<(), EvalError> {
+    match outcome {
+        Ok(record) => {
+            if let Some(failure) = retain_from_eval_record(record)? {
+                ledger.retain(failure)?;
+            }
+            Ok(())
+        }
+        Err(EvalError::ProtectedOrFinalSplit) => Err(EvalError::ProtectedOrFinalSplit),
+        Err(error) => {
+            ledger.retain_eval_error(&error, arm, Some(case_id))?;
+            Ok(())
+        }
+    }
+}
+
+/// Evaluate one sealed case on both matched arms in identical order.
+fn evaluate_preflight_pair<T, S>(
+    case: &LabeledCase<T>,
+    oracle_sign: S,
+    v6_run: &mut EvaluatorRun,
+    c6_run: &mut EvaluatorRun,
+    v6_failures: &mut FailureLedger,
+    c6_failures: &mut FailureLedger,
+) -> Result<(), EvalError>
+where
+    S: Fn(&T) -> Result<i8, EvalError>,
+{
+    let case_id = case.inference_view().case_id;
+    retain_preflight_outcome(
+        v6_run.evaluate_v6_binary(case, &oracle_sign),
+        EvalArm::V6,
+        case_id,
+        v6_failures,
+    )?;
+    retain_preflight_outcome(
+        c6_run.evaluate_c6_binary(case, &oracle_sign),
+        EvalArm::C6,
+        case_id,
+        c6_failures,
+    )
+}
+
+const fn preflight_generation_failed() -> EvalError {
+    EvalError::StageCPreflightInvalid {
+        reason: "case_generation_failed",
+    }
+}
+
+/// Run one bounded Stage-C preflight smoke campaign on a non-final split.
+///
+/// Deterministic; no RNG, no training, no protected/final population. The
+/// initialization / ordering seed and provenance seed identity reuse the
+/// Slice-18 registered seed for `(split domain, ReflectionDiscriminative,
+/// first_pair_id)` — no new seed material and no freeze pin is invented.
+pub fn run_stage_c_preflight(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<StageCPreflightReport, EvalError> {
+    validate_non_final_split(split)?;
+    let cases_per_arm = budget.cases_per_arm()?;
+
+    let registered = register_seed(
+        SeedDomain::from_split(split),
+        STAGE_C_PREFLIGHT_FAMILIES[0],
+        budget.first_pair_id,
+    );
+    let matched_parameters = match_parameter_counts(
+        TrainableCapacity::reference_v6(),
+        TrainableCapacity::reference_c6(),
+    )?;
+    let matched_initialization = match_initialization(
+        InitializationPolicy::reference_v6(registered.mixed_seed),
+        InitializationPolicy::reference_c6(registered.mixed_seed),
+    )?;
+    let matched_optimizer_budget = match_optimizer_update_budgets(
+        OptimizerUpdateBudget::reference_v6(cases_per_arm, registered.mixed_seed),
+        OptimizerUpdateBudget::reference_c6(cases_per_arm, registered.mixed_seed),
+    )?;
+    let metric_registry = MetricRegistry::pinned();
+    validate_metric_registry(&metric_registry)?;
+
+    let v6_provenance = ProvenanceEnvelope::for_pinned_stage_c_run(
+        EvalArm::V6,
+        split,
+        &registered,
+        budget.first_pair_id,
+    )?;
+    let c6_provenance = ProvenanceEnvelope::for_pinned_stage_c_run(
+        EvalArm::C6,
+        split,
+        &registered,
+        budget.first_pair_id,
+    )?;
+    let mut v6_config = EvaluatorConfig::v6(split)?;
+    v6_config.budget.max_cases = cases_per_arm;
+    let mut c6_config = EvaluatorConfig::c6(split)?;
+    c6_config.budget.max_cases = cases_per_arm;
+    let mut v6_run = EvaluatorRun::open_with_provenance(v6_config, v6_provenance.clone())?;
+    let mut c6_run = EvaluatorRun::open_with_provenance(c6_config, c6_provenance.clone())?;
+    let mut v6_failures = FailureLedger::open(split)?;
+    let mut c6_failures = FailureLedger::open(split)?;
+
+    let last_pair_id = budget.first_pair_id + budget.pairs_per_family;
+    for pair_id in budget.first_pair_id..last_pair_id {
+        let discriminative = reflection_discriminative_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [discriminative.right, discriminative.left] {
+            evaluate_preflight_pair(
+                &seal_reflection_discriminative(&member),
+                handedness_sign,
+                &mut v6_run,
+                &mut c6_run,
+                &mut v6_failures,
+                &mut c6_failures,
+            )?;
+        }
+        let nuisance = reflection_nuisance_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [nuisance.canonical, nuisance.reflected] {
+            evaluate_preflight_pair(
+                &seal_reflection_nuisance(&member),
+                reflection_invariant_sign,
+                &mut v6_run,
+                &mut c6_run,
+                &mut v6_failures,
+                &mut c6_failures,
+            )?;
+        }
+        let direction = direction_reversal_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [direction.forward, direction.reverse] {
+            evaluate_preflight_pair(
+                &seal_direction_reversal(&member),
+                direction_sign,
+                &mut v6_run,
+                &mut c6_run,
+                &mut v6_failures,
+                &mut c6_failures,
+            )?;
+        }
+        let base_case_id = pair_id
+            .checked_mul(STAGE_C_PREFLIGHT_MEMBERS_PER_PAIR)
+            .ok_or_else(preflight_generation_failed)?;
+        for case_id in [base_case_id, base_case_id + 1] {
+            let control = non_chiral_control_case_in_split(case_id, split)
+                .map_err(|_| preflight_generation_failed())?;
+            evaluate_preflight_pair(
+                &seal_non_chiral_control(&control),
+                non_chiral_sign,
+                &mut v6_run,
+                &mut c6_run,
+                &mut v6_failures,
+                &mut c6_failures,
+            )?;
+        }
+    }
+
+    let v6_records = v6_run.records().to_vec();
+    let c6_records = c6_run.records().to_vec();
+    let paired_summary = if v6_failures.records().is_empty() && c6_failures.records().is_empty() {
+        Some(summarize_paired_uncertainty_from_records(
+            split,
+            &v6_records,
+            &c6_records,
+            &metric_registry,
+        )?)
+    } else {
+        None
+    };
+
+    let report = StageCPreflightReport {
+        preflight_contract: STAGE_C_PREFLIGHT_CONTRACT,
+        split,
+        budget,
+        cases_per_arm,
+        matched_parameters,
+        matched_initialization,
+        matched_optimizer_budget,
+        metric_registry,
+        v6_provenance,
+        c6_provenance,
+        v6_records,
+        c6_records,
+        v6_failures,
+        c6_failures,
+        paired_summary,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_stage_c_preflight_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label and run the preflight; protected/final labels fail closed
+/// before any case is generated.
+pub fn run_stage_c_preflight_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<StageCPreflightReport, EvalError> {
+    let split = parse_non_final_split(split_label)?;
+    run_stage_c_preflight(split, budget)
+}
+
+fn validate_preflight_arm(
+    split: DataSplit,
+    arm: EvalArm,
+    cases_per_arm: u64,
+    records: &[EvalRecord],
+    failures: &FailureLedger,
+    provenance: &ProvenanceEnvelope,
+) -> Result<(), EvalError> {
+    validate_provenance_envelope(provenance)?;
+    if provenance.arm != arm || provenance.split != split {
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "provenance_binding_mismatch",
+        });
+    }
+    if failures.split() != split || failures.taxonomy_contract() != FAILURE_TAXONOMY_CONTRACT {
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "failure_ledger_binding_mismatch",
+        });
+    }
+    let records_len = records.len() as u64;
+    if records_len > cases_per_arm {
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "case_budget_exceeded",
+        });
+    }
+    // Every attempted case is either an emitted record or a retained failure.
+    let emitted_failures = records
+        .iter()
+        .filter(|record| matches!(record.outcome, EvalOutcome::Failure(_)))
+        .count() as u64;
+    let hard_failures = (failures.records().len() as u64)
+        .checked_sub(emitted_failures)
+        .ok_or(EvalError::StageCPreflightInvalid {
+            reason: "failure_not_retained",
+        })?;
+    if records_len + hard_failures != cases_per_arm {
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "unaccounted_cases",
+        });
+    }
+    for record in records {
+        validate_eval_record_contracts(record)?;
+        if record.arm != arm || record.split != split {
+            return Err(EvalError::StageCPreflightInvalid {
+                reason: "record_binding_mismatch",
+            });
+        }
+    }
+    for failure in failures.records() {
+        validate_failure_record(failure)?;
+        if failure.arm != arm {
+            return Err(EvalError::StageCPreflightInvalid {
+                reason: "failure_arm_mismatch",
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Validate a preflight report: contract pin, non-authorising flags, matched
+/// budgets, per-arm provenance/accounting and paired-summary consistency.
+pub fn validate_stage_c_preflight_report(report: &StageCPreflightReport) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.preflight_contract != STAGE_C_PREFLIGHT_CONTRACT {
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "contract_drift",
+        });
+    }
+    if report.protected_or_final_access {
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "protected_or_final_access_forbidden",
+        });
+    }
+    if report.training_executed {
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "training_forbidden",
+        });
+    }
+    if report.scientific_claim {
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "scientific_claim_forbidden",
+        });
+    }
+    if !report.experimental_non_final {
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "experimental_non_final_required",
+        });
+    }
+    if report.budget.cases_per_arm()? != report.cases_per_arm {
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "case_count_mismatch",
+        });
+    }
+    if report.cases_per_arm > MAX_CASES_PER_RUN {
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "budget_exceeds_case_cap",
+        });
+    }
+    if report.matched_parameters.matcher_contract != PARAMETER_COUNT_MATCHER_CONTRACT
+        || report.matched_initialization.matcher_contract != INITIALIZATION_MATCHER_CONTRACT
+        || report.matched_optimizer_budget.matcher_contract != OPTIMIZER_UPDATE_BUDGET_CONTRACT
+    {
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "matcher_contract_drift",
+        });
+    }
+    if report.matched_optimizer_budget.examples != report.cases_per_arm
+        || report.matched_optimizer_budget.updates != NON_TRAINED_UPDATE_BUDGET
+        || report.matched_parameters.trainable_parameters != 0
+    {
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "non_trained_budget_mismatch",
+        });
+    }
+    if report.metric_registry != MetricRegistry::pinned() {
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "registry_not_pinned",
+        });
+    }
+    validate_preflight_arm(
+        report.split,
+        EvalArm::V6,
+        report.cases_per_arm,
+        &report.v6_records,
+        &report.v6_failures,
+        &report.v6_provenance,
+    )?;
+    validate_preflight_arm(
+        report.split,
+        EvalArm::C6,
+        report.cases_per_arm,
+        &report.c6_records,
+        &report.c6_failures,
+        &report.c6_provenance,
+    )?;
+    if report.v6_provenance.seed_identity != report.c6_provenance.seed_identity
+        || report.v6_provenance.config_identity != report.c6_provenance.config_identity
+        || report.v6_provenance.data_identity != report.c6_provenance.data_identity
+    {
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "unpaired_provenance",
+        });
+    }
+    let failure_free =
+        report.v6_failures.records().is_empty() && report.c6_failures.records().is_empty();
+    match (&report.paired_summary, failure_free) {
+        (Some(summary), true) => {
+            if summary.split != report.split
+                || summary.n_pairs != report.cases_per_arm
+                || summary.uncertainty_contract != PAIRED_UNCERTAINTY_CONTRACT
+                || !summary.experimental_non_final
+            {
+                return Err(EvalError::StageCPreflightInvalid {
+                    reason: "paired_summary_mismatch",
+                });
+            }
+        }
+        (None, false) => {}
+        (Some(_), false) => {
+            return Err(EvalError::StageCPreflightInvalid {
+                reason: "summary_hides_failures",
+            });
+        }
+        (None, true) => {
+            return Err(EvalError::StageCPreflightInvalid {
+                reason: "missing_paired_summary",
+            });
+        }
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -2200,6 +2710,8 @@ pub enum EvalError {
     FailureTaxonomyInvalid { reason: &'static str },
     /// Provenance envelope rejected empty/drifted identity fields or protected split.
     ProvenanceEnvelopeInvalid { reason: &'static str },
+    /// Stage-C preflight rejected an unbounded budget, drifted report or forbidden flag.
+    StageCPreflightInvalid { reason: &'static str },
 }
 
 impl fmt::Display for EvalError {
@@ -2276,6 +2788,9 @@ impl fmt::Display for EvalError {
             }
             Self::ProvenanceEnvelopeInvalid { reason } => {
                 write!(formatter, "provenance envelope invalid: {reason}")
+            }
+            Self::StageCPreflightInvalid { reason } => {
+                write!(formatter, "stage-c preflight invalid: {reason}")
             }
         }
     }
@@ -3964,5 +4479,84 @@ mod tests {
         assert!(bundle.contains(FAILURE_TAXONOMY_CONTRACT));
         assert!(bundle.contains(PROVENANCE_ENVELOPE_CONTRACT));
         assert!(!bundle.contains("freeze"));
+    }
+
+    #[test]
+    fn stage_c_preflight_retains_failures_and_never_summarises_over_them() {
+        let mut ledger = FailureLedger::open(DataSplit::Development).unwrap();
+        retain_preflight_outcome(
+            Err(EvalError::CaseBudgetExceeded),
+            EvalArm::C6,
+            9,
+            &mut ledger,
+        )
+        .unwrap();
+        assert_eq!(ledger.records().len(), 1);
+        assert_eq!(ledger.records()[0].class, FailureClass::Resource);
+        assert_eq!(ledger.records()[0].arm, EvalArm::C6);
+        assert_eq!(ledger.records()[0].case_id, Some(9));
+        assert_eq!(
+            retain_preflight_outcome(
+                Err(EvalError::ProtectedOrFinalSplit),
+                EvalArm::V6,
+                0,
+                &mut ledger,
+            ),
+            Err(EvalError::ProtectedOrFinalSplit)
+        );
+        assert_eq!(ledger.records().len(), 1);
+
+        let report =
+            run_stage_c_preflight(DataSplit::Development, StageCPreflightBudget::bounded(1, 0))
+                .unwrap();
+        // A retained hard failure replacing a dropped record keeps accounting
+        // closed, but then the paired summary must be absent.
+        let mut failed = report.clone();
+        let dropped = failed.c6_records.pop().unwrap();
+        failed
+            .c6_failures
+            .retain_eval_error(
+                &EvalError::CaseBudgetExceeded,
+                EvalArm::C6,
+                Some(dropped.case_id),
+            )
+            .unwrap();
+        assert_eq!(
+            validate_stage_c_preflight_report(&failed),
+            Err(EvalError::StageCPreflightInvalid {
+                reason: "summary_hides_failures",
+            })
+        );
+        failed.paired_summary = None;
+        validate_stage_c_preflight_report(&failed).unwrap();
+
+        let mut wrong_arm = report.clone();
+        wrong_arm
+            .v6_failures
+            .retain_eval_error(&EvalError::CaseBudgetExceeded, EvalArm::C6, None)
+            .unwrap();
+        wrong_arm.v6_records.pop();
+        wrong_arm.paired_summary = None;
+        assert_eq!(
+            validate_stage_c_preflight_report(&wrong_arm),
+            Err(EvalError::StageCPreflightInvalid {
+                reason: "failure_arm_mismatch",
+            })
+        );
+
+        assert_eq!(
+            classify_eval_error(&EvalError::StageCPreflightInvalid {
+                reason: "empty_budget",
+            })
+            .unwrap(),
+            FailureClass::Invalid
+        );
+        assert_eq!(
+            eval_error_message_code(&EvalError::StageCPreflightInvalid {
+                reason: "empty_budget",
+            }),
+            "stage_c_preflight_invalid"
+        );
+        assert!(!stage_c_config_identity_bundle().contains(STAGE_C_PREFLIGHT_CONTRACT));
     }
 }

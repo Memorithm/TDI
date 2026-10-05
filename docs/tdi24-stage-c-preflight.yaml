@@ -1,0 +1,31 @@
+schema_version: 1
+programme: TDI-24
+stage: C
+status: candidate_pending_exact_head_qualification_and_merge
+contract_versions:
+  evaluator_envelope: tdi24-evaluator-envelope-v1
+  v6_evaluator: tdi24-v6-evaluator-v1
+  c6_evaluator: tdi24-c6-evaluator-v1
+  readout_budget: tdi24-readout-budget-v1
+  parameter_count_matcher: tdi24-parameter-count-matcher-v1
+  initialization_matcher: tdi24-initialization-matcher-v1
+  optimizer_update_budget: tdi24-optimizer-update-budget-v1
+  metric_registry: tdi24-metric-registry-v1
+  paired_uncertainty: tdi24-paired-uncertainty-v1
+  failure_taxonomy: tdi24-failure-taxonomy-v1
+  provenance_envelope: tdi24-provenance-envelope-v1
+  preflight: tdi24-stage-c-preflight-v1
+smoke_budget:
+  splits: [development, validation]
+  families: [reflection_discriminative, reflection_nuisance, direction_reversal, non_chiral_control]
+  members_per_pair: 2
+  max_pairs_per_family: 8
+  max_cases_per_arm: 64
+  trained_updates: 0
+authorizations:
+  bounded_development_validation_smoke: true
+  training: false
+  confirmatory_execution: false
+  protected_or_final_access: false
+  scientific_claim: false
+  performance_claim: false
