@@ -37,7 +37,14 @@
 //! reversal is present versus the pooled sign; otherwise `sign_reversal_present`
 //! is set and a clean pooled win cannot be claimed. Fail-closed on missing
 //! required families, registry/contract drift, and protected/final. Deterministic;
-//! no RNG; no ProtectedLabel. All arms consume sealed
+//! no RNG; no ProtectedLabel. Slice 29 adds typed failure/resource accounting
+//! under `tdi25-failure-resource-accounting-v1`: a closed
+//! numerical/task/resource/invalid taxonomy over `EvalError`, a bounded
+//! `FailureResourceLedger` that retains every failure by arm and counts
+//! matched readout resources only through evaluator-backed paths, and
+//! `require_complete_primary_accounting`, which refuses a clean T6-vs-C6
+//! summary when the primaries attempted different cases or retained failures.
+//! Protected/final errors are never retained as a class. All arms consume sealed
 //! Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
@@ -98,6 +105,20 @@ pub const PAIRED_UNCERTAINTY_CONTRACT: &str = "tdi25-paired-uncertainty-v1";
 
 /// Versioned family-stratified synthesis contract.
 pub const FAMILY_STRATIFIED_SYNTHESIS_CONTRACT: &str = "tdi25-family-stratified-synthesis-v1";
+
+/// Versioned typed failure/resource accounting contract (slice 29).
+pub const FAILURE_RESOURCE_ACCOUNTING_CONTRACT: &str = "tdi25-failure-resource-accounting-v1";
+
+/// Canonical accounted arms: T6/C6 primaries plus the G6 attribution control.
+pub const ACCOUNTED_ARMS: &[ComparisonArm] =
+    &[ComparisonArm::T6, ComparisonArm::C6, ComparisonArm::G6];
+
+/// Maximum retained failures per arm in one accounting ledger.
+pub const MAX_FAILURES_PER_ARM: u64 = MAX_CASES_PER_RUN;
+
+/// Maximum accounted attempts per arm: one full block per seed block bound.
+pub const MAX_ACCOUNTED_CASES_PER_ARM: u64 =
+    MAX_CASES_PER_RUN * MAX_SEED_BLOCKS_PER_SYNTHESIS as u64;
 
 /// Canonical ordered families required for a complete Stage-C stratified synthesis.
 pub const REQUIRED_SYNTHESIS_FAMILIES: &[TaskFamily] = &[
@@ -3169,6 +3190,632 @@ pub fn synthesize_family_stratified_from_revealed_outcomes(
     Ok(report)
 }
 
+/// Closed retained failure class for TDI-25 Stage-C accounting by arm.
+///
+/// Mirrors the campaign gate wording (numerical / task / resource) plus an
+/// explicit `invalid` class for configuration/contract rejections. Unknown
+/// labels fail closed. Experimental and non-final only.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FailureClass {
+    /// Contract, budget, registry, matcher or other invalid configuration/input.
+    Invalid,
+    /// Upstream torsor/chiral/generic/normalizer arithmetic rejected a value.
+    Numerical,
+    /// Case budget exhausted.
+    Resource,
+    /// Task case was non-canonical, mislabeled or drawn from the wrong split.
+    Task,
+}
+
+impl FailureClass {
+    /// Stable lowercase failure-class token.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Invalid => "invalid",
+            Self::Numerical => "numerical",
+            Self::Resource => "resource",
+            Self::Task => "task",
+        }
+    }
+}
+
+/// Parse a failure-class label; unknown tokens fail closed.
+pub fn parse_failure_class(label: &str) -> Result<FailureClass, EvalError> {
+    match label {
+        "invalid" => Ok(FailureClass::Invalid),
+        "numerical" => Ok(FailureClass::Numerical),
+        "resource" => Ok(FailureClass::Resource),
+        "task" => Ok(FailureClass::Task),
+        "" => Err(EvalError::FailureResourceAccountingInvalid {
+            reason: "empty_class",
+        }),
+        _ => Err(EvalError::FailureResourceAccountingInvalid {
+            reason: "unknown_class",
+        }),
+    }
+}
+
+const fn classify_bridge_error(error: &Tdi25Error) -> FailureClass {
+    match error {
+        Tdi25Error::Torsor(_)
+        | Tdi25Error::Chiral(_)
+        | Tdi25Error::Normalizer(_)
+        | Tdi25Error::NonFiniteGeneric
+        | Tdi25Error::NonFiniteScalar { .. }
+        | Tdi25Error::InvalidScoreScale => FailureClass::Numerical,
+        Tdi25Error::InvalidComparisonRecord { .. }
+        | Tdi25Error::ChiralInvariantViolation { .. }
+        | Tdi25Error::SourceContractMismatch { .. } => FailureClass::Invalid,
+    }
+}
+
+/// Classify an [`EvalError`] into the closed [`FailureClass`] set.
+///
+/// Every admitted error maps to exactly one class. Protected/final split
+/// errors are never retained as a class: they stay hard rejections so this
+/// accounting surface cannot authorise protected/final evaluation.
+pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError> {
+    match error {
+        EvalError::ProtectedOrFinalSplit => Err(EvalError::ProtectedOrFinalSplit),
+        EvalError::Bridge(bridge) => Ok(classify_bridge_error(bridge)),
+        EvalError::CaseBudgetExceeded => Ok(FailureClass::Resource),
+        EvalError::SplitMismatch { .. } => Ok(FailureClass::Task),
+        EvalError::ContractMismatch(
+            "torsor_transport_case"
+            | "mixed_case"
+            | "chiral_reflection_case"
+            | "neutral_control_case",
+        ) => Ok(FailureClass::Task),
+        EvalError::PairedUncertaintyInvalid {
+            reason: "non_finite",
+        } => Ok(FailureClass::Numerical),
+        EvalError::ContractMismatch(_)
+        | EvalError::InvalidBudget
+        | EvalError::ParameterReadoutMismatch { .. }
+        | EvalError::OptimizerUpdateBudgetMismatch { .. }
+        | EvalError::MetricRegistryInvalid { .. }
+        | EvalError::PairedUncertaintyInvalid { .. }
+        | EvalError::FamilyStratifiedSynthesisInvalid { .. }
+        | EvalError::FailureResourceAccountingInvalid { .. } => Ok(FailureClass::Invalid),
+    }
+}
+
+/// Stable message code for one [`EvalError`] variant.
+#[must_use]
+pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
+    match error {
+        EvalError::ContractMismatch(_) => "contract_mismatch",
+        EvalError::InvalidBudget => "invalid_budget",
+        EvalError::SplitMismatch { .. } => "split_mismatch",
+        EvalError::CaseBudgetExceeded => "case_budget_exceeded",
+        EvalError::Bridge(Tdi25Error::Torsor(_)) => "bridge_torsor",
+        EvalError::Bridge(Tdi25Error::Chiral(_)) => "bridge_chiral",
+        EvalError::Bridge(Tdi25Error::Normalizer(_)) => "bridge_normalizer",
+        EvalError::Bridge(Tdi25Error::NonFiniteGeneric) => "bridge_non_finite_generic",
+        EvalError::Bridge(Tdi25Error::NonFiniteScalar { .. }) => "bridge_non_finite_scalar",
+        EvalError::Bridge(Tdi25Error::InvalidScoreScale) => "bridge_invalid_score_scale",
+        EvalError::Bridge(Tdi25Error::InvalidComparisonRecord { .. }) => {
+            "bridge_invalid_comparison_record"
+        }
+        EvalError::Bridge(Tdi25Error::ChiralInvariantViolation { .. }) => {
+            "bridge_chiral_invariant_violation"
+        }
+        EvalError::Bridge(Tdi25Error::SourceContractMismatch { .. }) => {
+            "bridge_source_contract_mismatch"
+        }
+        EvalError::ParameterReadoutMismatch { .. } => "parameter_readout_mismatch",
+        EvalError::OptimizerUpdateBudgetMismatch { .. } => "optimizer_update_budget_mismatch",
+        EvalError::MetricRegistryInvalid { .. } => "metric_registry_invalid",
+        EvalError::ProtectedOrFinalSplit => "protected_or_final_split",
+        EvalError::PairedUncertaintyInvalid { .. } => "paired_uncertainty_invalid",
+        EvalError::FamilyStratifiedSynthesisInvalid { .. } => "family_stratified_synthesis_invalid",
+        EvalError::FailureResourceAccountingInvalid { .. } => "failure_resource_accounting_invalid",
+    }
+}
+
+/// One retained typed failure attributed to exactly one arm.
+///
+/// Never silently discarded once classified. `case_id` is `None` only for
+/// atomic matched-reference block failures, which are retained on both
+/// primary arms.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ArmFailureRecord {
+    pub class: FailureClass,
+    pub arm: ComparisonArm,
+    pub split: DataSplit,
+    pub family: TaskFamily,
+    pub case_id: Option<u64>,
+    pub message_code: &'static str,
+    pub accounting_contract: &'static str,
+}
+
+/// Validate a retained failure record against the closed accounting pin.
+pub fn validate_arm_failure_record(record: &ArmFailureRecord) -> Result<(), EvalError> {
+    validate_non_final_split(record.split)?;
+    if record.accounting_contract != FAILURE_RESOURCE_ACCOUNTING_CONTRACT {
+        return Err(EvalError::FailureResourceAccountingInvalid {
+            reason: "contract_drift",
+        });
+    }
+    if parse_failure_class(record.class.as_str())? != record.class {
+        return Err(EvalError::FailureResourceAccountingInvalid {
+            reason: "unknown_class",
+        });
+    }
+    if record.message_code.is_empty() {
+        return Err(EvalError::FailureResourceAccountingInvalid {
+            reason: "empty_message_code",
+        });
+    }
+    Ok(())
+}
+
+/// Per-arm resource and failure account for one bounded non-final ledger.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArmResourceAccount {
+    pub arm: ComparisonArm,
+    /// Matched readout budget shared by every accounted arm.
+    pub budget: ReadoutBudget,
+    /// Cases that produced an evaluator-minted score.
+    pub scored_cases: u64,
+    /// Readout scalars retained (score + oracle-match flag per scored case).
+    pub readout_scalars_used: u64,
+    pub numerical_failures: u64,
+    pub task_failures: u64,
+    pub resource_failures: u64,
+    pub invalid_failures: u64,
+    /// Attempts (scored + retained failures) by family, in
+    /// [`REQUIRED_SYNTHESIS_FAMILIES`] order.
+    pub attempts_by_family: [u64; 4],
+}
+
+impl ArmResourceAccount {
+    const fn open(arm: ComparisonArm) -> Self {
+        Self {
+            arm,
+            budget: ReadoutBudget::matched_non_trained(),
+            scored_cases: 0,
+            readout_scalars_used: 0,
+            numerical_failures: 0,
+            task_failures: 0,
+            resource_failures: 0,
+            invalid_failures: 0,
+            attempts_by_family: [0; 4],
+        }
+    }
+
+    /// Total retained failures across every class.
+    #[must_use]
+    pub const fn retained_failures(&self) -> u64 {
+        self.numerical_failures
+            + self.task_failures
+            + self.resource_failures
+            + self.invalid_failures
+    }
+
+    /// Scored cases plus retained failures.
+    #[must_use]
+    pub const fn attempted_cases(&self) -> u64 {
+        self.scored_cases + self.retained_failures()
+    }
+
+    /// Retained failures of one class.
+    #[must_use]
+    pub const fn failures_of(&self, class: FailureClass) -> u64 {
+        match class {
+            FailureClass::Invalid => self.invalid_failures,
+            FailureClass::Numerical => self.numerical_failures,
+            FailureClass::Resource => self.resource_failures,
+            FailureClass::Task => self.task_failures,
+        }
+    }
+}
+
+const fn accounted_arm_index(arm: ComparisonArm) -> usize {
+    match arm {
+        ComparisonArm::T6 => 0,
+        ComparisonArm::C6 => 1,
+        ComparisonArm::G6 => 2,
+    }
+}
+
+const fn synthesis_family_index(family: TaskFamily) -> usize {
+    match family {
+        TaskFamily::TorsorFavorable => 0,
+        TaskFamily::ChiralFavorable => 1,
+        TaskFamily::Mixed => 2,
+        TaskFamily::Neutral => 3,
+    }
+}
+
+/// Bounded ledger retaining numerical/task/resource/invalid failures by arm and
+/// the matched readout resources each arm consumed.
+///
+/// Scores can only be counted through the evaluator-backed `account_*`
+/// methods; there is no public "record a score" surface. Development/
+/// Validation only; protected/final errors stay hard rejections.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FailureResourceLedger {
+    split: DataSplit,
+    accounting_contract: &'static str,
+    accounts: [ArmResourceAccount; 3],
+    failures: Vec<ArmFailureRecord>,
+}
+
+impl FailureResourceLedger {
+    /// Open an empty bounded ledger for one non-final split.
+    pub fn open(split: DataSplit) -> Result<Self, EvalError> {
+        validate_non_final_split(split)?;
+        Ok(Self {
+            split,
+            accounting_contract: FAILURE_RESOURCE_ACCOUNTING_CONTRACT,
+            accounts: [
+                ArmResourceAccount::open(ComparisonArm::T6),
+                ArmResourceAccount::open(ComparisonArm::C6),
+                ArmResourceAccount::open(ComparisonArm::G6),
+            ],
+            failures: Vec::new(),
+        })
+    }
+
+    /// Split this ledger was opened under.
+    #[must_use]
+    pub const fn split(&self) -> DataSplit {
+        self.split
+    }
+
+    /// Accounting contract pin.
+    #[must_use]
+    pub const fn accounting_contract(&self) -> &'static str {
+        self.accounting_contract
+    }
+
+    /// Borrow one arm's account.
+    #[must_use]
+    pub const fn account(&self, arm: ComparisonArm) -> &ArmResourceAccount {
+        &self.accounts[accounted_arm_index(arm)]
+    }
+
+    /// Borrow retained failures in admission order.
+    #[must_use]
+    pub fn failures(&self) -> &[ArmFailureRecord] {
+        &self.failures
+    }
+
+    fn require_capacity(&self, arm: ComparisonArm) -> Result<(), EvalError> {
+        if self.accounting_contract != FAILURE_RESOURCE_ACCOUNTING_CONTRACT {
+            return Err(EvalError::FailureResourceAccountingInvalid {
+                reason: "contract_drift",
+            });
+        }
+        if self.account(arm).attempted_cases() >= MAX_ACCOUNTED_CASES_PER_ARM {
+            return Err(EvalError::CaseBudgetExceeded);
+        }
+        Ok(())
+    }
+
+    fn record_scored(&mut self, arm: ComparisonArm, family: TaskFamily) -> Result<(), EvalError> {
+        self.require_capacity(arm)?;
+        let account = &mut self.accounts[accounted_arm_index(arm)];
+        account.scored_cases += 1;
+        account.readout_scalars_used += MAX_READOUT_SCALARS_PER_CASE;
+        account.attempts_by_family[synthesis_family_index(family)] += 1;
+        Ok(())
+    }
+
+    /// Classify and retain one evaluator error against `arm`; never silently drops.
+    ///
+    /// Protected/final errors are returned unchanged and never retained.
+    pub fn retain_failure(
+        &mut self,
+        arm: ComparisonArm,
+        family: TaskFamily,
+        case_id: Option<u64>,
+        error: &EvalError,
+    ) -> Result<&ArmFailureRecord, EvalError> {
+        let class = classify_eval_error(error)?;
+        self.require_capacity(arm)?;
+        if self.account(arm).retained_failures() >= MAX_FAILURES_PER_ARM {
+            return Err(EvalError::CaseBudgetExceeded);
+        }
+        let record = ArmFailureRecord {
+            class,
+            arm,
+            split: self.split,
+            family,
+            case_id,
+            message_code: eval_error_message_code(error),
+            accounting_contract: FAILURE_RESOURCE_ACCOUNTING_CONTRACT,
+        };
+        validate_arm_failure_record(&record)?;
+        let account = &mut self.accounts[accounted_arm_index(arm)];
+        match class {
+            FailureClass::Invalid => account.invalid_failures += 1,
+            FailureClass::Numerical => account.numerical_failures += 1,
+            FailureClass::Resource => account.resource_failures += 1,
+            FailureClass::Task => account.task_failures += 1,
+        }
+        account.attempts_by_family[synthesis_family_index(family)] += 1;
+        self.failures.push(record);
+        Ok(self.failures.last().expect("failure was just retained"))
+    }
+
+    fn require_run_split(&self, run_split: DataSplit) -> Result<(), EvalError> {
+        if run_split != self.split {
+            return Err(EvalError::FailureResourceAccountingInvalid {
+                reason: "run_split_mismatch",
+            });
+        }
+        Ok(())
+    }
+
+    fn settle<R>(
+        &mut self,
+        arm: ComparisonArm,
+        family: TaskFamily,
+        case_id: u64,
+        result: Result<R, EvalError>,
+    ) -> Result<Option<R>, EvalError> {
+        match result {
+            Ok(outcome) => {
+                self.record_scored(arm, family)?;
+                Ok(Some(outcome))
+            }
+            Err(error) => {
+                self.retain_failure(arm, family, Some(case_id), &error)?;
+                Ok(None)
+            }
+        }
+    }
+
+    /// Evaluate one torsor-favorable case on T6, accounting score or failure.
+    pub fn account_t6_torsor_transport(
+        &mut self,
+        run: &mut T6EvaluatorRun,
+        case: &LabeledCase<TorsorTransportInput, TorsorTransportOracle>,
+    ) -> Result<Option<T6Outcome>, EvalError> {
+        self.require_run_split(run.config.split)?;
+        let input = case.inference_input();
+        let result = run
+            .evaluate_torsor_transport(case)
+            .map(|record| record.outcome);
+        self.settle(ComparisonArm::T6, input.task_family, input.case_id, result)
+    }
+
+    /// Evaluate one mixed case on T6, accounting score or failure.
+    pub fn account_t6_mixed(
+        &mut self,
+        run: &mut T6EvaluatorRun,
+        case: &LabeledCase<MixedGeometryInput, MixedGeometryOracle>,
+    ) -> Result<Option<T6Outcome>, EvalError> {
+        self.require_run_split(run.config.split)?;
+        let input = case.inference_input();
+        let result = run.evaluate_mixed(case).map(|record| record.outcome);
+        self.settle(ComparisonArm::T6, input.task_family, input.case_id, result)
+    }
+
+    /// Evaluate one chiral-favorable case on C6, accounting score or failure.
+    pub fn account_c6_chiral_reflection(
+        &mut self,
+        run: &mut C6EvaluatorRun,
+        case: &LabeledCase<ChiralReflectionInput, ChiralReflectionOracle>,
+    ) -> Result<Option<C6Outcome>, EvalError> {
+        self.require_run_split(run.config.split)?;
+        let input = case.inference_input();
+        let result = run
+            .evaluate_chiral_reflection(case)
+            .map(|record| record.outcome);
+        self.settle(ComparisonArm::C6, input.task_family, input.case_id, result)
+    }
+
+    /// Evaluate one mixed case on C6, accounting score or failure.
+    pub fn account_c6_mixed(
+        &mut self,
+        run: &mut C6EvaluatorRun,
+        case: &LabeledCase<MixedGeometryInput, MixedGeometryOracle>,
+    ) -> Result<Option<C6Outcome>, EvalError> {
+        self.require_run_split(run.config.split)?;
+        let input = case.inference_input();
+        let result = run.evaluate_mixed(case).map(|record| record.outcome);
+        self.settle(ComparisonArm::C6, input.task_family, input.case_id, result)
+    }
+
+    /// Evaluate one neutral control case on G6, accounting score or failure.
+    pub fn account_g6_neutral_control(
+        &mut self,
+        run: &mut G6EvaluatorRun,
+        case: &LabeledCase<NeutralControlInput, NeutralControlOracle>,
+    ) -> Result<Option<G6Outcome>, EvalError> {
+        self.require_run_split(run.config.split)?;
+        let input = case.inference_input();
+        let result = run
+            .evaluate_neutral_control(case)
+            .map(|record| record.outcome);
+        self.settle(ComparisonArm::G6, input.task_family, input.case_id, result)
+    }
+
+    /// Execute one matched-reference block and account both primary arms.
+    ///
+    /// The matched block is atomic: a rejection is retained once on **both**
+    /// T6 and C6 (`case_id = None`), so neither arm can silently omit it.
+    pub fn account_matched_primary_block(
+        &mut self,
+        family: TaskFamily,
+        seed_block: u64,
+        n_cases: u64,
+    ) -> Result<Option<matched_reference::MatchedPrimaryRun>, EvalError> {
+        match matched_reference::MatchedPrimaryRun::evaluate(
+            self.split, family, seed_block, n_cases,
+        ) {
+            Ok(run) => {
+                let cases = run.t6_outcomes().len() as u64;
+                if cases != run.c6_outcomes().len() as u64 || run.split() != self.split {
+                    return Err(EvalError::FailureResourceAccountingInvalid {
+                        reason: "matched_block_mismatch",
+                    });
+                }
+                for arm in [ComparisonArm::T6, ComparisonArm::C6] {
+                    let account = self.account(arm);
+                    if account.attempted_cases() + cases > MAX_ACCOUNTED_CASES_PER_ARM {
+                        return Err(EvalError::CaseBudgetExceeded);
+                    }
+                }
+                for _ in 0..cases {
+                    self.record_scored(ComparisonArm::T6, family)?;
+                    self.record_scored(ComparisonArm::C6, family)?;
+                }
+                Ok(Some(run))
+            }
+            Err(EvalError::ProtectedOrFinalSplit) => Err(EvalError::ProtectedOrFinalSplit),
+            Err(error) => {
+                self.retain_failure(ComparisonArm::T6, family, None, &error)?;
+                self.retain_failure(ComparisonArm::C6, family, None, &error)?;
+                Ok(None)
+            }
+        }
+    }
+
+    /// Snapshot the ledger into a validated report.
+    pub fn report(&self) -> Result<FailureResourceReport, EvalError> {
+        let t6 = self.account(ComparisonArm::T6);
+        let c6 = self.account(ComparisonArm::C6);
+        let report = FailureResourceReport {
+            split: self.split,
+            accounting_contract: self.accounting_contract,
+            arms: self.accounts.to_vec(),
+            failures: self.failures.clone(),
+            primary_attempts_matched: t6.attempts_by_family == c6.attempts_by_family,
+            primary_failure_free: t6.retained_failures() == 0 && c6.retained_failures() == 0,
+            experimental_non_final: true,
+        };
+        validate_failure_resource_report(&report)?;
+        Ok(report)
+    }
+}
+
+/// Immutable per-arm failure/resource report for one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FailureResourceReport {
+    pub split: DataSplit,
+    pub accounting_contract: &'static str,
+    /// T6, C6, G6 accounts in that canonical order.
+    pub arms: Vec<ArmResourceAccount>,
+    /// Every retained failure, attributed to one arm.
+    pub failures: Vec<ArmFailureRecord>,
+    /// T6 and C6 attempted identical case counts in every family.
+    pub primary_attempts_matched: bool,
+    /// Neither primary arm retained a failure.
+    pub primary_failure_free: bool,
+    /// Must remain true: experimental and non-final only.
+    pub experimental_non_final: bool,
+}
+
+/// Validate a report: contract pin, canonical arm order, matched budgets,
+/// readout accounting, and per-class counts reconciled against retained records.
+pub fn validate_failure_resource_report(report: &FailureResourceReport) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.accounting_contract != FAILURE_RESOURCE_ACCOUNTING_CONTRACT {
+        return Err(EvalError::FailureResourceAccountingInvalid {
+            reason: "contract_drift",
+        });
+    }
+    if !report.experimental_non_final {
+        return Err(EvalError::FailureResourceAccountingInvalid {
+            reason: "experimental_non_final_required",
+        });
+    }
+    let arms: Vec<ComparisonArm> = report.arms.iter().map(|account| account.arm).collect();
+    if arms != ACCOUNTED_ARMS {
+        return Err(EvalError::FailureResourceAccountingInvalid {
+            reason: "arm_order_mismatch",
+        });
+    }
+    for record in &report.failures {
+        validate_arm_failure_record(record)?;
+        if record.split != report.split {
+            return Err(EvalError::SplitMismatch {
+                expected: report.split,
+                actual: record.split,
+            });
+        }
+    }
+    for account in &report.arms {
+        if account.budget != ReadoutBudget::matched_non_trained() {
+            return Err(EvalError::FailureResourceAccountingInvalid {
+                reason: "unmatched_arm_budget",
+            });
+        }
+        if account.readout_scalars_used != account.scored_cases * MAX_READOUT_SCALARS_PER_CASE {
+            return Err(EvalError::FailureResourceAccountingInvalid {
+                reason: "readout_accounting_mismatch",
+            });
+        }
+        if account.attempted_cases() > MAX_ACCOUNTED_CASES_PER_ARM
+            || account.retained_failures() > MAX_FAILURES_PER_ARM
+        {
+            return Err(EvalError::FailureResourceAccountingInvalid {
+                reason: "accounting_capacity_exceeded",
+            });
+        }
+        if account.attempts_by_family.iter().sum::<u64>() != account.attempted_cases() {
+            return Err(EvalError::FailureResourceAccountingInvalid {
+                reason: "family_attempts_mismatch",
+            });
+        }
+        for class in [
+            FailureClass::Invalid,
+            FailureClass::Numerical,
+            FailureClass::Resource,
+            FailureClass::Task,
+        ] {
+            let retained = report
+                .failures
+                .iter()
+                .filter(|record| record.arm == account.arm && record.class == class)
+                .count() as u64;
+            if retained != account.failures_of(class) {
+                return Err(EvalError::FailureResourceAccountingInvalid {
+                    reason: "failure_not_retained",
+                });
+            }
+        }
+    }
+    let t6 = &report.arms[accounted_arm_index(ComparisonArm::T6)];
+    let c6 = &report.arms[accounted_arm_index(ComparisonArm::C6)];
+    if report.primary_attempts_matched != (t6.attempts_by_family == c6.attempts_by_family)
+        || report.primary_failure_free
+            != (t6.retained_failures() == 0 && c6.retained_failures() == 0)
+    {
+        return Err(EvalError::FailureResourceAccountingInvalid {
+            reason: "primary_flag_mismatch",
+        });
+    }
+    Ok(())
+}
+
+/// Require complete primary accounting before any clean T6-vs-C6 summary.
+///
+/// Fails closed when T6/C6 attempted different case counts in any family or
+/// when either primary arm retained a failure — so a pooled or stratified
+/// summary cannot silently drop failed cases from one arm.
+pub fn require_complete_primary_accounting(
+    report: &FailureResourceReport,
+) -> Result<(), EvalError> {
+    validate_failure_resource_report(report)?;
+    if !report.primary_attempts_matched {
+        return Err(EvalError::FailureResourceAccountingInvalid {
+            reason: "unmatched_primary_family_attempts",
+        });
+    }
+    if !report.primary_failure_free {
+        return Err(EvalError::FailureResourceAccountingInvalid {
+            reason: "primary_failures_retained",
+        });
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -3229,6 +3876,10 @@ pub enum EvalError {
     },
     /// Family-stratified synthesis rejected the request fail-closed.
     FamilyStratifiedSynthesisInvalid {
+        reason: &'static str,
+    },
+    /// Failure/resource accounting rejected drift, capacity or dropped failures.
+    FailureResourceAccountingInvalid {
         reason: &'static str,
     },
 }
@@ -3298,6 +3949,9 @@ impl fmt::Display for EvalError {
             }
             Self::FamilyStratifiedSynthesisInvalid { reason } => {
                 write!(formatter, "family-stratified synthesis invalid: {reason}")
+            }
+            Self::FailureResourceAccountingInvalid { reason } => {
+                write!(formatter, "failure/resource accounting invalid: {reason}")
             }
         }
     }
@@ -5728,6 +6382,299 @@ mod tests {
             classify_signed_effect(0.15, wrong_method),
             Err(EvalError::FamilyStratifiedSynthesisInvalid {
                 reason: "uncertainty_method_mismatch",
+            })
+        );
+    }
+
+    #[test]
+    fn failure_resource_taxonomy_is_closed_and_protected_stays_hard() {
+        assert_eq!(
+            FAILURE_RESOURCE_ACCOUNTING_CONTRACT,
+            "tdi25-failure-resource-accounting-v1"
+        );
+        assert_eq!(MAX_FAILURES_PER_ARM, MAX_CASES_PER_RUN);
+        for class in [
+            FailureClass::Invalid,
+            FailureClass::Numerical,
+            FailureClass::Resource,
+            FailureClass::Task,
+        ] {
+            assert_eq!(parse_failure_class(class.as_str()).unwrap(), class);
+        }
+        assert_eq!(
+            parse_failure_class("timeout"),
+            Err(EvalError::FailureResourceAccountingInvalid {
+                reason: "unknown_class",
+            })
+        );
+        assert_eq!(
+            parse_failure_class(""),
+            Err(EvalError::FailureResourceAccountingInvalid {
+                reason: "empty_class",
+            })
+        );
+        let cases = [
+            (
+                EvalError::Bridge(Tdi25Error::NonFiniteGeneric),
+                FailureClass::Numerical,
+            ),
+            (
+                EvalError::Bridge(Tdi25Error::NonFiniteScalar { field: "score" }),
+                FailureClass::Numerical,
+            ),
+            (
+                EvalError::Bridge(Tdi25Error::InvalidScoreScale),
+                FailureClass::Numerical,
+            ),
+            (
+                EvalError::Bridge(Tdi25Error::ChiralInvariantViolation { field: "chi" }),
+                FailureClass::Invalid,
+            ),
+            (
+                EvalError::PairedUncertaintyInvalid {
+                    reason: "non_finite",
+                },
+                FailureClass::Numerical,
+            ),
+            (EvalError::CaseBudgetExceeded, FailureClass::Resource),
+            (
+                EvalError::SplitMismatch {
+                    expected: DataSplit::Development,
+                    actual: DataSplit::Validation,
+                },
+                FailureClass::Task,
+            ),
+            (
+                EvalError::ContractMismatch("mixed_case"),
+                FailureClass::Task,
+            ),
+            (
+                EvalError::ContractMismatch("arm_contract"),
+                FailureClass::Invalid,
+            ),
+            (EvalError::InvalidBudget, FailureClass::Invalid),
+        ];
+        for (error, class) in cases {
+            assert_eq!(classify_eval_error(&error).unwrap(), class, "{error:?}");
+            assert!(!eval_error_message_code(&error).is_empty());
+        }
+        assert_eq!(
+            classify_eval_error(&EvalError::ProtectedOrFinalSplit),
+            Err(EvalError::ProtectedOrFinalSplit)
+        );
+        let mut ledger = FailureResourceLedger::open(DataSplit::Development).unwrap();
+        assert_eq!(
+            ledger.retain_failure(
+                ComparisonArm::T6,
+                TaskFamily::Mixed,
+                Some(0),
+                &EvalError::ProtectedOrFinalSplit,
+            ),
+            Err(EvalError::ProtectedOrFinalSplit)
+        );
+        assert!(ledger.failures().is_empty());
+        assert_eq!(
+            parse_non_final_split("final"),
+            Err(EvalError::ProtectedOrFinalSplit)
+        );
+    }
+
+    #[test]
+    fn failure_resource_ledger_retains_failures_by_arm_and_counts_resources() {
+        let split = DataSplit::Development;
+        let mut ledger = FailureResourceLedger::open(split).unwrap();
+        let torsor = torsor_transport_pair_in_split(2, split).unwrap();
+        let other = torsor_transport_pair_in_split(3, split).unwrap();
+        let mut tight = EvaluatorConfig::t6(split);
+        tight.budget.max_cases = 1;
+        let mut t6 = T6EvaluatorRun::open(tight).unwrap();
+        let first = seal_torsor_transport(torsor.original, torsor.oracle);
+        assert!(
+            ledger
+                .account_t6_torsor_transport(&mut t6, &first)
+                .unwrap()
+                .is_some()
+        );
+        // Budget exhausted: retained as a T6 resource failure.
+        let second = seal_torsor_transport(torsor.transported, torsor.oracle);
+        assert!(
+            ledger
+                .account_t6_torsor_transport(&mut t6, &second)
+                .unwrap()
+                .is_none()
+        );
+        // Non-canonical oracle pairing: retained as a T6 task failure.
+        let mut fresh = T6EvaluatorRun::open(EvaluatorConfig::t6(split)).unwrap();
+        let mislabeled = seal_torsor_transport(torsor.original, other.oracle);
+        assert!(
+            ledger
+                .account_t6_torsor_transport(&mut fresh, &mislabeled)
+                .unwrap()
+                .is_none()
+        );
+
+        let chiral = chiral_reflection_pair_in_split(2, split).unwrap();
+        let mut c6 = C6EvaluatorRun::open(EvaluatorConfig::c6(split)).unwrap();
+        for case in [
+            seal_chiral_reflection(chiral.right, chiral.right_oracle),
+            seal_chiral_reflection(chiral.left, chiral.left_oracle),
+        ] {
+            assert!(
+                ledger
+                    .account_c6_chiral_reflection(&mut c6, &case)
+                    .unwrap()
+                    .is_some()
+            );
+        }
+        let neutral = neutral_control_pair_in_split(2, split).unwrap();
+        let mut g6 = G6EvaluatorRun::open(EvaluatorConfig::g6(split)).unwrap();
+        let validation = neutral_control_pair_in_split(2, DataSplit::Validation).unwrap();
+        assert!(
+            ledger
+                .account_g6_neutral_control(
+                    &mut g6,
+                    &seal_neutral_control(validation.class_a, validation.class_a_oracle),
+                )
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            ledger
+                .account_g6_neutral_control(
+                    &mut g6,
+                    &seal_neutral_control(neutral.class_a, neutral.class_a_oracle),
+                )
+                .unwrap()
+                .is_some()
+        );
+
+        let t6_account = ledger.account(ComparisonArm::T6);
+        assert_eq!(t6_account.scored_cases, 1);
+        assert_eq!(t6_account.readout_scalars_used, 2);
+        assert_eq!(t6_account.resource_failures, 1);
+        assert_eq!(t6_account.task_failures, 1);
+        assert_eq!(t6_account.attempted_cases(), 3);
+        assert_eq!(t6_account.attempts_by_family, [3, 0, 0, 0]);
+        let c6_account = ledger.account(ComparisonArm::C6);
+        assert_eq!(c6_account.scored_cases, 2);
+        assert_eq!(c6_account.retained_failures(), 0);
+        assert_eq!(c6_account.attempts_by_family, [0, 2, 0, 0]);
+        let g6_account = ledger.account(ComparisonArm::G6);
+        assert_eq!(g6_account.task_failures, 1);
+        assert_eq!(g6_account.scored_cases, 1);
+
+        let report = ledger.report().unwrap();
+        assert_eq!(report.failures.len(), 3);
+        assert!(report.failures.iter().all(|record| record.split == split));
+        assert!(
+            report
+                .failures
+                .iter()
+                .all(|record| record.accounting_contract == FAILURE_RESOURCE_ACCOUNTING_CONTRACT)
+        );
+        assert!(!report.primary_attempts_matched);
+        assert!(!report.primary_failure_free);
+        assert_eq!(
+            require_complete_primary_accounting(&report),
+            Err(EvalError::FailureResourceAccountingInvalid {
+                reason: "unmatched_primary_family_attempts",
+            })
+        );
+
+        // Tampering: dropping a retained failure or forging readout use fails closed.
+        let mut dropped = report.clone();
+        dropped.failures.pop();
+        assert_eq!(
+            validate_failure_resource_report(&dropped),
+            Err(EvalError::FailureResourceAccountingInvalid {
+                reason: "failure_not_retained",
+            })
+        );
+        let mut forged = report.clone();
+        forged.arms[0].readout_scalars_used = 0;
+        assert_eq!(
+            validate_failure_resource_report(&forged),
+            Err(EvalError::FailureResourceAccountingInvalid {
+                reason: "readout_accounting_mismatch",
+            })
+        );
+        let mut reordered = report.clone();
+        reordered.arms.swap(0, 1);
+        assert_eq!(
+            validate_failure_resource_report(&reordered),
+            Err(EvalError::FailureResourceAccountingInvalid {
+                reason: "arm_order_mismatch",
+            })
+        );
+        let mut flagged = report.clone();
+        flagged.primary_failure_free = true;
+        assert_eq!(
+            validate_failure_resource_report(&flagged),
+            Err(EvalError::FailureResourceAccountingInvalid {
+                reason: "primary_flag_mismatch",
+            })
+        );
+        let mut drifted = report;
+        drifted.failures[0].accounting_contract = "tdi25-failure-resource-accounting-v0";
+        assert_eq!(
+            validate_failure_resource_report(&drifted),
+            Err(EvalError::FailureResourceAccountingInvalid {
+                reason: "contract_drift",
+            })
+        );
+
+        // A run opened on another split cannot be accounted in this ledger.
+        let mut validation_run =
+            T6EvaluatorRun::open(EvaluatorConfig::t6(DataSplit::Validation)).unwrap();
+        assert_eq!(
+            ledger.account_t6_torsor_transport(&mut validation_run, &first),
+            Err(EvalError::FailureResourceAccountingInvalid {
+                reason: "run_split_mismatch",
+            })
+        );
+    }
+
+    #[test]
+    fn matched_primary_blocks_account_both_arms_and_retain_atomic_failures() {
+        let mut ledger = FailureResourceLedger::open(DataSplit::Validation).unwrap();
+        for family in REQUIRED_SYNTHESIS_FAMILIES {
+            let run = ledger
+                .account_matched_primary_block(*family, 0, 8)
+                .unwrap()
+                .unwrap();
+            assert_eq!(run.t6_outcomes().len(), 8);
+        }
+        let report = ledger.report().unwrap();
+        assert!(report.primary_attempts_matched);
+        assert!(report.primary_failure_free);
+        require_complete_primary_accounting(&report).unwrap();
+        assert_eq!(report.arms[0].scored_cases, 32);
+        assert_eq!(report.arms[1].scored_cases, 32);
+        assert_eq!(report.arms[0].readout_scalars_used, 64);
+        assert_eq!(report.arms[2].attempted_cases(), 0);
+
+        // An inadmissible block is retained once on both primary arms.
+        assert!(
+            ledger
+                .account_matched_primary_block(TaskFamily::Mixed, 0, 1)
+                .unwrap()
+                .is_none()
+        );
+        let report = ledger.report().unwrap();
+        assert!(report.primary_attempts_matched);
+        assert!(!report.primary_failure_free);
+        assert_eq!(report.arms[0].invalid_failures, 1);
+        assert_eq!(report.arms[1].invalid_failures, 1);
+        assert!(
+            report
+                .failures
+                .iter()
+                .all(|record| record.case_id.is_none())
+        );
+        assert_eq!(
+            require_complete_primary_accounting(&report),
+            Err(EvalError::FailureResourceAccountingInvalid {
+                reason: "primary_failures_retained",
             })
         );
     }
