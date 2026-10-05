@@ -22,7 +22,12 @@
 //! non-final run, validated fail-closed without inventing freeze pins. Slice 30
 //! closes Phase C with a bounded Stage-C preflight smoke campaign: slices 21–29
 //! run end-to-end on synthetic Development/Validation cases under a capped
-//! budget, every outcome is retained, and no protected/final path exists. No training,
+//! budget, every outcome is retained, and no protected/final path exists. Slice 31
+//! opens Phase D with the `gamma=0` ablation: the C6 reference weights with only
+//! the parity-odd coefficient zeroed (alpha/beta fixed, matched capacity), run on
+//! the same bounded Stage-C case stream, with exact per-case identities showing
+//! the parity-odd channel contributes nothing and enantiomorphic scores coincide.
+//! No training,
 //! confirmatory execution, protected/final evaluation, or scientific claim is
 //! authorised here.
 
@@ -31,6 +36,7 @@ use core::fmt;
 use super::tdi24_accounting::ScoreArm;
 use super::tdi24_chiral::{
     CHIRAL_CONTRACT, CHIRAL_WIDTH, Chiral6, ChiralError, ChiralScoreWeights, chiral_score,
+    enantiomorphic_scores, observables,
 };
 use super::tdi24_tasks::{
     DATASET_CANONICALIZATION_CONTRACT, DataSplit, DirectionTarget, HandednessTarget, InferenceView,
@@ -104,6 +110,16 @@ pub const PROVENANCE_ENVELOPE_CONTRACT: &str = "tdi24-provenance-envelope-v1";
 
 /// Versioned Stage-C bounded preflight contract (slice 30).
 pub const STAGE_C_PREFLIGHT_CONTRACT: &str = "tdi24-stage-c-preflight-v1";
+
+/// Phase-D `gamma=0` ablation contract pin (slice 31).
+pub const GAMMA_ZERO_ABLATION_CONTRACT: &str = "tdi24-gamma-zero-ablation-v1";
+
+/// Matched C6 reference score weights (alpha, beta, gamma) used since slice 22.
+pub const C6_REFERENCE_WEIGHTS: ChiralScoreWeights = ChiralScoreWeights {
+    alpha: 1.0,
+    beta: 0.0,
+    gamma: 1.0,
+};
 
 /// Declared rustc channel string for Stage-C provenance (matches CI gate `1.97.1`).
 ///
@@ -514,8 +530,31 @@ pub fn score_c6_from_view(view: &InferenceView) -> Result<f64, EvalError> {
     let k = view.key.as_array();
     let query = Chiral6::from_array(q).map_err(EvalError::ChiralNumerical)?;
     let key = Chiral6::from_array(k).map_err(EvalError::ChiralNumerical)?;
-    let weights = ChiralScoreWeights::new(1.0, 0.0, 1.0).map_err(EvalError::ChiralNumerical)?;
+    let weights = ChiralScoreWeights::new(
+        C6_REFERENCE_WEIGHTS.alpha,
+        C6_REFERENCE_WEIGHTS.beta,
+        C6_REFERENCE_WEIGHTS.gamma,
+    )
+    .map_err(EvalError::ChiralNumerical)?;
     chiral_score(query, key, weights).map_err(EvalError::ChiralNumerical)
+}
+
+/// `gamma=0` ablation of `reference`: only the parity-odd coefficient changes.
+#[must_use]
+pub const fn gamma_zero_weights(reference: ChiralScoreWeights) -> ChiralScoreWeights {
+    ChiralScoreWeights {
+        alpha: reference.alpha,
+        beta: reference.beta,
+        gamma: 0.0,
+    }
+}
+
+/// Score an inference view with the `gamma=0` ablation of the C6 reference.
+pub fn score_c6_gamma_zero_from_view(view: &InferenceView) -> Result<f64, EvalError> {
+    let query = Chiral6::from_array(view.query.as_array()).map_err(EvalError::ChiralNumerical)?;
+    let key = Chiral6::from_array(view.key.as_array()).map_err(EvalError::ChiralNumerical)?;
+    chiral_score(query, key, gamma_zero_weights(C6_REFERENCE_WEIGHTS))
+        .map_err(EvalError::ChiralNumerical)
 }
 
 /// Score an inference view with the matched V6 vector reference.
@@ -1743,7 +1782,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::PairedUncertaintyInvalid { .. }
         | EvalError::FailureTaxonomyInvalid { .. }
         | EvalError::ProvenanceEnvelopeInvalid { .. }
-        | EvalError::StageCPreflightInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::StageCPreflightInvalid { .. }
+        | EvalError::GammaZeroAblationInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -1779,6 +1819,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::FailureTaxonomyInvalid { .. } => "failure_taxonomy_invalid",
         EvalError::ProvenanceEnvelopeInvalid { .. } => "provenance_envelope_invalid",
         EvalError::StageCPreflightInvalid { .. } => "stage_c_preflight_invalid",
+        EvalError::GammaZeroAblationInvalid { .. } => "gamma_zero_ablation_invalid",
     }
 }
 
@@ -2640,6 +2681,278 @@ pub fn validate_stage_c_preflight_report(report: &StageCPreflightReport) -> Resu
     Ok(())
 }
 
+/// One case scored by the C6 reference and its `gamma=0` ablation.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GammaZeroAblationCase {
+    pub family: TaskFamily,
+    pub case_id: u64,
+    pub reference_score: f64,
+    pub ablated_score: f64,
+    /// Unweighted parity-odd observable `q^T J k`.
+    pub parity_odd_channel: f64,
+    pub reference_correct: bool,
+    pub ablated_correct: bool,
+}
+
+/// Per-family correct counts for the reference and the ablation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GammaZeroFamilySummary {
+    pub family: TaskFamily,
+    pub n_cases: u64,
+    pub reference_correct: u64,
+    pub ablated_correct: u64,
+}
+
+/// Immutable `gamma=0` ablation report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GammaZeroAblationReport {
+    pub ablation_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    pub reference_weights: ChiralScoreWeights,
+    pub ablated_weights: ChiralScoreWeights,
+    /// Identical capacity on both sides: the ablation removes no parameter.
+    pub reference_capacity: TrainableCapacity,
+    pub ablated_capacity: TrainableCapacity,
+    pub cases: Vec<GammaZeroAblationCase>,
+    pub families: Vec<GammaZeroFamilySummary>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false: both sides are the non-trained reference.
+    pub training_executed: bool,
+    /// Must remain false: attribution is decided only by the Stage-D audit.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn gamma_zero_invalid(reason: &'static str) -> EvalError {
+    EvalError::GammaZeroAblationInvalid { reason }
+}
+
+/// Check the exact per-case identities of the ablation.
+fn check_gamma_zero_identities(
+    query: Chiral6,
+    key: Chiral6,
+    reference: ChiralScoreWeights,
+    reference_score: f64,
+    ablated_score: f64,
+) -> Result<f64, EvalError> {
+    let channels = observables(query, key).map_err(EvalError::ChiralNumerical)?;
+    let ablated = gamma_zero_weights(reference);
+    // The parity-odd channel is the only difference between the two scores.
+    if reference_score != ablated_score + reference.gamma * channels.chiral {
+        return Err(gamma_zero_invalid("parity_odd_residual"));
+    }
+    // With gamma=0 the right/left enantiomorphic scores coincide exactly.
+    let (right, left) =
+        enantiomorphic_scores(query, key, ablated).map_err(EvalError::ChiralNumerical)?;
+    if right != left || right != ablated_score {
+        return Err(gamma_zero_invalid("enantiomorphic_split"));
+    }
+    Ok(channels.chiral)
+}
+
+fn ablate_gamma_zero_case<T, S>(
+    case: &LabeledCase<T>,
+    split: DataSplit,
+    oracle_sign: S,
+    cases: &mut Vec<GammaZeroAblationCase>,
+) -> Result<(), EvalError>
+where
+    S: Fn(&T) -> Result<i8, EvalError>,
+{
+    let view = case.inference_view();
+    if view.split != split {
+        return Err(EvalError::SplitMismatch {
+            expected: split,
+            actual: view.split,
+        });
+    }
+    let reference_score = run_inference_callback(case, score_c6_from_view)?;
+    let ablated_score = run_inference_callback(case, score_c6_gamma_zero_from_view)?;
+    let query = Chiral6::from_array(view.query.as_array()).map_err(EvalError::ChiralNumerical)?;
+    let key = Chiral6::from_array(view.key.as_array()).map_err(EvalError::ChiralNumerical)?;
+    let parity_odd_channel = check_gamma_zero_identities(
+        query,
+        key,
+        C6_REFERENCE_WEIGHTS,
+        reference_score,
+        ablated_score,
+    )?;
+    let sign = oracle_sign(case.protected_label().reveal_for_evaluation())?;
+    if sign != 1 && sign != -1 {
+        return Err(gamma_zero_invalid("oracle_sign"));
+    }
+    let sign = f64::from(sign);
+    cases.push(GammaZeroAblationCase {
+        family: view.family,
+        case_id: view.case_id,
+        reference_score,
+        ablated_score,
+        parity_odd_channel,
+        reference_correct: reference_score * sign > 0.0,
+        ablated_correct: ablated_score * sign > 0.0,
+    });
+    Ok(())
+}
+
+fn summarize_gamma_zero_families(cases: &[GammaZeroAblationCase]) -> Vec<GammaZeroFamilySummary> {
+    STAGE_C_PREFLIGHT_FAMILIES
+        .iter()
+        .map(|family| {
+            let members = cases.iter().filter(|case| case.family == *family);
+            GammaZeroFamilySummary {
+                family: *family,
+                n_cases: members.clone().count() as u64,
+                reference_correct: members.clone().filter(|c| c.reference_correct).count() as u64,
+                ablated_correct: members.filter(|c| c.ablated_correct).count() as u64,
+            }
+        })
+        .collect()
+}
+
+/// Run the `gamma=0` ablation on the bounded Stage-C case stream.
+///
+/// Same generators, pair ids, split and capacity as the Stage-C preflight;
+/// only the parity-odd coefficient changes. Any scoring or identity failure
+/// aborts fail-closed; nothing is silently dropped.
+pub fn run_gamma_zero_ablation(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<GammaZeroAblationReport, EvalError> {
+    validate_non_final_split(split)?;
+    let cases_per_arm = budget.cases_per_arm()?;
+    let mut cases = Vec::new();
+    let last_pair_id = budget.first_pair_id + budget.pairs_per_family;
+    for pair_id in budget.first_pair_id..last_pair_id {
+        let discriminative = reflection_discriminative_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [discriminative.right, discriminative.left] {
+            ablate_gamma_zero_case(
+                &seal_reflection_discriminative(&member),
+                split,
+                handedness_sign,
+                &mut cases,
+            )?;
+        }
+        let nuisance = reflection_nuisance_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [nuisance.canonical, nuisance.reflected] {
+            ablate_gamma_zero_case(
+                &seal_reflection_nuisance(&member),
+                split,
+                reflection_invariant_sign,
+                &mut cases,
+            )?;
+        }
+        let direction = direction_reversal_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [direction.forward, direction.reverse] {
+            ablate_gamma_zero_case(
+                &seal_direction_reversal(&member),
+                split,
+                direction_sign,
+                &mut cases,
+            )?;
+        }
+        let base_case_id = pair_id
+            .checked_mul(STAGE_C_PREFLIGHT_MEMBERS_PER_PAIR)
+            .ok_or_else(preflight_generation_failed)?;
+        for case_id in [base_case_id, base_case_id + 1] {
+            let control = non_chiral_control_case_in_split(case_id, split)
+                .map_err(|_| preflight_generation_failed())?;
+            ablate_gamma_zero_case(
+                &seal_non_chiral_control(&control),
+                split,
+                non_chiral_sign,
+                &mut cases,
+            )?;
+        }
+    }
+    if cases.len() as u64 != cases_per_arm {
+        return Err(gamma_zero_invalid("case_count"));
+    }
+    let families = summarize_gamma_zero_families(&cases);
+    let report = GammaZeroAblationReport {
+        ablation_contract: GAMMA_ZERO_ABLATION_CONTRACT,
+        split,
+        budget,
+        reference_weights: C6_REFERENCE_WEIGHTS,
+        ablated_weights: gamma_zero_weights(C6_REFERENCE_WEIGHTS),
+        reference_capacity: TrainableCapacity::reference_c6(),
+        ablated_capacity: TrainableCapacity::reference_c6(),
+        cases,
+        families,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_gamma_zero_ablation_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_gamma_zero_ablation_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<GammaZeroAblationReport, EvalError> {
+    run_gamma_zero_ablation(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a `gamma=0` ablation report: pins, all-else-fixed weights, matched
+/// capacity, bounded coverage, exact per-case parity-odd residual, recomputed
+/// family counts, and the no-access / no-training / no-claim flags.
+pub fn validate_gamma_zero_ablation_report(
+    report: &GammaZeroAblationReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.ablation_contract != GAMMA_ZERO_ABLATION_CONTRACT {
+        return Err(gamma_zero_invalid("contract_drift"));
+    }
+    if report.reference_weights != C6_REFERENCE_WEIGHTS {
+        return Err(gamma_zero_invalid("reference_weights_drift"));
+    }
+    if report.ablated_weights != gamma_zero_weights(report.reference_weights) {
+        return Err(gamma_zero_invalid("ablated_weights_drift"));
+    }
+    if report.reference_capacity != report.ablated_capacity
+        || report.reference_capacity != TrainableCapacity::reference_c6()
+    {
+        return Err(gamma_zero_invalid("capacity_mismatch"));
+    }
+    let expected = report.budget.cases_per_arm()?;
+    if report.cases.len() as u64 != expected {
+        return Err(gamma_zero_invalid("case_count"));
+    }
+    for case in &report.cases {
+        if case.reference_score
+            != case.ablated_score + report.reference_weights.gamma * case.parity_odd_channel
+        {
+            return Err(gamma_zero_invalid("parity_odd_residual"));
+        }
+    }
+    if report.families != summarize_gamma_zero_families(&report.cases)
+        || report.families.iter().map(|f| f.n_cases).sum::<u64>() != expected
+    {
+        return Err(gamma_zero_invalid("family_summary_drift"));
+    }
+    if report.protected_or_final_access {
+        return Err(gamma_zero_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(gamma_zero_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(gamma_zero_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(gamma_zero_invalid("experimental_non_final"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -2712,6 +3025,8 @@ pub enum EvalError {
     ProvenanceEnvelopeInvalid { reason: &'static str },
     /// Stage-C preflight rejected an unbounded budget, drifted report or forbidden flag.
     StageCPreflightInvalid { reason: &'static str },
+    /// `gamma=0` ablation rejected drifted weights, identities, budget or flags.
+    GammaZeroAblationInvalid { reason: &'static str },
 }
 
 impl fmt::Display for EvalError {
@@ -2791,6 +3106,9 @@ impl fmt::Display for EvalError {
             }
             Self::StageCPreflightInvalid { reason } => {
                 write!(formatter, "stage-c preflight invalid: {reason}")
+            }
+            Self::GammaZeroAblationInvalid { reason } => {
+                write!(formatter, "gamma=0 ablation invalid: {reason}")
             }
         }
     }
