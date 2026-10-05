@@ -3993,10 +3993,14 @@ pub fn validate_stage_c_preflight_report(report: &StageCPreflightReport) -> Resu
         return invalid("synthesis_contract");
     }
     if report.protected_or_final_access {
-        return invalid("protected_or_final_access");
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "protected_or_final_access",
+        });
     }
     if report.scientific_claim {
-        return invalid("scientific_claim");
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "scientific_claim",
+        });
     }
     if !report.experimental_non_final || !report.synthesis.experimental_non_final {
         return invalid("experimental_non_final");
