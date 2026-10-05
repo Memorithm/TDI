@@ -21,8 +21,8 @@ grep -Fq 'reason: "primary_failures_retained"' tdi-ai/src/tdi25_eval.rs
 # Scores may only be counted through evaluator-backed paths.
 ! grep -Fq 'pub fn record_scored' tdi-ai/src/tdi25_eval.rs
 grep -Fq '| 28 | Family-stratified synthesis | **landed** in #689, exact head `e34411b6b6e2e23bf36374bdd07368c2b9bf3121`, merge `14102d8745b79d41aca821a37c81c90077ea77d2`;' docs/TDI-25-CAMPAIGN-50.md
-grep -Fq '| 29 | Typed failure/resource accounting | **current candidate**' docs/TDI-25-CAMPAIGN-50.md
+grep -Fq '| 29 | Typed failure/resource accounting | **landed** in #699, exact head `b2b26ff0ea5d141eae5d4611d8191c25e0a35047`, merge `a8d82700d00b70a7e20eea5104b09b0a7d8ee1c5`;' docs/TDI-25-CAMPAIGN-50.md
 # Monotone: later qualified slices must be able to advance the merged count.
 merged_count="$(grep -Eo '\*\*[0-9]+/50 merged\*\*' docs/TDI-25-CAMPAIGN-50.md | head -n 1 | tr -dc '0-9/' | cut -d/ -f1)"
-test "${merged_count:-0}" -ge 28
+test "${merged_count:-0}" -ge 29
 ! grep -Fq '#PRNUM' docs/TDI-25-CAMPAIGN-50.md

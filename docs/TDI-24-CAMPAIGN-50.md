@@ -47,7 +47,7 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 | 27 | Paired uncertainty engine | **landed** in #671, exact head `7c640354626de37400bf0f86655e6c0e21284d39`, merge `c547fa5f7f12e001f4437c3bb054d75b239099a7`; confidence intervals/effect summaries without label leakage |
 | 28 | Failure taxonomy | **landed** in #677, exact head `c8bfb4aa82e6bbf9b0767ad0a3e73f93a98b6b85`, merge `b0f5c76c04fd2e67d22cad8a20aecbe825122d9d`; typed invalid/numerical/resource/task failures retained |
 | 29 | Provenance envelope | **landed** in #687, exact head `cd098d81ccbedce5f0a75a9216b4d72350729f14`, merge `11245ad9e4ba93cd0580a82e1a78aa2d11760a34`; code/config/data/seed/toolchain identity per run |
-| 30 | Stage-C preflight | **current stacked slice**; bounded smoke campaign; zero protected/final access |
+| 30 | Stage-C preflight | **landed** in #698, exact head `586de6338a486bb9cbef3183f2be8faf2450d75f`, merge `60bb25afa271079181df17ca6a4f1201b291c5b5`; bounded smoke campaign; zero protected/final access |
 
 ## Phase D — attribution ablations (PR 31–40)
 
@@ -93,4 +93,4 @@ The campaign pauses rather than forcing a later PR when:
 
 ## Progress accounting
 
-**29/50 merged** (#406, #471, #487, #492, #548, #549, #550, #551, #556, #559, #562, #565, #567, #569, #601, #602, #604, #608, #609, #610, #611, #615, #655, #657, #659, #667, #671, #677, #687). Slice 30 is next. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**30/50 merged** (#406, #471, #487, #492, #548, #549, #550, #551, #556, #559, #562, #565, #567, #569, #601, #602, #604, #608, #609, #610, #611, #615, #655, #657, #659, #667, #671, #677, #687, #698). Slice 31 is next. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
