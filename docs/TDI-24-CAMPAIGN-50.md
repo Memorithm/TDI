@@ -53,7 +53,7 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 
 | Slice | Deliverable | Gate / definition of done |
 | ---: | --- | --- |
-| 31 | `gamma=0` ablation | parity-odd channel removed, all else fixed |
+| 31 | `gamma=0` ablation | **current stacked slice**; parity-odd channel removed, all else fixed |
 | 32 | `beta=0` ablation | mirror-even extra channel removed |
 | 33 | direct-only collapse | C6 path numerically matches V6 score semantics |
 | 34 | parity-shuffle control | capacity preserved, H+/H- structure destroyed reproducibly |
