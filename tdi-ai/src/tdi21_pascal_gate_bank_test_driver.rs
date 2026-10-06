@@ -1,9 +1,8 @@
 use crate::tdi21_pascal_gate_bank::{
-    PascalP1Decision, PascalP1Error, PascalP1Schedule, PascalP1Split,
-    evaluate_pascal_p1_gates, generate_pascal_p1_bank, generic_p1_materialize,
-    pascal_p1_decision, pascal_p1_materialize, pascal_p1_query_addresses,
-    run_pascal_p1_cell, run_pascal_p1_matrix, PASCAL_P1_GATE_COUNT,
-    PASCAL_P1_SEMANTICS,
+    PASCAL_P1_GATE_COUNT, PASCAL_P1_SEMANTICS, PascalP1Decision, PascalP1Error, PascalP1Schedule,
+    PascalP1Split, evaluate_pascal_p1_gates, generate_pascal_p1_bank, generic_p1_materialize,
+    pascal_p1_decision, pascal_p1_materialize, pascal_p1_query_addresses, run_pascal_p1_cell,
+    run_pascal_p1_matrix,
 };
 
 #[test]
@@ -11,6 +10,7 @@ fn frozen_generator_is_unique_and_deterministic() {
     let first = generate_pascal_p1_bank(12, 256).unwrap();
     let second = generate_pascal_p1_bank(12, 256).unwrap();
     assert_eq!(first, second);
+    assert_eq!(first.variable_count(), 12);
     assert_eq!(first.domain_size(), 4096);
     assert_eq!(first.density(), 256);
     assert_eq!(first.constants(), 0b1010_1010);
@@ -30,10 +30,7 @@ fn pascal_matches_independent_generic_materialization() {
         let (pascal, xor_count) = pascal_p1_materialize(&bank).unwrap();
         let (generic, term_tests) = generic_p1_materialize(&bank).unwrap();
         assert_eq!(pascal, generic);
-        assert_eq!(
-            xor_count,
-            u64::from(width) * bank.domain_size() as u64 / 2
-        );
+        assert_eq!(xor_count, u64::from(width) * bank.domain_size() as u64 / 2);
         assert_eq!(
             term_tests,
             bank.domain_size() as u64 * density as u64 * PASCAL_P1_GATE_COUNT as u64
@@ -50,8 +47,7 @@ fn frozen_query_schedules_preserve_declared_extremes() {
     assert_eq!(unique.len(), 256);
 
     let low = pascal_p1_query_addresses(8, PascalP1Schedule::LowWeightFirst, 16).unwrap();
-    let high =
-        pascal_p1_query_addresses(8, PascalP1Schedule::HighWeightFirst, 16).unwrap();
+    let high = pascal_p1_query_addresses(8, PascalP1Schedule::HighWeightFirst, 16).unwrap();
     assert_eq!(low[0], 0);
     assert_eq!(high[0], 255);
     assert!(

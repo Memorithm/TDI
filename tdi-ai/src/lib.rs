@@ -15,10 +15,6 @@ pub mod assr_h_reference;
 pub mod assr_reference;
 pub mod bounded_recovery;
 pub mod experiment;
-#[cfg(test)]
-mod tdi21_pascal_gate_bank;
-#[cfg(test)]
-mod tdi21_pascal_gate_bank_test_driver;
 #[cfg(feature = "experimental")]
 pub mod experimental;
 pub mod full_history_reference;
@@ -31,6 +27,10 @@ pub mod task_encoding;
 pub mod task_execution;
 pub mod task_generators;
 pub mod task_readout;
+#[cfg(test)]
+mod tdi21_pascal_gate_bank;
+#[cfg(test)]
+mod tdi21_pascal_gate_bank_test_driver;
 mod toy_attention;
 pub mod validated_profile;
 pub mod vsa_workspace;

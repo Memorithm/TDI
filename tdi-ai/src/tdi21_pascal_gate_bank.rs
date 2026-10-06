@@ -211,9 +211,7 @@ fn evaluate_bank(
     Ok(value)
 }
 
-pub fn pascal_p1_materialize(
-    bank: &PascalP1GateBank,
-) -> Result<(Vec<u8>, u64), PascalP1Error> {
+pub fn pascal_p1_materialize(bank: &PascalP1GateBank) -> Result<(Vec<u8>, u64), PascalP1Error> {
     let mut table = vec![0u8; bank.domain_size];
     table[0] = bank.constants;
     for gate in 0..PASCAL_P1_GATE_COUNT {
@@ -237,9 +235,7 @@ pub fn pascal_p1_materialize(
     Ok((table, xor_count))
 }
 
-pub fn generic_p1_materialize(
-    bank: &PascalP1GateBank,
-) -> Result<(Vec<u8>, u64), PascalP1Error> {
+pub fn generic_p1_materialize(bank: &PascalP1GateBank) -> Result<(Vec<u8>, u64), PascalP1Error> {
     let mut table = Vec::new();
     table
         .try_reserve_exact(bank.domain_size)
@@ -363,14 +359,22 @@ pub fn run_pascal_p1_cell(
 }
 
 fn frozen_densities(domain_size: usize) -> Vec<usize> {
-    let mut values = vec![4usize, 32usize.min(domain_size - 1), 256usize.min(domain_size - 1)];
+    let mut values = vec![
+        4usize,
+        32usize.min(domain_size - 1),
+        256usize.min(domain_size - 1),
+    ];
     values.sort_unstable();
     values.dedup();
     values
 }
 
 fn frozen_query_loads(domain_size: usize) -> Vec<usize> {
-    let mut values = vec![16usize.min(domain_size), 64usize.min(domain_size), domain_size];
+    let mut values = vec![
+        16usize.min(domain_size),
+        64usize.min(domain_size),
+        domain_size,
+    ];
     values.sort_unstable();
     values.dedup();
     values
@@ -427,8 +431,10 @@ pub fn evaluate_pascal_p1_gates(cells: &[PascalP1CellEvidence]) -> PascalP1Gates
                 && cell.materialized_table_bytes == cell.domain_size
                 && cell.anf_semantic_bits > 0
         });
-    let g3_tdi21_prohibition =
-        !cells.is_empty() && cells.iter().all(|cell| cell.pairwise_token_comparisons == 0);
+    let g3_tdi21_prohibition = !cells.is_empty()
+        && cells
+            .iter()
+            .all(|cell| cell.pairwise_token_comparisons == 0);
 
     let development_targets: Vec<_> = cells
         .iter()
