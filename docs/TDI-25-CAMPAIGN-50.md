@@ -47,7 +47,7 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | 27 | Paired uncertainty engine | **landed** in #683, exact head `9bf33373630ea7b7bdc338da359c9eb1fcc845d9`, merge `ff7de14f6f3968f2fb5679e96d962a5f651d43b4`; paired effect/interval computation by seed block |
 | 28 | Family-stratified synthesis | **landed** in #689, exact head `e34411b6b6e2e23bf36374bdd07368c2b9bf3121`, merge `14102d8745b79d41aca821a37c81c90077ea77d2`; pooled summaries cannot hide sign reversals |
 | 29 | Typed failure/resource accounting | **landed** in #699, exact head `b2b26ff0ea5d141eae5d4611d8191c25e0a35047`, merge `a8d82700d00b70a7e20eea5104b09b0a7d8ee1c5`; numerical/task/resource failures retained by arm |
-| 30 | Stage-C bounded preflight | **current candidate** in #701; Development/Validation only; no protected/final execution |
+| 30 | Stage-C bounded preflight | **landed** in #701, exact head `d32d6a3985ae76ad5db272078de69893817efd88`, merge `4a58ff8c5aaf244d75b4c228decc9e5003359e07`; Development/Validation only; no protected/final execution |
 
 ## Phase D — structure attribution and geometry ablations (PR 31–40)
 
@@ -94,4 +94,4 @@ Pause the campaign when any of the following occurs:
 
 ## Progress accounting
 
-**29/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606, #607, #612, #654, #656, #658, #660, #661, #663, #666, #669, #673, #679, #683, #689, #699). Slice 30 is next. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**30/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606, #607, #612, #654, #656, #658, #660, #661, #663, #666, #669, #673, #679, #683, #689, #699, #701). Slice 31 is next. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
