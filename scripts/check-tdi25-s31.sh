@@ -23,8 +23,8 @@ grep -Fq 'reduction_point_invalid("scientific_claim")' tdi-ai/src/tdi25_eval.rs
 grep -Fq 'fn reference_side_reproduces_the_matched_t6_primary_exactly' tdi-ai/tests/tdi25_reduction_point_ablation.rs
 grep -Fq 'tdi25-torsor-reduction-point-ablation-v1' docs/TDI-25-REDUCTION-POINT-ABLATION-V1.md
 ! grep -Eq 'DataSplit::(Protected|Final|Holdout)' tdi-ai/src/tdi25_eval.rs tdi-ai/src/tdi25_matched_reference.rs tdi-ai/tests/tdi25_reduction_point_ablation.rs
-grep -Fq '| 31 | Torsor reduction-point ablation | **current candidate**' docs/TDI-25-CAMPAIGN-50.md
+grep -Fq '| 31 | Torsor reduction-point ablation | **landed** in #704, exact head `66265e1ec9627a78e5ce17a658eec900469d784b`, merge `c18189fa5c50d9c224044b5368071947b9a9db89`;' docs/TDI-25-CAMPAIGN-50.md
 # Monotone: later qualified slices must be able to advance the merged count.
 merged_count="$(grep -Eo '\*\*[0-9]+/50 merged\*\*' docs/TDI-25-CAMPAIGN-50.md | head -n 1 | tr -dc '0-9/' | cut -d/ -f1)"
-test "${merged_count:-0}" -ge 29
+test "${merged_count:-0}" -ge 31
 ! grep -Fq '#PRNUM' docs/TDI-25-CAMPAIGN-50.md
