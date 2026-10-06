@@ -26,8 +26,8 @@ grep -Fq 'fn matched_population_bridge_is_bit_exact_and_records_the_degeneracy' 
 grep -Fq 'tdi25-direct-vs-factorized-bridge-v1' docs/TDI-25-DIRECT-VS-FACTORIZED-BRIDGE-V1.md
 grep -Fq 'Recorded degeneracies' docs/TDI-25-DIRECT-VS-FACTORIZED-BRIDGE-V1.md
 ! grep -Eq 'DataSplit::(Protected|Final|Holdout)' tdi-ai/src/tdi25_eval.rs tdi-ai/src/tdi25_matched_reference.rs tdi-ai/tests/tdi25_direct_vs_factorized_bridge.rs
-grep -Fq '| 32 | Direct vs factorized torsor bridge | **current candidate**' docs/TDI-25-CAMPAIGN-50.md
+grep -Fq '| 32 | Direct vs factorized torsor bridge | **landed** in #708, exact head `9a899209a16ba2ac3cd745fa1e601901e66c2caa`, merge `c73f98a9ed69f842ee2d49cdc8b24b5fafc42f7a`;' docs/TDI-25-CAMPAIGN-50.md
 # Monotone: later qualified slices must be able to advance the merged count.
 merged_count="$(grep -Eo '\*\*[0-9]+/50 merged\*\*' docs/TDI-25-CAMPAIGN-50.md | head -n 1 | tr -dc '0-9/' | cut -d/ -f1)"
-test "${merged_count:-0}" -ge 31
+test "${merged_count:-0}" -ge 32
 ! grep -Fq '#PRNUM' docs/TDI-25-CAMPAIGN-50.md
