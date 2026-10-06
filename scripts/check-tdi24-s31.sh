@@ -20,5 +20,5 @@ grep -Fq 'gamma_zero_invalid("protected_or_final_access")' tdi-ai/src/tdi24_eval
 grep -Fq 'fn reference_side_reproduces_the_stage_c_c6_evaluator_exactly' tdi-ai/tests/tdi24_gamma_zero_ablation.rs
 ! grep -Eq 'DataSplit::(Protected|Final|Holdout)' tdi-ai/src/tdi24_eval.rs tdi-ai/tests/tdi24_gamma_zero_ablation.rs
 grep -Fq '| 30 | Stage-C preflight | **landed** in #698, exact head `586de6338a486bb9cbef3183f2be8faf2450d75f`, merge `60bb25afa271079181df17ca6a4f1201b291c5b5`;' docs/TDI-24-CAMPAIGN-50.md
-grep -Fq '| 31 | `gamma=0` ablation | **current stacked slice**;' docs/TDI-24-CAMPAIGN-50.md
+grep -Fq '| 31 | `gamma=0` ablation | **landed** in #702, exact head `56ff53b183e10f052c1d62b97c03f4991252b147`, merge `2d59303a73c39100c52b872b7f6ad61a7a1e2504`;' docs/TDI-24-CAMPAIGN-50.md
 # Do not pin the global merged count here: later qualified slices must advance it.
