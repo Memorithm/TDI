@@ -1,0 +1,28 @@
+name: TDI-24.0 slice 32 beta=0 ablation
+on:
+  pull_request:
+    paths:
+      - 'tdi-ai/src/tdi24_eval.rs'
+      - 'tdi-ai/src/tdi24_chiral.rs'
+      - 'tdi-ai/src/tdi24_tasks.rs'
+      - 'tdi-ai/tests/tdi24_gamma_zero_ablation.rs'
+      - 'tdi-ai/tests/tdi24_beta_zero_ablation.rs'
+      - 'tdi-ai/tests/tdi24_stage_c_preflight.rs'
+      - 'docs/TDI-24-CAMPAIGN-50.md'
+      - 'scripts/check-tdi24-s32.sh'
+      - '.github/workflows/tdi24-s32-beta-zero-ablation.yml'
+permissions:
+  contents: read
+jobs:
+  beta-zero-ablation:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+      - run: bash scripts/check-tdi24-s32.sh
