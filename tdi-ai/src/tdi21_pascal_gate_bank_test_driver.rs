@@ -1,6 +1,4 @@
-mod tdi21_pascal_gate_bank;
-
-use tdi21_pascal_gate_bank::{
+use crate::tdi21_pascal_gate_bank::{
     PascalP1Decision, PascalP1Error, PascalP1Schedule, PascalP1Split,
     evaluate_pascal_p1_gates, generate_pascal_p1_bank, generic_p1_materialize,
     pascal_p1_decision, pascal_p1_materialize, pascal_p1_query_addresses,

@@ -15,6 +15,10 @@ pub mod assr_h_reference;
 pub mod assr_reference;
 pub mod bounded_recovery;
 pub mod experiment;
+#[cfg(test)]
+mod tdi21_pascal_gate_bank;
+#[cfg(test)]
+mod tdi21_pascal_gate_bank_test_driver;
 #[cfg(feature = "experimental")]
 pub mod experimental;
 pub mod full_history_reference;
