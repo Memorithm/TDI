@@ -37,6 +37,8 @@ sha256sum Cargo.lock Cargo.toml tdi-ai/Cargo.toml \
   tdi-ai/src/tdi21_relational_address_search.rs \
   tdi-ai/src/tdi21_relational_learned.rs \
   docs/TDI-21.0-PASCAL-GATE-BANK-P1-PREREGISTRATION.md \
+  docs/TDI-21.0-PASCAL-GATE-BANK-P2-PREREGISTRATION.md \
+  docs/TDI-21.0-PASCAL-P2-DEVELOPMENT-PREFLIGHT-EVIDENCE.md \
   tdi-ai/src/tdi21_pascal_gate_bank.rs \
   tdi-ai/src/tdi21_pascal_gate_bank_test_driver.rs \
   tdi-ai/tests/tdi21_pascal_p2_preflight.rs \
