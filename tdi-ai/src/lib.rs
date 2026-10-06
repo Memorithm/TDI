@@ -27,6 +27,10 @@ pub mod task_encoding;
 pub mod task_execution;
 pub mod task_generators;
 pub mod task_readout;
+#[cfg(test)]
+mod tdi21_pascal_gate_bank;
+#[cfg(test)]
+mod tdi21_pascal_gate_bank_test_driver;
 mod toy_attention;
 pub mod validated_profile;
 pub mod vsa_workspace;

@@ -36,6 +36,9 @@ sha256sum Cargo.lock Cargo.toml tdi-ai/Cargo.toml \
   tdi-ai/tests/tdi21_relational_anf_tasks.rs \
   tdi-ai/src/tdi21_relational_address_search.rs \
   tdi-ai/src/tdi21_relational_learned.rs \
+  docs/TDI-21.0-PASCAL-GATE-BANK-P1-PREREGISTRATION.md \
+  tdi-ai/src/tdi21_pascal_gate_bank.rs \
+  tdi-ai/src/tdi21_pascal_gate_bank_test_driver.rs \
   tdi-ai/tests/tdi21_relational_address_search.rs \
   tdi-ai/tests/tdi21_relational_learned.rs
 cargo test --locked -p tdi-ai --features experimental --test tdi21_audit_regressions
@@ -57,6 +60,7 @@ cargo test --locked -p tdi-ai --features experimental --test tdi21_relational_an
 cargo test --locked -p tdi-ai --features experimental --test tdi21_relational_address_search
 cargo test --locked -p tdi-ai --features experimental --test tdi21_relational_learned
 cargo test --locked -p tdi-ai --features experimental --lib experimental::tdi21_attention
+cargo test --locked -p tdi-ai --lib tdi21_pascal_gate_bank_test_driver -- --nocapture
 cargo test --locked --release -p tdi-ai --features experimental --test tdi21_audit_regressions
 cargo test --locked --release -p tdi-ai --features experimental --test tdi21_stream_contract
 cargo test --locked --release -p tdi-ai --features experimental --test tdi21_memory_tradeoffs -- --nocapture
@@ -76,6 +80,7 @@ cargo test --locked --release -p tdi-ai --features experimental --test tdi21_rel
 cargo test --locked --release -p tdi-ai --features experimental --test tdi21_relational_address_search
 cargo test --locked --release -p tdi-ai --features experimental --test tdi21_relational_learned
 cargo test --locked --release -p tdi-ai --features experimental --lib experimental::tdi21_attention
+cargo test --locked --release -p tdi-ai --lib tdi21_pascal_gate_bank_test_driver -- --nocapture
 scratch="$(mktemp -d)"
 trap 'rm -rf -- "$scratch"' EXIT
 for example in tdi21_development tdi21_attention_comparison; do
