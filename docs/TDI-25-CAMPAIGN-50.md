@@ -54,7 +54,7 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | Slice | Deliverable | Gate / definition of done |
 | ---: | --- | --- |
 | 31 | Torsor reduction-point ablation | **landed** in #704, exact head `66265e1ec9627a78e5ce17a658eec900469d784b`, merge `c18189fa5c50d9c224044b5368071947b9a9db89`; remove/alter transport structure under matched capacity |
-| 32 | Direct vs factorized torsor bridge | **current candidate**; numerical equivalence monitored inside comparison harness |
+| 32 | Direct vs factorized torsor bridge | **landed** in #708, exact head `9a899209a16ba2ac3cd745fa1e601901e66c2caa`, merge `c73f98a9ed69f842ee2d49cdc8b24b5fafc42f7a`; numerical equivalence monitored inside comparison harness |
 | 33 | Chiral `gamma=0` ablation | remove parity-odd channel |
 | 34 | Chiral parity-shuffle control | six values preserved; H+/H- semantics destroyed |
 | 35 | Torsor structure-shuffle control | six values preserved; Varignon pairing semantics destroyed |
@@ -94,4 +94,4 @@ Pause the campaign when any of the following occurs:
 
 ## Progress accounting
 
-**31/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606, #607, #612, #654, #656, #658, #660, #661, #663, #666, #669, #673, #679, #683, #689, #699, #701, #704). Slice 32 is next. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**32/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606, #607, #612, #654, #656, #658, #660, #661, #663, #666, #669, #673, #679, #683, #689, #699, #701, #704, #708). Slice 33 is next. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
