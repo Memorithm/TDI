@@ -35,6 +35,7 @@ pub enum Error {
     UnsupportedWidth,
     InvalidDensity,
     InvalidQueryLoad,
+    InvalidReuse,
     SplitWidthMismatch,
     DuplicateGeneratedMask,
     CounterOverflow,

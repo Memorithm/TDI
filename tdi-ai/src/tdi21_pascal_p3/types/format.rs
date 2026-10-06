@@ -1,5 +1,9 @@
 use super::{Cell, SEMANTICS};
 
+pub fn canonical_header() -> &'static str {
+    "split\tn\tk\tdensity\tschedule\tquery_load\treuse\tchecksum_pascal\tchecksum_direct\tchecksum_generic\tmismatch_pascal\tmismatch_generic\tpascal_zeta_xors\tdirect_term_tests\tgeneric_term_tests\tquery_lookups\tcoefficient_bytes\tmaterialized_table_bytes\tanf_semantic_bits\tpairwise_token_comparisons\tw_pascal\tw_direct\tw_generic\tdelta_direct\tdelta_generic\tsemantics"
+}
+
 impl Cell {
     pub fn canonical_record(&self) -> String {
         let mut fields = vec![
