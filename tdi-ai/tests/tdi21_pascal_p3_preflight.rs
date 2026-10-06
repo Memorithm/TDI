@@ -71,8 +71,7 @@ fn p3_frozen_geometry_is_exactly_216_nonfinal_cells() {
     let query_loads = 3usize;
     let reuse_values = 2usize;
 
-    let cells_per_split =
-        widths_per_split * densities * schedules * query_loads * reuse_values;
+    let cells_per_split = widths_per_split * densities * schedules * query_loads * reuse_values;
     assert_eq!(cells_per_split, 108);
     assert_eq!(2 * cells_per_split, 216);
 }
