@@ -32,6 +32,11 @@
 //! matched C6 reference already carries `beta=0`, so the ablation is recorded
 //! explicitly as the identity (bit-for-bit equal scores) while the per-case
 //! mirror-even observable is retained and the parity-odd channel stays intact.
+//! Slice 33 adds the direct-only collapse: both extra C6 channels are zeroed
+//! (`beta=gamma=0`, alpha and capacity fixed) on the same case stream and the
+//! collapsed C6 score is checked bit-for-bit against the matched V6 score.
+//! Because the reference already has `beta=0`, the collapse shares its weights
+//! with the slice-31 `gamma=0` ablation; that coincidence is recorded explicitly.
 //! No training,
 //! confirmatory execution, protected/final evaluation, or scientific claim is
 //! authorised here.
@@ -40,8 +45,8 @@ use core::fmt;
 
 use super::tdi24_accounting::ScoreArm;
 use super::tdi24_chiral::{
-    CHIRAL_CONTRACT, CHIRAL_WIDTH, Chiral6, ChiralError, ChiralScoreWeights, chiral_score,
-    enantiomorphic_scores, observables,
+    CHIRAL_CONTRACT, CHIRAL_WIDTH, Chiral6, ChiralError, ChiralObservables, ChiralScoreWeights,
+    chiral_score, enantiomorphic_scores, observables,
 };
 use super::tdi24_tasks::{
     DATASET_CANONICALIZATION_CONTRACT, DataSplit, DirectionTarget, HandednessTarget, InferenceView,
@@ -121,6 +126,15 @@ pub const GAMMA_ZERO_ABLATION_CONTRACT: &str = "tdi24-gamma-zero-ablation-v1";
 
 /// Phase-D `beta=0` ablation contract pin (slice 32).
 pub const BETA_ZERO_ABLATION_CONTRACT: &str = "tdi24-beta-zero-ablation-v1";
+
+/// Phase-D direct-only collapse contract pin (slice 33).
+pub const DIRECT_ONLY_COLLAPSE_CONTRACT: &str = "tdi24-direct-only-collapse-v1";
+
+/// Declared absolute tolerance of the collapsed-C6-vs-V6 score match (slice 33).
+///
+/// Exactly zero: the collapsed C6 path and V6 share the identical checked dot
+/// accumulation, so the match is required bit-for-bit. Not a freeze pin.
+pub const DIRECT_ONLY_V6_MATCH_TOLERANCE: f64 = 0.0;
 
 /// Matched C6 reference score weights (alpha, beta, gamma) used since slice 22.
 pub const C6_REFERENCE_WEIGHTS: ChiralScoreWeights = ChiralScoreWeights {
@@ -580,6 +594,25 @@ pub fn score_c6_beta_zero_from_view(view: &InferenceView) -> Result<f64, EvalErr
     let query = Chiral6::from_array(view.query.as_array()).map_err(EvalError::ChiralNumerical)?;
     let key = Chiral6::from_array(view.key.as_array()).map_err(EvalError::ChiralNumerical)?;
     chiral_score(query, key, beta_zero_weights(C6_REFERENCE_WEIGHTS))
+        .map_err(EvalError::ChiralNumerical)
+}
+
+/// Direct-only collapse of `reference`: both extra channels (mirror-even
+/// `beta` and parity-odd `gamma`) are zeroed; only `alpha` is kept.
+#[must_use]
+pub const fn direct_only_weights(reference: ChiralScoreWeights) -> ChiralScoreWeights {
+    ChiralScoreWeights {
+        alpha: reference.alpha,
+        beta: 0.0,
+        gamma: 0.0,
+    }
+}
+
+/// Score an inference view with the direct-only collapse of the C6 reference.
+pub fn score_c6_direct_only_from_view(view: &InferenceView) -> Result<f64, EvalError> {
+    let query = Chiral6::from_array(view.query.as_array()).map_err(EvalError::ChiralNumerical)?;
+    let key = Chiral6::from_array(view.key.as_array()).map_err(EvalError::ChiralNumerical)?;
+    chiral_score(query, key, direct_only_weights(C6_REFERENCE_WEIGHTS))
         .map_err(EvalError::ChiralNumerical)
 }
 
@@ -1810,7 +1843,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::ProvenanceEnvelopeInvalid { .. }
         | EvalError::StageCPreflightInvalid { .. }
         | EvalError::GammaZeroAblationInvalid { .. }
-        | EvalError::BetaZeroAblationInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::BetaZeroAblationInvalid { .. }
+        | EvalError::DirectOnlyCollapseInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -1848,6 +1882,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::StageCPreflightInvalid { .. } => "stage_c_preflight_invalid",
         EvalError::GammaZeroAblationInvalid { .. } => "gamma_zero_ablation_invalid",
         EvalError::BetaZeroAblationInvalid { .. } => "beta_zero_ablation_invalid",
+        EvalError::DirectOnlyCollapseInvalid { .. } => "direct_only_collapse_invalid",
     }
 }
 
@@ -3274,6 +3309,354 @@ pub fn validate_beta_zero_ablation_report(
     Ok(())
 }
 
+/// One case scored by the C6 reference, its direct-only collapse and V6.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DirectOnlyCollapseCase {
+    pub family: TaskFamily,
+    pub case_id: u64,
+    pub reference_score: f64,
+    pub collapsed_score: f64,
+    /// Matched V6 score on the same inference view.
+    pub v6_score: f64,
+    /// Unweighted mirror-even observable `q^T M k` removed by the collapse.
+    pub mirror_even_channel: f64,
+    /// Unweighted parity-odd observable `q^T J k` removed by the collapse.
+    pub parity_odd_channel: f64,
+    pub reference_correct: bool,
+    pub collapsed_correct: bool,
+    pub v6_correct: bool,
+}
+
+/// Per-family correct counts for the reference, the collapse and V6.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DirectOnlyFamilySummary {
+    pub family: TaskFamily,
+    pub n_cases: u64,
+    pub reference_correct: u64,
+    pub collapsed_correct: u64,
+    pub v6_correct: u64,
+}
+
+/// Immutable direct-only collapse report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DirectOnlyCollapseReport {
+    pub collapse_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    pub reference_weights: ChiralScoreWeights,
+    pub collapsed_weights: ChiralScoreWeights,
+    /// Declared absolute tolerance of the collapsed-vs-V6 match; must be the
+    /// exact pin [`DIRECT_ONLY_V6_MATCH_TOLERANCE`] (`0.0`, bit-for-bit).
+    pub v6_match_tolerance: f64,
+    /// True when the matched C6 reference already carries `beta=0`: the
+    /// collapse then has the same weights as the slice-31 `gamma=0` ablation,
+    /// recorded as such rather than hidden.
+    pub collapse_coincides_with_gamma_zero: bool,
+    /// Identical capacity on both C6 sides: the collapse removes no parameter.
+    pub reference_capacity: TrainableCapacity,
+    pub collapsed_capacity: TrainableCapacity,
+    /// Matched V6 capacity the collapsed path is compared against.
+    pub v6_capacity: TrainableCapacity,
+    pub cases: Vec<DirectOnlyCollapseCase>,
+    pub families: Vec<DirectOnlyFamilySummary>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false: every side is the non-trained reference.
+    pub training_executed: bool,
+    /// Must remain false: attribution is decided only by the Stage-D audit.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn direct_only_invalid(reason: &'static str) -> EvalError {
+    EvalError::DirectOnlyCollapseInvalid { reason }
+}
+
+/// Exact collapsed-vs-V6 comparison under the declared tolerance pin.
+fn direct_only_matches_v6(collapsed: f64, v6: f64, tolerance: f64) -> bool {
+    if tolerance == 0.0 {
+        collapsed.to_bits() == v6.to_bits()
+    } else {
+        (collapsed - v6).abs() <= tolerance
+    }
+}
+
+/// Check the exact per-case identities of the collapse.
+fn check_direct_only_identities(
+    query: Chiral6,
+    key: Chiral6,
+    reference: ChiralScoreWeights,
+    reference_score: f64,
+    collapsed_score: f64,
+    v6_score: f64,
+) -> Result<ChiralObservables, EvalError> {
+    let channels = observables(query, key).map_err(EvalError::ChiralNumerical)?;
+    let collapsed = direct_only_weights(reference);
+    // The two extra channels are the only difference between the C6 scores.
+    if reference_score
+        != collapsed_score + reference.beta * channels.mirrored + reference.gamma * channels.chiral
+    {
+        return Err(direct_only_invalid("removed_channel_residual"));
+    }
+    // The collapsed path is the V6 direct score on the identical carrier.
+    if !direct_only_matches_v6(collapsed_score, v6_score, DIRECT_ONLY_V6_MATCH_TOLERANCE)
+        || !direct_only_matches_v6(channels.direct, v6_score, DIRECT_ONLY_V6_MATCH_TOLERANCE)
+    {
+        return Err(direct_only_invalid("v6_score_mismatch"));
+    }
+    // With no parity-odd channel the right/left enantiomorphic scores coincide.
+    let (right, left) =
+        enantiomorphic_scores(query, key, collapsed).map_err(EvalError::ChiralNumerical)?;
+    if right != left || right != collapsed_score {
+        return Err(direct_only_invalid("enantiomorphic_split"));
+    }
+    Ok(channels)
+}
+
+fn collapse_direct_only_case<T, S>(
+    case: &LabeledCase<T>,
+    split: DataSplit,
+    oracle_sign: S,
+    cases: &mut Vec<DirectOnlyCollapseCase>,
+) -> Result<(), EvalError>
+where
+    S: Fn(&T) -> Result<i8, EvalError>,
+{
+    let view = case.inference_view();
+    if view.split != split {
+        return Err(EvalError::SplitMismatch {
+            expected: split,
+            actual: view.split,
+        });
+    }
+    let reference_score = run_inference_callback(case, score_c6_from_view)?;
+    let collapsed_score = run_inference_callback(case, score_c6_direct_only_from_view)?;
+    let v6_score = run_inference_callback(case, score_v6_from_view)?;
+    let query = Chiral6::from_array(view.query.as_array()).map_err(EvalError::ChiralNumerical)?;
+    let key = Chiral6::from_array(view.key.as_array()).map_err(EvalError::ChiralNumerical)?;
+    let channels = check_direct_only_identities(
+        query,
+        key,
+        C6_REFERENCE_WEIGHTS,
+        reference_score,
+        collapsed_score,
+        v6_score,
+    )?;
+    let sign = oracle_sign(case.protected_label().reveal_for_evaluation())?;
+    if sign != 1 && sign != -1 {
+        return Err(direct_only_invalid("oracle_sign"));
+    }
+    let sign = f64::from(sign);
+    cases.push(DirectOnlyCollapseCase {
+        family: view.family,
+        case_id: view.case_id,
+        reference_score,
+        collapsed_score,
+        v6_score,
+        mirror_even_channel: channels.mirrored,
+        parity_odd_channel: channels.chiral,
+        reference_correct: reference_score * sign > 0.0,
+        collapsed_correct: collapsed_score * sign > 0.0,
+        v6_correct: v6_score * sign > 0.0,
+    });
+    Ok(())
+}
+
+fn summarize_direct_only_families(
+    cases: &[DirectOnlyCollapseCase],
+) -> Vec<DirectOnlyFamilySummary> {
+    STAGE_C_PREFLIGHT_FAMILIES
+        .iter()
+        .map(|family| {
+            let members = cases.iter().filter(|case| case.family == *family);
+            DirectOnlyFamilySummary {
+                family: *family,
+                n_cases: members.clone().count() as u64,
+                reference_correct: members.clone().filter(|c| c.reference_correct).count() as u64,
+                collapsed_correct: members.clone().filter(|c| c.collapsed_correct).count() as u64,
+                v6_correct: members.filter(|c| c.v6_correct).count() as u64,
+            }
+        })
+        .collect()
+}
+
+/// Run the direct-only collapse on the bounded Stage-C case stream.
+///
+/// Same generators, pair ids, split and capacity as the Stage-C preflight;
+/// both extra C6 channels (`beta`, `gamma`) are zeroed and the collapsed path
+/// is checked bit-for-bit against the matched V6 score on the same view. The
+/// matched C6 reference already uses `beta=0`, so the collapse has the same
+/// weights as the slice-31 `gamma=0` ablation and the report says so
+/// explicitly (`collapse_coincides_with_gamma_zero`). Any scoring or identity
+/// failure aborts fail-closed; nothing is silently dropped.
+pub fn run_direct_only_collapse(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<DirectOnlyCollapseReport, EvalError> {
+    validate_non_final_split(split)?;
+    let cases_per_arm = budget.cases_per_arm()?;
+    let mut cases = Vec::new();
+    let last_pair_id = budget.first_pair_id + budget.pairs_per_family;
+    for pair_id in budget.first_pair_id..last_pair_id {
+        let discriminative = reflection_discriminative_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [discriminative.right, discriminative.left] {
+            collapse_direct_only_case(
+                &seal_reflection_discriminative(&member),
+                split,
+                handedness_sign,
+                &mut cases,
+            )?;
+        }
+        let nuisance = reflection_nuisance_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [nuisance.canonical, nuisance.reflected] {
+            collapse_direct_only_case(
+                &seal_reflection_nuisance(&member),
+                split,
+                reflection_invariant_sign,
+                &mut cases,
+            )?;
+        }
+        let direction = direction_reversal_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [direction.forward, direction.reverse] {
+            collapse_direct_only_case(
+                &seal_direction_reversal(&member),
+                split,
+                direction_sign,
+                &mut cases,
+            )?;
+        }
+        let base_case_id = pair_id
+            .checked_mul(STAGE_C_PREFLIGHT_MEMBERS_PER_PAIR)
+            .ok_or_else(preflight_generation_failed)?;
+        for case_id in [base_case_id, base_case_id + 1] {
+            let control = non_chiral_control_case_in_split(case_id, split)
+                .map_err(|_| preflight_generation_failed())?;
+            collapse_direct_only_case(
+                &seal_non_chiral_control(&control),
+                split,
+                non_chiral_sign,
+                &mut cases,
+            )?;
+        }
+    }
+    if cases.len() as u64 != cases_per_arm {
+        return Err(direct_only_invalid("case_count"));
+    }
+    let families = summarize_direct_only_families(&cases);
+    let collapsed_weights = direct_only_weights(C6_REFERENCE_WEIGHTS);
+    let report = DirectOnlyCollapseReport {
+        collapse_contract: DIRECT_ONLY_COLLAPSE_CONTRACT,
+        split,
+        budget,
+        reference_weights: C6_REFERENCE_WEIGHTS,
+        collapsed_weights,
+        v6_match_tolerance: DIRECT_ONLY_V6_MATCH_TOLERANCE,
+        collapse_coincides_with_gamma_zero: collapsed_weights
+            == gamma_zero_weights(C6_REFERENCE_WEIGHTS),
+        reference_capacity: TrainableCapacity::reference_c6(),
+        collapsed_capacity: TrainableCapacity::reference_c6(),
+        v6_capacity: TrainableCapacity::reference_v6(),
+        cases,
+        families,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_direct_only_collapse_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_direct_only_collapse_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<DirectOnlyCollapseReport, EvalError> {
+    run_direct_only_collapse(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a direct-only collapse report: pins, collapsed weights, the
+/// declared exact V6 tolerance, the explicit `gamma=0` coincidence flag,
+/// matched C6/V6 capacity, bounded coverage, the exact per-case removed-channel
+/// residual, the bit-for-bit V6 score/correctness match, recomputed family
+/// counts, and the no-access / no-training / no-claim flags.
+pub fn validate_direct_only_collapse_report(
+    report: &DirectOnlyCollapseReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.collapse_contract != DIRECT_ONLY_COLLAPSE_CONTRACT {
+        return Err(direct_only_invalid("contract_drift"));
+    }
+    if report.reference_weights != C6_REFERENCE_WEIGHTS {
+        return Err(direct_only_invalid("reference_weights_drift"));
+    }
+    if report.collapsed_weights != direct_only_weights(report.reference_weights) {
+        return Err(direct_only_invalid("collapsed_weights_drift"));
+    }
+    // V6 score semantics are the unweighted direct channel `s = q^T k`.
+    if report.collapsed_weights.alpha != 1.0 {
+        return Err(direct_only_invalid("v6_semantics_alpha"));
+    }
+    if report.v6_match_tolerance.to_bits() != DIRECT_ONLY_V6_MATCH_TOLERANCE.to_bits() {
+        return Err(direct_only_invalid("tolerance_drift"));
+    }
+    if report.collapse_coincides_with_gamma_zero
+        != (report.collapsed_weights == gamma_zero_weights(report.reference_weights))
+    {
+        return Err(direct_only_invalid("degeneracy_flag_drift"));
+    }
+    if report.reference_capacity != report.collapsed_capacity
+        || report.reference_capacity != TrainableCapacity::reference_c6()
+        || report.v6_capacity != TrainableCapacity::reference_v6()
+        || match_parameter_counts(report.v6_capacity, report.collapsed_capacity).is_err()
+    {
+        return Err(direct_only_invalid("capacity_mismatch"));
+    }
+    let expected = report.budget.cases_per_arm()?;
+    if report.cases.len() as u64 != expected {
+        return Err(direct_only_invalid("case_count"));
+    }
+    for case in &report.cases {
+        if case.reference_score
+            != case.collapsed_score
+                + report.reference_weights.beta * case.mirror_even_channel
+                + report.reference_weights.gamma * case.parity_odd_channel
+        {
+            return Err(direct_only_invalid("removed_channel_residual"));
+        }
+        if !direct_only_matches_v6(
+            case.collapsed_score,
+            case.v6_score,
+            report.v6_match_tolerance,
+        ) || case.collapsed_correct != case.v6_correct
+        {
+            return Err(direct_only_invalid("v6_score_mismatch"));
+        }
+    }
+    if report.families != summarize_direct_only_families(&report.cases)
+        || report.families.iter().map(|f| f.n_cases).sum::<u64>() != expected
+    {
+        return Err(direct_only_invalid("family_summary_drift"));
+    }
+    if report.protected_or_final_access {
+        return Err(direct_only_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(direct_only_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(direct_only_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(direct_only_invalid("experimental_non_final"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -3350,6 +3733,8 @@ pub enum EvalError {
     GammaZeroAblationInvalid { reason: &'static str },
     /// `beta=0` ablation rejected drifted weights, identities, budget or flags.
     BetaZeroAblationInvalid { reason: &'static str },
+    /// Direct-only collapse rejected drifted weights, V6 mismatch, budget or flags.
+    DirectOnlyCollapseInvalid { reason: &'static str },
 }
 
 impl fmt::Display for EvalError {
@@ -3435,6 +3820,9 @@ impl fmt::Display for EvalError {
             }
             Self::BetaZeroAblationInvalid { reason } => {
                 write!(formatter, "beta=0 ablation invalid: {reason}")
+            }
+            Self::DirectOnlyCollapseInvalid { reason } => {
+                write!(formatter, "direct-only collapse invalid: {reason}")
             }
         }
     }
