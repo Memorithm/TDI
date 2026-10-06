@@ -60,7 +60,12 @@
 //! monitored identity `reference = ablated + transport_term`; cases whose
 //! reduction point already equals the query point must carry an exactly zero
 //! term. The report records match counts only; attribution is reserved for the
-//! Stage-D audit. All arms consume sealed
+//! Stage-D audit. Slice 32 adds the direct vs factorized torsor bridge monitor
+//! under `tdi25-direct-vs-factorized-bridge-v1`: on the same bounded matched
+//! population, every T6 case is scored through the unchanged factorized TDI-22
+//! pairing `(v + Q x omega).R + omega.C` and through the direct pairing
+//! `v.R + omega.M(Q)`, and the residual between the two forms is monitored
+//! under the shared v1 tolerance. All arms consume sealed
 //! Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
@@ -71,8 +76,9 @@ pub mod matched_reference {
 }
 
 pub use matched_reference::{
-    ReductionPointAblationCase, evaluate_reduction_point_ablation, reduction_point_transport_term,
-    untransported_torsor_score,
+    ReductionPointAblationCase, TorsorBridgeCase, direct_torsor_bridge_score,
+    evaluate_reduction_point_ablation, evaluate_torsor_bridge_equivalence,
+    reduction_point_transport_term, untransported_torsor_score,
 };
 
 use core::fmt;
@@ -143,6 +149,13 @@ pub const TORSOR_REDUCTION_POINT_ABLATION_CONTRACT: &str =
 /// Relative tolerance of the monitored transport identity; identical to the
 /// matched-reference v1 scalar tolerance shared by every arm.
 pub const TRANSPORT_IDENTITY_RELATIVE_TOLERANCE: f64 = 1e-12;
+
+/// Phase-D direct vs factorized torsor bridge contract pin (slice 32).
+pub const DIRECT_VS_FACTORIZED_BRIDGE_CONTRACT: &str = "tdi25-direct-vs-factorized-bridge-v1";
+
+/// Relative tolerance of the monitored bridge equivalence; reuses the
+/// matched-reference v1 scalar tolerance shared by every arm (no new value).
+pub const BRIDGE_EQUIVALENCE_RELATIVE_TOLERANCE: f64 = TRANSPORT_IDENTITY_RELATIVE_TOLERANCE;
 
 /// Maximum seed blocks per family in one Stage-C preflight.
 pub const MAX_PREFLIGHT_SEED_BLOCKS: u64 = 2;
@@ -3319,7 +3332,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::FamilyStratifiedSynthesisInvalid { .. }
         | EvalError::FailureResourceAccountingInvalid { .. }
         | EvalError::StageCPreflightInvalid { .. }
-        | EvalError::ReductionPointAblationInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::ReductionPointAblationInvalid { .. }
+        | EvalError::TorsorBridgeEquivalenceInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -3355,6 +3369,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::FailureResourceAccountingInvalid { .. } => "failure_resource_accounting_invalid",
         EvalError::StageCPreflightInvalid { .. } => "stage_c_preflight_invalid",
         EvalError::ReductionPointAblationInvalid { .. } => "reduction_point_ablation_invalid",
+        EvalError::TorsorBridgeEquivalenceInvalid { .. } => "torsor_bridge_equivalence_invalid",
     }
 }
 
@@ -4226,6 +4241,213 @@ pub fn validate_torsor_reduction_point_ablation_report(
     Ok(())
 }
 
+/// Per-family counts for the direct vs factorized torsor bridge monitor.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TorsorBridgeFamilySummary {
+    pub family: TaskFamily,
+    pub n_cases: u64,
+    pub factorized_matches: u64,
+    pub direct_matches: u64,
+    /// Cases whose two bridge forms agree bit for bit.
+    pub bit_identical_cases: u64,
+    /// Largest monitored `|factorized - direct|` in the family.
+    pub max_abs_residual: f64,
+}
+
+/// Immutable direct vs factorized torsor bridge report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TorsorBridgeEquivalenceReport {
+    pub bridge_contract: &'static str,
+    pub population_contract: &'static str,
+    pub torsor_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    /// Declared monitor tolerance; must equal
+    /// [`BRIDGE_EQUIVALENCE_RELATIVE_TOLERANCE`].
+    pub relative_tolerance: f64,
+    /// Identical capacity on both sides: the two forms are one T6 score.
+    pub factorized_capacity: ParameterReadoutCapacity,
+    pub direct_capacity: ParameterReadoutCapacity,
+    pub cases: Vec<TorsorBridgeCase>,
+    pub families: Vec<TorsorBridgeFamilySummary>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false: both sides are the non-trained reference.
+    pub training_executed: bool,
+    /// Must remain false: attribution is decided only by the Stage-D audit.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn bridge_invalid(reason: &'static str) -> EvalError {
+    EvalError::TorsorBridgeEquivalenceInvalid { reason }
+}
+
+/// Monitored equivalence `factorized = direct` under the shared
+/// matched-reference v1 relative tolerance.
+#[must_use]
+pub fn bridge_equivalence_holds(factorized: f64, direct: f64) -> bool {
+    factorized.is_finite()
+        && direct.is_finite()
+        && (factorized - direct).abs()
+            <= BRIDGE_EQUIVALENCE_RELATIVE_TOLERANCE * (1.0 + factorized.abs().max(direct.abs()))
+}
+
+fn check_torsor_bridge_case(case: &TorsorBridgeCase) -> Result<(), EvalError> {
+    if !bridge_equivalence_holds(case.factorized_score, case.direct_score) {
+        return Err(bridge_invalid("bridge_residual"));
+    }
+    if case.residual.to_bits() != (case.factorized_score - case.direct_score).to_bits() {
+        return Err(bridge_invalid("residual_drift"));
+    }
+    if case.bit_identical != (case.factorized_score.to_bits() == case.direct_score.to_bits()) {
+        return Err(bridge_invalid("bit_identity_drift"));
+    }
+    // Identical scores against one common target must share their match bit.
+    if case.bit_identical && case.factorized_matches_target != case.direct_matches_target {
+        return Err(bridge_invalid("match_bit_drift"));
+    }
+    Ok(())
+}
+
+fn summarize_torsor_bridge_families(cases: &[TorsorBridgeCase]) -> Vec<TorsorBridgeFamilySummary> {
+    REQUIRED_SYNTHESIS_FAMILIES
+        .iter()
+        .map(|family| {
+            let members = cases.iter().filter(|case| case.family == *family);
+            TorsorBridgeFamilySummary {
+                family: *family,
+                n_cases: members.clone().count() as u64,
+                factorized_matches: members
+                    .clone()
+                    .filter(|c| c.factorized_matches_target)
+                    .count() as u64,
+                direct_matches: members.clone().filter(|c| c.direct_matches_target).count() as u64,
+                bit_identical_cases: members.clone().filter(|c| c.bit_identical).count() as u64,
+                max_abs_residual: members.fold(0.0, |max: f64, c| max.max(c.residual.abs())),
+            }
+        })
+        .collect()
+}
+
+/// Run the direct vs factorized torsor bridge monitor on the bounded matched
+/// population.
+///
+/// Same families, seed blocks, cases, split and capacity as the Stage-C
+/// preflight; each T6 case is scored through both upstream TDI-22 forms and
+/// their residual is monitored. Any scoring, drift or equivalence failure
+/// aborts fail-closed; nothing is silently dropped.
+pub fn run_direct_vs_factorized_bridge(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<TorsorBridgeEquivalenceReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.validate()?;
+    let mut cases = Vec::new();
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..budget.seed_blocks {
+            cases.extend(evaluate_torsor_bridge_equivalence(
+                split,
+                *family,
+                seed_block,
+                budget.cases_per_block,
+            )?);
+        }
+    }
+    let families = summarize_torsor_bridge_families(&cases);
+    let report = TorsorBridgeEquivalenceReport {
+        bridge_contract: DIRECT_VS_FACTORIZED_BRIDGE_CONTRACT,
+        population_contract: matched_reference::MATCHED_POPULATION_CONTRACT,
+        torsor_contract: TORSOR_CONTRACT,
+        split,
+        budget,
+        relative_tolerance: BRIDGE_EQUIVALENCE_RELATIVE_TOLERANCE,
+        factorized_capacity: ParameterReadoutCapacity::reference_t6(),
+        direct_capacity: ParameterReadoutCapacity::reference_t6(),
+        cases,
+        families,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_direct_vs_factorized_bridge_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_direct_vs_factorized_bridge_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<TorsorBridgeEquivalenceReport, EvalError> {
+    run_direct_vs_factorized_bridge(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a direct vs factorized bridge report: pins, declared tolerance,
+/// matched capacity, bounded coverage in canonical order, the monitored
+/// per-case residual, recomputed family summaries, and the no-access /
+/// no-training / no-claim flags.
+pub fn validate_direct_vs_factorized_bridge_report(
+    report: &TorsorBridgeEquivalenceReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.bridge_contract != DIRECT_VS_FACTORIZED_BRIDGE_CONTRACT {
+        return Err(bridge_invalid("contract_drift"));
+    }
+    if report.population_contract != matched_reference::MATCHED_POPULATION_CONTRACT {
+        return Err(bridge_invalid("population_drift"));
+    }
+    if report.torsor_contract != TORSOR_CONTRACT {
+        return Err(bridge_invalid("torsor_contract_drift"));
+    }
+    if report.relative_tolerance.to_bits() != BRIDGE_EQUIVALENCE_RELATIVE_TOLERANCE.to_bits() {
+        return Err(bridge_invalid("tolerance_drift"));
+    }
+    report.budget.validate()?;
+    if report.factorized_capacity != report.direct_capacity
+        || report.factorized_capacity != ParameterReadoutCapacity::reference_t6()
+    {
+        return Err(bridge_invalid("capacity_mismatch"));
+    }
+    let expected = report.budget.cases_per_arm();
+    if report.cases.len() as u64 != expected {
+        return Err(bridge_invalid("case_count"));
+    }
+    let mut position = 0usize;
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..report.budget.seed_blocks {
+            for case_id in 0..report.budget.cases_per_block {
+                let case = &report.cases[position];
+                if case.family != *family
+                    || case.seed_block != seed_block
+                    || case.case_id != case_id
+                {
+                    return Err(bridge_invalid("case_order"));
+                }
+                check_torsor_bridge_case(case)?;
+                position += 1;
+            }
+        }
+    }
+    if report.families != summarize_torsor_bridge_families(&report.cases) {
+        return Err(bridge_invalid("family_summary"));
+    }
+    if report.protected_or_final_access {
+        return Err(bridge_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(bridge_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(bridge_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(bridge_invalid("experimental_non_final"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -4298,6 +4520,10 @@ pub enum EvalError {
     },
     /// Torsor reduction-point ablation rejected drift, identity or claims.
     ReductionPointAblationInvalid {
+        reason: &'static str,
+    },
+    /// Direct vs factorized torsor bridge monitor rejected drift or residual.
+    TorsorBridgeEquivalenceInvalid {
         reason: &'static str,
     },
 }
@@ -4379,6 +4605,9 @@ impl fmt::Display for EvalError {
                     formatter,
                     "torsor reduction-point ablation invalid: {reason}"
                 )
+            }
+            Self::TorsorBridgeEquivalenceInvalid { reason } => {
+                write!(formatter, "torsor bridge equivalence invalid: {reason}")
             }
         }
     }
