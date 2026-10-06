@@ -28,5 +28,5 @@ grep -Fq 'fn both_sides_reproduce_the_stage_c_evaluators_exactly' tdi-ai/tests/t
 grep -Fq 'fn collapse_coincides_with_the_gamma_zero_ablation_bit_for_bit' tdi-ai/tests/tdi24_direct_only_collapse.rs
 ! grep -Eq 'DataSplit::(Protected|Final|Holdout)' tdi-ai/src/tdi24_eval.rs tdi-ai/tests/tdi24_direct_only_collapse.rs
 grep -Fq '| 32 | `beta=0` ablation | **landed** in #705, exact head `a3b4a8e986baf4b37bc6421ab14c55d28556af41`, merge `dcbd11751aebcdc4de3882e84ea7504d81abe936`;' docs/TDI-24-CAMPAIGN-50.md
-grep -Fq '| 33 | direct-only collapse | **current stacked slice**;' docs/TDI-24-CAMPAIGN-50.md
+grep -Fq '| 33 | direct-only collapse | **landed** in #707, exact head `e775f1fbfc7dde86124886a8acbe6383e7ded303`, merge `3f6fd02aa68222110384405cf230e6c049fb8767`;' docs/TDI-24-CAMPAIGN-50.md
 # Do not pin the global merged count here: later qualified slices must advance it.
