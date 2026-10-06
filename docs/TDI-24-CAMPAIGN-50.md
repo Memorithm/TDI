@@ -55,7 +55,7 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 | ---: | --- | --- |
 | 31 | `gamma=0` ablation | **landed** in #702, exact head `56ff53b183e10f052c1d62b97c03f4991252b147`, merge `2d59303a73c39100c52b872b7f6ad61a7a1e2504`; parity-odd channel removed, all else fixed |
 | 32 | `beta=0` ablation | **landed** in #705, exact head `a3b4a8e986baf4b37bc6421ab14c55d28556af41`, merge `dcbd11751aebcdc4de3882e84ea7504d81abe936`; mirror-even extra channel removed; matched C6 reference already has `beta=0`, so recorded explicitly as the identity |
-| 33 | direct-only collapse | C6 path numerically matches V6 score semantics |
+| 33 | direct-only collapse | **current stacked slice**; C6 path numerically matches V6 score semantics (bit-for-bit, declared tolerance `0.0`); matched C6 reference already has `beta=0`, so the collapse shares its weights with the slice-31 `gamma=0` ablation, recorded explicitly |
 | 34 | parity-shuffle control | capacity preserved, H+/H- structure destroyed reproducibly |
 | 35 | fixed-M sensitivity | alternative fixed mirror bases under frozen rule |
 | 36 | structure-preserving learned basis prototype | only orthogonal/constrained transforms that preserve algebra |
