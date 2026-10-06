@@ -53,8 +53,8 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 
 | Slice | Deliverable | Gate / definition of done |
 | ---: | --- | --- |
-| 31 | `gamma=0` ablation | **current stacked slice**; parity-odd channel removed, all else fixed |
-| 32 | `beta=0` ablation | mirror-even extra channel removed |
+| 31 | `gamma=0` ablation | **landed** in #702, exact head `56ff53b183e10f052c1d62b97c03f4991252b147`, merge `2d59303a73c39100c52b872b7f6ad61a7a1e2504`; parity-odd channel removed, all else fixed |
+| 32 | `beta=0` ablation | **current stacked slice**; mirror-even extra channel removed; matched C6 reference already has `beta=0`, so recorded explicitly as the identity |
 | 33 | direct-only collapse | C6 path numerically matches V6 score semantics |
 | 34 | parity-shuffle control | capacity preserved, H+/H- structure destroyed reproducibly |
 | 35 | fixed-M sensitivity | alternative fixed mirror bases under frozen rule |
@@ -93,4 +93,4 @@ The campaign pauses rather than forcing a later PR when:
 
 ## Progress accounting
 
-**30/50 merged** (#406, #471, #487, #492, #548, #549, #550, #551, #556, #559, #562, #565, #567, #569, #601, #602, #604, #608, #609, #610, #611, #615, #655, #657, #659, #667, #671, #677, #687, #698). Slice 31 is next. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**31/50 merged** (#406, #471, #487, #492, #548, #549, #550, #551, #556, #559, #562, #565, #567, #569, #601, #602, #604, #608, #609, #610, #611, #615, #655, #657, #659, #667, #671, #677, #687, #698, #702). Slice 32 is next. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
