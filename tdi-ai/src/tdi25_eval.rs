@@ -51,7 +51,16 @@
 //! paired uncertainty engine, and family-stratified synthesis end to end on
 //! Development/Validation only. It refuses to report when any primary failure
 //! is retained, never emits a scientific claim, and records zero protected/final
-//! access. All arms consume sealed
+//! access. Slice 31 opens Phase D with the torsor reduction-point ablation under
+//! `tdi25-torsor-reduction-point-ablation-v1`: on the same bounded matched
+//! population, T6 is compared with an ablation that keeps every input scalar
+//! and the matched capacity but drops the Varignon transport, pairing the stored
+//! moment `M(P)` as if reduced at the query point. Each case carries the
+//! removed transport term `omega.((P - Q) x R)` and is checked against the
+//! monitored identity `reference = ablated + transport_term`; cases whose
+//! reduction point already equals the query point must carry an exactly zero
+//! term. The report records match counts only; attribution is reserved for the
+//! Stage-D audit. All arms consume sealed
 //! Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
@@ -60,6 +69,11 @@
 pub mod matched_reference {
     include!("tdi25_matched_reference.rs");
 }
+
+pub use matched_reference::{
+    ReductionPointAblationCase, evaluate_reduction_point_ablation, reduction_point_transport_term,
+    untransported_torsor_score,
+};
 
 use core::fmt;
 
@@ -121,6 +135,14 @@ pub const FAILURE_RESOURCE_ACCOUNTING_CONTRACT: &str = "tdi25-failure-resource-a
 /// Canonical accounted arms: T6/C6 primaries plus the G6 attribution control.
 /// Stage-C bounded preflight contract pin (slice 30).
 pub const STAGE_C_PREFLIGHT_CONTRACT: &str = "tdi25-stage-c-preflight-v1";
+
+/// Phase-D torsor reduction-point ablation contract pin (slice 31).
+pub const TORSOR_REDUCTION_POINT_ABLATION_CONTRACT: &str =
+    "tdi25-torsor-reduction-point-ablation-v1";
+
+/// Relative tolerance of the monitored transport identity; identical to the
+/// matched-reference v1 scalar tolerance shared by every arm.
+pub const TRANSPORT_IDENTITY_RELATIVE_TOLERANCE: f64 = 1e-12;
 
 /// Maximum seed blocks per family in one Stage-C preflight.
 pub const MAX_PREFLIGHT_SEED_BLOCKS: u64 = 2;
@@ -3296,7 +3318,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::PairedUncertaintyInvalid { .. }
         | EvalError::FamilyStratifiedSynthesisInvalid { .. }
         | EvalError::FailureResourceAccountingInvalid { .. }
-        | EvalError::StageCPreflightInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::StageCPreflightInvalid { .. }
+        | EvalError::ReductionPointAblationInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -3331,6 +3354,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::FamilyStratifiedSynthesisInvalid { .. } => "family_stratified_synthesis_invalid",
         EvalError::FailureResourceAccountingInvalid { .. } => "failure_resource_accounting_invalid",
         EvalError::StageCPreflightInvalid { .. } => "stage_c_preflight_invalid",
+        EvalError::ReductionPointAblationInvalid { .. } => "reduction_point_ablation_invalid",
     }
 }
 
@@ -4008,6 +4032,200 @@ pub fn validate_stage_c_preflight_report(report: &StageCPreflightReport) -> Resu
     Ok(())
 }
 
+/// Per-family match counts for the T6 reference and its reduction-point ablation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ReductionPointFamilySummary {
+    pub family: TaskFamily,
+    pub n_cases: u64,
+    pub reference_matches: u64,
+    pub ablated_matches: u64,
+    /// Cases whose removed transport term is non-zero.
+    pub transport_active_cases: u64,
+}
+
+/// Immutable torsor reduction-point ablation report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReductionPointAblationReport {
+    pub ablation_contract: &'static str,
+    pub population_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    /// Identical capacity on both sides: the ablation removes no parameter
+    /// and no input scalar, only the transport structure.
+    pub reference_capacity: ParameterReadoutCapacity,
+    pub ablated_capacity: ParameterReadoutCapacity,
+    pub cases: Vec<ReductionPointAblationCase>,
+    pub families: Vec<ReductionPointFamilySummary>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false: both sides are the non-trained reference.
+    pub training_executed: bool,
+    /// Must remain false: attribution is decided only by the Stage-D audit.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn reduction_point_invalid(reason: &'static str) -> EvalError {
+    EvalError::ReductionPointAblationInvalid { reason }
+}
+
+/// Monitored identity `reference = ablated + transport_term` under the shared
+/// matched-reference tolerance.
+#[must_use]
+pub fn transport_identity_holds(reference: f64, ablated: f64, transport_term: f64) -> bool {
+    let reconstructed = ablated + transport_term;
+    reference.is_finite()
+        && reconstructed.is_finite()
+        && (reference - reconstructed).abs()
+            <= TRANSPORT_IDENTITY_RELATIVE_TOLERANCE
+                * (1.0 + reference.abs().max(reconstructed.abs()))
+}
+
+fn check_reduction_point_case(case: &ReductionPointAblationCase) -> Result<(), EvalError> {
+    if !transport_identity_holds(
+        case.reference_score,
+        case.ablated_score,
+        case.transport_term,
+    ) {
+        return Err(reduction_point_invalid("transport_residual"));
+    }
+    // A coincident reduction point removes nothing: the term is exactly zero.
+    if case.reduction_points_coincide && case.transport_term != 0.0 {
+        return Err(reduction_point_invalid("coincident_point_transport"));
+    }
+    Ok(())
+}
+
+fn summarize_reduction_point_families(
+    cases: &[ReductionPointAblationCase],
+) -> Vec<ReductionPointFamilySummary> {
+    REQUIRED_SYNTHESIS_FAMILIES
+        .iter()
+        .map(|family| {
+            let members = cases.iter().filter(|case| case.family == *family);
+            ReductionPointFamilySummary {
+                family: *family,
+                n_cases: members.clone().count() as u64,
+                reference_matches: members
+                    .clone()
+                    .filter(|c| c.reference_matches_target)
+                    .count() as u64,
+                ablated_matches: members.clone().filter(|c| c.ablated_matches_target).count()
+                    as u64,
+                transport_active_cases: members.filter(|c| c.transport_term != 0.0).count() as u64,
+            }
+        })
+        .collect()
+}
+
+/// Run the torsor reduction-point ablation on the bounded matched population.
+///
+/// Same families, seed blocks, cases, split and capacity as the Stage-C
+/// preflight; only the T6 transport structure is removed. Any scoring, drift
+/// or identity failure aborts fail-closed; nothing is silently dropped.
+pub fn run_torsor_reduction_point_ablation(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<ReductionPointAblationReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.validate()?;
+    let mut cases = Vec::new();
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..budget.seed_blocks {
+            cases.extend(evaluate_reduction_point_ablation(
+                split,
+                *family,
+                seed_block,
+                budget.cases_per_block,
+            )?);
+        }
+    }
+    let families = summarize_reduction_point_families(&cases);
+    let report = ReductionPointAblationReport {
+        ablation_contract: TORSOR_REDUCTION_POINT_ABLATION_CONTRACT,
+        population_contract: matched_reference::MATCHED_POPULATION_CONTRACT,
+        split,
+        budget,
+        reference_capacity: ParameterReadoutCapacity::reference_t6(),
+        ablated_capacity: ParameterReadoutCapacity::reference_t6(),
+        cases,
+        families,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_torsor_reduction_point_ablation_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_torsor_reduction_point_ablation_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<ReductionPointAblationReport, EvalError> {
+    run_torsor_reduction_point_ablation(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a reduction-point ablation report: pins, matched capacity,
+/// bounded coverage in canonical order, the monitored per-case transport
+/// identity, recomputed family counts, and the no-access / no-training /
+/// no-claim flags.
+pub fn validate_torsor_reduction_point_ablation_report(
+    report: &ReductionPointAblationReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.ablation_contract != TORSOR_REDUCTION_POINT_ABLATION_CONTRACT {
+        return Err(reduction_point_invalid("contract_drift"));
+    }
+    if report.population_contract != matched_reference::MATCHED_POPULATION_CONTRACT {
+        return Err(reduction_point_invalid("population_drift"));
+    }
+    report.budget.validate()?;
+    if report.reference_capacity != report.ablated_capacity
+        || report.reference_capacity != ParameterReadoutCapacity::reference_t6()
+    {
+        return Err(reduction_point_invalid("capacity_mismatch"));
+    }
+    let expected = report.budget.cases_per_arm();
+    if report.cases.len() as u64 != expected {
+        return Err(reduction_point_invalid("case_count"));
+    }
+    let mut position = 0usize;
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..report.budget.seed_blocks {
+            for case_id in 0..report.budget.cases_per_block {
+                let case = &report.cases[position];
+                if case.family != *family
+                    || case.seed_block != seed_block
+                    || case.case_id != case_id
+                {
+                    return Err(reduction_point_invalid("case_order"));
+                }
+                check_reduction_point_case(case)?;
+                position += 1;
+            }
+        }
+    }
+    if report.families != summarize_reduction_point_families(&report.cases) {
+        return Err(reduction_point_invalid("family_summary"));
+    }
+    if report.protected_or_final_access {
+        return Err(reduction_point_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(reduction_point_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(reduction_point_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(reduction_point_invalid("experimental_non_final"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -4076,6 +4294,10 @@ pub enum EvalError {
     },
     /// Stage-C bounded preflight rejected budget, matrix, drift or claims.
     StageCPreflightInvalid {
+        reason: &'static str,
+    },
+    /// Torsor reduction-point ablation rejected drift, identity or claims.
+    ReductionPointAblationInvalid {
         reason: &'static str,
     },
 }
@@ -4151,6 +4373,12 @@ impl fmt::Display for EvalError {
             }
             Self::StageCPreflightInvalid { reason } => {
                 write!(formatter, "Stage-C preflight invalid: {reason}")
+            }
+            Self::ReductionPointAblationInvalid { reason } => {
+                write!(
+                    formatter,
+                    "torsor reduction-point ablation invalid: {reason}"
+                )
             }
         }
     }
