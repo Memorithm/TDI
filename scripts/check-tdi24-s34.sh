@@ -30,7 +30,7 @@ grep -Fq 'fn reference_side_reproduces_the_stage_c_c6_evaluator_exactly' tdi-ai/
 grep -Fq 'fn block_preserving_or_swapping_shuffles_are_rejected' tdi-ai/tests/tdi24_parity_shuffle_control.rs
 ! grep -Eq 'DataSplit::(Protected|Final|Holdout)' tdi-ai/src/tdi24_eval.rs tdi-ai/tests/tdi24_parity_shuffle_control.rs
 grep -Fq '| 33 | direct-only collapse | **landed** in #707, exact head `e775f1fbfc7dde86124886a8acbe6383e7ded303`, merge `3f6fd02aa68222110384405cf230e6c049fb8767`;' docs/TDI-24-CAMPAIGN-50.md
-grep -Fq '| 34 | parity-shuffle control | **current stacked slice**;' docs/TDI-24-CAMPAIGN-50.md
+grep -Fq '| 34 | parity-shuffle control | **landed** in #713, exact head `17407c30e4d132b8d68af72798d9a15193400d10`, merge `8aef82dfda23baa9104178b1ff8e7dcd7652e2fa`;' docs/TDI-24-CAMPAIGN-50.md
 # Do not pin the global merged count here: later qualified slices must advance it.
 grep -Fq 'parity_shuffle_invalid("score_channel_drift")' tdi-ai/src/tdi24_eval.rs
 grep -Fq 'parity_shuffle_invalid("case_evidence_drift")' tdi-ai/src/tdi24_eval.rs

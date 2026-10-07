@@ -30,9 +30,9 @@ grep -Fq 'tdi25-chiral-gamma-zero-ablation-v1' docs/TDI-25-CHIRAL-GAMMA-ZERO-ABL
 grep -Fq 'Recorded degeneracies' docs/TDI-25-CHIRAL-GAMMA-ZERO-ABLATION-V1.md
 ! grep -Eq 'DataSplit::(Protected|Final|Holdout)' tdi-ai/src/tdi25_eval.rs tdi-ai/src/tdi25_matched_reference.rs tdi-ai/tests/tdi25_chiral_gamma_zero_ablation.rs
 grep -Fq '| 32 | Direct vs factorized torsor bridge | **landed** in #708' docs/TDI-25-CAMPAIGN-50.md
-grep -Fq '| 33 | Chiral `gamma=0` ablation | **current candidate**' docs/TDI-25-CAMPAIGN-50.md
+grep -Fq '| 33 | Chiral `gamma=0` ablation | **landed** in #714, exact head `da2a98ae9ef596b2dc0fb5dbd79764e829609e5c`, merge `87b5f02fa053d415b3c9f5b2d5041d4fe9c58b41`;' docs/TDI-25-CAMPAIGN-50.md
 # Monotone: later qualified slices must be able to advance the merged count.
 merged_count="$(grep -Eo '\*\*[0-9]+/50 merged\*\*' docs/TDI-25-CAMPAIGN-50.md | head -n 1 | tr -dc '0-9/' | cut -d/ -f1)"
-test "${merged_count:-0}" -ge 32
+test "${merged_count:-0}" -ge 33
 ! grep -Fq '#PRNUM' docs/TDI-25-CAMPAIGN-50.md
 grep -Fq 'chiral_gamma_zero_invalid("case_evidence_drift")' tdi-ai/src/tdi25_eval.rs
