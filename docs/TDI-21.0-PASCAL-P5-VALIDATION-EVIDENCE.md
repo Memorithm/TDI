@@ -1,6 +1,6 @@
 # TDI-21 Pascal P5 Validation evidence
 
-Status: completed preregistered Validation-only realized-cost slice. This is non-final evidence; no protected/final population was opened, generated, or executed.
+Status: completed preregistered Validation-only realized-cost slice; the Development-vs-Validation timing comparison is inconclusive under G7 (Validation CPU affinity not recorded, see below). This is non-final evidence; no protected/final population was opened, generated, or executed.
 
 ## Frozen execution identity
 
@@ -27,6 +27,14 @@ Against `DIRECT_ANF_QUERY`, `delta_direct = direct - Pascal` is positive in 6 ce
 Against `GENERIC_FULL_MATERIALIZE`, Pascal is faster in 54/54 cells, with median signed delta +2008360.5 ns.
 
 There are 24/54 sign disagreements between the P4 direct-cost proxy and P5 realized direct timing. Those disagreements are retained as evidence and are not filtered or reclassified.
+
+## G7 timing-procedure gap: Development-vs-Validation timing comparison is inconclusive
+
+The Development freeze (`results/tdi21_pascal_p5/freeze.json`) pins `cpu_affinity` to `cpu0`, and the Validation runner amendment requires the Validation timing procedure to match Development. No committed artifact records the CPU affinity (or the pinning invocation) used for the Validation execution: the execution-side freeze records host, kernel, governor, toolchain and binary identities, but not affinity, and no such record exists elsewhere. No affinity value is inferred or added here.
+
+Gate G7 (unchanged timing procedure between Development and Validation) therefore cannot be established. Under the preregistration rule that a G7 failure makes the affected evidence inconclusive, the **Development-vs-Validation timing comparison is classified as inconclusive** because the Validation CPU affinity was not recorded. `validation-summary.json` records this as `gates.g7_validation_timing_procedure_matches_development = false` and `development_validation_timing_comparison.classification = "inconclusive"`.
+
+Unaffected: the semantic gates (exact Pascal/generic outputs, zero pairwise-token operations) and the completeness of the raw record (all six rounds per arm, every signed contrast retained). The raw Validation timing rows above are retained unchanged as measured on this host, but they are not certified as procedure-matched to Development and support no cross-split timing claim.
 
 ## Interpretation boundary
 
