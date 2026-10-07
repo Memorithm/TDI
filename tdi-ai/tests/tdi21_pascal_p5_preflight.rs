@@ -1,5 +1,12 @@
-use tdi_ai::tdi21_pascal_p4::Split;
-use tdi_ai::tdi21_pascal_p5::{
+#![allow(dead_code)]
+
+#[path = "../src/tdi21_pascal_p4.rs"]
+mod tdi21_pascal_p4;
+#[path = "../src/tdi21_pascal_p5.rs"]
+mod tdi21_pascal_p5;
+
+use tdi21_pascal_p4::Split;
+use tdi21_pascal_p5::{
     Arm, MEASURED_ROUNDS, SEMANTICS, WARMUP_ROUNDS, declared_cell_count, declared_widths,
     median_ns_six, timing_order,
 };
