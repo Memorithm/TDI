@@ -1,0 +1,47 @@
+name: TDI-25 slice 36 G6 orthogonal-basis control
+on:
+  pull_request:
+    paths:
+      - 'tdi-ai/src/tdi25_eval.rs'
+      - 'tdi-ai/src/tdi25_matched_reference.rs'
+      - 'tdi-ai/tests/tdi25_matched_reference.rs'
+      - 'tdi-ai/tests/tdi25_production_pairing.rs'
+      - 'tdi-ai/tests/tdi25_failure_resource_accounting.rs'
+      - 'tdi-ai/tests/tdi25_stage_c_preflight.rs'
+      - 'tdi-ai/tests/tdi25_reduction_point_ablation.rs'
+      - 'tdi-ai/tests/tdi25_direct_vs_factorized_bridge.rs'
+      - 'tdi-ai/tests/tdi25_chiral_gamma_zero_ablation.rs'
+      - 'tdi-ai/tests/tdi25_chiral_parity_shuffle_control.rs'
+      - 'tdi-ai/tests/tdi25_torsor_structure_shuffle_control.rs'
+      - 'tdi-ai/tests/tdi25_g6_orthogonal_basis_control.rs'
+      - 'tdi-ai/tests/tdi24_learned_basis_prototype.rs'
+      - 'docs/TDI-25-G6-ORTHOGONAL-BASIS-CONTROL-V1.md'
+      - 'docs/TDI-25-TORSOR-STRUCTURE-SHUFFLE-CONTROL-V1.md'
+      - 'tdi-ai/src/tdi24_eval.rs'
+      - 'tdi-ai/tests/tdi24_parity_shuffle_control.rs'
+      - 'tdi-ai/src/tdi24_chiral.rs'
+      - 'tdi-ai/src/tdi22_torsor.rs'
+      - 'tdi-ai/src/tdi25_torsor_chiral.rs'
+      - 'docs/TDI-25-CHIRAL-GAMMA-ZERO-ABLATION-V1.md'
+      - 'docs/TDI-25-CHIRAL-PARITY-SHUFFLE-CONTROL-V1.md'
+      - 'tdi-ai/src/tdi25_matched_matrix.rs'
+      - 'docs/TDI-25-MATCHED-REFERENCE-V1.md'
+      - 'docs/TDI-25-MATCHED-EVALUATOR-GATE.md'
+      - 'docs/TDI-25-CAMPAIGN-50.md'
+      - 'scripts/check-tdi25-s36.sh'
+      - '.github/workflows/tdi25-s36-g6-orthogonal-basis-control.yml'
+permissions:
+  contents: read
+jobs:
+  g6-orthogonal-basis-control:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+      - run: bash scripts/check-tdi25-s36.sh
