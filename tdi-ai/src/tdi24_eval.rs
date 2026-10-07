@@ -4738,7 +4738,8 @@ pub enum LearnedBasisProbeRole {
     Identity,
     /// `O = diag(R, R)`: commutes with `M` and `J`, scores must be invariant.
     Gauge,
-    /// One rotation in the `(0, 3)` plane mixing the two parity sectors.
+    /// One rotation in the `(0, 4)` plane mixing the two parity sectors across
+    /// a pair not coupled by `J` (the `(0, 3)` plane commutes with `J`).
     SectorMixing,
     /// Every plane rotated by a distinct declared angle.
     Generic,
@@ -4790,7 +4791,7 @@ pub fn learned_basis_probes() -> [LearnedBasisProbe; LEARNED_BASIS_PROBE_COUNT] 
     gauge[plane_index(3, 4)] = PI / 5.0;
     gauge[plane_index(4, 5)] = PI / 7.0;
     let mut mixing = identity;
-    mixing[plane_index(0, 3)] = PI / 4.0;
+    mixing[plane_index(0, 4)] = PI / 4.0;
     let mut generic = identity;
     for (plane, angle) in generic.iter_mut().enumerate() {
         *angle = (plane as f64 + 1.0) * PI / 32.0;

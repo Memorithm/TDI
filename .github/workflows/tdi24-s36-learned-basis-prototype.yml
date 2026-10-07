@@ -16,7 +16,7 @@ on:
       - 'tdi-ai/tests/tdi24_stage_c_preflight.rs'
       - 'docs/TDI-24-CAMPAIGN-50.md'
       - 'scripts/check-tdi24-s36.sh'
-      - '.github/workflows/tdi24-s36-fixed-m-sensitivity.yml'
+      - '.github/workflows/tdi24-s36-learned-basis-prototype.yml'
 permissions:
   contents: read
 jobs:

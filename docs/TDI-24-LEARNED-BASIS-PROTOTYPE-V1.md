@@ -27,7 +27,7 @@ change. The subgroup `diag(R, R)`, `R` in `O(3)`, commutes with both `M` and
 | ---: | --- | --- |
 | 0 | Identity | none |
 | 1 | Gauge `diag(R, R)` | `theta_01 = theta_34 = pi/5`, `theta_12 = theta_45 = pi/7` |
-| 2 | Sector mixing | `theta_03 = pi/4` |
+| 2 | Sector mixing | `theta_04 = pi/4` (slots 0 and 4 are not paired by `J`; the `(0,3)` plane would commute with `J` and be a gauge direction) |
 | 3 | Generic | `theta_p = (p + 1) pi / 32` for plane rank `p = 0..14` |
 
 The probes are prototype evaluation points of the parameterisation. They are
@@ -82,9 +82,11 @@ family). Correct counts per probe and family:
 2. **Gauge directions are unidentifiable.** `diag(R, R)` leaves every score
    unchanged, so at most `15 - 3 = 12` angles can affect scores; any future
    training must quotient or fix this gauge.
-3. **Sector mixing in one plane leaves these counts unchanged** on this
-   bounded stream; this is a property of the case values, not evidence of
-   invariance in general.
+3. **Sector mixing in one plane changes scores but not these counts** on this
+   bounded stream (scores differ beyond tolerance on some cases; the sign of
+   every score is unchanged). This is a property of the case values, not
+   evidence of invariance in general. Rotations in the `J`-paired planes
+   `(0,3)`, `(1,4)`, `(2,5)` commute with `J` and leave `chi` invariant.
 4. **Beta = 0.** Only the parity-odd channel depends on the basis.
 
 ## What is recorded

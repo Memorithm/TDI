@@ -147,12 +147,10 @@ fn identity_probe_reproduces_the_stage_c_c6_evaluator_exactly() {
 
 #[test]
 fn hand_calculated_sector_mixing_score() {
-    // Probe 2 rotates the (0,3) plane by pi/4: x0' = (x0 - x3)/sqrt2,
-    // x3' = (x0 + x3)/sqrt2. The direct channel is invariant.
+    // Probe 2 rotates the (0,4) plane by pi/4: x0' = (x0 - x4)/sqrt2,
+    // x4' = (x0 + x4)/sqrt2. Slots 0 and 4 are not paired by J, so chi moves.
     let probe = learned_basis_probes()[2];
     let transform = learned_basis_transform(&probe).unwrap();
-    let query = Chiral6::new([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]).unwrap();
-    let key = Chiral6::new([0.0, 0.0, 0.0], [1.0, 0.0, 0.0]).unwrap();
     let apply = |carrier: Chiral6| {
         let x = carrier.as_array();
         let mut y = [0.0; 6];
@@ -163,16 +161,13 @@ fn hand_calculated_sector_mixing_score() {
         }
         Chiral6::from_array(y).unwrap()
     };
-    // Canonical: s = 0, chi = 1. Rotated: q' = (1,0,0|1,0,0)/sqrt2,
-    // k' = (-1,0,0|1,0,0)/sqrt2, so s = 0 and chi = (1 + 1)/2 = 1.
-    let canonical = chiral_score(query, key, C6_REFERENCE_WEIGHTS).unwrap();
-    assert_eq!(canonical, 1.0);
-    let rotated = apply(query).chiral_pairing(apply(key)).unwrap();
-    assert!((rotated - 1.0).abs() <= LEARNED_BASIS_TOLERANCE);
-    // A key in the same plane exposes the change: k = e0.
-    let key = Chiral6::new([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]).unwrap();
-    let rotated = apply(query).chiral_pairing(apply(key)).unwrap();
-    assert!(rotated.abs() <= LEARNED_BASIS_TOLERANCE);
+    // q = e0, k = e3: canonical s = 0, chi = 1.
+    let query = Chiral6::new([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]).unwrap();
+    let key = Chiral6::new([0.0, 0.0, 0.0], [1.0, 0.0, 0.0]).unwrap();
+    assert_eq!(chiral_score(query, key, C6_REFERENCE_WEIGHTS).unwrap(), 1.0);
+    // q' = (e0 + e4)/sqrt2, k' = e3: chi = 1/sqrt2, s = 0.
+    let rotated = chiral_score(apply(query), apply(key), C6_REFERENCE_WEIGHTS).unwrap();
+    assert!((rotated - core::f64::consts::FRAC_1_SQRT_2).abs() <= LEARNED_BASIS_TOLERANCE);
 }
 
 #[test]
@@ -206,6 +201,16 @@ fn smoke_study_covers_every_probe_and_family_on_both_non_final_splits() {
                     <= LEARNED_BASIS_TOLERANCE * gauge.reference_score.abs().max(1.0)
             );
             assert_eq!(gauge.correct, group[0].correct);
+        }
+        // Non-gauge probes are not score-invariant on the case stream.
+        for probe_index in [2, 3] {
+            assert!(
+                report
+                    .cases
+                    .chunks(LEARNED_BASIS_PROBE_COUNT)
+                    .any(|group| (group[probe_index].score - group[0].score).abs()
+                        > LEARNED_BASIS_TOLERANCE * group[0].score.abs().max(1.0))
+            );
         }
         validate_learned_basis_prototype_report(&report).unwrap();
     }
