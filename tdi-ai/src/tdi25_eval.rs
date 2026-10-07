@@ -77,7 +77,15 @@
 //! seed (no new seed material). The six query and six key values, the
 //! direct-product multiset, the matched weights and the capacity are
 //! preserved bit-for-bit, while the shuffle provably breaks `M` and `J`, so
-//! the `H+`/`H-` semantics are destroyed. All arms consume sealed
+//! the `H+`/`H-` semantics are destroyed. Slice 35 adds the torsor
+//! structure-shuffle control under `tdi25-torsor-structure-shuffle-control-v1`:
+//! on the same bounded matched population, the twist and torsor carrier slots
+//! are relabelled by the same unchanged TDI-24 slice-34 shuffle, drawn from
+//! the already-registered seed `(split domain, TorsorFavorable, 0)`. The six
+//! query and six key values, both geometry points, the untransported
+//! coordinate-product multiset and the T6 capacity are preserved bit-for-bit,
+//! while linear/angular blocks are provably mixed, so the Varignon pairing
+//! semantics are destroyed. All arms consume sealed
 //! Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
@@ -94,6 +102,10 @@ pub use matched_reference::{
     evaluate_chiral_parity_shuffle_control, evaluate_reduction_point_ablation,
     evaluate_torsor_bridge_equivalence, gamma_zero_chiral_score, parity_shuffled_chiral_score,
     reduction_point_transport_term, untransported_torsor_score,
+};
+pub use matched_reference::{
+    TorsorStructureShuffleCase, evaluate_torsor_structure_shuffle_control,
+    structure_shuffled_torsor_score,
 };
 
 use core::fmt;
@@ -168,6 +180,10 @@ pub const CHIRAL_GAMMA_ZERO_ABLATION_CONTRACT: &str = "tdi25-chiral-gamma-zero-a
 
 /// Phase-D chiral parity-shuffle control contract pin (slice 34).
 pub const CHIRAL_PARITY_SHUFFLE_CONTROL_CONTRACT: &str = "tdi25-chiral-parity-shuffle-control-v1";
+
+/// Phase-D torsor structure-shuffle control contract pin (slice 35).
+pub const TORSOR_STRUCTURE_SHUFFLE_CONTROL_CONTRACT: &str =
+    "tdi25-torsor-structure-shuffle-control-v1";
 
 /// Relative tolerance of the monitored transport identity; identical to the
 /// matched-reference v1 scalar tolerance shared by every arm.
@@ -3358,7 +3374,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::ReductionPointAblationInvalid { .. }
         | EvalError::TorsorBridgeEquivalenceInvalid { .. }
         | EvalError::ChiralGammaZeroAblationInvalid { .. }
-        | EvalError::ChiralParityShuffleControlInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::ChiralParityShuffleControlInvalid { .. }
+        | EvalError::TorsorStructureShuffleControlInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -3398,6 +3415,9 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::ChiralGammaZeroAblationInvalid { .. } => "chiral_gamma_zero_ablation_invalid",
         EvalError::ChiralParityShuffleControlInvalid { .. } => {
             "chiral_parity_shuffle_control_invalid"
+        }
+        EvalError::TorsorStructureShuffleControlInvalid { .. } => {
+            "torsor_structure_shuffle_control_invalid"
         }
     }
 }
@@ -4962,6 +4982,260 @@ pub fn validate_chiral_parity_shuffle_control_report(
     Ok(())
 }
 
+/// Per-family match counts for the T6 reference and its structure-shuffle control.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TorsorStructureShuffleFamilySummary {
+    pub family: TaskFamily,
+    pub n_cases: u64,
+    pub reference_matches: u64,
+    pub shuffled_matches: u64,
+    /// Cases whose Varignon transport term changed under the shuffle.
+    pub transport_changed: u64,
+}
+
+/// Immutable torsor structure-shuffle control report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TorsorStructureShuffleControlReport {
+    pub control_contract: &'static str,
+    pub population_contract: &'static str,
+    pub torsor_contract: &'static str,
+    /// Upstream TDI-24 slice-34 shuffle contract, consumed unchanged.
+    pub shuffle_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    /// Reused registered seed `(split domain, TorsorFavorable, 0)`: the seed of
+    /// the first TorsorFavorable case of the matched population; no new seed
+    /// material.
+    pub registered_seed: RegisteredSeed,
+    pub shuffle: ParityShuffle,
+    /// Identical capacity on both sides: the shuffle is a fixed relabelling
+    /// with zero trainable parameters.
+    pub reference_capacity: ParameterReadoutCapacity,
+    pub shuffled_capacity: ParameterReadoutCapacity,
+    pub cases: Vec<TorsorStructureShuffleCase>,
+    pub families: Vec<TorsorStructureShuffleFamilySummary>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false: both sides are the non-trained reference.
+    pub training_executed: bool,
+    /// Must remain false: attribution is decided only by the Stage-D audit.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn torsor_structure_shuffle_invalid(reason: &'static str) -> EvalError {
+    EvalError::TorsorStructureShuffleControlInvalid { reason }
+}
+
+/// Registered seed reused by the structure-shuffle control (no new seed material).
+#[must_use]
+pub fn torsor_structure_shuffle_registered_seed(split: DataSplit) -> RegisteredSeed {
+    register_seed(
+        SeedDomain::from_split(split),
+        TaskFamily::TorsorFavorable,
+        0,
+    )
+}
+
+fn torsor_structure_shuffle_for_split(split: DataSplit) -> Result<ParityShuffle, EvalError> {
+    parity_shuffle_from_seed(torsor_structure_shuffle_registered_seed(split).mixed_seed).map_err(
+        |error| match error {
+            super::tdi24_eval::EvalError::ParityShuffleControlInvalid { reason } => {
+                torsor_structure_shuffle_invalid(reason)
+            }
+            _ => torsor_structure_shuffle_invalid("upstream_shuffle_invalid"),
+        },
+    )
+}
+
+fn summarize_torsor_structure_shuffle_families(
+    cases: &[TorsorStructureShuffleCase],
+) -> Vec<TorsorStructureShuffleFamilySummary> {
+    REQUIRED_SYNTHESIS_FAMILIES
+        .iter()
+        .map(|family| {
+            let members = cases.iter().filter(|case| case.family == *family);
+            TorsorStructureShuffleFamilySummary {
+                family: *family,
+                n_cases: members.clone().count() as u64,
+                reference_matches: members
+                    .clone()
+                    .filter(|c| c.reference_matches_target)
+                    .count() as u64,
+                shuffled_matches: members
+                    .clone()
+                    .filter(|c| c.shuffled_matches_target)
+                    .count() as u64,
+                transport_changed: members
+                    .filter(|c| {
+                        c.reference_transport_term.to_bits() != c.shuffled_transport_term.to_bits()
+                    })
+                    .count() as u64,
+            }
+        })
+        .collect()
+}
+
+fn collect_torsor_structure_shuffle_cases(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+    shuffle: &ParityShuffle,
+) -> Result<Vec<TorsorStructureShuffleCase>, EvalError> {
+    let mut cases = Vec::new();
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..budget.seed_blocks {
+            cases.extend(evaluate_torsor_structure_shuffle_control(
+                split,
+                *family,
+                seed_block,
+                budget.cases_per_block,
+                shuffle,
+            )?);
+        }
+    }
+    Ok(cases)
+}
+
+/// Run the torsor structure-shuffle control on the bounded matched population.
+///
+/// Same families, seed blocks, cases, split, and capacity as the
+/// Stage-C preflight; only the carrier slots are relabelled by the unchanged
+/// TDI-24 slice-34 shuffle drawn from a reused registered seed. Any scoring,
+/// drift or identity failure aborts fail-closed; nothing is silently dropped.
+pub fn run_torsor_structure_shuffle_control(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<TorsorStructureShuffleControlReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.validate()?;
+    let shuffle = torsor_structure_shuffle_for_split(split)?;
+    let cases = collect_torsor_structure_shuffle_cases(split, budget, &shuffle)?;
+    let families = summarize_torsor_structure_shuffle_families(&cases);
+    let report = TorsorStructureShuffleControlReport {
+        control_contract: TORSOR_STRUCTURE_SHUFFLE_CONTROL_CONTRACT,
+        population_contract: matched_reference::MATCHED_POPULATION_CONTRACT,
+        torsor_contract: TORSOR_CONTRACT,
+        shuffle_contract: PARITY_SHUFFLE_CONTROL_CONTRACT,
+        split,
+        budget,
+        registered_seed: torsor_structure_shuffle_registered_seed(split),
+        shuffle,
+        reference_capacity: ParameterReadoutCapacity::reference_t6(),
+        shuffled_capacity: ParameterReadoutCapacity::reference_t6(),
+        cases,
+        families,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_torsor_structure_shuffle_control_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_torsor_structure_shuffle_control_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<TorsorStructureShuffleControlReport, EvalError> {
+    run_torsor_structure_shuffle_control(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a torsor structure-shuffle control report: pins, reused seed and
+/// reproducible structure-destroying shuffle, identical and capacity,
+/// bounded coverage in canonical order, preserved six values and
+/// direct-product multiset, recomputed family counts, the no-access /
+/// no-training / no-claim flags, and regenerated per-case evidence.
+pub fn validate_torsor_structure_shuffle_control_report(
+    report: &TorsorStructureShuffleControlReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.control_contract != TORSOR_STRUCTURE_SHUFFLE_CONTROL_CONTRACT {
+        return Err(torsor_structure_shuffle_invalid("contract_drift"));
+    }
+    if report.population_contract != matched_reference::MATCHED_POPULATION_CONTRACT {
+        return Err(torsor_structure_shuffle_invalid("population_drift"));
+    }
+    if report.torsor_contract != TORSOR_CONTRACT {
+        return Err(torsor_structure_shuffle_invalid("torsor_contract_drift"));
+    }
+    if report.shuffle_contract != PARITY_SHUFFLE_CONTROL_CONTRACT {
+        return Err(torsor_structure_shuffle_invalid("shuffle_contract_drift"));
+    }
+    if report.registered_seed != torsor_structure_shuffle_registered_seed(report.split) {
+        return Err(torsor_structure_shuffle_invalid("seed_drift"));
+    }
+    super::tdi24_eval::validate_parity_shuffle(&report.shuffle).map_err(|error| match error {
+        super::tdi24_eval::EvalError::ParityShuffleControlInvalid { reason } => {
+            torsor_structure_shuffle_invalid(reason)
+        }
+        _ => torsor_structure_shuffle_invalid("upstream_shuffle_invalid"),
+    })?;
+    if report.shuffle != torsor_structure_shuffle_for_split(report.split)? {
+        return Err(torsor_structure_shuffle_invalid("shuffle_not_reproducible"));
+    }
+    report.budget.validate()?;
+    if report.reference_capacity != report.shuffled_capacity
+        || report.reference_capacity != ParameterReadoutCapacity::reference_t6()
+    {
+        return Err(torsor_structure_shuffle_invalid("capacity_mismatch"));
+    }
+    let expected = report.budget.cases_per_arm();
+    if report.cases.len() as u64 != expected {
+        return Err(torsor_structure_shuffle_invalid("case_count"));
+    }
+    let mut position = 0usize;
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..report.budget.seed_blocks {
+            for case_id in 0..report.budget.cases_per_block {
+                let case = &report.cases[position];
+                if case.family != *family
+                    || case.seed_block != seed_block
+                    || case.case_id != case_id
+                {
+                    return Err(torsor_structure_shuffle_invalid("case_order"));
+                }
+                if !case.six_values_preserved {
+                    return Err(torsor_structure_shuffle_invalid("six_values_drift"));
+                }
+                if !case.untransported_products_preserved {
+                    return Err(torsor_structure_shuffle_invalid(
+                        "untransported_product_multiset_drift",
+                    ));
+                }
+                position += 1;
+            }
+        }
+    }
+    if report.families != summarize_torsor_structure_shuffle_families(&report.cases) {
+        return Err(torsor_structure_shuffle_invalid("family_summary"));
+    }
+    if report.protected_or_final_access {
+        return Err(torsor_structure_shuffle_invalid(
+            "protected_or_final_access",
+        ));
+    }
+    if report.training_executed {
+        return Err(torsor_structure_shuffle_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(torsor_structure_shuffle_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(torsor_structure_shuffle_invalid("experimental_non_final"));
+    }
+    // Stored evidence is never trusted: every case is regenerated from the
+    // canonical matched population `(split, family, seed_block, case_id)`, its
+    // evaluator-owned target and the reproducible shuffle, and compared exactly.
+    let regenerated =
+        collect_torsor_structure_shuffle_cases(report.split, report.budget, &report.shuffle)?;
+    if regenerated != report.cases {
+        return Err(torsor_structure_shuffle_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -5047,6 +5321,11 @@ pub enum EvalError {
     /// Chiral parity-shuffle control rejected a drifted shuffle, evidence or
     /// claims.
     ChiralParityShuffleControlInvalid {
+        reason: &'static str,
+    },
+    /// Torsor structure-shuffle control rejected a drifted shuffle, evidence
+    /// or claims.
+    TorsorStructureShuffleControlInvalid {
         reason: &'static str,
     },
 }
@@ -5137,6 +5416,12 @@ impl fmt::Display for EvalError {
             }
             Self::ChiralParityShuffleControlInvalid { reason } => {
                 write!(formatter, "chiral parity-shuffle control invalid: {reason}")
+            }
+            Self::TorsorStructureShuffleControlInvalid { reason } => {
+                write!(
+                    formatter,
+                    "torsor structure-shuffle control invalid: {reason}"
+                )
             }
         }
     }
