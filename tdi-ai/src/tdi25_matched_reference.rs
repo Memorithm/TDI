@@ -15,7 +15,9 @@ use crate::experimental::tdi24_eval::{
     LearnedBasisProbe, LearnedBasisProbeRole, ParityShuffle, learned_basis_probes,
     learned_basis_transform, validate_learned_basis_probe, validate_parity_shuffle,
 };
-use crate::experimental::tdi25_tasks::{SeedDomain, mix_registered_seed};
+use crate::experimental::tdi25_tasks::{
+    PositionGeometryArm, SeedDomain, mix_registered_seed, position_geometry_point,
+};
 use crate::experimental::tdi25_torsor_chiral::{
     Generic6, chiral_arm_score, generic_arm_score, torsor_arm_score, validate_source_contracts,
 };
@@ -1009,6 +1011,118 @@ pub fn evaluate_g6_orthogonal_basis_control(
                 c6_rotated_score,
                 g6_reference_matches_target: shared_match(g6_reference_score, target),
                 g6_rotated_matches_target: shared_match(g6_rotated_score, target),
+            });
+        }
+    }
+    Ok(cases)
+}
+
+/// Geometry arms of the position-geometry ablation (TDI-25 slice 37), in
+/// fixed order: the generated matched geometry first, then every internal arm
+/// of the frozen `tdi25-position-geometry-arm-v1` registry. `External` needs
+/// caller-supplied coordinates and is excluded, recorded as a degeneracy.
+pub const POSITION_GEOMETRY_ABLATION_ARMS: [Option<PositionGeometryArm>; 4] = [
+    None,
+    Some(PositionGeometryArm::Linear),
+    Some(PositionGeometryArm::Helical),
+    Some(PositionGeometryArm::Learned),
+];
+
+/// One matched-population case scored by T6 under one geometry arm.
+///
+/// The six query and six key scalars are unchanged; only the reduction point
+/// `P` and the query point `Q` come from the arm (`P` at registry index
+/// `2 * case_id`, `Q` at `2 * case_id + 1`). The target and match bits are
+/// minted here, inside the evaluator privacy boundary, from the generated
+/// case.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PositionGeometryCase {
+    pub family: TaskFamily,
+    pub seed_block: u64,
+    pub case_id: u64,
+    /// Index into [`POSITION_GEOMETRY_ABLATION_ARMS`].
+    pub arm_index: usize,
+    pub key_position: [f64; 3],
+    pub query_position: [f64; 3],
+    pub score: f64,
+    /// Varignon transport term `omega.((P - Q) x R)` under this geometry.
+    pub transport_term: f64,
+    pub matches_target: bool,
+}
+
+fn geometry_error(_: crate::experimental::tdi25_tasks::Tdi25TaskError) -> EvalError {
+    EvalError::PositionGeometryAblationInvalid {
+        reason: "geometry_generation_failed",
+    }
+}
+
+/// Positions `(P, Q)` of one case under one ablation arm.
+pub fn position_geometry_ablation_points(
+    input: &MatchedInput,
+    arm_index: usize,
+    case_id: u64,
+) -> Result<([f64; 3], [f64; 3]), EvalError> {
+    match POSITION_GEOMETRY_ABLATION_ARMS.get(arm_index) {
+        None => Err(EvalError::PositionGeometryAblationInvalid {
+            reason: "arm_not_registered",
+        }),
+        Some(None) => Ok((input.key_position, input.query_position)),
+        Some(Some(arm)) => {
+            let key = position_geometry_point(*arm, 2 * case_id, None)
+                .map_err(geometry_error)?
+                .point;
+            let query = position_geometry_point(*arm, 2 * case_id + 1, None)
+                .map_err(geometry_error)?
+                .point;
+            Ok(([key.x, key.y, key.z], [query.x, query.y, query.z]))
+        }
+    }
+}
+
+/// Score one matched block with T6 under every geometry arm.
+///
+/// Case-major, arm-minor order. The matched arm must reproduce the matched
+/// primary T6 score bit for bit. Any failure aborts fail-closed.
+pub fn evaluate_position_geometry_ablation(
+    split: DataSplit,
+    family: TaskFamily,
+    seed_block: u64,
+    n_cases: u64,
+) -> Result<Vec<PositionGeometryCase>, EvalError> {
+    let run = MatchedPrimaryRun::evaluate(split, family, seed_block, n_cases)?;
+    let mut cases = Vec::with_capacity(run.inputs().len() * POSITION_GEOMETRY_ABLATION_ARMS.len());
+    for (index, input) in run.inputs().iter().enumerate() {
+        let target = common_target(input, family)?;
+        let reference = run.t6_scores()[index];
+        for arm_index in 0..POSITION_GEOMETRY_ABLATION_ARMS.len() {
+            let (key_position, query_position) =
+                position_geometry_ablation_points(input, arm_index, index as u64)?;
+            let placed = MatchedInput {
+                query: input.query,
+                key: input.key,
+                key_position,
+                query_position,
+            };
+            let score = score_t6(&placed)?;
+            if arm_index == 0
+                && (score.to_bits() != reference.to_bits()
+                    || shared_match(score, target) != run.t6_outcomes()[index].matches_oracle)
+            {
+                return Err(EvalError::PositionGeometryAblationInvalid {
+                    reason: "matched_reference_drift",
+                });
+            }
+            let (query, key, position) = torsor_carriers(&placed)?;
+            cases.push(PositionGeometryCase {
+                family,
+                seed_block,
+                case_id: index as u64,
+                arm_index,
+                key_position,
+                query_position,
+                score,
+                transport_term: reduction_point_transport_term(query, key, position)?,
+                matches_target: shared_match(score, target),
             });
         }
     }
