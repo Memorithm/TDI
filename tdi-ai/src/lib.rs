@@ -33,6 +33,7 @@ mod tdi21_pascal_gate_bank;
 mod tdi21_pascal_gate_bank_test_driver;
 pub mod tdi21_pascal_p3;
 pub mod tdi21_pascal_p4;
+pub mod tdi21_pascal_p5;
 mod toy_attention;
 pub mod validated_profile;
 pub mod vsa_workspace;
