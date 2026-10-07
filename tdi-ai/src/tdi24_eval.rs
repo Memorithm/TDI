@@ -69,6 +69,15 @@
 //! carrier restricted to the first `n` slots of each sector), with identical
 //! weights and zero-trainable capacity; full width reproduces Stage-C C6
 //! bit-for-bit and no width is selected.
+//! Slice 39 adds sequence-length scaling: non-overlapping windows of
+//! consecutive same-family cases at preregistered lengths `[2, 4, 8]` form
+//! attention rows through the shared masked-softmax reference under both mask
+//! policies, for C6 and its direct-only arm, with exact bounded cost
+//! accounting (score evaluations, normalizer calls, masked entries).
+//! Slice 40 adds the Stage-D attribution audit: every Phase-C/D slice (30 to
+//! 39) is regenerated and validated, and the only admissible claim class is
+//! software semantics on Development/Validation; scientific attribution stays
+//! inadmissible.
 //! No training,
 //! confirmatory execution, protected/final evaluation, or scientific claim is
 //! authorised here.
@@ -76,6 +85,9 @@
 use core::fmt;
 
 use super::tdi24_accounting::ScoreArm;
+use super::tdi24_attention::{
+    MASKING_CONTRACT, MaskPolicy, NORMALIZER_CONTRACT, normalize_with_policy,
+};
 use super::tdi24_chiral::{
     CHIRAL_CONTRACT, CHIRAL_WIDTH, Chiral6, ChiralError, ChiralObservables, ChiralScoreWeights,
     chiral_score, enantiomorphic_scores, observables,
@@ -1899,7 +1911,9 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::FixedMSensitivityInvalid { .. }
         | EvalError::LearnedBasisPrototypeInvalid { .. }
         | EvalError::HeadSharingAblationInvalid { .. }
-        | EvalError::WidthScalingInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::WidthScalingInvalid { .. }
+        | EvalError::SequenceLengthScalingInvalid { .. }
+        | EvalError::StageDAttributionAuditInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -1943,6 +1957,8 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::LearnedBasisPrototypeInvalid { .. } => "learned_basis_prototype_invalid",
         EvalError::HeadSharingAblationInvalid { .. } => "head_sharing_ablation_invalid",
         EvalError::WidthScalingInvalid { .. } => "width_scaling_invalid",
+        EvalError::SequenceLengthScalingInvalid { .. } => "sequence_length_scaling_invalid",
+        EvalError::StageDAttributionAuditInvalid { .. } => "stage_d_attribution_audit_invalid",
     }
 }
 
@@ -5955,6 +5971,624 @@ pub fn validate_width_scaling_report(report: &WidthScalingReport) -> Result<(), 
     Ok(())
 }
 
+/// Phase-D sequence-length scaling contract pin (slice 39).
+pub const SEQUENCE_LENGTH_SCALING_CONTRACT: &str = "tdi24-sequence-length-scaling-v1";
+
+/// Number of preregistered sequence lengths.
+pub const SEQUENCE_LENGTH_COUNT: usize = 3;
+
+/// Preregistered matched sequence lengths, identical for every arm and mask
+/// policy, all reported, none selected. A declared software configuration of
+/// this study, not a freeze pin.
+pub const SEQUENCE_LENGTHS: [usize; SEQUENCE_LENGTH_COUNT] = [2, 4, 8];
+
+/// Shared mask policies, both evaluated for every arm and length.
+pub const SEQUENCE_MASK_POLICIES: [MaskPolicy; 2] = [MaskPolicy::Full, MaskPolicy::Causal];
+
+/// Declared tolerance for the row-sum check of the shared normalizer.
+pub const SEQUENCE_ROW_SUM_TOLERANCE: f64 = 1e-12;
+
+const fn sequence_invalid(reason: &'static str) -> EvalError {
+    EvalError::SequenceLengthScalingInvalid { reason }
+}
+
+/// Scoring arm of the sequence-length study.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SequenceArm {
+    /// C6 reference weights `(1, 0, 1)`.
+    C6,
+    /// Direct-only matched arm `(1, 0, 0)`.
+    DirectOnly,
+}
+
+/// Both arms in fixed order.
+pub const SEQUENCE_ARMS: [SequenceArm; 2] = [SequenceArm::C6, SequenceArm::DirectOnly];
+
+impl SequenceArm {
+    #[must_use]
+    pub const fn weights(self) -> ChiralScoreWeights {
+        match self {
+            Self::C6 => C6_REFERENCE_WEIGHTS,
+            Self::DirectOnly => direct_only_weights(C6_REFERENCE_WEIGHTS),
+        }
+    }
+}
+
+/// Bounded cost and outcome accounting for one (length, mask, arm, family).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SequenceCell {
+    pub length: usize,
+    pub policy: MaskPolicy,
+    pub arm: SequenceArm,
+    pub family: TaskFamily,
+    /// Non-overlapping windows of `length` consecutive cases of the family.
+    pub windows: u64,
+    /// Family cases left outside a full window (recorded, never scored).
+    pub unwindowed_cases: u64,
+    /// Pairwise score evaluations: `windows * length^2`.
+    pub score_evaluations: u64,
+    /// Normalizer calls: `windows * length`.
+    pub normalizer_calls: u64,
+    /// Attention entries forced to zero by the mask.
+    pub masked_entries: u64,
+    /// Rows whose maximal attention weight is on the row's own key.
+    pub self_retrieval_rows: u64,
+    /// Max `|sum(row) - 1|` over all rows.
+    pub max_row_sum_error: f64,
+}
+
+/// Immutable sequence-length scaling report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SequenceLengthScalingReport {
+    pub scaling_contract: &'static str,
+    pub normalizer_contract: &'static str,
+    pub masking_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    pub lengths: [usize; SEQUENCE_LENGTH_COUNT],
+    /// Zero trainable parameters for both arms at every length.
+    pub capacity: TrainableCapacity,
+    pub cells: Vec<SequenceCell>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false.
+    pub training_executed: bool,
+    /// Must remain false: no length is selected.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+type SequenceItem = (TaskFamily, Chiral6, Chiral6, f64);
+
+fn sequence_item<T>(case: &LabeledCase<T>, split: DataSplit) -> Result<SequenceItem, EvalError> {
+    let view = case.inference_view();
+    if view.split != split {
+        return Err(EvalError::SplitMismatch {
+            expected: split,
+            actual: view.split,
+        });
+    }
+    let query = Chiral6::from_array(view.query.as_array()).map_err(EvalError::ChiralNumerical)?;
+    let key = Chiral6::from_array(view.key.as_array()).map_err(EvalError::ChiralNumerical)?;
+    let reference = run_inference_callback(case, score_c6_from_view)?;
+    Ok((view.family, query, key, reference))
+}
+
+fn collect_sequence_items(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<SequenceItem>, EvalError> {
+    validate_non_final_split(split)?;
+    budget.cases_per_arm()?;
+    let mut items = Vec::new();
+    let last_pair_id = budget.first_pair_id + budget.pairs_per_family;
+    for pair_id in budget.first_pair_id..last_pair_id {
+        let discriminative = reflection_discriminative_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [discriminative.right, discriminative.left] {
+            items.push(sequence_item(
+                &seal_reflection_discriminative(&member),
+                split,
+            )?);
+        }
+        let nuisance = reflection_nuisance_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [nuisance.canonical, nuisance.reflected] {
+            items.push(sequence_item(&seal_reflection_nuisance(&member), split)?);
+        }
+        let direction = direction_reversal_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [direction.forward, direction.reverse] {
+            items.push(sequence_item(&seal_direction_reversal(&member), split)?);
+        }
+        let base_case_id = pair_id
+            .checked_mul(STAGE_C_PREFLIGHT_MEMBERS_PER_PAIR)
+            .ok_or_else(preflight_generation_failed)?;
+        for case_id in [base_case_id, base_case_id + 1] {
+            let control = non_chiral_control_case_in_split(case_id, split)
+                .map_err(|_| preflight_generation_failed())?;
+            items.push(sequence_item(&seal_non_chiral_control(&control), split)?);
+        }
+    }
+    Ok(items)
+}
+
+/// Attention rows of one window: row `i` is the shared masked softmax of the
+/// logits `score(q_i, k_j)` under the arm's weights.
+pub fn sequence_window_rows(
+    queries: &[Chiral6],
+    keys: &[Chiral6],
+    policy: MaskPolicy,
+    arm: SequenceArm,
+) -> Result<Vec<Vec<f64>>, EvalError> {
+    normalize_sequence_logits(&sequence_window_logits(queries, keys, arm)?, policy)
+}
+
+/// Logit matrix of one window: entry `(i, j)` is `score(q_i, k_j)`. Exactly
+/// `L^2` score evaluations; nothing else in the slice calls the scorer.
+pub fn sequence_window_logits(
+    queries: &[Chiral6],
+    keys: &[Chiral6],
+    arm: SequenceArm,
+) -> Result<Vec<Vec<f64>>, EvalError> {
+    if queries.len() != keys.len() || !SEQUENCE_LENGTHS.contains(&queries.len()) {
+        return Err(sequence_invalid("length_not_registered"));
+    }
+    let mut logits = Vec::with_capacity(queries.len());
+    for query in queries {
+        let mut row = Vec::with_capacity(keys.len());
+        for key in keys {
+            row.push(
+                chiral_score(*query, *key, arm.weights()).map_err(EvalError::ChiralNumerical)?,
+            );
+        }
+        logits.push(row);
+    }
+    Ok(logits)
+}
+
+fn normalize_sequence_logits(
+    logits: &[Vec<f64>],
+    policy: MaskPolicy,
+) -> Result<Vec<Vec<f64>>, EvalError> {
+    logits
+        .iter()
+        .enumerate()
+        .map(|(row, values)| {
+            normalize_with_policy(values, policy, row)
+                .map_err(|_| sequence_invalid("normalizer_failure"))
+        })
+        .collect()
+}
+
+fn sequence_cell(
+    items: &[SequenceItem],
+    length: usize,
+    policy: MaskPolicy,
+    arm: SequenceArm,
+    family: TaskFamily,
+) -> Result<SequenceCell, EvalError> {
+    let members: Vec<&SequenceItem> = items.iter().filter(|item| item.0 == family).collect();
+    let windows = members.len() / length;
+    let mut cell = SequenceCell {
+        length,
+        policy,
+        arm,
+        family,
+        windows: windows as u64,
+        unwindowed_cases: (members.len() - windows * length) as u64,
+        score_evaluations: 0,
+        normalizer_calls: 0,
+        masked_entries: 0,
+        self_retrieval_rows: 0,
+        max_row_sum_error: 0.0,
+    };
+    for window in members.chunks_exact(length) {
+        let queries: Vec<Chiral6> = window.iter().map(|item| item.1).collect();
+        let keys: Vec<Chiral6> = window.iter().map(|item| item.2).collect();
+        let logits = sequence_window_logits(&queries, &keys, arm)?;
+        for (index, item) in window.iter().enumerate() {
+            // The diagonal logit (already counted among the L^2 evaluations)
+            // is the single-case Stage-C C6 score.
+            if arm == SequenceArm::C6 && logits[index][index].to_bits() != item.3.to_bits() {
+                return Err(sequence_invalid("diagonal_reference_drift"));
+            }
+        }
+        let rows = normalize_sequence_logits(&logits, policy)?;
+        cell.score_evaluations += (length * length) as u64;
+        cell.normalizer_calls += length as u64;
+        for (row_index, row) in rows.iter().enumerate() {
+            let sum: f64 = row.iter().sum();
+            cell.max_row_sum_error = cell.max_row_sum_error.max((sum - 1.0).abs());
+            let zeros = row.iter().filter(|value| **value == 0.0).count();
+            let expected_masked = match policy {
+                MaskPolicy::Full => 0,
+                MaskPolicy::Causal => length - 1 - row_index,
+            };
+            if zeros < expected_masked {
+                return Err(sequence_invalid("mask_drift"));
+            }
+            cell.masked_entries += expected_masked as u64;
+            let best =
+                row.iter().enumerate().fold(
+                    0,
+                    |best, (index, value)| if *value > row[best] { index } else { best },
+                );
+            if best == row_index {
+                cell.self_retrieval_rows += 1;
+            }
+        }
+    }
+    if cell.max_row_sum_error > SEQUENCE_ROW_SUM_TOLERANCE {
+        return Err(sequence_invalid("row_sum_drift"));
+    }
+    Ok(cell)
+}
+
+fn collect_sequence_cells(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<SequenceCell>, EvalError> {
+    let items = collect_sequence_items(split, budget)?;
+    let mut cells = Vec::new();
+    for length in SEQUENCE_LENGTHS {
+        for policy in SEQUENCE_MASK_POLICIES {
+            for arm in SEQUENCE_ARMS {
+                for family in STAGE_C_PREFLIGHT_FAMILIES {
+                    cells.push(sequence_cell(&items, length, policy, arm, *family)?);
+                }
+            }
+        }
+    }
+    Ok(cells)
+}
+
+/// Run the sequence-length scaling study on the bounded Stage-C case stream.
+pub fn run_sequence_length_scaling(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<SequenceLengthScalingReport, EvalError> {
+    let cells = collect_sequence_cells(split, budget)?;
+    let report = SequenceLengthScalingReport {
+        scaling_contract: SEQUENCE_LENGTH_SCALING_CONTRACT,
+        normalizer_contract: NORMALIZER_CONTRACT,
+        masking_contract: MASKING_CONTRACT,
+        split,
+        budget,
+        lengths: SEQUENCE_LENGTHS,
+        capacity: TrainableCapacity::reference_c6(),
+        cells,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_sequence_length_scaling_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_sequence_length_scaling_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<SequenceLengthScalingReport, EvalError> {
+    run_sequence_length_scaling(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a sequence-length scaling report: pins, length set, capacity,
+/// exact cost accounting per cell, row-sum bound, flags and regenerated
+/// evidence.
+pub fn validate_sequence_length_scaling_report(
+    report: &SequenceLengthScalingReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.scaling_contract != SEQUENCE_LENGTH_SCALING_CONTRACT {
+        return Err(sequence_invalid("contract_drift"));
+    }
+    if report.normalizer_contract != NORMALIZER_CONTRACT
+        || report.masking_contract != MASKING_CONTRACT
+    {
+        return Err(sequence_invalid("normalizer_contract_drift"));
+    }
+    if report.lengths != SEQUENCE_LENGTHS {
+        return Err(sequence_invalid("length_set_drift"));
+    }
+    if report.capacity != TrainableCapacity::reference_c6() {
+        return Err(sequence_invalid("capacity_mismatch"));
+    }
+    let expected_cells = SEQUENCE_LENGTH_COUNT
+        * SEQUENCE_MASK_POLICIES.len()
+        * SEQUENCE_ARMS.len()
+        * STAGE_C_PREFLIGHT_FAMILIES.len();
+    if report.cells.len() != expected_cells {
+        return Err(sequence_invalid("cell_count"));
+    }
+    let per_family = report.budget.cases_per_arm()? / STAGE_C_PREFLIGHT_FAMILIES.len() as u64;
+    for cell in &report.cells {
+        // Reject unregistered lengths before any arithmetic on them.
+        if !SEQUENCE_LENGTHS.contains(&cell.length) {
+            return Err(sequence_invalid("length_not_registered"));
+        }
+        let length = cell.length as u64;
+        let masked_per_window = match cell.policy {
+            MaskPolicy::Full => 0,
+            MaskPolicy::Causal => length * (length - 1) / 2,
+        };
+        if cell.windows * length + cell.unwindowed_cases != per_family
+            || cell.unwindowed_cases >= length
+            || cell.score_evaluations != cell.windows * length * length
+            || cell.normalizer_calls != cell.windows * length
+            || cell.masked_entries != cell.windows * masked_per_window
+            || cell.self_retrieval_rows > cell.normalizer_calls
+        {
+            return Err(sequence_invalid("cost_accounting_drift"));
+        }
+        if cell.max_row_sum_error.is_nan() || cell.max_row_sum_error > SEQUENCE_ROW_SUM_TOLERANCE {
+            return Err(sequence_invalid("row_sum_drift"));
+        }
+    }
+    if report.protected_or_final_access {
+        return Err(sequence_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(sequence_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(sequence_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(sequence_invalid("experimental_non_final"));
+    }
+    if collect_sequence_cells(report.split, report.budget)? != report.cells {
+        return Err(sequence_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
+/// Phase-D Stage-D attribution audit contract pin (slice 40).
+pub const STAGE_D_ATTRIBUTION_AUDIT_CONTRACT: &str = "tdi24-stage-d-attribution-audit-v1";
+
+/// Audited Phase-C/D slices in campaign order (slices 30 through 39) with
+/// their frozen contract pins. Nothing outside this registry is audited.
+pub const ATTRIBUTION_AUDITED_SLICES: [(u8, &str); 10] = [
+    (30, STAGE_C_PREFLIGHT_CONTRACT),
+    (31, GAMMA_ZERO_ABLATION_CONTRACT),
+    (32, BETA_ZERO_ABLATION_CONTRACT),
+    (33, DIRECT_ONLY_COLLAPSE_CONTRACT),
+    (34, PARITY_SHUFFLE_CONTROL_CONTRACT),
+    (35, FIXED_M_SENSITIVITY_CONTRACT),
+    (36, LEARNED_BASIS_PROTOTYPE_CONTRACT),
+    (37, HEAD_SHARING_ABLATION_CONTRACT),
+    (38, WIDTH_SCALING_CONTRACT),
+    (39, SEQUENCE_LENGTH_SCALING_CONTRACT),
+];
+
+/// Claim class an audited slice may support after the ablations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AttributionClaim {
+    /// The validated report supports only software-semantics statements
+    /// (contracts, accounting, fail-closed behavior) on Development/Validation.
+    SoftwareSemanticsOnly,
+    /// Withheld: the report failed validation or set a forbidden flag.
+    Withheld,
+}
+
+/// One audited slice.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AttributionEntry {
+    pub slice: u8,
+    pub contract: &'static str,
+    /// The upstream validator accepted the regenerated report.
+    pub validated: bool,
+    /// FNV-1a 64 digest of the regenerated report's `Debug` rendering; binds
+    /// the entry to the exact split, budget and evidence.
+    pub evidence_digest: u64,
+    /// Flags read from the report itself.
+    pub protected_or_final_access: bool,
+    pub training_executed: bool,
+    pub scientific_claim: bool,
+    pub experimental_non_final: bool,
+    pub admissible: AttributionClaim,
+}
+
+/// Immutable Stage-D attribution audit on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StageDAttributionAuditReport {
+    pub audit_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    pub entries: Vec<AttributionEntry>,
+    /// Must remain false: no scientific attribution is admissible without a
+    /// trained, preregistered Stage-D run, which this campaign never executes.
+    pub scientific_attribution_admissible: bool,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false.
+    pub training_executed: bool,
+    /// Must remain false.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn attribution_invalid(reason: &'static str) -> EvalError {
+    EvalError::StageDAttributionAuditInvalid { reason }
+}
+
+fn attribution_digest(rendering: &str) -> u64 {
+    rendering.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+    })
+}
+
+const fn admissible_claim(entry: &AttributionEntry) -> AttributionClaim {
+    if entry.validated
+        && !entry.protected_or_final_access
+        && !entry.training_executed
+        && !entry.scientific_claim
+        && entry.experimental_non_final
+    {
+        AttributionClaim::SoftwareSemanticsOnly
+    } else {
+        AttributionClaim::Withheld
+    }
+}
+
+fn collect_attribution_entries(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<AttributionEntry>, EvalError> {
+    macro_rules! audit {
+        ($slice:expr, $contract:expr, $report:expr) => {{
+            let report = $report;
+            let mut entry = AttributionEntry {
+                slice: $slice,
+                contract: $contract,
+                validated: true,
+                evidence_digest: attribution_digest(&format!("{report:?}")),
+                protected_or_final_access: report.protected_or_final_access,
+                training_executed: report.training_executed,
+                scientific_claim: report.scientific_claim,
+                experimental_non_final: report.experimental_non_final,
+                admissible: AttributionClaim::Withheld,
+            };
+            entry.admissible = admissible_claim(&entry);
+            entry
+        }};
+    }
+    // Every runner validates its own report before returning it; any
+    // rejection aborts the audit fail-closed.
+    Ok(vec![
+        audit!(
+            30,
+            STAGE_C_PREFLIGHT_CONTRACT,
+            run_stage_c_preflight(split, budget)?
+        ),
+        audit!(
+            31,
+            GAMMA_ZERO_ABLATION_CONTRACT,
+            run_gamma_zero_ablation(split, budget)?
+        ),
+        audit!(
+            32,
+            BETA_ZERO_ABLATION_CONTRACT,
+            run_beta_zero_ablation(split, budget)?
+        ),
+        audit!(
+            33,
+            DIRECT_ONLY_COLLAPSE_CONTRACT,
+            run_direct_only_collapse(split, budget)?
+        ),
+        audit!(
+            34,
+            PARITY_SHUFFLE_CONTROL_CONTRACT,
+            run_parity_shuffle_control(split, budget)?
+        ),
+        audit!(
+            35,
+            FIXED_M_SENSITIVITY_CONTRACT,
+            run_fixed_m_sensitivity(split, budget)?
+        ),
+        audit!(
+            36,
+            LEARNED_BASIS_PROTOTYPE_CONTRACT,
+            run_learned_basis_prototype(split, budget)?
+        ),
+        audit!(
+            37,
+            HEAD_SHARING_ABLATION_CONTRACT,
+            run_head_sharing_ablation(split, budget)?
+        ),
+        audit!(
+            38,
+            WIDTH_SCALING_CONTRACT,
+            run_width_scaling(split, budget)?
+        ),
+        audit!(
+            39,
+            SEQUENCE_LENGTH_SCALING_CONTRACT,
+            run_sequence_length_scaling(split, budget)?
+        ),
+    ])
+}
+
+/// Run the Stage-D attribution audit over every audited slice.
+pub fn run_stage_d_attribution_audit(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<StageDAttributionAuditReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.cases_per_arm()?;
+    let report = StageDAttributionAuditReport {
+        audit_contract: STAGE_D_ATTRIBUTION_AUDIT_CONTRACT,
+        split,
+        budget,
+        entries: collect_attribution_entries(split, budget)?,
+        scientific_attribution_admissible: false,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_stage_d_attribution_audit_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_stage_d_attribution_audit_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<StageDAttributionAuditReport, EvalError> {
+    run_stage_d_attribution_audit(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a Stage-D attribution audit: pin, the complete audited registry
+/// in order, per-entry admissibility derived from flags, no withheld entry,
+/// no scientific attribution, flags and regenerated evidence.
+pub fn validate_stage_d_attribution_audit_report(
+    report: &StageDAttributionAuditReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.audit_contract != STAGE_D_ATTRIBUTION_AUDIT_CONTRACT {
+        return Err(attribution_invalid("contract_drift"));
+    }
+    report.budget.cases_per_arm()?;
+    if report.entries.len() != ATTRIBUTION_AUDITED_SLICES.len() {
+        return Err(attribution_invalid("registry_drift"));
+    }
+    for (entry, (slice, contract)) in report.entries.iter().zip(ATTRIBUTION_AUDITED_SLICES) {
+        if entry.slice != slice || entry.contract != contract {
+            return Err(attribution_invalid("registry_drift"));
+        }
+        if entry.admissible != admissible_claim(entry) {
+            return Err(attribution_invalid("admissibility_drift"));
+        }
+        if entry.admissible != AttributionClaim::SoftwareSemanticsOnly {
+            return Err(attribution_invalid("withheld_entry"));
+        }
+    }
+    if report.scientific_attribution_admissible {
+        return Err(attribution_invalid("scientific_attribution_admissible"));
+    }
+    if report.protected_or_final_access {
+        return Err(attribution_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(attribution_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(attribution_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(attribution_invalid("experimental_non_final"));
+    }
+    if collect_attribution_entries(report.split, report.budget)? != report.entries {
+        return Err(attribution_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -6048,6 +6682,12 @@ pub enum EvalError {
     /// Width scaling rejected a drifted width set, weights, capacity,
     /// evidence or flags.
     WidthScalingInvalid { reason: &'static str },
+    /// Sequence-length scaling rejected drifted lengths, masks, cost
+    /// accounting, evidence or flags.
+    SequenceLengthScalingInvalid { reason: &'static str },
+    /// Stage-D attribution audit rejected a drifted registry, admissibility,
+    /// evidence or claims.
+    StageDAttributionAuditInvalid { reason: &'static str },
 }
 
 impl fmt::Display for EvalError {
@@ -6151,6 +6791,12 @@ impl fmt::Display for EvalError {
             }
             Self::WidthScalingInvalid { reason } => {
                 write!(formatter, "width scaling invalid: {reason}")
+            }
+            Self::SequenceLengthScalingInvalid { reason } => {
+                write!(formatter, "sequence-length scaling invalid: {reason}")
+            }
+            Self::StageDAttributionAuditInvalid { reason } => {
+                write!(formatter, "Stage-D attribution audit invalid: {reason}")
             }
         }
     }

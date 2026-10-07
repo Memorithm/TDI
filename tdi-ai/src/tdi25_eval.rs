@@ -98,7 +98,10 @@
 //! learned table), all reported, none privileged or selected. Slice 38 adds
 //! sequence-length scaling under `tdi25-sequence-length-scaling-v1`: T6 and C6
 //! on identical non-overlapping windows of preregistered lengths `[2, 4, 8]`
-//! under both shared mask policies, with exact resource accounting. All arms consume sealed
+//! under both shared mask policies, with exact resource accounting. Slice 39
+//! adds data-volume scaling under `tdi25-data-volume-scaling-v1`: T6 and C6
+//! on identical nested prefixes of preregistered per-block counts
+//! `[8, 16, 32]`, never allocated per arm. All arms consume sealed
 //! Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
@@ -223,6 +226,9 @@ pub const POSITION_GEOMETRY_ABLATION_CONTRACT: &str = "tdi25-position-geometry-a
 
 /// Phase-D sequence-length scaling contract pin (slice 38).
 pub const SEQUENCE_LENGTH_SCALING_CONTRACT: &str = "tdi25-sequence-length-scaling-v1";
+
+/// Phase-D data-volume scaling contract pin (slice 39).
+pub const DATA_VOLUME_SCALING_CONTRACT: &str = "tdi25-data-volume-scaling-v1";
 
 /// Relative tolerance of the monitored transport identity; identical to the
 /// matched-reference v1 scalar tolerance shared by every arm.
@@ -3417,7 +3423,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::TorsorStructureShuffleControlInvalid { .. }
         | EvalError::G6OrthogonalBasisControlInvalid { .. }
         | EvalError::PositionGeometryAblationInvalid { .. }
-        | EvalError::SequenceLengthScalingInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::SequenceLengthScalingInvalid { .. }
+        | EvalError::DataVolumeScalingInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -3464,6 +3471,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::G6OrthogonalBasisControlInvalid { .. } => "g6_orthogonal_basis_control_invalid",
         EvalError::PositionGeometryAblationInvalid { .. } => "position_geometry_ablation_invalid",
         EvalError::SequenceLengthScalingInvalid { .. } => "sequence_length_scaling_invalid",
+        EvalError::DataVolumeScalingInvalid { .. } => "data_volume_scaling_invalid",
     }
 }
 
@@ -5853,6 +5861,190 @@ pub fn validate_sequence_length_scaling_report(
     Ok(())
 }
 
+/// Preregistered per-block sample counts of the data-volume scaling study
+/// (slice 39). Every count is reported; none is selected. Both arms always
+/// receive the same count: no adaptive, arm-specific allocation.
+pub const DATA_VOLUME_COUNTS: [u64; 3] = [8, 16, 32];
+
+/// Per (count, family, arm) match counts on the bounded matched population.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DataVolumeCell {
+    pub cases_per_block: u64,
+    pub family: TaskFamily,
+    pub arm: ComparisonArm,
+    /// `seed_blocks * cases_per_block`, identical for T6 and C6.
+    pub n_cases: u64,
+    pub matches: u64,
+}
+
+/// Immutable data-volume scaling report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DataVolumeScalingReport {
+    pub scaling_contract: &'static str,
+    pub population_contract: &'static str,
+    pub split: DataSplit,
+    /// Only `seed_blocks` is consumed; counts come from the registry.
+    pub budget: StageCPreflightBudget,
+    pub counts: Vec<u64>,
+    pub t6_capacity: ParameterReadoutCapacity,
+    pub c6_capacity: ParameterReadoutCapacity,
+    /// Count-major, then family, then arm (T6, C6).
+    pub cells: Vec<DataVolumeCell>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false.
+    pub training_executed: bool,
+    /// Must remain false: no count is selected.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn data_volume_invalid(reason: &'static str) -> EvalError {
+    EvalError::DataVolumeScalingInvalid { reason }
+}
+
+fn collect_data_volume_cells(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<DataVolumeCell>, EvalError> {
+    let largest = DATA_VOLUME_COUNTS[DATA_VOLUME_COUNTS.len() - 1];
+    let mut cells = Vec::new();
+    for count in DATA_VOLUME_COUNTS {
+        for family in REQUIRED_SYNTHESIS_FAMILIES {
+            let (mut t6, mut c6) = (0u64, 0u64);
+            for seed_block in 0..budget.seed_blocks {
+                let run = matched_reference::MatchedPrimaryRun::evaluate(
+                    split, *family, seed_block, count,
+                )?;
+                // Smaller volumes are exact prefixes of the largest one.
+                let full = matched_reference::MatchedPrimaryRun::evaluate(
+                    split, *family, seed_block, largest,
+                )?;
+                if run.t6_outcomes() != &full.t6_outcomes()[..count as usize]
+                    || run.c6_outcomes() != &full.c6_outcomes()[..count as usize]
+                {
+                    return Err(data_volume_invalid("nesting_drift"));
+                }
+                t6 += run
+                    .t6_outcomes()
+                    .iter()
+                    .filter(|o| o.matches_oracle)
+                    .count() as u64;
+                c6 += run
+                    .c6_outcomes()
+                    .iter()
+                    .filter(|o| o.matches_oracle)
+                    .count() as u64;
+            }
+            let n_cases = budget.seed_blocks * count;
+            for (arm, matches) in [(ComparisonArm::T6, t6), (ComparisonArm::C6, c6)] {
+                cells.push(DataVolumeCell {
+                    cases_per_block: count,
+                    family: *family,
+                    arm,
+                    n_cases,
+                    matches,
+                });
+            }
+        }
+    }
+    Ok(cells)
+}
+
+/// Run the data-volume scaling study on the bounded matched population.
+pub fn run_data_volume_scaling(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<DataVolumeScalingReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.validate()?;
+    let report = DataVolumeScalingReport {
+        scaling_contract: DATA_VOLUME_SCALING_CONTRACT,
+        population_contract: matched_reference::MATCHED_POPULATION_CONTRACT,
+        split,
+        budget,
+        counts: DATA_VOLUME_COUNTS.to_vec(),
+        t6_capacity: ParameterReadoutCapacity::reference_t6(),
+        c6_capacity: ParameterReadoutCapacity::reference_c6(),
+        cells: collect_data_volume_cells(split, budget)?,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_data_volume_scaling_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_data_volume_scaling_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<DataVolumeScalingReport, EvalError> {
+    run_data_volume_scaling(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a data-volume scaling report: pins, the complete count set,
+/// matched capacity, canonical order, identical per-arm allocation, flags
+/// and regenerated evidence.
+pub fn validate_data_volume_scaling_report(
+    report: &DataVolumeScalingReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.scaling_contract != DATA_VOLUME_SCALING_CONTRACT {
+        return Err(data_volume_invalid("contract_drift"));
+    }
+    if report.population_contract != matched_reference::MATCHED_POPULATION_CONTRACT {
+        return Err(data_volume_invalid("population_drift"));
+    }
+    if report.counts != DATA_VOLUME_COUNTS.to_vec() {
+        return Err(data_volume_invalid("count_set_drift"));
+    }
+    report.budget.validate()?;
+    if report.t6_capacity != ParameterReadoutCapacity::reference_t6()
+        || report.c6_capacity != ParameterReadoutCapacity::reference_c6()
+    {
+        return Err(data_volume_invalid("capacity_mismatch"));
+    }
+    let expected = DATA_VOLUME_COUNTS.len() * REQUIRED_SYNTHESIS_FAMILIES.len() * 2;
+    if report.cells.len() != expected {
+        return Err(data_volume_invalid("cell_count"));
+    }
+    let mut position = 0usize;
+    for count in DATA_VOLUME_COUNTS {
+        for family in REQUIRED_SYNTHESIS_FAMILIES {
+            for arm in [ComparisonArm::T6, ComparisonArm::C6] {
+                let cell = &report.cells[position];
+                position += 1;
+                if cell.cases_per_block != count || cell.family != *family || cell.arm != arm {
+                    return Err(data_volume_invalid("cell_order"));
+                }
+                if cell.n_cases != report.budget.seed_blocks * count || cell.matches > cell.n_cases
+                {
+                    return Err(data_volume_invalid("allocation_drift"));
+                }
+            }
+        }
+    }
+    if report.protected_or_final_access {
+        return Err(data_volume_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(data_volume_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(data_volume_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(data_volume_invalid("experimental_non_final"));
+    }
+    if collect_data_volume_cells(report.split, report.budget)? != report.cells {
+        return Err(data_volume_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -5960,6 +6152,11 @@ pub enum EvalError {
     SequenceLengthScalingInvalid {
         reason: &'static str,
     },
+    /// Data-volume scaling rejected drifted counts, allocation, evidence or
+    /// claims.
+    DataVolumeScalingInvalid {
+        reason: &'static str,
+    },
 }
 
 impl fmt::Display for EvalError {
@@ -6063,6 +6260,9 @@ impl fmt::Display for EvalError {
             }
             Self::SequenceLengthScalingInvalid { reason } => {
                 write!(formatter, "sequence-length scaling invalid: {reason}")
+            }
+            Self::DataVolumeScalingInvalid { reason } => {
+                write!(formatter, "data-volume scaling invalid: {reason}")
             }
         }
     }

@@ -1,4 +1,4 @@
-name: TDI-25 slice 38 sequence-length scaling
+name: TDI-25 slice 39 data-volume scaling
 on:
   pull_request:
     paths:
@@ -16,6 +16,8 @@ on:
       - 'tdi-ai/tests/tdi25_g6_orthogonal_basis_control.rs'
       - 'tdi-ai/tests/tdi25_position_geometry_ablation.rs'
       - 'tdi-ai/tests/tdi25_sequence_length_scaling.rs'
+      - 'tdi-ai/tests/tdi25_data_volume_scaling.rs'
+      - 'docs/TDI-25-DATA-VOLUME-SCALING-V1.md'
       - 'docs/TDI-25-SEQUENCE-LENGTH-SCALING-V1.md'
       - 'tdi-ai/src/tdi24_attention.rs'
       - 'tdi-ai/src/tdi25_tasks.rs'
@@ -34,12 +36,12 @@ on:
       - 'docs/TDI-25-MATCHED-REFERENCE-V1.md'
       - 'docs/TDI-25-MATCHED-EVALUATOR-GATE.md'
       - 'docs/TDI-25-CAMPAIGN-50.md'
-      - 'scripts/check-tdi25-s38.sh'
-      - '.github/workflows/tdi25-s38-sequence-length-scaling.yml'
+      - 'scripts/check-tdi25-s39.sh'
+      - '.github/workflows/tdi25-s39-data-volume-scaling.yml'
 permissions:
   contents: read
 jobs:
-  sequence-length-scaling:
+  data-volume-scaling:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -50,4 +52,4 @@ jobs:
         with:
           toolchain: 1.97.1
           components: rustfmt, clippy
-      - run: bash scripts/check-tdi25-s38.sh
+      - run: bash scripts/check-tdi25-s39.sh
