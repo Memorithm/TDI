@@ -43,6 +43,14 @@
 //! blocks. Weights and capacity are unchanged and the direct-product multiset is
 //! preserved bit-for-bit, while `P^T M P != ±M` and `P^T J P != ±J` show the
 //! `H+`/`H-` structure is destroyed reproducibly.
+//! Slice 35 adds the fixed-M sensitivity study: under one frozen rule, every
+//! choice of three carrier slots as the parity-even sector (`C(6,3) = 20`
+//! fixed mirror bases, enumerated in lexicographic order, canonical first) is
+//! scored with the unchanged C6 reference weights. Each basis is checked to
+//! satisfy the exact chiral algebra (`M'^2 = I`, `J'^T = -J'`, `J'^2 = -I`,
+//! `M' J' M' = -J'`); the canonical basis must reproduce the Stage-C C6
+//! evaluator bit-for-bit and complementary bases must give exactly opposite
+//! parity-odd observables. No basis is selected or tuned.
 //! No training,
 //! confirmatory execution, protected/final evaluation, or scientific claim is
 //! authorised here.
@@ -150,6 +158,15 @@ pub const PARITY_SHUFFLE_CONTROL_CONTRACT: &str = "tdi24-parity-shuffle-control-
 /// A software termination bound only (about 90% of uniform draws already mix
 /// the sectors); not a freeze pin and not a tuned parameter.
 pub const MAX_PARITY_SHUFFLE_DRAWS: u32 = 64;
+
+/// Phase-D fixed-M sensitivity contract pin (slice 35).
+pub const FIXED_M_SENSITIVITY_CONTRACT: &str = "tdi24-fixed-m-sensitivity-v1";
+
+/// Number of fixed mirror bases under the frozen rule: every choice of three
+/// of the six carrier slots as the parity-even sector, `C(6,3) = 20`.
+///
+/// Derived from the carrier width, not a tuned parameter and not a freeze pin.
+pub const FIXED_MIRROR_BASIS_COUNT: usize = 20;
 
 /// Matched C6 reference score weights (alpha, beta, gamma) used since slice 22.
 pub const C6_REFERENCE_WEIGHTS: ChiralScoreWeights = ChiralScoreWeights {
@@ -1860,7 +1877,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::GammaZeroAblationInvalid { .. }
         | EvalError::BetaZeroAblationInvalid { .. }
         | EvalError::DirectOnlyCollapseInvalid { .. }
-        | EvalError::ParityShuffleControlInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::ParityShuffleControlInvalid { .. }
+        | EvalError::FixedMSensitivityInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -1900,6 +1918,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::BetaZeroAblationInvalid { .. } => "beta_zero_ablation_invalid",
         EvalError::DirectOnlyCollapseInvalid { .. } => "direct_only_collapse_invalid",
         EvalError::ParityShuffleControlInvalid { .. } => "parity_shuffle_control_invalid",
+        EvalError::FixedMSensitivityInvalid { .. } => "fixed_m_sensitivity_invalid",
     }
 }
 
@@ -4211,6 +4230,476 @@ pub fn validate_parity_shuffle_control_report(
     Ok(())
 }
 
+/// One fixed mirror basis of the slice-35 family.
+///
+/// `even_slots` are the carrier slots declared parity-even (`H+`) and
+/// `odd_slots` the complementary parity-odd slots (`H-`), both ascending; the
+/// `i`-th even slot is paired with the `i`-th odd slot by the complex
+/// structure. Scoring a carrier under this basis is scoring the relabelled
+/// carrier `(x[even_slots], x[odd_slots])` with the canonical `M`/`J`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FixedMirrorBasis {
+    /// Lexicographic rank of `even_slots` in the frozen enumeration.
+    pub index: usize,
+    pub even_slots: [usize; 3],
+    pub odd_slots: [usize; 3],
+}
+
+impl FixedMirrorBasis {
+    /// Slot relabelling `shuffled[i] = x[permutation[i]]`.
+    #[must_use]
+    pub const fn permutation(&self) -> [usize; CHIRAL_WIDTH] {
+        [
+            self.even_slots[0],
+            self.even_slots[1],
+            self.even_slots[2],
+            self.odd_slots[0],
+            self.odd_slots[1],
+            self.odd_slots[2],
+        ]
+    }
+
+    /// Express a carrier in this basis.
+    #[must_use]
+    pub fn apply(&self, carrier: Chiral6) -> Chiral6 {
+        let source = carrier.as_array();
+        let permutation = self.permutation();
+        let mut relabelled = [0.0; CHIRAL_WIDTH];
+        for (slot, value) in relabelled.iter_mut().enumerate() {
+            *value = source[permutation[slot]];
+        }
+        Chiral6::from_array(relabelled).expect("permutation of a finite carrier is finite")
+    }
+
+    /// True for the declared canonical basis `H+ = {0,1,2}`.
+    #[must_use]
+    pub const fn is_canonical(&self) -> bool {
+        self.even_slots[0] == 0 && self.even_slots[1] == 1 && self.even_slots[2] == 2
+    }
+
+    /// Index of the complementary basis (sectors exchanged).
+    #[must_use]
+    pub const fn complement_index(&self) -> usize {
+        FIXED_MIRROR_BASIS_COUNT - 1 - self.index
+    }
+}
+
+/// The frozen slice-35 basis family: every 3-subset of the six slots as the
+/// parity-even sector, in lexicographic order (canonical basis first). There
+/// is no selection, filtering or tuning; the family is complete.
+#[must_use]
+pub fn fixed_mirror_bases() -> [FixedMirrorBasis; FIXED_MIRROR_BASIS_COUNT] {
+    let mut bases = [FixedMirrorBasis {
+        index: 0,
+        even_slots: [0, 1, 2],
+        odd_slots: [3, 4, 5],
+    }; FIXED_MIRROR_BASIS_COUNT];
+    let mut index = 0;
+    for a in 0..CHIRAL_WIDTH {
+        for b in a + 1..CHIRAL_WIDTH {
+            for c in b + 1..CHIRAL_WIDTH {
+                let mut odd = [0usize; 3];
+                let mut cursor = 0;
+                for slot in 0..CHIRAL_WIDTH {
+                    if slot != a && slot != b && slot != c {
+                        odd[cursor] = slot;
+                        cursor += 1;
+                    }
+                }
+                bases[index] = FixedMirrorBasis {
+                    index,
+                    even_slots: [a, b, c],
+                    odd_slots: odd,
+                };
+                index += 1;
+            }
+        }
+    }
+    bases
+}
+
+type SignedMatrix = [[i8; CHIRAL_WIDTH]; CHIRAL_WIDTH];
+
+fn signed_matmul(left: SignedMatrix, right: SignedMatrix) -> SignedMatrix {
+    let mut product = [[0i8; CHIRAL_WIDTH]; CHIRAL_WIDTH];
+    for (row, out) in product.iter_mut().enumerate() {
+        for (column, value) in out.iter_mut().enumerate() {
+            *value = (0..CHIRAL_WIDTH)
+                .map(|inner| left[row][inner] * right[inner][column])
+                .sum();
+        }
+    }
+    product
+}
+
+fn signed_transpose(matrix: SignedMatrix) -> SignedMatrix {
+    let mut transposed = [[0i8; CHIRAL_WIDTH]; CHIRAL_WIDTH];
+    for (row, values) in matrix.iter().enumerate() {
+        for (column, value) in values.iter().enumerate() {
+            transposed[column][row] = *value;
+        }
+    }
+    transposed
+}
+
+fn signed_identity() -> SignedMatrix {
+    let mut identity = [[0i8; CHIRAL_WIDTH]; CHIRAL_WIDTH];
+    for (index, row) in identity.iter_mut().enumerate() {
+        row[index] = 1;
+    }
+    identity
+}
+
+const fn fixed_m_invalid(reason: &'static str) -> EvalError {
+    EvalError::FixedMSensitivityInvalid { reason }
+}
+
+/// Validate one basis: a true ascending sector partition at its frozen rank,
+/// and the exact chiral algebra for the effective `M' = P^T M P` and
+/// `J' = P^T J P` (`M'^2 = I`, `J'^T = -J'`, `J'^2 = -I`, `M' J' M' = -J'`).
+pub fn validate_fixed_mirror_basis(basis: &FixedMirrorBasis) -> Result<(), EvalError> {
+    if basis.index >= FIXED_MIRROR_BASIS_COUNT {
+        return Err(fixed_m_invalid("basis_order_drift"));
+    }
+    let mut seen = [false; CHIRAL_WIDTH];
+    for slot in basis.permutation() {
+        if slot >= CHIRAL_WIDTH || seen[slot] {
+            return Err(fixed_m_invalid("basis_not_a_sector_partition"));
+        }
+        seen[slot] = true;
+    }
+    if !(basis.even_slots[0] < basis.even_slots[1] && basis.even_slots[1] < basis.even_slots[2])
+        || !(basis.odd_slots[0] < basis.odd_slots[1] && basis.odd_slots[1] < basis.odd_slots[2])
+    {
+        return Err(fixed_m_invalid("basis_not_a_sector_partition"));
+    }
+    if fixed_mirror_bases()[basis.index] != *basis {
+        return Err(fixed_m_invalid("basis_order_drift"));
+    }
+    let permutation = basis.permutation();
+    let mirror = conjugate_by_shuffle(mirror_matrix(), permutation);
+    let complex = conjugate_by_shuffle(complex_structure_matrix(), permutation);
+    let identity = signed_identity();
+    if signed_matmul(mirror, mirror) != identity
+        || signed_transpose(complex) != negate_matrix(complex)
+        || signed_matmul(complex, complex) != negate_matrix(identity)
+        || signed_matmul(signed_matmul(mirror, complex), mirror) != negate_matrix(complex)
+    {
+        return Err(fixed_m_invalid("basis_algebra_failure"));
+    }
+    Ok(())
+}
+
+/// One case scored by the C6 reference weights under one fixed mirror basis.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FixedMSensitivityCase {
+    pub family: TaskFamily,
+    pub case_id: u64,
+    pub basis_index: usize,
+    pub score: f64,
+    /// Parity-odd observable `chi` under this basis.
+    pub chiral: f64,
+    pub correct: bool,
+}
+
+/// Per-basis, per-family correct counts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FixedMBasisFamilySummary {
+    pub basis_index: usize,
+    pub family: TaskFamily,
+    pub n_cases: u64,
+    pub correct: u64,
+}
+
+/// Immutable fixed-M sensitivity report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FixedMSensitivityReport {
+    pub sensitivity_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    /// The complete frozen basis family, canonical first.
+    pub bases: Vec<FixedMirrorBasis>,
+    /// Identical C6 reference weights under every basis.
+    pub weights: ChiralScoreWeights,
+    /// Identical capacity under every basis: a basis is a fixed relabelling
+    /// with zero trainable parameters.
+    pub capacity: TrainableCapacity,
+    /// Case-major, basis-minor order.
+    pub cases: Vec<FixedMSensitivityCase>,
+    pub summaries: Vec<FixedMBasisFamilySummary>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false: every basis is scored with the non-trained reference.
+    pub training_executed: bool,
+    /// Must remain false: no basis is selected; attribution is decided only by
+    /// the Stage-D audit.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+/// Score an inference view with the C6 reference weights under one basis.
+pub fn score_c6_in_basis_from_view(
+    view: &InferenceView,
+    basis: &FixedMirrorBasis,
+) -> Result<f64, EvalError> {
+    validate_fixed_mirror_basis(basis)?;
+    let query = Chiral6::from_array(view.query.as_array()).map_err(EvalError::ChiralNumerical)?;
+    let key = Chiral6::from_array(view.key.as_array()).map_err(EvalError::ChiralNumerical)?;
+    chiral_score(basis.apply(query), basis.apply(key), C6_REFERENCE_WEIGHTS)
+        .map_err(EvalError::ChiralNumerical)
+}
+
+fn fixed_m_case<T, S>(
+    case: &LabeledCase<T>,
+    split: DataSplit,
+    bases: &[FixedMirrorBasis; FIXED_MIRROR_BASIS_COUNT],
+    oracle_sign: S,
+    cases: &mut Vec<FixedMSensitivityCase>,
+) -> Result<(), EvalError>
+where
+    S: Fn(&T) -> Result<i8, EvalError>,
+{
+    let view = case.inference_view();
+    if view.split != split {
+        return Err(EvalError::SplitMismatch {
+            expected: split,
+            actual: view.split,
+        });
+    }
+    let sign = oracle_sign(case.protected_label().reveal_for_evaluation())?;
+    if sign != 1 && sign != -1 {
+        return Err(fixed_m_invalid("oracle_sign"));
+    }
+    let sign = f64::from(sign);
+    let reference = run_inference_callback(case, score_c6_from_view)?;
+    let query = Chiral6::from_array(view.query.as_array()).map_err(EvalError::ChiralNumerical)?;
+    let key = Chiral6::from_array(view.key.as_array()).map_err(EvalError::ChiralNumerical)?;
+    for basis in bases {
+        let score = run_inference_callback(case, |view: &InferenceView| {
+            score_c6_in_basis_from_view(view, basis)
+        })?;
+        if basis.is_canonical() && score.to_bits() != reference.to_bits() {
+            return Err(fixed_m_invalid("canonical_reference_drift"));
+        }
+        let chiral = basis
+            .apply(query)
+            .chiral_pairing(basis.apply(key))
+            .map_err(EvalError::ChiralNumerical)?;
+        cases.push(FixedMSensitivityCase {
+            family: view.family,
+            case_id: view.case_id,
+            basis_index: basis.index,
+            score,
+            chiral,
+            correct: score * sign > 0.0,
+        });
+    }
+    Ok(())
+}
+
+fn summarize_fixed_m(cases: &[FixedMSensitivityCase]) -> Vec<FixedMBasisFamilySummary> {
+    let mut summaries =
+        Vec::with_capacity(FIXED_MIRROR_BASIS_COUNT * STAGE_C_PREFLIGHT_FAMILIES.len());
+    for basis_index in 0..FIXED_MIRROR_BASIS_COUNT {
+        for family in STAGE_C_PREFLIGHT_FAMILIES {
+            let members = cases
+                .iter()
+                .filter(|case| case.basis_index == basis_index && case.family == *family);
+            summaries.push(FixedMBasisFamilySummary {
+                basis_index,
+                family: *family,
+                n_cases: members.clone().count() as u64,
+                correct: members.filter(|case| case.correct).count() as u64,
+            });
+        }
+    }
+    summaries
+}
+
+fn collect_fixed_m_cases(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<FixedMSensitivityCase>, EvalError> {
+    validate_non_final_split(split)?;
+    budget.cases_per_arm()?;
+    let bases = fixed_mirror_bases();
+    for basis in &bases {
+        validate_fixed_mirror_basis(basis)?;
+    }
+    let mut cases = Vec::new();
+    let last_pair_id = budget.first_pair_id + budget.pairs_per_family;
+    for pair_id in budget.first_pair_id..last_pair_id {
+        let discriminative = reflection_discriminative_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [discriminative.right, discriminative.left] {
+            fixed_m_case(
+                &seal_reflection_discriminative(&member),
+                split,
+                &bases,
+                handedness_sign,
+                &mut cases,
+            )?;
+        }
+        let nuisance = reflection_nuisance_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [nuisance.canonical, nuisance.reflected] {
+            fixed_m_case(
+                &seal_reflection_nuisance(&member),
+                split,
+                &bases,
+                reflection_invariant_sign,
+                &mut cases,
+            )?;
+        }
+        let direction = direction_reversal_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [direction.forward, direction.reverse] {
+            fixed_m_case(
+                &seal_direction_reversal(&member),
+                split,
+                &bases,
+                direction_sign,
+                &mut cases,
+            )?;
+        }
+        let base_case_id = pair_id
+            .checked_mul(STAGE_C_PREFLIGHT_MEMBERS_PER_PAIR)
+            .ok_or_else(preflight_generation_failed)?;
+        for case_id in [base_case_id, base_case_id + 1] {
+            let control = non_chiral_control_case_in_split(case_id, split)
+                .map_err(|_| preflight_generation_failed())?;
+            fixed_m_case(
+                &seal_non_chiral_control(&control),
+                split,
+                &bases,
+                non_chiral_sign,
+                &mut cases,
+            )?;
+        }
+    }
+    Ok(cases)
+}
+
+/// Run the fixed-M sensitivity study on the bounded Stage-C case stream.
+///
+/// Same generators, pair ids, split, weights and capacity as the Stage-C
+/// preflight; every case is scored under all twenty frozen mirror bases. Any
+/// scoring or identity failure aborts fail-closed; nothing is dropped.
+pub fn run_fixed_m_sensitivity(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<FixedMSensitivityReport, EvalError> {
+    let cases = collect_fixed_m_cases(split, budget)?;
+    let summaries = summarize_fixed_m(&cases);
+    let report = FixedMSensitivityReport {
+        sensitivity_contract: FIXED_M_SENSITIVITY_CONTRACT,
+        split,
+        budget,
+        bases: fixed_mirror_bases().to_vec(),
+        weights: C6_REFERENCE_WEIGHTS,
+        capacity: TrainableCapacity::reference_c6(),
+        cases,
+        summaries,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_fixed_m_sensitivity_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_fixed_m_sensitivity_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<FixedMSensitivityReport, EvalError> {
+    run_fixed_m_sensitivity(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a fixed-M sensitivity report: contract pin, the complete frozen
+/// basis family in order with exact algebra, identical weights and capacity,
+/// bounded coverage in case-major/basis-minor order, exact complementary-basis
+/// antisymmetry of `chi`, recomputed summaries, the no-access / no-training /
+/// no-claim flags, and regenerated per-case evidence.
+pub fn validate_fixed_m_sensitivity_report(
+    report: &FixedMSensitivityReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.sensitivity_contract != FIXED_M_SENSITIVITY_CONTRACT {
+        return Err(fixed_m_invalid("contract_drift"));
+    }
+    if report.bases.len() != FIXED_MIRROR_BASIS_COUNT {
+        return Err(fixed_m_invalid("basis_family_incomplete"));
+    }
+    for (position, basis) in report.bases.iter().enumerate() {
+        if basis.index != position {
+            return Err(fixed_m_invalid("basis_order_drift"));
+        }
+        validate_fixed_mirror_basis(basis)?;
+    }
+    if !report.bases[0].is_canonical() {
+        return Err(fixed_m_invalid("basis_order_drift"));
+    }
+    if report.weights != C6_REFERENCE_WEIGHTS {
+        return Err(fixed_m_invalid("weights_drift"));
+    }
+    if report.capacity != TrainableCapacity::reference_c6() {
+        return Err(fixed_m_invalid("capacity_mismatch"));
+    }
+    let per_basis = report.budget.cases_per_arm()?;
+    if report.cases.len() as u64 != per_basis * FIXED_MIRROR_BASIS_COUNT as u64 {
+        return Err(fixed_m_invalid("case_count"));
+    }
+    for group in report.cases.chunks(FIXED_MIRROR_BASIS_COUNT) {
+        for (basis_index, case) in group.iter().enumerate() {
+            if case.basis_index != basis_index
+                || case.family != group[0].family
+                || case.case_id != group[0].case_id
+            {
+                return Err(fixed_m_invalid("case_order"));
+            }
+        }
+        for case in group {
+            let complement = &group[report.bases[case.basis_index].complement_index()];
+            if case.chiral != -complement.chiral {
+                return Err(fixed_m_invalid("complement_antisymmetry"));
+            }
+        }
+    }
+    if report.summaries != summarize_fixed_m(&report.cases)
+        || report
+            .summaries
+            .iter()
+            .filter(|summary| summary.basis_index == 0)
+            .map(|summary| summary.n_cases)
+            .sum::<u64>()
+            != per_basis
+    {
+        return Err(fixed_m_invalid("summary_drift"));
+    }
+    if report.protected_or_final_access {
+        return Err(fixed_m_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(fixed_m_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(fixed_m_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(fixed_m_invalid("experimental_non_final"));
+    }
+    // Stored evidence is never trusted: every case is regenerated from the
+    // report's split and budget under the frozen basis family and compared
+    // exactly.
+    if collect_fixed_m_cases(report.split, report.budget)? != report.cases {
+        return Err(fixed_m_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -4292,6 +4781,9 @@ pub enum EvalError {
     /// Parity-shuffle control rejected a structure-preserving or irreproducible
     /// shuffle, drifted weights/capacity, budget or flags.
     ParityShuffleControlInvalid { reason: &'static str },
+    /// Fixed-M sensitivity rejected a non-algebraic or reordered basis family,
+    /// drifted weights/capacity, evidence, budget or flags.
+    FixedMSensitivityInvalid { reason: &'static str },
 }
 
 impl fmt::Display for EvalError {
@@ -4383,6 +4875,9 @@ impl fmt::Display for EvalError {
             }
             Self::ParityShuffleControlInvalid { reason } => {
                 write!(formatter, "parity-shuffle control invalid: {reason}")
+            }
+            Self::FixedMSensitivityInvalid { reason } => {
+                write!(formatter, "fixed-M sensitivity invalid: {reason}")
             }
         }
     }
