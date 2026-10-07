@@ -70,7 +70,14 @@
 //! population, the matched C6 weights keep `alpha`/`beta` and zero only the
 //! parity-odd coefficient; the exact identity `reference = ablated + gamma*chi`
 //! and the closed right/left enantiomorphic split are checked per case at
-//! matched capacity. All arms consume sealed
+//! matched capacity. Slice 34 adds the chiral parity-shuffle control under
+//! `tdi25-chiral-parity-shuffle-control-v1`: on the same bounded matched
+//! population, query and key carrier slots are relabelled by the unchanged
+//! TDI-24 slice-34 parity shuffle, drawn from an already-registered TDI-25
+//! seed (no new seed material). The six query and six key values, the
+//! direct-product multiset, the matched weights and the capacity are
+//! preserved bit-for-bit, while the shuffle provably breaks `M` and `J`, so
+//! the `H+`/`H-` semantics are destroyed. All arms consume sealed
 //! Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
@@ -81,17 +88,19 @@ pub mod matched_reference {
 }
 
 pub use matched_reference::{
-    ChiralGammaZeroAblationCase, ReductionPointAblationCase, TorsorBridgeCase,
-    chiral_gamma_zero_weights, chiral_parity_odd_channel, direct_torsor_bridge_score,
-    evaluate_chiral_gamma_zero_ablation, evaluate_reduction_point_ablation,
-    evaluate_torsor_bridge_equivalence, gamma_zero_chiral_score, reduction_point_transport_term,
-    untransported_torsor_score,
+    ChiralGammaZeroAblationCase, ChiralParityShuffleCase, ReductionPointAblationCase,
+    TorsorBridgeCase, chiral_gamma_zero_weights, chiral_parity_odd_channel,
+    direct_torsor_bridge_score, evaluate_chiral_gamma_zero_ablation,
+    evaluate_chiral_parity_shuffle_control, evaluate_reduction_point_ablation,
+    evaluate_torsor_bridge_equivalence, gamma_zero_chiral_score, parity_shuffled_chiral_score,
+    reduction_point_transport_term, untransported_torsor_score,
 };
 
 use core::fmt;
 
 use super::tdi22_torsor::TORSOR_CONTRACT;
 use super::tdi24_chiral::{CHIRAL_CONTRACT, ChiralScoreWeights};
+use super::tdi24_eval::{PARITY_SHUFFLE_CONTROL_CONTRACT, ParityShuffle, parity_shuffle_from_seed};
 use super::tdi25_matched_matrix::{
     MATCHED_EVALUATOR_MATRIX_CONTRACT, matched_family_paths, require_complete_primary_matrix,
 };
@@ -105,6 +114,7 @@ use super::tdi25_tasks::{
     chiral_reflection_pair_in_split, mixed_geometry_pair_in_split, neutral_control_pair_in_split,
     run_inference_callback, torsor_transport_pair_in_split,
 };
+use super::tdi25_tasks::{RegisteredSeed, SeedDomain, register_seed};
 use super::tdi25_torsor_chiral::{
     ComparisonArm, GENERIC6_CONTRACT, PINNED_SOURCE_CONTRACTS, TaskFamily, Tdi25Error,
     carrier_accounting, chiral_arm_score, generic_arm_score, torsor_arm_score,
@@ -155,6 +165,9 @@ pub const TORSOR_REDUCTION_POINT_ABLATION_CONTRACT: &str =
 
 /// Phase-D chiral `gamma=0` ablation contract pin (slice 33).
 pub const CHIRAL_GAMMA_ZERO_ABLATION_CONTRACT: &str = "tdi25-chiral-gamma-zero-ablation-v1";
+
+/// Phase-D chiral parity-shuffle control contract pin (slice 34).
+pub const CHIRAL_PARITY_SHUFFLE_CONTROL_CONTRACT: &str = "tdi25-chiral-parity-shuffle-control-v1";
 
 /// Relative tolerance of the monitored transport identity; identical to the
 /// matched-reference v1 scalar tolerance shared by every arm.
@@ -3344,7 +3357,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::StageCPreflightInvalid { .. }
         | EvalError::ReductionPointAblationInvalid { .. }
         | EvalError::TorsorBridgeEquivalenceInvalid { .. }
-        | EvalError::ChiralGammaZeroAblationInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::ChiralGammaZeroAblationInvalid { .. }
+        | EvalError::ChiralParityShuffleControlInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -3382,6 +3396,9 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::ReductionPointAblationInvalid { .. } => "reduction_point_ablation_invalid",
         EvalError::TorsorBridgeEquivalenceInvalid { .. } => "torsor_bridge_equivalence_invalid",
         EvalError::ChiralGammaZeroAblationInvalid { .. } => "chiral_gamma_zero_ablation_invalid",
+        EvalError::ChiralParityShuffleControlInvalid { .. } => {
+            "chiral_parity_shuffle_control_invalid"
+        }
     }
 }
 
@@ -4684,6 +4701,267 @@ pub fn validate_chiral_gamma_zero_ablation_report(
     Ok(())
 }
 
+/// Per-family match counts for the C6 reference and its parity-shuffle control.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChiralParityShuffleFamilySummary {
+    pub family: TaskFamily,
+    pub n_cases: u64,
+    pub reference_matches: u64,
+    pub shuffled_matches: u64,
+    /// Cases whose parity-odd observable changed under the shuffle.
+    pub parity_odd_changed: u64,
+}
+
+/// Immutable chiral parity-shuffle control report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ChiralParityShuffleControlReport {
+    pub control_contract: &'static str,
+    pub population_contract: &'static str,
+    pub chiral_contract: &'static str,
+    /// Upstream TDI-24 slice-34 shuffle contract, consumed unchanged.
+    pub shuffle_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    /// Reused registered seed `(split domain, ChiralFavorable, 0)`: the seed of
+    /// the first ChiralFavorable case of the matched population; no new seed
+    /// material.
+    pub registered_seed: RegisteredSeed,
+    pub shuffle: ParityShuffle,
+    /// Identical weights on both sides: the control changes no coefficient.
+    pub reference_weights: ChiralScoreWeights,
+    pub shuffled_weights: ChiralScoreWeights,
+    /// Identical capacity on both sides: the shuffle is a fixed relabelling
+    /// with zero trainable parameters.
+    pub reference_capacity: ParameterReadoutCapacity,
+    pub shuffled_capacity: ParameterReadoutCapacity,
+    pub cases: Vec<ChiralParityShuffleCase>,
+    pub families: Vec<ChiralParityShuffleFamilySummary>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false: both sides are the non-trained reference.
+    pub training_executed: bool,
+    /// Must remain false: attribution is decided only by the Stage-D audit.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn chiral_parity_shuffle_invalid(reason: &'static str) -> EvalError {
+    EvalError::ChiralParityShuffleControlInvalid { reason }
+}
+
+/// Registered seed reused by the parity-shuffle control (no new seed material).
+#[must_use]
+pub fn chiral_parity_shuffle_registered_seed(split: DataSplit) -> RegisteredSeed {
+    register_seed(
+        SeedDomain::from_split(split),
+        TaskFamily::ChiralFavorable,
+        0,
+    )
+}
+
+fn chiral_parity_shuffle_for_split(split: DataSplit) -> Result<ParityShuffle, EvalError> {
+    parity_shuffle_from_seed(chiral_parity_shuffle_registered_seed(split).mixed_seed).map_err(
+        |error| match error {
+            super::tdi24_eval::EvalError::ParityShuffleControlInvalid { reason } => {
+                chiral_parity_shuffle_invalid(reason)
+            }
+            _ => chiral_parity_shuffle_invalid("upstream_shuffle_invalid"),
+        },
+    )
+}
+
+fn summarize_chiral_parity_shuffle_families(
+    cases: &[ChiralParityShuffleCase],
+) -> Vec<ChiralParityShuffleFamilySummary> {
+    REQUIRED_SYNTHESIS_FAMILIES
+        .iter()
+        .map(|family| {
+            let members = cases.iter().filter(|case| case.family == *family);
+            ChiralParityShuffleFamilySummary {
+                family: *family,
+                n_cases: members.clone().count() as u64,
+                reference_matches: members
+                    .clone()
+                    .filter(|c| c.reference_matches_target)
+                    .count() as u64,
+                shuffled_matches: members
+                    .clone()
+                    .filter(|c| c.shuffled_matches_target)
+                    .count() as u64,
+                parity_odd_changed: members
+                    .filter(|c| c.reference_parity_odd.to_bits() != c.shuffled_parity_odd.to_bits())
+                    .count() as u64,
+            }
+        })
+        .collect()
+}
+
+fn collect_chiral_parity_shuffle_cases(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+    shuffle: &ParityShuffle,
+) -> Result<Vec<ChiralParityShuffleCase>, EvalError> {
+    let mut cases = Vec::new();
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..budget.seed_blocks {
+            cases.extend(evaluate_chiral_parity_shuffle_control(
+                split,
+                *family,
+                seed_block,
+                budget.cases_per_block,
+                shuffle,
+            )?);
+        }
+    }
+    Ok(cases)
+}
+
+/// Run the chiral parity-shuffle control on the bounded matched population.
+///
+/// Same families, seed blocks, cases, split, weights and capacity as the
+/// Stage-C preflight; only the carrier slots are relabelled by the unchanged
+/// TDI-24 slice-34 shuffle drawn from a reused registered seed. Any scoring,
+/// drift or identity failure aborts fail-closed; nothing is silently dropped.
+pub fn run_chiral_parity_shuffle_control(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<ChiralParityShuffleControlReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.validate()?;
+    let shuffle = chiral_parity_shuffle_for_split(split)?;
+    let cases = collect_chiral_parity_shuffle_cases(split, budget, &shuffle)?;
+    let families = summarize_chiral_parity_shuffle_families(&cases);
+    let report = ChiralParityShuffleControlReport {
+        control_contract: CHIRAL_PARITY_SHUFFLE_CONTROL_CONTRACT,
+        population_contract: matched_reference::MATCHED_POPULATION_CONTRACT,
+        chiral_contract: CHIRAL_CONTRACT,
+        shuffle_contract: PARITY_SHUFFLE_CONTROL_CONTRACT,
+        split,
+        budget,
+        registered_seed: chiral_parity_shuffle_registered_seed(split),
+        shuffle,
+        reference_weights: matched_reference::MATCHED_CHIRAL_WEIGHTS,
+        shuffled_weights: matched_reference::MATCHED_CHIRAL_WEIGHTS,
+        reference_capacity: ParameterReadoutCapacity::reference_c6(),
+        shuffled_capacity: ParameterReadoutCapacity::reference_c6(),
+        cases,
+        families,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_chiral_parity_shuffle_control_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_chiral_parity_shuffle_control_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<ChiralParityShuffleControlReport, EvalError> {
+    run_chiral_parity_shuffle_control(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a chiral parity-shuffle control report: pins, reused seed and
+/// reproducible structure-destroying shuffle, identical weights and capacity,
+/// bounded coverage in canonical order, preserved six values and
+/// direct-product multiset, recomputed family counts, the no-access /
+/// no-training / no-claim flags, and regenerated per-case evidence.
+pub fn validate_chiral_parity_shuffle_control_report(
+    report: &ChiralParityShuffleControlReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.control_contract != CHIRAL_PARITY_SHUFFLE_CONTROL_CONTRACT {
+        return Err(chiral_parity_shuffle_invalid("contract_drift"));
+    }
+    if report.population_contract != matched_reference::MATCHED_POPULATION_CONTRACT {
+        return Err(chiral_parity_shuffle_invalid("population_drift"));
+    }
+    if report.chiral_contract != CHIRAL_CONTRACT {
+        return Err(chiral_parity_shuffle_invalid("chiral_contract_drift"));
+    }
+    if report.shuffle_contract != PARITY_SHUFFLE_CONTROL_CONTRACT {
+        return Err(chiral_parity_shuffle_invalid("shuffle_contract_drift"));
+    }
+    if report.registered_seed != chiral_parity_shuffle_registered_seed(report.split) {
+        return Err(chiral_parity_shuffle_invalid("seed_drift"));
+    }
+    super::tdi24_eval::validate_parity_shuffle(&report.shuffle).map_err(|error| match error {
+        super::tdi24_eval::EvalError::ParityShuffleControlInvalid { reason } => {
+            chiral_parity_shuffle_invalid(reason)
+        }
+        _ => chiral_parity_shuffle_invalid("upstream_shuffle_invalid"),
+    })?;
+    if report.shuffle != chiral_parity_shuffle_for_split(report.split)? {
+        return Err(chiral_parity_shuffle_invalid("shuffle_not_reproducible"));
+    }
+    if report.reference_weights != matched_reference::MATCHED_CHIRAL_WEIGHTS {
+        return Err(chiral_parity_shuffle_invalid("reference_weights_drift"));
+    }
+    if report.shuffled_weights != report.reference_weights {
+        return Err(chiral_parity_shuffle_invalid("shuffled_weights_drift"));
+    }
+    report.budget.validate()?;
+    if report.reference_capacity != report.shuffled_capacity
+        || report.reference_capacity != ParameterReadoutCapacity::reference_c6()
+    {
+        return Err(chiral_parity_shuffle_invalid("capacity_mismatch"));
+    }
+    let expected = report.budget.cases_per_arm();
+    if report.cases.len() as u64 != expected {
+        return Err(chiral_parity_shuffle_invalid("case_count"));
+    }
+    let mut position = 0usize;
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..report.budget.seed_blocks {
+            for case_id in 0..report.budget.cases_per_block {
+                let case = &report.cases[position];
+                if case.family != *family
+                    || case.seed_block != seed_block
+                    || case.case_id != case_id
+                {
+                    return Err(chiral_parity_shuffle_invalid("case_order"));
+                }
+                if !case.six_values_preserved {
+                    return Err(chiral_parity_shuffle_invalid("six_values_drift"));
+                }
+                if !case.direct_products_preserved {
+                    return Err(chiral_parity_shuffle_invalid(
+                        "direct_product_multiset_drift",
+                    ));
+                }
+                position += 1;
+            }
+        }
+    }
+    if report.families != summarize_chiral_parity_shuffle_families(&report.cases) {
+        return Err(chiral_parity_shuffle_invalid("family_summary"));
+    }
+    if report.protected_or_final_access {
+        return Err(chiral_parity_shuffle_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(chiral_parity_shuffle_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(chiral_parity_shuffle_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(chiral_parity_shuffle_invalid("experimental_non_final"));
+    }
+    // Stored evidence is never trusted: every case is regenerated from the
+    // canonical matched population `(split, family, seed_block, case_id)`, its
+    // evaluator-owned target and the reproducible shuffle, and compared exactly.
+    let regenerated =
+        collect_chiral_parity_shuffle_cases(report.split, report.budget, &report.shuffle)?;
+    if regenerated != report.cases {
+        return Err(chiral_parity_shuffle_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -4764,6 +5042,11 @@ pub enum EvalError {
     },
     /// Chiral `gamma=0` ablation rejected drifted weights, identity or claims.
     ChiralGammaZeroAblationInvalid {
+        reason: &'static str,
+    },
+    /// Chiral parity-shuffle control rejected a drifted shuffle, evidence or
+    /// claims.
+    ChiralParityShuffleControlInvalid {
         reason: &'static str,
     },
 }
@@ -4851,6 +5134,9 @@ impl fmt::Display for EvalError {
             }
             Self::ChiralGammaZeroAblationInvalid { reason } => {
                 write!(formatter, "chiral gamma=0 ablation invalid: {reason}")
+            }
+            Self::ChiralParityShuffleControlInvalid { reason } => {
+                write!(formatter, "chiral parity-shuffle control invalid: {reason}")
             }
         }
     }
