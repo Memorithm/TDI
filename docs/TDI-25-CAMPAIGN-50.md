@@ -55,7 +55,7 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | ---: | --- | --- |
 | 31 | Torsor reduction-point ablation | **landed** in #704, exact head `66265e1ec9627a78e5ce17a658eec900469d784b`, merge `c18189fa5c50d9c224044b5368071947b9a9db89`; remove/alter transport structure under matched capacity |
 | 32 | Direct vs factorized torsor bridge | **landed** in #708, exact head `9a899209a16ba2ac3cd745fa1e601901e66c2caa`, merge `c73f98a9ed69f842ee2d49cdc8b24b5fafc42f7a`; numerical equivalence monitored inside comparison harness |
-| 33 | Chiral `gamma=0` ablation | **current candidate**; remove parity-odd channel: matched C6 weights `(1, 0, 1)` with only `gamma` zeroed at matched capacity on the bounded matched population; exact `reference = ablated + gamma*chi` and closed enantiomorphic split per case; ChiralFavorable target equals the reference score, recorded as a degeneracy |
+| 33 | Chiral `gamma=0` ablation | **landed** in #714, exact head `da2a98ae9ef596b2dc0fb5dbd79764e829609e5c`, merge `87b5f02fa053d415b3c9f5b2d5041d4fe9c58b41`; remove parity-odd channel: matched C6 weights `(1, 0, 1)` with only `gamma` zeroed at matched capacity on the bounded matched population; exact `reference = ablated + gamma*chi` and closed enantiomorphic split per case; ChiralFavorable target equals the reference score, recorded as a degeneracy |
 | 34 | Chiral parity-shuffle control | six values preserved; H+/H- semantics destroyed |
 | 35 | Torsor structure-shuffle control | six values preserved; Varignon pairing semantics destroyed |
 | 36 | G6 orthogonal-basis control | generic capacity under deterministic basis rotations |
@@ -94,4 +94,4 @@ Pause the campaign when any of the following occurs:
 
 ## Progress accounting
 
-**32/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606, #607, #612, #654, #656, #658, #660, #661, #663, #666, #669, #673, #679, #683, #689, #699, #701, #704, #708). Slice 33 is next. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**33/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606, #607, #612, #654, #656, #658, #660, #661, #663, #666, #669, #673, #679, #683, #689, #699, #701, #704, #708, #714). Slice 34 is next. Only merged, exact-head-qualified substantive PRs increment the campaign counter.

@@ -56,7 +56,7 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 | 31 | `gamma=0` ablation | **landed** in #702, exact head `56ff53b183e10f052c1d62b97c03f4991252b147`, merge `2d59303a73c39100c52b872b7f6ad61a7a1e2504`; parity-odd channel removed, all else fixed |
 | 32 | `beta=0` ablation | **landed** in #705, exact head `a3b4a8e986baf4b37bc6421ab14c55d28556af41`, merge `dcbd11751aebcdc4de3882e84ea7504d81abe936`; mirror-even extra channel removed; matched C6 reference already has `beta=0`, so recorded explicitly as the identity |
 | 33 | direct-only collapse | **landed** in #707, exact head `e775f1fbfc7dde86124886a8acbe6383e7ded303`, merge `3f6fd02aa68222110384405cf230e6c049fb8767`; C6 path numerically matches V6 score semantics (bit-for-bit, declared tolerance `0.0`); matched C6 reference already has `beta=0`, so the collapse shares its weights with the slice-31 `gamma=0` ablation, recorded explicitly |
-| 34 | parity-shuffle control | **current stacked slice**; capacity preserved, H+/H- structure destroyed reproducibly: one fixed carrier-slot permutation drawn from the reused Slice-18 registered seed (no new seed material), block-preserving/swapping draws rejected, `P^T M P != ±M` and `P^T J P != ±J` checked exactly, weights/capacity unchanged, direct-product multiset preserved bit-for-bit |
+| 34 | parity-shuffle control | **landed** in #713, exact head `17407c30e4d132b8d68af72798d9a15193400d10`, merge `8aef82dfda23baa9104178b1ff8e7dcd7652e2fa`; capacity preserved, H+/H- structure destroyed reproducibly: one fixed carrier-slot permutation drawn from the reused Slice-18 registered seed (no new seed material), block-preserving/swapping draws rejected, `P^T M P != ±M` and `P^T J P != ±J` checked exactly, weights/capacity unchanged, direct-product multiset preserved bit-for-bit |
 | 35 | fixed-M sensitivity | alternative fixed mirror bases under frozen rule |
 | 36 | structure-preserving learned basis prototype | only orthogonal/constrained transforms that preserve algebra |
 | 37 | head-sharing ablation | shared vs per-head chiral structure under matched capacity |
@@ -93,4 +93,4 @@ The campaign pauses rather than forcing a later PR when:
 
 ## Progress accounting
 
-**33/50 merged** (#406, #471, #487, #492, #548, #549, #550, #551, #556, #559, #562, #565, #567, #569, #601, #602, #604, #608, #609, #610, #611, #615, #655, #657, #659, #667, #671, #677, #687, #698, #702, #705, #707). Slice 34 is next. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**34/50 merged** (#406, #471, #487, #492, #548, #549, #550, #551, #556, #559, #562, #565, #567, #569, #601, #602, #604, #608, #609, #610, #611, #615, #655, #657, #659, #667, #671, #677, #687, #698, #702, #705, #707, #713). Slice 35 is next. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
