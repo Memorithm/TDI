@@ -4028,6 +4028,20 @@ pub fn run_parity_shuffle_control(
     split: DataSplit,
     budget: StageCPreflightBudget,
 ) -> Result<ParityShuffleControlReport, EvalError> {
+    let report = collect_parity_shuffle_control(split, budget)?;
+    validate_parity_shuffle_control_report(&report)?;
+    Ok(report)
+}
+
+/// Generate the parity-shuffle control report without validating it.
+///
+/// Shared by [`run_parity_shuffle_control`] and by the validator, which
+/// regenerates every case from the report's split and budget instead of
+/// trusting stored per-case evidence.
+fn collect_parity_shuffle_control(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<ParityShuffleControlReport, EvalError> {
     validate_non_final_split(split)?;
     let cases_per_arm = budget.cases_per_arm()?;
     let registered_seed = parity_shuffle_registered_seed(split, budget);
@@ -4087,7 +4101,7 @@ pub fn run_parity_shuffle_control(
         return Err(parity_shuffle_invalid("case_count"));
     }
     let families = summarize_parity_shuffle_families(&cases);
-    let report = ParityShuffleControlReport {
+    Ok(ParityShuffleControlReport {
         control_contract: PARITY_SHUFFLE_CONTROL_CONTRACT,
         split,
         budget,
@@ -4103,9 +4117,14 @@ pub fn run_parity_shuffle_control(
         training_executed: false,
         scientific_claim: false,
         experimental_non_final: true,
-    };
-    validate_parity_shuffle_control_report(&report)?;
-    Ok(report)
+    })
+}
+
+/// Score implied by retained primitive channels, accumulated in exactly the
+/// order of the upstream `chiral_score` (so the comparison is bit-exact).
+fn weighted_channel_score(channels: ChiralObservables, weights: ChiralScoreWeights) -> f64 {
+    (weights.alpha * channels.direct + weights.beta * channels.mirrored)
+        + weights.gamma * channels.chiral
 }
 
 /// Parse a split label first; protected/final labels never generate a case.
@@ -4156,6 +4175,15 @@ pub fn validate_parity_shuffle_control_report(
     {
         return Err(parity_shuffle_invalid("direct_product_multiset_drift"));
     }
+    for case in &report.cases {
+        if case.reference_score.to_bits()
+            != weighted_channel_score(case.reference_channels, report.reference_weights).to_bits()
+            || case.shuffled_score.to_bits()
+                != weighted_channel_score(case.shuffled_channels, report.shuffled_weights).to_bits()
+        {
+            return Err(parity_shuffle_invalid("score_channel_drift"));
+        }
+    }
     if report.families != summarize_parity_shuffle_families(&report.cases)
         || report.families.iter().map(|f| f.n_cases).sum::<u64>() != expected
     {
@@ -4172,6 +4200,13 @@ pub fn validate_parity_shuffle_control_report(
     }
     if !report.experimental_non_final {
         return Err(parity_shuffle_invalid("experimental_non_final"));
+    }
+    // Stored evidence is never trusted: every case (scores, channels,
+    // preserved-product flag and correctness) is regenerated from the
+    // report's split, budget and reproducible shuffle and compared exactly.
+    let regenerated = collect_parity_shuffle_control(report.split, report.budget)?;
+    if regenerated.shuffle != report.shuffle || regenerated.cases != report.cases {
+        return Err(parity_shuffle_invalid("case_evidence_drift"));
     }
     Ok(())
 }

@@ -245,6 +245,22 @@ fn drifted_control_reports_fail_closed() {
         "family_summary_drift",
     );
     reject(
+        &|r| r.cases[0].reference_score += 0.5,
+        "score_channel_drift",
+    );
+    reject(&|r| r.cases[0].shuffled_score += 0.5, "score_channel_drift");
+    reject(
+        &|r| r.cases[0].shuffled_channels.chiral += 0.5,
+        "score_channel_drift",
+    );
+    reject(&|r| r.cases[0].case_id += 1_000, "case_evidence_drift");
+    reject(
+        // Self-consistent forgery: beta = 0, so the mirror-even channel does
+        // not enter the score and only regeneration can expose it.
+        &|r| r.cases[0].shuffled_channels.mirrored += 0.5,
+        "case_evidence_drift",
+    );
+    reject(
         &|r| r.protected_or_final_access = true,
         "protected_or_final_access",
     );

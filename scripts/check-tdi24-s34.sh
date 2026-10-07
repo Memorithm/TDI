@@ -32,3 +32,5 @@ grep -Fq 'fn block_preserving_or_swapping_shuffles_are_rejected' tdi-ai/tests/td
 grep -Fq '| 33 | direct-only collapse | **landed** in #707, exact head `e775f1fbfc7dde86124886a8acbe6383e7ded303`, merge `3f6fd02aa68222110384405cf230e6c049fb8767`;' docs/TDI-24-CAMPAIGN-50.md
 grep -Fq '| 34 | parity-shuffle control | **current stacked slice**;' docs/TDI-24-CAMPAIGN-50.md
 # Do not pin the global merged count here: later qualified slices must advance it.
+grep -Fq 'parity_shuffle_invalid("score_channel_drift")' tdi-ai/src/tdi24_eval.rs
+grep -Fq 'parity_shuffle_invalid("case_evidence_drift")' tdi-ai/src/tdi24_eval.rs
