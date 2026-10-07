@@ -11,11 +11,13 @@ use crate::experimental::tdi22_torsor::{
 };
 use crate::experimental::tdi24_chiral::{Chiral6, ChiralScoreWeights, enantiomorphic_scores};
 use crate::experimental::tdi24_eval::{
-    EvalError as Tdi24EvalError, ParityShuffle, validate_parity_shuffle,
+    EvalError as Tdi24EvalError, LEARNED_BASIS_PROBE_COUNT, LEARNED_BASIS_TOLERANCE,
+    LearnedBasisProbe, LearnedBasisProbeRole, ParityShuffle, learned_basis_probes,
+    learned_basis_transform, validate_learned_basis_probe, validate_parity_shuffle,
 };
 use crate::experimental::tdi25_tasks::{SeedDomain, mix_registered_seed};
 use crate::experimental::tdi25_torsor_chiral::{
-    chiral_arm_score, torsor_arm_score, validate_source_contracts,
+    Generic6, chiral_arm_score, generic_arm_score, torsor_arm_score, validate_source_contracts,
 };
 
 /// Explicitly distinct from the legacy Phase-B population.
@@ -871,6 +873,144 @@ pub fn evaluate_torsor_structure_shuffle_control(
             reference_matches_target,
             shuffled_matches_target: shared_match(shuffled_score, target),
         });
+    }
+    Ok(cases)
+}
+
+/// One matched-population case under one deterministic orthogonal basis
+/// rotation (TDI-25 slice 36).
+///
+/// The rotation is one of the four declared TDI-24 slice-36 probes
+/// (`tdi24-learned-basis-prototype-v1`, consumed unchanged) applied to the six
+/// query and six key scalars. G6 is scored on the rotated pair; C6 is scored
+/// on the same rotated pair for contrast. The target and match bits are minted
+/// here, inside the evaluator privacy boundary, from the unrotated case.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct G6OrthogonalBasisCase {
+    pub family: TaskFamily,
+    pub seed_block: u64,
+    pub case_id: u64,
+    pub probe_index: usize,
+    /// G6 score `q.k` of the unrotated pair.
+    pub g6_reference_score: f64,
+    /// G6 score of the rotated pair.
+    pub g6_rotated_score: f64,
+    /// Unchanged matched C6 score, reused from the matched primary run.
+    pub c6_reference_score: f64,
+    /// Matched C6 score of the rotated pair.
+    pub c6_rotated_score: f64,
+    pub g6_reference_matches_target: bool,
+    pub g6_rotated_matches_target: bool,
+}
+
+fn g6_basis_invalid(reason: &'static str) -> EvalError {
+    EvalError::G6OrthogonalBasisControlInvalid { reason }
+}
+
+fn upstream_probe_error(error: Tdi24EvalError) -> EvalError {
+    match error {
+        Tdi24EvalError::LearnedBasisPrototypeInvalid { reason } => g6_basis_invalid(reason),
+        _ => g6_basis_invalid("upstream_probe_invalid"),
+    }
+}
+
+fn rotate_six(transform: &[[f64; 6]; 6], values: [f64; 6]) -> Result<[f64; 6], EvalError> {
+    let mut rotated = [0.0; 6];
+    for (row, value) in rotated.iter_mut().enumerate() {
+        let mut sum = transform[row][0] * values[0];
+        for column in 1..6 {
+            sum += transform[row][column] * values[column];
+        }
+        if !sum.is_finite() {
+            return Err(g6_basis_invalid("non_finite_rotation"));
+        }
+        *value = sum;
+    }
+    Ok(rotated)
+}
+
+fn g6_score(query: [f64; 6], key: [f64; 6]) -> Result<f64, EvalError> {
+    let query = Generic6::new(query).map_err(EvalError::Bridge)?;
+    let key = Generic6::new(key).map_err(EvalError::Bridge)?;
+    generic_arm_score(query, key).map_err(EvalError::Bridge)
+}
+
+/// G6 and C6 scores of one matched input in the basis of one probe.
+/// The identity probe scores the untouched carrier.
+pub fn rotated_generic_and_chiral_scores(
+    input: &MatchedInput,
+    probe: &LearnedBasisProbe,
+) -> Result<(f64, f64), EvalError> {
+    validate_learned_basis_probe(probe).map_err(upstream_probe_error)?;
+    let (query, key) = if probe.role == LearnedBasisProbeRole::Identity {
+        (input.query, input.key)
+    } else {
+        let transform = learned_basis_transform(probe).map_err(upstream_probe_error)?;
+        (
+            rotate_six(&transform, input.query)?,
+            rotate_six(&transform, input.key)?,
+        )
+    };
+    let rotated = MatchedInput {
+        query,
+        key,
+        key_position: input.key_position,
+        query_position: input.query_position,
+    };
+    Ok((g6_score(query, key)?, score_c6(&rotated)?))
+}
+
+/// True when two G6 scores agree within the upstream probe tolerance.
+#[must_use]
+pub fn g6_rotation_invariant(reference: f64, rotated: f64) -> bool {
+    (reference - rotated).abs() <= LEARNED_BASIS_TOLERANCE * reference.abs().max(1.0)
+}
+
+/// Score one matched block under every declared orthogonal probe.
+///
+/// Case-major, probe-minor order. Any scoring, drift or invariance failure
+/// aborts the block fail-closed.
+pub fn evaluate_g6_orthogonal_basis_control(
+    split: DataSplit,
+    family: TaskFamily,
+    seed_block: u64,
+    n_cases: u64,
+) -> Result<Vec<G6OrthogonalBasisCase>, EvalError> {
+    let probes = learned_basis_probes();
+    let run = MatchedPrimaryRun::evaluate(split, family, seed_block, n_cases)?;
+    let mut cases = Vec::with_capacity(run.inputs().len() * LEARNED_BASIS_PROBE_COUNT);
+    for (index, input) in run.inputs().iter().enumerate() {
+        let target = common_target(input, family)?;
+        let c6_reference_score = run.c6_scores()[index];
+        if c6_reference_score.to_bits() != score_c6(input)?.to_bits() {
+            return Err(g6_basis_invalid("reference_drift"));
+        }
+        let g6_reference_score = g6_score(input.query, input.key)?;
+        for probe in &probes {
+            let (g6_rotated_score, c6_rotated_score) =
+                rotated_generic_and_chiral_scores(input, probe)?;
+            if probe.role == LearnedBasisProbeRole::Identity
+                && (g6_rotated_score.to_bits() != g6_reference_score.to_bits()
+                    || c6_rotated_score.to_bits() != c6_reference_score.to_bits())
+            {
+                return Err(g6_basis_invalid("identity_probe_drift"));
+            }
+            if !g6_rotation_invariant(g6_reference_score, g6_rotated_score) {
+                return Err(g6_basis_invalid("g6_rotation_invariance_drift"));
+            }
+            cases.push(G6OrthogonalBasisCase {
+                family,
+                seed_block,
+                case_id: index as u64,
+                probe_index: probe.index,
+                g6_reference_score,
+                g6_rotated_score,
+                c6_reference_score,
+                c6_rotated_score,
+                g6_reference_matches_target: shared_match(g6_reference_score, target),
+                g6_rotated_matches_target: shared_match(g6_rotated_score, target),
+            });
+        }
     }
     Ok(cases)
 }
