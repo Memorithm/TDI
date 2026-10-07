@@ -74,6 +74,10 @@
 //! attention rows through the shared masked-softmax reference under both mask
 //! policies, for C6 and its direct-only arm, with exact bounded cost
 //! accounting (score evaluations, normalizer calls, masked entries).
+//! Slice 40 adds the Stage-D attribution audit: every Phase-C/D slice (30 to
+//! 39) is regenerated and validated, and the only admissible claim class is
+//! software semantics on Development/Validation; scientific attribution stays
+//! inadmissible.
 //! No training,
 //! confirmatory execution, protected/final evaluation, or scientific claim is
 //! authorised here.
@@ -1908,7 +1912,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::LearnedBasisPrototypeInvalid { .. }
         | EvalError::HeadSharingAblationInvalid { .. }
         | EvalError::WidthScalingInvalid { .. }
-        | EvalError::SequenceLengthScalingInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::SequenceLengthScalingInvalid { .. }
+        | EvalError::StageDAttributionAuditInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -1953,6 +1958,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::HeadSharingAblationInvalid { .. } => "head_sharing_ablation_invalid",
         EvalError::WidthScalingInvalid { .. } => "width_scaling_invalid",
         EvalError::SequenceLengthScalingInvalid { .. } => "sequence_length_scaling_invalid",
+        EvalError::StageDAttributionAuditInvalid { .. } => "stage_d_attribution_audit_invalid",
     }
 }
 
@@ -6340,6 +6346,249 @@ pub fn validate_sequence_length_scaling_report(
     Ok(())
 }
 
+/// Phase-D Stage-D attribution audit contract pin (slice 40).
+pub const STAGE_D_ATTRIBUTION_AUDIT_CONTRACT: &str = "tdi24-stage-d-attribution-audit-v1";
+
+/// Audited Phase-C/D slices in campaign order (slices 30 through 39) with
+/// their frozen contract pins. Nothing outside this registry is audited.
+pub const ATTRIBUTION_AUDITED_SLICES: [(u8, &str); 10] = [
+    (30, STAGE_C_PREFLIGHT_CONTRACT),
+    (31, GAMMA_ZERO_ABLATION_CONTRACT),
+    (32, BETA_ZERO_ABLATION_CONTRACT),
+    (33, DIRECT_ONLY_COLLAPSE_CONTRACT),
+    (34, PARITY_SHUFFLE_CONTROL_CONTRACT),
+    (35, FIXED_M_SENSITIVITY_CONTRACT),
+    (36, LEARNED_BASIS_PROTOTYPE_CONTRACT),
+    (37, HEAD_SHARING_ABLATION_CONTRACT),
+    (38, WIDTH_SCALING_CONTRACT),
+    (39, SEQUENCE_LENGTH_SCALING_CONTRACT),
+];
+
+/// Claim class an audited slice may support after the ablations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AttributionClaim {
+    /// The validated report supports only software-semantics statements
+    /// (contracts, accounting, fail-closed behavior) on Development/Validation.
+    SoftwareSemanticsOnly,
+    /// Withheld: the report failed validation or set a forbidden flag.
+    Withheld,
+}
+
+/// One audited slice.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AttributionEntry {
+    pub slice: u8,
+    pub contract: &'static str,
+    /// The upstream validator accepted the regenerated report.
+    pub validated: bool,
+    /// FNV-1a 64 digest of the regenerated report's `Debug` rendering; binds
+    /// the entry to the exact split, budget and evidence.
+    pub evidence_digest: u64,
+    /// Flags read from the report itself.
+    pub protected_or_final_access: bool,
+    pub training_executed: bool,
+    pub scientific_claim: bool,
+    pub experimental_non_final: bool,
+    pub admissible: AttributionClaim,
+}
+
+/// Immutable Stage-D attribution audit on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StageDAttributionAuditReport {
+    pub audit_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    pub entries: Vec<AttributionEntry>,
+    /// Must remain false: no scientific attribution is admissible without a
+    /// trained, preregistered Stage-D run, which this campaign never executes.
+    pub scientific_attribution_admissible: bool,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false.
+    pub training_executed: bool,
+    /// Must remain false.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn attribution_invalid(reason: &'static str) -> EvalError {
+    EvalError::StageDAttributionAuditInvalid { reason }
+}
+
+fn attribution_digest(rendering: &str) -> u64 {
+    rendering.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+    })
+}
+
+const fn admissible_claim(entry: &AttributionEntry) -> AttributionClaim {
+    if entry.validated
+        && !entry.protected_or_final_access
+        && !entry.training_executed
+        && !entry.scientific_claim
+        && entry.experimental_non_final
+    {
+        AttributionClaim::SoftwareSemanticsOnly
+    } else {
+        AttributionClaim::Withheld
+    }
+}
+
+fn collect_attribution_entries(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<AttributionEntry>, EvalError> {
+    macro_rules! audit {
+        ($slice:expr, $contract:expr, $report:expr) => {{
+            let report = $report;
+            let mut entry = AttributionEntry {
+                slice: $slice,
+                contract: $contract,
+                validated: true,
+                evidence_digest: attribution_digest(&format!("{report:?}")),
+                protected_or_final_access: report.protected_or_final_access,
+                training_executed: report.training_executed,
+                scientific_claim: report.scientific_claim,
+                experimental_non_final: report.experimental_non_final,
+                admissible: AttributionClaim::Withheld,
+            };
+            entry.admissible = admissible_claim(&entry);
+            entry
+        }};
+    }
+    // Every runner validates its own report before returning it; any
+    // rejection aborts the audit fail-closed.
+    Ok(vec![
+        audit!(
+            30,
+            STAGE_C_PREFLIGHT_CONTRACT,
+            run_stage_c_preflight(split, budget)?
+        ),
+        audit!(
+            31,
+            GAMMA_ZERO_ABLATION_CONTRACT,
+            run_gamma_zero_ablation(split, budget)?
+        ),
+        audit!(
+            32,
+            BETA_ZERO_ABLATION_CONTRACT,
+            run_beta_zero_ablation(split, budget)?
+        ),
+        audit!(
+            33,
+            DIRECT_ONLY_COLLAPSE_CONTRACT,
+            run_direct_only_collapse(split, budget)?
+        ),
+        audit!(
+            34,
+            PARITY_SHUFFLE_CONTROL_CONTRACT,
+            run_parity_shuffle_control(split, budget)?
+        ),
+        audit!(
+            35,
+            FIXED_M_SENSITIVITY_CONTRACT,
+            run_fixed_m_sensitivity(split, budget)?
+        ),
+        audit!(
+            36,
+            LEARNED_BASIS_PROTOTYPE_CONTRACT,
+            run_learned_basis_prototype(split, budget)?
+        ),
+        audit!(
+            37,
+            HEAD_SHARING_ABLATION_CONTRACT,
+            run_head_sharing_ablation(split, budget)?
+        ),
+        audit!(
+            38,
+            WIDTH_SCALING_CONTRACT,
+            run_width_scaling(split, budget)?
+        ),
+        audit!(
+            39,
+            SEQUENCE_LENGTH_SCALING_CONTRACT,
+            run_sequence_length_scaling(split, budget)?
+        ),
+    ])
+}
+
+/// Run the Stage-D attribution audit over every audited slice.
+pub fn run_stage_d_attribution_audit(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<StageDAttributionAuditReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.cases_per_arm()?;
+    let report = StageDAttributionAuditReport {
+        audit_contract: STAGE_D_ATTRIBUTION_AUDIT_CONTRACT,
+        split,
+        budget,
+        entries: collect_attribution_entries(split, budget)?,
+        scientific_attribution_admissible: false,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_stage_d_attribution_audit_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_stage_d_attribution_audit_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<StageDAttributionAuditReport, EvalError> {
+    run_stage_d_attribution_audit(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a Stage-D attribution audit: pin, the complete audited registry
+/// in order, per-entry admissibility derived from flags, no withheld entry,
+/// no scientific attribution, flags and regenerated evidence.
+pub fn validate_stage_d_attribution_audit_report(
+    report: &StageDAttributionAuditReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.audit_contract != STAGE_D_ATTRIBUTION_AUDIT_CONTRACT {
+        return Err(attribution_invalid("contract_drift"));
+    }
+    report.budget.cases_per_arm()?;
+    if report.entries.len() != ATTRIBUTION_AUDITED_SLICES.len() {
+        return Err(attribution_invalid("registry_drift"));
+    }
+    for (entry, (slice, contract)) in report.entries.iter().zip(ATTRIBUTION_AUDITED_SLICES) {
+        if entry.slice != slice || entry.contract != contract {
+            return Err(attribution_invalid("registry_drift"));
+        }
+        if entry.admissible != admissible_claim(entry) {
+            return Err(attribution_invalid("admissibility_drift"));
+        }
+        if entry.admissible != AttributionClaim::SoftwareSemanticsOnly {
+            return Err(attribution_invalid("withheld_entry"));
+        }
+    }
+    if report.scientific_attribution_admissible {
+        return Err(attribution_invalid("scientific_attribution_admissible"));
+    }
+    if report.protected_or_final_access {
+        return Err(attribution_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(attribution_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(attribution_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(attribution_invalid("experimental_non_final"));
+    }
+    if collect_attribution_entries(report.split, report.budget)? != report.entries {
+        return Err(attribution_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -6436,6 +6685,9 @@ pub enum EvalError {
     /// Sequence-length scaling rejected drifted lengths, masks, cost
     /// accounting, evidence or flags.
     SequenceLengthScalingInvalid { reason: &'static str },
+    /// Stage-D attribution audit rejected a drifted registry, admissibility,
+    /// evidence or claims.
+    StageDAttributionAuditInvalid { reason: &'static str },
 }
 
 impl fmt::Display for EvalError {
@@ -6542,6 +6794,9 @@ impl fmt::Display for EvalError {
             }
             Self::SequenceLengthScalingInvalid { reason } => {
                 write!(formatter, "sequence-length scaling invalid: {reason}")
+            }
+            Self::StageDAttributionAuditInvalid { reason } => {
+                write!(formatter, "Stage-D attribution audit invalid: {reason}")
             }
         }
     }
