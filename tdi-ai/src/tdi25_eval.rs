@@ -85,7 +85,13 @@
 //! query and six key values, both geometry points, the untransported
 //! coordinate-product multiset and the T6 capacity are preserved bit-for-bit,
 //! while linear/angular blocks are provably mixed, so the Varignon pairing
-//! semantics are destroyed. All arms consume sealed
+//! semantics are destroyed. Slice 36 adds the G6 orthogonal-basis control
+//! under `tdi25-g6-orthogonal-basis-control-v1`: on the same bounded matched
+//! population, query and key scalars are rotated by each of the four declared
+//! TDI-24 slice-36 orthogonal probes (consumed unchanged; no new parameters).
+//! The generic G6 score is invariant within the upstream tolerance, the
+//! identity probe is bit-exact, and the matched C6 score on the rotated pair
+//! is recorded for contrast. All arms consume sealed
 //! Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
@@ -104,6 +110,10 @@ pub use matched_reference::{
     reduction_point_transport_term, untransported_torsor_score,
 };
 pub use matched_reference::{
+    G6OrthogonalBasisCase, evaluate_g6_orthogonal_basis_control, g6_rotation_invariant,
+    rotated_generic_and_chiral_scores,
+};
+pub use matched_reference::{
     TorsorStructureShuffleCase, evaluate_torsor_structure_shuffle_control,
     structure_shuffled_torsor_score,
 };
@@ -112,7 +122,10 @@ use core::fmt;
 
 use super::tdi22_torsor::TORSOR_CONTRACT;
 use super::tdi24_chiral::{CHIRAL_CONTRACT, ChiralScoreWeights};
-use super::tdi24_eval::{PARITY_SHUFFLE_CONTROL_CONTRACT, ParityShuffle, parity_shuffle_from_seed};
+use super::tdi24_eval::{
+    LEARNED_BASIS_PROBE_COUNT, LEARNED_BASIS_PROTOTYPE_CONTRACT, LearnedBasisProbe,
+    PARITY_SHUFFLE_CONTROL_CONTRACT, ParityShuffle, learned_basis_probes, parity_shuffle_from_seed,
+};
 use super::tdi25_matched_matrix::{
     MATCHED_EVALUATOR_MATRIX_CONTRACT, matched_family_paths, require_complete_primary_matrix,
 };
@@ -184,6 +197,9 @@ pub const CHIRAL_PARITY_SHUFFLE_CONTROL_CONTRACT: &str = "tdi25-chiral-parity-sh
 /// Phase-D torsor structure-shuffle control contract pin (slice 35).
 pub const TORSOR_STRUCTURE_SHUFFLE_CONTROL_CONTRACT: &str =
     "tdi25-torsor-structure-shuffle-control-v1";
+
+/// Phase-D G6 orthogonal-basis control contract pin (slice 36).
+pub const G6_ORTHOGONAL_BASIS_CONTROL_CONTRACT: &str = "tdi25-g6-orthogonal-basis-control-v1";
 
 /// Relative tolerance of the monitored transport identity; identical to the
 /// matched-reference v1 scalar tolerance shared by every arm.
@@ -3375,7 +3391,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::TorsorBridgeEquivalenceInvalid { .. }
         | EvalError::ChiralGammaZeroAblationInvalid { .. }
         | EvalError::ChiralParityShuffleControlInvalid { .. }
-        | EvalError::TorsorStructureShuffleControlInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::TorsorStructureShuffleControlInvalid { .. }
+        | EvalError::G6OrthogonalBasisControlInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -3419,6 +3436,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::TorsorStructureShuffleControlInvalid { .. } => {
             "torsor_structure_shuffle_control_invalid"
         }
+        EvalError::G6OrthogonalBasisControlInvalid { .. } => "g6_orthogonal_basis_control_invalid",
     }
 }
 
@@ -5237,6 +5255,216 @@ pub fn validate_torsor_structure_shuffle_control_report(
     Ok(())
 }
 
+/// Per-probe, per-family counts for the G6 orthogonal-basis control.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct G6OrthogonalBasisFamilySummary {
+    pub probe_index: usize,
+    pub family: TaskFamily,
+    pub n_cases: u64,
+    pub g6_reference_matches: u64,
+    pub g6_rotated_matches: u64,
+    /// Cases whose matched C6 score changed beyond the upstream tolerance.
+    pub c6_changed: u64,
+}
+
+/// Immutable G6 orthogonal-basis control report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct G6OrthogonalBasisControlReport {
+    pub control_contract: &'static str,
+    pub population_contract: &'static str,
+    pub generic_contract: &'static str,
+    /// Upstream TDI-24 slice-36 probe contract, consumed unchanged.
+    pub probe_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    pub probes: Vec<LearnedBasisProbe>,
+    /// Identical capacity before and after rotation.
+    pub reference_capacity: ParameterReadoutCapacity,
+    pub rotated_capacity: ParameterReadoutCapacity,
+    /// Case-major, probe-minor order.
+    pub cases: Vec<G6OrthogonalBasisCase>,
+    pub summaries: Vec<G6OrthogonalBasisFamilySummary>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false.
+    pub training_executed: bool,
+    /// Must remain false.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn g6_orthogonal_basis_invalid(reason: &'static str) -> EvalError {
+    EvalError::G6OrthogonalBasisControlInvalid { reason }
+}
+
+fn summarize_g6_orthogonal_basis(
+    cases: &[G6OrthogonalBasisCase],
+) -> Vec<G6OrthogonalBasisFamilySummary> {
+    let mut summaries = Vec::new();
+    for probe_index in 0..LEARNED_BASIS_PROBE_COUNT {
+        for family in REQUIRED_SYNTHESIS_FAMILIES {
+            let members = cases
+                .iter()
+                .filter(|c| c.probe_index == probe_index && c.family == *family);
+            summaries.push(G6OrthogonalBasisFamilySummary {
+                probe_index,
+                family: *family,
+                n_cases: members.clone().count() as u64,
+                g6_reference_matches: members
+                    .clone()
+                    .filter(|c| c.g6_reference_matches_target)
+                    .count() as u64,
+                g6_rotated_matches: members
+                    .clone()
+                    .filter(|c| c.g6_rotated_matches_target)
+                    .count() as u64,
+                c6_changed: members
+                    .filter(|c| !g6_rotation_invariant(c.c6_reference_score, c.c6_rotated_score))
+                    .count() as u64,
+            });
+        }
+    }
+    summaries
+}
+
+fn collect_g6_orthogonal_basis_cases(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<G6OrthogonalBasisCase>, EvalError> {
+    let mut cases = Vec::new();
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..budget.seed_blocks {
+            cases.extend(evaluate_g6_orthogonal_basis_control(
+                split,
+                *family,
+                seed_block,
+                budget.cases_per_block,
+            )?);
+        }
+    }
+    Ok(cases)
+}
+
+/// Run the G6 orthogonal-basis control on the bounded matched population.
+pub fn run_g6_orthogonal_basis_control(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<G6OrthogonalBasisControlReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.validate()?;
+    let cases = collect_g6_orthogonal_basis_cases(split, budget)?;
+    let summaries = summarize_g6_orthogonal_basis(&cases);
+    let report = G6OrthogonalBasisControlReport {
+        control_contract: G6_ORTHOGONAL_BASIS_CONTROL_CONTRACT,
+        population_contract: matched_reference::MATCHED_POPULATION_CONTRACT,
+        generic_contract: GENERIC6_CONTRACT,
+        probe_contract: LEARNED_BASIS_PROTOTYPE_CONTRACT,
+        split,
+        budget,
+        probes: learned_basis_probes().to_vec(),
+        reference_capacity: ParameterReadoutCapacity::reference_g6(),
+        rotated_capacity: ParameterReadoutCapacity::reference_g6(),
+        cases,
+        summaries,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_g6_orthogonal_basis_control_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_g6_orthogonal_basis_control_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<G6OrthogonalBasisControlReport, EvalError> {
+    run_g6_orthogonal_basis_control(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a G6 orthogonal-basis control report: pins, the unchanged
+/// upstream probe set, identical capacity, canonical case-major/probe-minor
+/// order, identity bit-exactness and G6 invariance per case, recomputed
+/// summaries, flags and regenerated evidence.
+pub fn validate_g6_orthogonal_basis_control_report(
+    report: &G6OrthogonalBasisControlReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.control_contract != G6_ORTHOGONAL_BASIS_CONTROL_CONTRACT {
+        return Err(g6_orthogonal_basis_invalid("contract_drift"));
+    }
+    if report.population_contract != matched_reference::MATCHED_POPULATION_CONTRACT {
+        return Err(g6_orthogonal_basis_invalid("population_drift"));
+    }
+    if report.generic_contract != GENERIC6_CONTRACT {
+        return Err(g6_orthogonal_basis_invalid("generic_contract_drift"));
+    }
+    if report.probe_contract != LEARNED_BASIS_PROTOTYPE_CONTRACT {
+        return Err(g6_orthogonal_basis_invalid("probe_contract_drift"));
+    }
+    if report.probes != learned_basis_probes().to_vec() {
+        return Err(g6_orthogonal_basis_invalid("probe_set_drift"));
+    }
+    report.budget.validate()?;
+    if report.reference_capacity != ParameterReadoutCapacity::reference_g6()
+        || report.rotated_capacity != report.reference_capacity
+    {
+        return Err(g6_orthogonal_basis_invalid("capacity_mismatch"));
+    }
+    let expected = report.budget.cases_per_arm() * LEARNED_BASIS_PROBE_COUNT as u64;
+    if report.cases.len() as u64 != expected {
+        return Err(g6_orthogonal_basis_invalid("case_count"));
+    }
+    let mut position = 0usize;
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..report.budget.seed_blocks {
+            for case_id in 0..report.budget.cases_per_block {
+                for probe_index in 0..LEARNED_BASIS_PROBE_COUNT {
+                    let case = &report.cases[position];
+                    if case.family != *family
+                        || case.seed_block != seed_block
+                        || case.case_id != case_id
+                        || case.probe_index != probe_index
+                    {
+                        return Err(g6_orthogonal_basis_invalid("case_order"));
+                    }
+                    if probe_index == 0
+                        && (case.g6_rotated_score.to_bits() != case.g6_reference_score.to_bits()
+                            || case.c6_rotated_score.to_bits() != case.c6_reference_score.to_bits())
+                    {
+                        return Err(g6_orthogonal_basis_invalid("identity_probe_drift"));
+                    }
+                    if !g6_rotation_invariant(case.g6_reference_score, case.g6_rotated_score) {
+                        return Err(g6_orthogonal_basis_invalid("g6_rotation_invariance_drift"));
+                    }
+                    position += 1;
+                }
+            }
+        }
+    }
+    if report.summaries != summarize_g6_orthogonal_basis(&report.cases) {
+        return Err(g6_orthogonal_basis_invalid("family_summary"));
+    }
+    if report.protected_or_final_access {
+        return Err(g6_orthogonal_basis_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(g6_orthogonal_basis_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(g6_orthogonal_basis_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(g6_orthogonal_basis_invalid("experimental_non_final"));
+    }
+    if collect_g6_orthogonal_basis_cases(report.split, report.budget)? != report.cases {
+        return Err(g6_orthogonal_basis_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -5327,6 +5555,11 @@ pub enum EvalError {
     /// Torsor structure-shuffle control rejected a drifted shuffle, evidence
     /// or claims.
     TorsorStructureShuffleControlInvalid {
+        reason: &'static str,
+    },
+    /// G6 orthogonal-basis control rejected a drifted probe, invariance,
+    /// evidence or claims.
+    G6OrthogonalBasisControlInvalid {
         reason: &'static str,
     },
 }
@@ -5423,6 +5656,9 @@ impl fmt::Display for EvalError {
                     formatter,
                     "torsor structure-shuffle control invalid: {reason}"
                 )
+            }
+            Self::G6OrthogonalBasisControlInvalid { reason } => {
+                write!(formatter, "G6 orthogonal-basis control invalid: {reason}")
             }
         }
     }
