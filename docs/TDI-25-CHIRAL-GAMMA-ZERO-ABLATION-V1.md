@@ -41,6 +41,11 @@ coincide, and both match bits against the evaluator-owned common target.
 - **Closed enantiomorphic split**: with `gamma = 0` the right and left
   enantiomorphic scores coincide bit for bit and equal the ablated score
   (`enantiomorphic_split`).
+- **Regenerated evidence**: the validator regenerates every case from the
+  canonical matched population `(split, family, seed_block, case_id)` and its
+  evaluator-owned target and requires exact equality, so coherent forgeries
+  of scores, observables, match bits or the split label are rejected
+  (`case_evidence_drift`).
 - **Inactive channel**: a case with `chi == 0` must have identical scores and
   match bits on both sides (`inactive_channel_drift`).
 

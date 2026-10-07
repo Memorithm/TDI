@@ -35,3 +35,4 @@ grep -Fq '| 33 | Chiral `gamma=0` ablation | **current candidate**' docs/TDI-25-
 merged_count="$(grep -Eo '\*\*[0-9]+/50 merged\*\*' docs/TDI-25-CAMPAIGN-50.md | head -n 1 | tr -dc '0-9/' | cut -d/ -f1)"
 test "${merged_count:-0}" -ge 32
 ! grep -Fq '#PRNUM' docs/TDI-25-CAMPAIGN-50.md
+grep -Fq 'chiral_gamma_zero_invalid("case_evidence_drift")' tdi-ai/src/tdi25_eval.rs

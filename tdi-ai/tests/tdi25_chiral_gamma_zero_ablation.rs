@@ -199,6 +199,17 @@ fn tampered_reports_fail_closed() {
         "enantiomorphic_split",
     );
     tamper(&|r| r.families[0].ablated_matches += 1, "family_summary");
+    // Coherent forgeries that keep every per-case identity intact are still
+    // rejected because each case is regenerated from the canonical population.
+    tamper(&|r| r.split = DataSplit::Validation, "case_evidence_drift");
+    tamper(
+        &|r| {
+            let case = &mut r.cases[active];
+            case.reference_score += 1.0;
+            case.parity_odd_channel += 1.0;
+        },
+        "case_evidence_drift",
+    );
     tamper(
         &|r| r.protected_or_final_access = true,
         "protected_or_final_access",

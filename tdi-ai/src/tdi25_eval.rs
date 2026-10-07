@@ -4664,6 +4664,23 @@ pub fn validate_chiral_gamma_zero_ablation_report(
     if !report.experimental_non_final {
         return Err(chiral_gamma_zero_invalid("experimental_non_final"));
     }
+    // Stored evidence is never trusted: every case is regenerated from the
+    // canonical matched population `(split, family, seed_block, case_id)` and
+    // its evaluator-owned target, and compared exactly.
+    let mut regenerated = Vec::with_capacity(report.cases.len());
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..report.budget.seed_blocks {
+            regenerated.extend(evaluate_chiral_gamma_zero_ablation(
+                report.split,
+                *family,
+                seed_block,
+                report.budget.cases_per_block,
+            )?);
+        }
+    }
+    if regenerated != report.cases {
+        return Err(chiral_gamma_zero_invalid("case_evidence_drift"));
+    }
     Ok(())
 }
 
