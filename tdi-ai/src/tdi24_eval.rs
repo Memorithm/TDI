@@ -59,6 +59,11 @@
 //! unchanged C6 weights; the identity reproduces Stage-C C6 bit-for-bit and
 //! the gauge probe is score-invariant within a declared tolerance. No angle is
 //! trained or selected.
+//! Slice 37 adds the head-sharing ablation: a two-head C6 score (mean of head
+//! scores) with one chiral structure shared by both heads versus a per-head
+//! structure (head `h` uses the slice-35 fixed mirror basis of rank `h`), at
+//! identical weights and zero trainable capacity on both arms. The shared arm
+//! reproduces the single-head Stage-C C6 score bit-for-bit.
 //! No training,
 //! confirmatory execution, protected/final evaluation, or scientific claim is
 //! authorised here.
@@ -1887,7 +1892,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::DirectOnlyCollapseInvalid { .. }
         | EvalError::ParityShuffleControlInvalid { .. }
         | EvalError::FixedMSensitivityInvalid { .. }
-        | EvalError::LearnedBasisPrototypeInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::LearnedBasisPrototypeInvalid { .. }
+        | EvalError::HeadSharingAblationInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -1929,6 +1935,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::ParityShuffleControlInvalid { .. } => "parity_shuffle_control_invalid",
         EvalError::FixedMSensitivityInvalid { .. } => "fixed_m_sensitivity_invalid",
         EvalError::LearnedBasisPrototypeInvalid { .. } => "learned_basis_prototype_invalid",
+        EvalError::HeadSharingAblationInvalid { .. } => "head_sharing_ablation_invalid",
     }
 }
 
@@ -5301,6 +5308,340 @@ pub fn validate_learned_basis_prototype_report(
     Ok(())
 }
 
+/// Phase-D head-sharing ablation contract pin (slice 37).
+pub const HEAD_SHARING_ABLATION_CONTRACT: &str = "tdi24-head-sharing-ablation-v1";
+
+/// Declared head count of both arms of the head-sharing ablation. A software
+/// configuration of this ablation, identical on both arms; not a freeze pin.
+pub const HEAD_SHARING_HEAD_COUNT: usize = 2;
+
+/// Per-head arm rule: head `h` uses the slice-35 fixed mirror basis of rank
+/// `h` (canonical first, then the next basis in the frozen lexicographic
+/// order). The shared arm uses rank 0 on every head. Not tuned, not selected.
+pub const PER_HEAD_BASIS_RANKS: [usize; HEAD_SHARING_HEAD_COUNT] = [0, 1];
+
+const fn head_sharing_invalid(reason: &'static str) -> EvalError {
+    EvalError::HeadSharingAblationInvalid { reason }
+}
+
+/// Mean of per-head scores, summed in head order.
+fn mean_head_score(scores: &[f64; HEAD_SHARING_HEAD_COUNT]) -> Result<f64, EvalError> {
+    let mut sum = scores[0];
+    for score in &scores[1..] {
+        sum += score;
+    }
+    let mean = sum / HEAD_SHARING_HEAD_COUNT as f64;
+    if mean.is_finite() {
+        Ok(mean)
+    } else {
+        Err(head_sharing_invalid("non_finite_head_score"))
+    }
+}
+
+/// Multi-head C6 score with one chiral structure shared by every head.
+pub fn shared_head_c6_score_from_view(view: &InferenceView) -> Result<f64, EvalError> {
+    let canonical = fixed_mirror_bases()[0];
+    let head = score_c6_in_basis_from_view(view, &canonical)?;
+    mean_head_score(&[head; HEAD_SHARING_HEAD_COUNT])
+}
+
+/// Per-head C6 head scores: head `h` uses basis `PER_HEAD_BASIS_RANKS[h]`.
+pub fn per_head_c6_head_scores_from_view(
+    view: &InferenceView,
+) -> Result<[f64; HEAD_SHARING_HEAD_COUNT], EvalError> {
+    let bases = fixed_mirror_bases();
+    let mut scores = [0.0; HEAD_SHARING_HEAD_COUNT];
+    for (head, rank) in PER_HEAD_BASIS_RANKS.iter().enumerate() {
+        scores[head] = score_c6_in_basis_from_view(view, &bases[*rank])?;
+    }
+    Ok(scores)
+}
+
+/// Multi-head C6 score with a per-head chiral structure.
+pub fn per_head_c6_score_from_view(view: &InferenceView) -> Result<f64, EvalError> {
+    mean_head_score(&per_head_c6_head_scores_from_view(view)?)
+}
+
+/// One case scored by the shared and per-head multi-head arms.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HeadSharingCase {
+    pub family: TaskFamily,
+    pub case_id: u64,
+    /// Single-head Stage-C C6 reference score.
+    pub reference_score: f64,
+    pub shared_score: f64,
+    pub per_head_score: f64,
+    /// Per-head arm head scores in head order.
+    pub per_head_head_scores: [f64; HEAD_SHARING_HEAD_COUNT],
+    pub shared_correct: bool,
+    pub per_head_correct: bool,
+}
+
+/// Per-family correct counts of both arms.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HeadSharingFamilySummary {
+    pub family: TaskFamily,
+    pub n_cases: u64,
+    pub shared_correct: u64,
+    pub per_head_correct: u64,
+    /// Cases where the two arms disagree on correctness.
+    pub disagreements: u64,
+}
+
+/// Immutable head-sharing ablation report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HeadSharingAblationReport {
+    pub ablation_contract: &'static str,
+    pub basis_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    pub head_count: usize,
+    pub shared_basis_ranks: [usize; HEAD_SHARING_HEAD_COUNT],
+    pub per_head_basis_ranks: [usize; HEAD_SHARING_HEAD_COUNT],
+    /// Identical weights on both arms.
+    pub shared_weights: ChiralScoreWeights,
+    pub per_head_weights: ChiralScoreWeights,
+    /// Identical capacity on both arms: bases are fixed relabellings.
+    pub shared_capacity: TrainableCapacity,
+    pub per_head_capacity: TrainableCapacity,
+    pub cases: Vec<HeadSharingCase>,
+    pub families: Vec<HeadSharingFamilySummary>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false.
+    pub training_executed: bool,
+    /// Must remain false.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+fn head_sharing_case<T, S>(
+    case: &LabeledCase<T>,
+    split: DataSplit,
+    oracle_sign: S,
+    cases: &mut Vec<HeadSharingCase>,
+) -> Result<(), EvalError>
+where
+    S: Fn(&T) -> Result<i8, EvalError>,
+{
+    let view = case.inference_view();
+    if view.split != split {
+        return Err(EvalError::SplitMismatch {
+            expected: split,
+            actual: view.split,
+        });
+    }
+    let sign = oracle_sign(case.protected_label().reveal_for_evaluation())?;
+    if sign != 1 && sign != -1 {
+        return Err(head_sharing_invalid("oracle_sign"));
+    }
+    let sign = f64::from(sign);
+    let reference_score = run_inference_callback(case, score_c6_from_view)?;
+    let shared_score = run_inference_callback(case, shared_head_c6_score_from_view)?;
+    let per_head_head_scores = run_inference_callback(case, per_head_c6_head_scores_from_view)?;
+    let per_head_score = run_inference_callback(case, per_head_c6_score_from_view)?;
+    let record = HeadSharingCase {
+        family: view.family,
+        case_id: view.case_id,
+        reference_score,
+        shared_score,
+        per_head_score,
+        per_head_head_scores,
+        shared_correct: shared_score * sign > 0.0,
+        per_head_correct: per_head_score * sign > 0.0,
+    };
+    check_head_sharing_case(&record)?;
+    cases.push(record);
+    Ok(())
+}
+
+fn check_head_sharing_case(case: &HeadSharingCase) -> Result<(), EvalError> {
+    // Sharing one structure over identical heads is exactly the single head.
+    if case.shared_score.to_bits() != case.reference_score.to_bits() {
+        return Err(head_sharing_invalid("shared_reference_drift"));
+    }
+    // Head 0 of the per-head arm is the canonical basis.
+    if case.per_head_head_scores[0].to_bits() != case.reference_score.to_bits() {
+        return Err(head_sharing_invalid("canonical_head_drift"));
+    }
+    if mean_head_score(&case.per_head_head_scores)?.to_bits() != case.per_head_score.to_bits() {
+        return Err(head_sharing_invalid("head_mean_drift"));
+    }
+    Ok(())
+}
+
+fn summarize_head_sharing(cases: &[HeadSharingCase]) -> Vec<HeadSharingFamilySummary> {
+    STAGE_C_PREFLIGHT_FAMILIES
+        .iter()
+        .map(|family| {
+            let members = cases.iter().filter(|case| case.family == *family);
+            HeadSharingFamilySummary {
+                family: *family,
+                n_cases: members.clone().count() as u64,
+                shared_correct: members.clone().filter(|c| c.shared_correct).count() as u64,
+                per_head_correct: members.clone().filter(|c| c.per_head_correct).count() as u64,
+                disagreements: members
+                    .filter(|c| c.shared_correct != c.per_head_correct)
+                    .count() as u64,
+            }
+        })
+        .collect()
+}
+
+fn collect_head_sharing_cases(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<HeadSharingCase>, EvalError> {
+    validate_non_final_split(split)?;
+    budget.cases_per_arm()?;
+    let mut cases = Vec::new();
+    let last_pair_id = budget.first_pair_id + budget.pairs_per_family;
+    for pair_id in budget.first_pair_id..last_pair_id {
+        let discriminative = reflection_discriminative_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [discriminative.right, discriminative.left] {
+            head_sharing_case(
+                &seal_reflection_discriminative(&member),
+                split,
+                handedness_sign,
+                &mut cases,
+            )?;
+        }
+        let nuisance = reflection_nuisance_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [nuisance.canonical, nuisance.reflected] {
+            head_sharing_case(
+                &seal_reflection_nuisance(&member),
+                split,
+                reflection_invariant_sign,
+                &mut cases,
+            )?;
+        }
+        let direction = direction_reversal_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [direction.forward, direction.reverse] {
+            head_sharing_case(
+                &seal_direction_reversal(&member),
+                split,
+                direction_sign,
+                &mut cases,
+            )?;
+        }
+        let base_case_id = pair_id
+            .checked_mul(STAGE_C_PREFLIGHT_MEMBERS_PER_PAIR)
+            .ok_or_else(preflight_generation_failed)?;
+        for case_id in [base_case_id, base_case_id + 1] {
+            let control = non_chiral_control_case_in_split(case_id, split)
+                .map_err(|_| preflight_generation_failed())?;
+            head_sharing_case(
+                &seal_non_chiral_control(&control),
+                split,
+                non_chiral_sign,
+                &mut cases,
+            )?;
+        }
+    }
+    Ok(cases)
+}
+
+/// Run the head-sharing ablation on the bounded Stage-C case stream.
+pub fn run_head_sharing_ablation(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<HeadSharingAblationReport, EvalError> {
+    let cases = collect_head_sharing_cases(split, budget)?;
+    let families = summarize_head_sharing(&cases);
+    let report = HeadSharingAblationReport {
+        ablation_contract: HEAD_SHARING_ABLATION_CONTRACT,
+        basis_contract: FIXED_M_SENSITIVITY_CONTRACT,
+        split,
+        budget,
+        head_count: HEAD_SHARING_HEAD_COUNT,
+        shared_basis_ranks: [0; HEAD_SHARING_HEAD_COUNT],
+        per_head_basis_ranks: PER_HEAD_BASIS_RANKS,
+        shared_weights: C6_REFERENCE_WEIGHTS,
+        per_head_weights: C6_REFERENCE_WEIGHTS,
+        shared_capacity: TrainableCapacity::reference_c6(),
+        per_head_capacity: TrainableCapacity::reference_c6(),
+        cases,
+        families,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_head_sharing_ablation_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_head_sharing_ablation_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<HeadSharingAblationReport, EvalError> {
+    run_head_sharing_ablation(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a head-sharing ablation report: pins, head count and basis
+/// ranks, identical weights and capacity, case identities, recomputed
+/// summaries, flags and regenerated evidence.
+pub fn validate_head_sharing_ablation_report(
+    report: &HeadSharingAblationReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.ablation_contract != HEAD_SHARING_ABLATION_CONTRACT {
+        return Err(head_sharing_invalid("contract_drift"));
+    }
+    if report.basis_contract != FIXED_M_SENSITIVITY_CONTRACT {
+        return Err(head_sharing_invalid("basis_contract_drift"));
+    }
+    if report.head_count != HEAD_SHARING_HEAD_COUNT {
+        return Err(head_sharing_invalid("head_count_drift"));
+    }
+    if report.shared_basis_ranks != [0; HEAD_SHARING_HEAD_COUNT]
+        || report.per_head_basis_ranks != PER_HEAD_BASIS_RANKS
+    {
+        return Err(head_sharing_invalid("basis_rank_drift"));
+    }
+    if report.shared_weights != C6_REFERENCE_WEIGHTS
+        || report.per_head_weights != report.shared_weights
+    {
+        return Err(head_sharing_invalid("weights_drift"));
+    }
+    if report.shared_capacity != TrainableCapacity::reference_c6()
+        || report.per_head_capacity != report.shared_capacity
+    {
+        return Err(head_sharing_invalid("capacity_mismatch"));
+    }
+    let expected = report.budget.cases_per_arm()?;
+    if report.cases.len() as u64 != expected {
+        return Err(head_sharing_invalid("case_count"));
+    }
+    for case in &report.cases {
+        check_head_sharing_case(case)?;
+    }
+    if report.families != summarize_head_sharing(&report.cases) {
+        return Err(head_sharing_invalid("summary_drift"));
+    }
+    if report.protected_or_final_access {
+        return Err(head_sharing_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(head_sharing_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(head_sharing_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(head_sharing_invalid("experimental_non_final"));
+    }
+    if collect_head_sharing_cases(report.split, report.budget)? != report.cases {
+        return Err(head_sharing_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -5388,6 +5729,9 @@ pub enum EvalError {
     /// Learned-basis prototype rejected a non-orthogonal or non-algebraic
     /// transform, a gauge or identity drift, or drifted evidence/flags.
     LearnedBasisPrototypeInvalid { reason: &'static str },
+    /// Head-sharing ablation rejected drifted heads, bases, weights,
+    /// capacity, evidence or flags.
+    HeadSharingAblationInvalid { reason: &'static str },
 }
 
 impl fmt::Display for EvalError {
@@ -5485,6 +5829,9 @@ impl fmt::Display for EvalError {
             }
             Self::LearnedBasisPrototypeInvalid { reason } => {
                 write!(formatter, "learned-basis prototype invalid: {reason}")
+            }
+            Self::HeadSharingAblationInvalid { reason } => {
+                write!(formatter, "head-sharing ablation invalid: {reason}")
             }
         }
     }
