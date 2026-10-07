@@ -91,7 +91,11 @@
 //! TDI-24 slice-36 orthogonal probes (consumed unchanged; no new parameters).
 //! The generic G6 score is invariant within the upstream tolerance, the
 //! identity probe is bit-exact, and the matched C6 score on the rotated pair
-//! is recorded for contrast. All arms consume sealed
+//! is recorded for contrast. Slice 37 adds the position-geometry ablation
+//! under `tdi25-position-geometry-ablation-v1`: on the same bounded matched
+//! population, T6 is scored with the generated geometry and with every
+//! internal arm of the frozen position-geometry registry (linear, helical,
+//! learned table), all reported, none privileged or selected. All arms consume sealed
 //! Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
@@ -112,6 +116,10 @@ pub use matched_reference::{
 pub use matched_reference::{
     G6OrthogonalBasisCase, evaluate_g6_orthogonal_basis_control, g6_rotation_invariant,
     rotated_generic_and_chiral_scores,
+};
+pub use matched_reference::{
+    POSITION_GEOMETRY_ABLATION_ARMS, PositionGeometryCase, evaluate_position_geometry_ablation,
+    position_geometry_ablation_points,
 };
 pub use matched_reference::{
     TorsorStructureShuffleCase, evaluate_torsor_structure_shuffle_control,
@@ -139,6 +147,7 @@ use super::tdi25_tasks::{
     chiral_reflection_pair_in_split, mixed_geometry_pair_in_split, neutral_control_pair_in_split,
     run_inference_callback, torsor_transport_pair_in_split,
 };
+use super::tdi25_tasks::{POSITION_GEOMETRY_ARM_CONTRACT, PositionGeometryArm};
 use super::tdi25_tasks::{RegisteredSeed, SeedDomain, register_seed};
 use super::tdi25_torsor_chiral::{
     ComparisonArm, GENERIC6_CONTRACT, PINNED_SOURCE_CONTRACTS, TaskFamily, Tdi25Error,
@@ -200,6 +209,9 @@ pub const TORSOR_STRUCTURE_SHUFFLE_CONTROL_CONTRACT: &str =
 
 /// Phase-D G6 orthogonal-basis control contract pin (slice 36).
 pub const G6_ORTHOGONAL_BASIS_CONTROL_CONTRACT: &str = "tdi25-g6-orthogonal-basis-control-v1";
+
+/// Phase-D position-geometry ablation contract pin (slice 37).
+pub const POSITION_GEOMETRY_ABLATION_CONTRACT: &str = "tdi25-position-geometry-ablation-v1";
 
 /// Relative tolerance of the monitored transport identity; identical to the
 /// matched-reference v1 scalar tolerance shared by every arm.
@@ -3392,7 +3404,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::ChiralGammaZeroAblationInvalid { .. }
         | EvalError::ChiralParityShuffleControlInvalid { .. }
         | EvalError::TorsorStructureShuffleControlInvalid { .. }
-        | EvalError::G6OrthogonalBasisControlInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::G6OrthogonalBasisControlInvalid { .. }
+        | EvalError::PositionGeometryAblationInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -3437,6 +3450,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
             "torsor_structure_shuffle_control_invalid"
         }
         EvalError::G6OrthogonalBasisControlInvalid { .. } => "g6_orthogonal_basis_control_invalid",
+        EvalError::PositionGeometryAblationInvalid { .. } => "position_geometry_ablation_invalid",
     }
 }
 
@@ -5465,6 +5479,191 @@ pub fn validate_g6_orthogonal_basis_control_report(
     Ok(())
 }
 
+/// Per-arm, per-family counts for the position-geometry ablation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PositionGeometryFamilySummary {
+    pub arm_index: usize,
+    pub family: TaskFamily,
+    pub n_cases: u64,
+    pub matches: u64,
+    /// Cases with a non-zero Varignon transport term under this arm.
+    pub nonzero_transport: u64,
+}
+
+/// Immutable position-geometry ablation report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PositionGeometryAblationReport {
+    pub ablation_contract: &'static str,
+    pub population_contract: &'static str,
+    pub geometry_contract: &'static str,
+    pub torsor_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    pub arms: Vec<Option<PositionGeometryArm>>,
+    /// Identical T6 capacity under every arm.
+    pub capacity: ParameterReadoutCapacity,
+    /// Case-major, arm-minor order.
+    pub cases: Vec<PositionGeometryCase>,
+    pub summaries: Vec<PositionGeometryFamilySummary>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false.
+    pub training_executed: bool,
+    /// Must remain false: no geometry is selected.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn position_geometry_invalid(reason: &'static str) -> EvalError {
+    EvalError::PositionGeometryAblationInvalid { reason }
+}
+
+fn summarize_position_geometry(
+    cases: &[PositionGeometryCase],
+) -> Vec<PositionGeometryFamilySummary> {
+    let mut summaries = Vec::new();
+    for arm_index in 0..POSITION_GEOMETRY_ABLATION_ARMS.len() {
+        for family in REQUIRED_SYNTHESIS_FAMILIES {
+            let members = cases
+                .iter()
+                .filter(|c| c.arm_index == arm_index && c.family == *family);
+            summaries.push(PositionGeometryFamilySummary {
+                arm_index,
+                family: *family,
+                n_cases: members.clone().count() as u64,
+                matches: members.clone().filter(|c| c.matches_target).count() as u64,
+                nonzero_transport: members.filter(|c| c.transport_term.abs() > 0.0).count() as u64,
+            });
+        }
+    }
+    summaries
+}
+
+fn collect_position_geometry_cases(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<PositionGeometryCase>, EvalError> {
+    let mut cases = Vec::new();
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..budget.seed_blocks {
+            cases.extend(evaluate_position_geometry_ablation(
+                split,
+                *family,
+                seed_block,
+                budget.cases_per_block,
+            )?);
+        }
+    }
+    Ok(cases)
+}
+
+/// Run the position-geometry ablation on the bounded matched population.
+pub fn run_position_geometry_ablation(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<PositionGeometryAblationReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.validate()?;
+    let cases = collect_position_geometry_cases(split, budget)?;
+    let summaries = summarize_position_geometry(&cases);
+    let report = PositionGeometryAblationReport {
+        ablation_contract: POSITION_GEOMETRY_ABLATION_CONTRACT,
+        population_contract: matched_reference::MATCHED_POPULATION_CONTRACT,
+        geometry_contract: POSITION_GEOMETRY_ARM_CONTRACT,
+        torsor_contract: TORSOR_CONTRACT,
+        split,
+        budget,
+        arms: POSITION_GEOMETRY_ABLATION_ARMS.to_vec(),
+        capacity: ParameterReadoutCapacity::reference_t6(),
+        cases,
+        summaries,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_position_geometry_ablation_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_position_geometry_ablation_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<PositionGeometryAblationReport, EvalError> {
+    run_position_geometry_ablation(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a position-geometry ablation report: pins, the complete arm set,
+/// capacity, canonical order, registry-consistent positions, recomputed
+/// summaries, flags and regenerated evidence.
+pub fn validate_position_geometry_ablation_report(
+    report: &PositionGeometryAblationReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.ablation_contract != POSITION_GEOMETRY_ABLATION_CONTRACT {
+        return Err(position_geometry_invalid("contract_drift"));
+    }
+    if report.population_contract != matched_reference::MATCHED_POPULATION_CONTRACT {
+        return Err(position_geometry_invalid("population_drift"));
+    }
+    if report.geometry_contract != POSITION_GEOMETRY_ARM_CONTRACT {
+        return Err(position_geometry_invalid("geometry_contract_drift"));
+    }
+    if report.torsor_contract != TORSOR_CONTRACT {
+        return Err(position_geometry_invalid("torsor_contract_drift"));
+    }
+    if report.arms != POSITION_GEOMETRY_ABLATION_ARMS.to_vec() {
+        return Err(position_geometry_invalid("arm_set_drift"));
+    }
+    report.budget.validate()?;
+    if report.capacity != ParameterReadoutCapacity::reference_t6() {
+        return Err(position_geometry_invalid("capacity_mismatch"));
+    }
+    let arms = POSITION_GEOMETRY_ABLATION_ARMS.len();
+    if report.cases.len() as u64 != report.budget.cases_per_arm() * arms as u64 {
+        return Err(position_geometry_invalid("case_count"));
+    }
+    let mut position = 0usize;
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..report.budget.seed_blocks {
+            for case_id in 0..report.budget.cases_per_block {
+                for arm_index in 0..arms {
+                    let case = &report.cases[position];
+                    if case.family != *family
+                        || case.seed_block != seed_block
+                        || case.case_id != case_id
+                        || case.arm_index != arm_index
+                    {
+                        return Err(position_geometry_invalid("case_order"));
+                    }
+                    position += 1;
+                }
+            }
+        }
+    }
+    if report.summaries != summarize_position_geometry(&report.cases) {
+        return Err(position_geometry_invalid("family_summary"));
+    }
+    if report.protected_or_final_access {
+        return Err(position_geometry_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(position_geometry_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(position_geometry_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(position_geometry_invalid("experimental_non_final"));
+    }
+    if collect_position_geometry_cases(report.split, report.budget)? != report.cases {
+        return Err(position_geometry_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -5560,6 +5759,11 @@ pub enum EvalError {
     /// G6 orthogonal-basis control rejected a drifted probe, invariance,
     /// evidence or claims.
     G6OrthogonalBasisControlInvalid {
+        reason: &'static str,
+    },
+    /// Position-geometry ablation rejected a drifted arm set, geometry,
+    /// evidence or claims.
+    PositionGeometryAblationInvalid {
         reason: &'static str,
     },
 }
@@ -5659,6 +5863,9 @@ impl fmt::Display for EvalError {
             }
             Self::G6OrthogonalBasisControlInvalid { reason } => {
                 write!(formatter, "G6 orthogonal-basis control invalid: {reason}")
+            }
+            Self::PositionGeometryAblationInvalid { reason } => {
+                write!(formatter, "position-geometry ablation invalid: {reason}")
             }
         }
     }
