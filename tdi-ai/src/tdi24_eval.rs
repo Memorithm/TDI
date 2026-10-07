@@ -77,7 +77,9 @@
 //! Slice 40 adds the Stage-D attribution audit: every Phase-C/D slice (30 to
 //! 39) is regenerated and validated, and the only admissible claim class is
 //! software semantics on Development/Validation; scientific attribution stays
-//! inadmissible.
+//! inadmissible. Slice 41 (Phase E) adds multi-seed replication: the
+//! Stage-C preflight on four frozen, disjoint seed blocks with per-block
+//! paired summaries, pooled counts and descriptive sign tallies.
 //! No training,
 //! confirmatory execution, protected/final evaluation, or scientific claim is
 //! authorised here.
@@ -1913,7 +1915,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::HeadSharingAblationInvalid { .. }
         | EvalError::WidthScalingInvalid { .. }
         | EvalError::SequenceLengthScalingInvalid { .. }
-        | EvalError::StageDAttributionAuditInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::StageDAttributionAuditInvalid { .. }
+        | EvalError::MultiSeedReplicationInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -1959,6 +1962,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::WidthScalingInvalid { .. } => "width_scaling_invalid",
         EvalError::SequenceLengthScalingInvalid { .. } => "sequence_length_scaling_invalid",
         EvalError::StageDAttributionAuditInvalid { .. } => "stage_d_attribution_audit_invalid",
+        EvalError::MultiSeedReplicationInvalid { .. } => "multi_seed_replication_invalid",
     }
 }
 
@@ -6589,6 +6593,230 @@ pub fn validate_stage_d_attribution_audit_report(
     Ok(())
 }
 
+/// Phase-E multi-seed replication contract pin (slice 41).
+pub const MULTI_SEED_REPLICATION_CONTRACT: &str = "tdi24-multi-seed-replication-v1";
+
+/// Frozen seed blocks of the replication. Block `b` starts at pair id
+/// `b * MULTI_SEED_BLOCK_STRIDE`, so the blocks are disjoint by construction.
+pub const MULTI_SEED_BLOCKS: [u64; 4] = [0, 1, 2, 3];
+
+/// Pair-id stride between frozen blocks; equal to the per-family pair cap so
+/// no admissible budget can make two blocks overlap.
+pub const MULTI_SEED_BLOCK_STRIDE: u64 = MAX_PREFLIGHT_PAIRS_PER_FAMILY;
+
+/// One frozen seed block: a full Stage-C preflight on a disjoint pair range.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SeedBlockReplication {
+    pub block: u64,
+    pub first_pair_id: u64,
+    pub cases_per_arm: u64,
+    pub v6_matches: u64,
+    pub c6_matches: u64,
+    /// Paired V6/C6 summary of this block (slice-27 engine, unchanged).
+    pub paired_summary: Option<PairedEffectSummary>,
+}
+
+/// Immutable multi-seed replication report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MultiSeedReplicationReport {
+    pub replication_contract: &'static str,
+    pub preflight_contract: &'static str,
+    pub split: DataSplit,
+    /// Base budget; `first_pair_id` must be 0 (offsets are frozen).
+    pub budget: StageCPreflightBudget,
+    pub blocks: Vec<SeedBlockReplication>,
+    pub pooled_cases_per_arm: u64,
+    pub pooled_v6_matches: u64,
+    pub pooled_c6_matches: u64,
+    /// Blocks with C6 > V6, C6 < V6 and C6 == V6 matches. Descriptive only.
+    pub blocks_c6_ahead: u64,
+    pub blocks_v6_ahead: u64,
+    pub blocks_tied: u64,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false.
+    pub training_executed: bool,
+    /// Must remain false: replication counts are not a claim.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn replication_invalid(reason: &'static str) -> EvalError {
+    EvalError::MultiSeedReplicationInvalid { reason }
+}
+
+fn count_matches(records: &[EvalRecord]) -> u64 {
+    records
+        .iter()
+        .filter(|record| matches!(record.outcome, EvalOutcome::Scored { correct: true, .. }))
+        .count() as u64
+}
+
+fn collect_seed_blocks(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<SeedBlockReplication>, EvalError> {
+    let mut blocks = Vec::with_capacity(MULTI_SEED_BLOCKS.len());
+    let mut seen = Vec::new();
+    for block in MULTI_SEED_BLOCKS {
+        let first_pair_id = block * MULTI_SEED_BLOCK_STRIDE;
+        let block_budget = StageCPreflightBudget::bounded(budget.pairs_per_family, first_pair_id);
+        let report = run_stage_c_preflight(split, block_budget)?;
+        // V6 and C6 score the same cases, so case digests are taken once.
+        for record in &report.v6_records {
+            seen.push(record.canonical_digest.clone());
+        }
+        blocks.push(SeedBlockReplication {
+            block,
+            first_pair_id,
+            cases_per_arm: report.cases_per_arm,
+            v6_matches: count_matches(&report.v6_records),
+            c6_matches: count_matches(&report.c6_records),
+            paired_summary: report.paired_summary,
+        });
+    }
+    let total = seen.len();
+    seen.sort_unstable();
+    seen.dedup();
+    if seen.len() != total {
+        return Err(replication_invalid("block_overlap"));
+    }
+    Ok(blocks)
+}
+
+/// Run the multi-seed replication over every frozen seed block.
+pub fn run_multi_seed_replication(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<MultiSeedReplicationReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.cases_per_arm()?;
+    if budget.first_pair_id != 0 {
+        return Err(replication_invalid("frozen_offset_drift"));
+    }
+    let blocks = collect_seed_blocks(split, budget)?;
+    let report = MultiSeedReplicationReport {
+        replication_contract: MULTI_SEED_REPLICATION_CONTRACT,
+        preflight_contract: STAGE_C_PREFLIGHT_CONTRACT,
+        split,
+        budget,
+        pooled_cases_per_arm: blocks.iter().map(|b| b.cases_per_arm).sum(),
+        pooled_v6_matches: blocks.iter().map(|b| b.v6_matches).sum(),
+        pooled_c6_matches: blocks.iter().map(|b| b.c6_matches).sum(),
+        blocks_c6_ahead: blocks
+            .iter()
+            .filter(|b| b.c6_matches > b.v6_matches)
+            .count() as u64,
+        blocks_v6_ahead: blocks
+            .iter()
+            .filter(|b| b.c6_matches < b.v6_matches)
+            .count() as u64,
+        blocks_tied: blocks
+            .iter()
+            .filter(|b| b.c6_matches == b.v6_matches)
+            .count() as u64,
+        blocks,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_multi_seed_replication_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_multi_seed_replication_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<MultiSeedReplicationReport, EvalError> {
+    run_multi_seed_replication(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a multi-seed replication report: pins, frozen blocks and
+/// offsets, per-block consistency, pooled sums, sign tallies, flags and
+/// regenerated evidence.
+pub fn validate_multi_seed_replication_report(
+    report: &MultiSeedReplicationReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.replication_contract != MULTI_SEED_REPLICATION_CONTRACT {
+        return Err(replication_invalid("contract_drift"));
+    }
+    if report.preflight_contract != STAGE_C_PREFLIGHT_CONTRACT {
+        return Err(replication_invalid("preflight_contract_drift"));
+    }
+    let per_block = report.budget.cases_per_arm()?;
+    if report.budget.first_pair_id != 0 {
+        return Err(replication_invalid("frozen_offset_drift"));
+    }
+    if report.blocks.len() != MULTI_SEED_BLOCKS.len() {
+        return Err(replication_invalid("block_set_drift"));
+    }
+    for (entry, block) in report.blocks.iter().zip(MULTI_SEED_BLOCKS) {
+        if entry.block != block || entry.first_pair_id != block * MULTI_SEED_BLOCK_STRIDE {
+            return Err(replication_invalid("block_set_drift"));
+        }
+        if entry.cases_per_arm != per_block
+            || entry.v6_matches > per_block
+            || entry.c6_matches > per_block
+        {
+            return Err(replication_invalid("block_count_drift"));
+        }
+        if entry
+            .paired_summary
+            .as_ref()
+            .is_some_and(|summary| summary.split != report.split)
+        {
+            return Err(replication_invalid("block_count_drift"));
+        }
+    }
+    let blocks = &report.blocks;
+    if report.pooled_cases_per_arm != blocks.iter().map(|b| b.cases_per_arm).sum::<u64>()
+        || report.pooled_v6_matches != blocks.iter().map(|b| b.v6_matches).sum::<u64>()
+        || report.pooled_c6_matches != blocks.iter().map(|b| b.c6_matches).sum::<u64>()
+    {
+        return Err(replication_invalid("pooled_sum_drift"));
+    }
+    let ahead = blocks
+        .iter()
+        .filter(|b| b.c6_matches > b.v6_matches)
+        .count() as u64;
+    let behind = blocks
+        .iter()
+        .filter(|b| b.c6_matches < b.v6_matches)
+        .count() as u64;
+    let tied = blocks
+        .iter()
+        .filter(|b| b.c6_matches == b.v6_matches)
+        .count() as u64;
+    if (
+        report.blocks_c6_ahead,
+        report.blocks_v6_ahead,
+        report.blocks_tied,
+    ) != (ahead, behind, tied)
+    {
+        return Err(replication_invalid("sign_tally_drift"));
+    }
+    if report.protected_or_final_access {
+        return Err(replication_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(replication_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(replication_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(replication_invalid("experimental_non_final"));
+    }
+    if collect_seed_blocks(report.split, report.budget)? != report.blocks {
+        return Err(replication_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -6688,6 +6916,9 @@ pub enum EvalError {
     /// Stage-D attribution audit rejected a drifted registry, admissibility,
     /// evidence or claims.
     StageDAttributionAuditInvalid { reason: &'static str },
+    /// Multi-seed replication rejected drifted blocks, sums, evidence or
+    /// claims.
+    MultiSeedReplicationInvalid { reason: &'static str },
 }
 
 impl fmt::Display for EvalError {
@@ -6797,6 +7028,9 @@ impl fmt::Display for EvalError {
             }
             Self::StageDAttributionAuditInvalid { reason } => {
                 write!(formatter, "Stage-D attribution audit invalid: {reason}")
+            }
+            Self::MultiSeedReplicationInvalid { reason } => {
+                write!(formatter, "multi-seed replication invalid: {reason}")
             }
         }
     }
