@@ -70,13 +70,13 @@ Development permutation `[0, 4, 3, 1, 2, 5]`, Validation permutation
 | Split | Family | Reference matches | Shuffled matches | Transport term changed |
 | --- | --- | ---: | ---: | ---: |
 | Development | TorsorFavorable | 16/16 | 0/16 | 16 |
-| Development | ChiralFavorable | 0/16 | 0/16 | 6 |
+| Development | ChiralFavorable | 0/16 | 0/16 | 0 |
 | Development | Mixed | 0/16 | 0/16 | 16 |
-| Development | Neutral | 0/16 | 0/16 | 4 |
-| Validation | TorsorFavorable | 16/16 | 2/16 | 15 |
-| Validation | ChiralFavorable | 0/16 | 0/16 | 3 |
+| Development | Neutral | 0/16 | 0/16 | 0 |
+| Validation | TorsorFavorable | 16/16 | 2/16 | 14 |
+| Validation | ChiralFavorable | 0/16 | 0/16 | 0 |
 | Validation | Mixed | 0/16 | 0/16 | 16 |
-| Validation | Neutral | 0/16 | 0/16 | 5 |
+| Validation | Neutral | 0/16 | 0/16 | 0 |
 
 ## Recorded degeneracies
 
@@ -84,9 +84,11 @@ Development permutation `[0, 4, 3, 1, 2, 5]`, Validation permutation
    counterpart: the reference matches by construction, so the control's loss
    of matches restates that construction and is not independent attribution
    evidence.
-2. **Zero transport cases.** Cases whose reduction point equals the query
-   point, or whose relabelled angular/resultant parts vanish, can keep the same
-   transport term; the unchanged counts are recorded, not filtered.
+2. **Zero transport cases.** "Transport term changed" compares values
+   numerically, so a signed-zero flip (`0.0` vs `-0.0`) is not a change. Cases
+   whose reduction point equals the query point (here every ChiralFavorable
+   and Neutral case) have a zero transport term on both sides; they are
+   recorded, not filtered.
 3. **Other families.** Neither side matches the ChiralFavorable, Mixed or
    Neutral targets on the smoke budget; these are software diagnostics only.
 

@@ -5069,7 +5069,8 @@ fn summarize_torsor_structure_shuffle_families(
                     .count() as u64,
                 transport_changed: members
                     .filter(|c| {
-                        c.reference_transport_term.to_bits() != c.shuffled_transport_term.to_bits()
+                        // Numeric change only: a signed-zero flip is not a change.
+                        (c.reference_transport_term - c.shuffled_transport_term).abs() > 0.0
                     })
                     .count() as u64,
             }

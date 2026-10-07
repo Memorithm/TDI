@@ -130,6 +130,16 @@ fn smoke_control_covers_every_family_on_both_non_final_splits() {
             assert!(case.six_values_preserved);
             assert!(case.untransported_products_preserved);
         }
+        // Signed-zero flips are not counted as transport changes.
+        for summary in &report.families {
+            let numeric = report
+                .cases
+                .iter()
+                .filter(|c| c.family == summary.family)
+                .filter(|c| (c.reference_transport_term - c.shuffled_transport_term).abs() > 0.0)
+                .count() as u64;
+            assert_eq!(summary.transport_changed, numeric);
+        }
         // The shuffle is not a no-op on the Varignon transport term.
         assert!(report.families.iter().any(|f| f.transport_changed > 0));
         validate_torsor_structure_shuffle_control_report(&report).unwrap();
@@ -297,8 +307,9 @@ fn tampered_reports_fail_closed() {
     tamper(&|r| r.cases[0].shuffled_score += 1.0, "case_evidence_drift");
     tamper(
         &|r| {
-            let changed = r.cases[0].reference_transport_term.to_bits()
-                != r.cases[0].shuffled_transport_term.to_bits();
+            let changed =
+                (r.cases[0].reference_transport_term - r.cases[0].shuffled_transport_term).abs()
+                    > 0.0;
             r.cases[0].shuffled_transport_term = r.cases[0].reference_transport_term;
             if changed {
                 let family = r.cases[0].family;

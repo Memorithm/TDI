@@ -26,7 +26,7 @@ on:
       - 'docs/TDI-25-MATCHED-EVALUATOR-GATE.md'
       - 'docs/TDI-25-CAMPAIGN-50.md'
       - 'scripts/check-tdi25-s35.sh'
-      - '.github/workflows/tdi25-s35-chiral-parity-shuffle-control.yml'
+      - '.github/workflows/tdi25-s35-torsor-structure-shuffle-control.yml'
 permissions:
   contents: read
 jobs:
