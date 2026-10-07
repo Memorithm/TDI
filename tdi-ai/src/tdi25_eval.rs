@@ -95,7 +95,10 @@
 //! under `tdi25-position-geometry-ablation-v1`: on the same bounded matched
 //! population, T6 is scored with the generated geometry and with every
 //! internal arm of the frozen position-geometry registry (linear, helical,
-//! learned table), all reported, none privileged or selected. All arms consume sealed
+//! learned table), all reported, none privileged or selected. Slice 38 adds
+//! sequence-length scaling under `tdi25-sequence-length-scaling-v1`: T6 and C6
+//! on identical non-overlapping windows of preregistered lengths `[2, 4, 8]`
+//! under both shared mask policies, with exact resource accounting. All arms consume sealed
 //! Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
@@ -122,6 +125,10 @@ pub use matched_reference::{
     position_geometry_ablation_points,
 };
 pub use matched_reference::{
+    SEQUENCE_SCALING_ARMS, SEQUENCE_SCALING_LENGTHS, SEQUENCE_SCALING_POLICIES,
+    SEQUENCE_SCALING_ROW_SUM_TOLERANCE, SequenceScalingCell, evaluate_sequence_length_scaling,
+};
+pub use matched_reference::{
     TorsorStructureShuffleCase, evaluate_torsor_structure_shuffle_control,
     structure_shuffled_torsor_score,
 };
@@ -129,6 +136,7 @@ pub use matched_reference::{
 use core::fmt;
 
 use super::tdi22_torsor::TORSOR_CONTRACT;
+use super::tdi24_attention::{MASKING_CONTRACT, MaskPolicy, NORMALIZER_CONTRACT};
 use super::tdi24_chiral::{CHIRAL_CONTRACT, ChiralScoreWeights};
 use super::tdi24_eval::{
     LEARNED_BASIS_PROBE_COUNT, LEARNED_BASIS_PROTOTYPE_CONTRACT, LearnedBasisProbe,
@@ -212,6 +220,9 @@ pub const G6_ORTHOGONAL_BASIS_CONTROL_CONTRACT: &str = "tdi25-g6-orthogonal-basi
 
 /// Phase-D position-geometry ablation contract pin (slice 37).
 pub const POSITION_GEOMETRY_ABLATION_CONTRACT: &str = "tdi25-position-geometry-ablation-v1";
+
+/// Phase-D sequence-length scaling contract pin (slice 38).
+pub const SEQUENCE_LENGTH_SCALING_CONTRACT: &str = "tdi25-sequence-length-scaling-v1";
 
 /// Relative tolerance of the monitored transport identity; identical to the
 /// matched-reference v1 scalar tolerance shared by every arm.
@@ -3405,7 +3416,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::ChiralParityShuffleControlInvalid { .. }
         | EvalError::TorsorStructureShuffleControlInvalid { .. }
         | EvalError::G6OrthogonalBasisControlInvalid { .. }
-        | EvalError::PositionGeometryAblationInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::PositionGeometryAblationInvalid { .. }
+        | EvalError::SequenceLengthScalingInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -3451,6 +3463,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         }
         EvalError::G6OrthogonalBasisControlInvalid { .. } => "g6_orthogonal_basis_control_invalid",
         EvalError::PositionGeometryAblationInvalid { .. } => "position_geometry_ablation_invalid",
+        EvalError::SequenceLengthScalingInvalid { .. } => "sequence_length_scaling_invalid",
     }
 }
 
@@ -5664,6 +5677,182 @@ pub fn validate_position_geometry_ablation_report(
     Ok(())
 }
 
+/// Immutable sequence-length scaling report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SequenceLengthScalingReport {
+    pub scaling_contract: &'static str,
+    pub population_contract: &'static str,
+    pub normalizer_contract: &'static str,
+    pub masking_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    pub lengths: Vec<usize>,
+    /// Identical T6 and C6 capacity at every length.
+    pub t6_capacity: ParameterReadoutCapacity,
+    pub c6_capacity: ParameterReadoutCapacity,
+    /// Family-major, seed-block, then length, policy, arm.
+    pub cells: Vec<SequenceScalingCell>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false.
+    pub training_executed: bool,
+    /// Must remain false: no length is selected.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn sequence_length_invalid(reason: &'static str) -> EvalError {
+    EvalError::SequenceLengthScalingInvalid { reason }
+}
+
+fn collect_sequence_length_cells(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<SequenceScalingCell>, EvalError> {
+    let mut cells = Vec::new();
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..budget.seed_blocks {
+            cells.extend(evaluate_sequence_length_scaling(
+                split,
+                *family,
+                seed_block,
+                budget.cases_per_block,
+            )?);
+        }
+    }
+    Ok(cells)
+}
+
+/// Run the sequence-length scaling study on the bounded matched population.
+pub fn run_sequence_length_scaling(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<SequenceLengthScalingReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.validate()?;
+    let cells = collect_sequence_length_cells(split, budget)?;
+    let report = SequenceLengthScalingReport {
+        scaling_contract: SEQUENCE_LENGTH_SCALING_CONTRACT,
+        population_contract: matched_reference::MATCHED_POPULATION_CONTRACT,
+        normalizer_contract: NORMALIZER_CONTRACT,
+        masking_contract: MASKING_CONTRACT,
+        split,
+        budget,
+        lengths: SEQUENCE_SCALING_LENGTHS.to_vec(),
+        t6_capacity: ParameterReadoutCapacity::reference_t6(),
+        c6_capacity: ParameterReadoutCapacity::reference_c6(),
+        cells,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_sequence_length_scaling_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_sequence_length_scaling_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<SequenceLengthScalingReport, EvalError> {
+    run_sequence_length_scaling(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a sequence-length scaling report: pins, the complete length set,
+/// matched capacity, canonical order, exact cost accounting, row sums, flags
+/// and regenerated evidence.
+pub fn validate_sequence_length_scaling_report(
+    report: &SequenceLengthScalingReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.scaling_contract != SEQUENCE_LENGTH_SCALING_CONTRACT {
+        return Err(sequence_length_invalid("contract_drift"));
+    }
+    if report.population_contract != matched_reference::MATCHED_POPULATION_CONTRACT {
+        return Err(sequence_length_invalid("population_drift"));
+    }
+    if report.normalizer_contract != NORMALIZER_CONTRACT
+        || report.masking_contract != MASKING_CONTRACT
+    {
+        return Err(sequence_length_invalid("normalizer_contract_drift"));
+    }
+    if report.lengths != SEQUENCE_SCALING_LENGTHS.to_vec() {
+        return Err(sequence_length_invalid("length_set_drift"));
+    }
+    report.budget.validate()?;
+    if report.t6_capacity != ParameterReadoutCapacity::reference_t6()
+        || report.c6_capacity != ParameterReadoutCapacity::reference_c6()
+    {
+        return Err(sequence_length_invalid("capacity_mismatch"));
+    }
+    let per_block = SEQUENCE_SCALING_LENGTHS.len()
+        * SEQUENCE_SCALING_POLICIES.len()
+        * SEQUENCE_SCALING_ARMS.len();
+    let expected = REQUIRED_SYNTHESIS_FAMILIES.len() as u64 * report.budget.seed_blocks;
+    if report.cells.len() as u64 != expected * per_block as u64 {
+        return Err(sequence_length_invalid("cell_count"));
+    }
+    let n = report.budget.cases_per_block;
+    let mut position = 0usize;
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..report.budget.seed_blocks {
+            for length in SEQUENCE_SCALING_LENGTHS {
+                for policy in SEQUENCE_SCALING_POLICIES {
+                    for arm in SEQUENCE_SCALING_ARMS {
+                        let cell = &report.cells[position];
+                        position += 1;
+                        if cell.family != *family
+                            || cell.seed_block != seed_block
+                            || cell.length != length
+                            || cell.policy != policy
+                            || cell.arm != arm
+                        {
+                            return Err(sequence_length_invalid("cell_order"));
+                        }
+                        let l = length as u64;
+                        let masked = match policy {
+                            MaskPolicy::Causal => cell.windows * l * (l - 1) / 2,
+                            _ => 0,
+                        };
+                        if cell.windows * l + cell.unwindowed_cases != n
+                            || cell.unwindowed_cases >= l
+                            || cell.score_evaluations != cell.windows * l * l
+                            || cell.normalizer_calls != cell.windows * l
+                            || cell.masked_entries != masked
+                            || cell.self_retrieval_rows > cell.normalizer_calls
+                        {
+                            return Err(sequence_length_invalid("cost_accounting_drift"));
+                        }
+                        if cell.max_row_sum_error.is_nan()
+                            || cell.max_row_sum_error > SEQUENCE_SCALING_ROW_SUM_TOLERANCE
+                        {
+                            return Err(sequence_length_invalid("row_sum_drift"));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if report.protected_or_final_access {
+        return Err(sequence_length_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(sequence_length_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(sequence_length_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(sequence_length_invalid("experimental_non_final"));
+    }
+    if collect_sequence_length_cells(report.split, report.budget)? != report.cells {
+        return Err(sequence_length_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -5766,6 +5955,11 @@ pub enum EvalError {
     PositionGeometryAblationInvalid {
         reason: &'static str,
     },
+    /// Sequence-length scaling rejected drifted lengths, masks, accounting,
+    /// evidence or claims.
+    SequenceLengthScalingInvalid {
+        reason: &'static str,
+    },
 }
 
 impl fmt::Display for EvalError {
@@ -5866,6 +6060,9 @@ impl fmt::Display for EvalError {
             }
             Self::PositionGeometryAblationInvalid { reason } => {
                 write!(formatter, "position-geometry ablation invalid: {reason}")
+            }
+            Self::SequenceLengthScalingInvalid { reason } => {
+                write!(formatter, "sequence-length scaling invalid: {reason}")
             }
         }
     }
