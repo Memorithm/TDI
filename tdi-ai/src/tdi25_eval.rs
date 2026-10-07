@@ -65,7 +65,12 @@
 //! population, every T6 case is scored through the unchanged factorized TDI-22
 //! pairing `(v + Q x omega).R + omega.C` and through the direct pairing
 //! `v.R + omega.M(Q)`, and the residual between the two forms is monitored
-//! under the shared v1 tolerance. All arms consume sealed
+//! under the shared v1 tolerance. Slice 33 adds the chiral `gamma=0` ablation
+//! under `tdi25-chiral-gamma-zero-ablation-v1`: on the same bounded matched
+//! population, the matched C6 weights keep `alpha`/`beta` and zero only the
+//! parity-odd coefficient; the exact identity `reference = ablated + gamma*chi`
+//! and the closed right/left enantiomorphic split are checked per case at
+//! matched capacity. All arms consume sealed
 //! Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
@@ -76,15 +81,17 @@ pub mod matched_reference {
 }
 
 pub use matched_reference::{
-    ReductionPointAblationCase, TorsorBridgeCase, direct_torsor_bridge_score,
-    evaluate_reduction_point_ablation, evaluate_torsor_bridge_equivalence,
-    reduction_point_transport_term, untransported_torsor_score,
+    ChiralGammaZeroAblationCase, ReductionPointAblationCase, TorsorBridgeCase,
+    chiral_gamma_zero_weights, chiral_parity_odd_channel, direct_torsor_bridge_score,
+    evaluate_chiral_gamma_zero_ablation, evaluate_reduction_point_ablation,
+    evaluate_torsor_bridge_equivalence, gamma_zero_chiral_score, reduction_point_transport_term,
+    untransported_torsor_score,
 };
 
 use core::fmt;
 
 use super::tdi22_torsor::TORSOR_CONTRACT;
-use super::tdi24_chiral::CHIRAL_CONTRACT;
+use super::tdi24_chiral::{CHIRAL_CONTRACT, ChiralScoreWeights};
 use super::tdi25_matched_matrix::{
     MATCHED_EVALUATOR_MATRIX_CONTRACT, matched_family_paths, require_complete_primary_matrix,
 };
@@ -145,6 +152,9 @@ pub const STAGE_C_PREFLIGHT_CONTRACT: &str = "tdi25-stage-c-preflight-v1";
 /// Phase-D torsor reduction-point ablation contract pin (slice 31).
 pub const TORSOR_REDUCTION_POINT_ABLATION_CONTRACT: &str =
     "tdi25-torsor-reduction-point-ablation-v1";
+
+/// Phase-D chiral `gamma=0` ablation contract pin (slice 33).
+pub const CHIRAL_GAMMA_ZERO_ABLATION_CONTRACT: &str = "tdi25-chiral-gamma-zero-ablation-v1";
 
 /// Relative tolerance of the monitored transport identity; identical to the
 /// matched-reference v1 scalar tolerance shared by every arm.
@@ -3333,7 +3343,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::FailureResourceAccountingInvalid { .. }
         | EvalError::StageCPreflightInvalid { .. }
         | EvalError::ReductionPointAblationInvalid { .. }
-        | EvalError::TorsorBridgeEquivalenceInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::TorsorBridgeEquivalenceInvalid { .. }
+        | EvalError::ChiralGammaZeroAblationInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -3370,6 +3381,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::StageCPreflightInvalid { .. } => "stage_c_preflight_invalid",
         EvalError::ReductionPointAblationInvalid { .. } => "reduction_point_ablation_invalid",
         EvalError::TorsorBridgeEquivalenceInvalid { .. } => "torsor_bridge_equivalence_invalid",
+        EvalError::ChiralGammaZeroAblationInvalid { .. } => "chiral_gamma_zero_ablation_invalid",
     }
 }
 
@@ -4448,6 +4460,213 @@ pub fn validate_direct_vs_factorized_bridge_report(
     Ok(())
 }
 
+/// Per-family match counts for the C6 reference and its `gamma=0` ablation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChiralGammaZeroFamilySummary {
+    pub family: TaskFamily,
+    pub n_cases: u64,
+    pub reference_matches: u64,
+    pub ablated_matches: u64,
+    /// Cases whose removed parity-odd observable is non-zero.
+    pub parity_odd_active_cases: u64,
+}
+
+/// Immutable chiral `gamma=0` ablation report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ChiralGammaZeroAblationReport {
+    pub ablation_contract: &'static str,
+    pub population_contract: &'static str,
+    pub chiral_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    pub reference_weights: ChiralScoreWeights,
+    pub ablated_weights: ChiralScoreWeights,
+    /// Identical capacity on both sides: the ablation removes no parameter
+    /// and no input scalar, only the parity-odd coefficient.
+    pub reference_capacity: ParameterReadoutCapacity,
+    pub ablated_capacity: ParameterReadoutCapacity,
+    pub cases: Vec<ChiralGammaZeroAblationCase>,
+    pub families: Vec<ChiralGammaZeroFamilySummary>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false: both sides are the non-trained reference.
+    pub training_executed: bool,
+    /// Must remain false: attribution is decided only by the Stage-D audit.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn chiral_gamma_zero_invalid(reason: &'static str) -> EvalError {
+    EvalError::ChiralGammaZeroAblationInvalid { reason }
+}
+
+fn check_chiral_gamma_zero_case(
+    case: &ChiralGammaZeroAblationCase,
+    reference_weights: ChiralScoreWeights,
+) -> Result<(), EvalError> {
+    // Exact: both sides share the identical alpha*s + beta*m accumulation, so
+    // the parity-odd term is the only difference between the two scores.
+    if case.reference_score
+        != case.ablated_score + reference_weights.gamma * case.parity_odd_channel
+    {
+        return Err(chiral_gamma_zero_invalid("parity_odd_residual"));
+    }
+    if !case.enantiomorphic_split_closed {
+        return Err(chiral_gamma_zero_invalid("enantiomorphic_split"));
+    }
+    // A vanishing parity-odd observable removes nothing.
+    if case.parity_odd_channel == 0.0
+        && (case.reference_score != case.ablated_score
+            || case.reference_matches_target != case.ablated_matches_target)
+    {
+        return Err(chiral_gamma_zero_invalid("inactive_channel_drift"));
+    }
+    Ok(())
+}
+
+fn summarize_chiral_gamma_zero_families(
+    cases: &[ChiralGammaZeroAblationCase],
+) -> Vec<ChiralGammaZeroFamilySummary> {
+    REQUIRED_SYNTHESIS_FAMILIES
+        .iter()
+        .map(|family| {
+            let members = cases.iter().filter(|case| case.family == *family);
+            ChiralGammaZeroFamilySummary {
+                family: *family,
+                n_cases: members.clone().count() as u64,
+                reference_matches: members
+                    .clone()
+                    .filter(|c| c.reference_matches_target)
+                    .count() as u64,
+                ablated_matches: members.clone().filter(|c| c.ablated_matches_target).count()
+                    as u64,
+                parity_odd_active_cases: members.filter(|c| c.parity_odd_channel != 0.0).count()
+                    as u64,
+            }
+        })
+        .collect()
+}
+
+/// Run the chiral `gamma=0` ablation on the bounded matched population.
+///
+/// Same families, seed blocks, cases, split and capacity as the Stage-C
+/// preflight; only the C6 parity-odd coefficient is zeroed. Any scoring,
+/// drift or identity failure aborts fail-closed; nothing is silently dropped.
+pub fn run_chiral_gamma_zero_ablation(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<ChiralGammaZeroAblationReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.validate()?;
+    let mut cases = Vec::new();
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..budget.seed_blocks {
+            cases.extend(evaluate_chiral_gamma_zero_ablation(
+                split,
+                *family,
+                seed_block,
+                budget.cases_per_block,
+            )?);
+        }
+    }
+    let families = summarize_chiral_gamma_zero_families(&cases);
+    let report = ChiralGammaZeroAblationReport {
+        ablation_contract: CHIRAL_GAMMA_ZERO_ABLATION_CONTRACT,
+        population_contract: matched_reference::MATCHED_POPULATION_CONTRACT,
+        chiral_contract: CHIRAL_CONTRACT,
+        split,
+        budget,
+        reference_weights: matched_reference::MATCHED_CHIRAL_WEIGHTS,
+        ablated_weights: chiral_gamma_zero_weights(matched_reference::MATCHED_CHIRAL_WEIGHTS),
+        reference_capacity: ParameterReadoutCapacity::reference_c6(),
+        ablated_capacity: ParameterReadoutCapacity::reference_c6(),
+        cases,
+        families,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_chiral_gamma_zero_ablation_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_chiral_gamma_zero_ablation_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<ChiralGammaZeroAblationReport, EvalError> {
+    run_chiral_gamma_zero_ablation(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a chiral `gamma=0` ablation report: pins, all-else-fixed weights,
+/// matched capacity, bounded coverage in canonical order, the exact per-case
+/// parity-odd residual and closed enantiomorphic split, recomputed family
+/// counts, and the no-access / no-training / no-claim flags.
+pub fn validate_chiral_gamma_zero_ablation_report(
+    report: &ChiralGammaZeroAblationReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.ablation_contract != CHIRAL_GAMMA_ZERO_ABLATION_CONTRACT {
+        return Err(chiral_gamma_zero_invalid("contract_drift"));
+    }
+    if report.population_contract != matched_reference::MATCHED_POPULATION_CONTRACT {
+        return Err(chiral_gamma_zero_invalid("population_drift"));
+    }
+    if report.chiral_contract != CHIRAL_CONTRACT {
+        return Err(chiral_gamma_zero_invalid("chiral_contract_drift"));
+    }
+    if report.reference_weights != matched_reference::MATCHED_CHIRAL_WEIGHTS {
+        return Err(chiral_gamma_zero_invalid("reference_weights_drift"));
+    }
+    if report.ablated_weights != chiral_gamma_zero_weights(report.reference_weights) {
+        return Err(chiral_gamma_zero_invalid("ablated_weights_drift"));
+    }
+    report.budget.validate()?;
+    if report.reference_capacity != report.ablated_capacity
+        || report.reference_capacity != ParameterReadoutCapacity::reference_c6()
+    {
+        return Err(chiral_gamma_zero_invalid("capacity_mismatch"));
+    }
+    let expected = report.budget.cases_per_arm();
+    if report.cases.len() as u64 != expected {
+        return Err(chiral_gamma_zero_invalid("case_count"));
+    }
+    let mut position = 0usize;
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..report.budget.seed_blocks {
+            for case_id in 0..report.budget.cases_per_block {
+                let case = &report.cases[position];
+                if case.family != *family
+                    || case.seed_block != seed_block
+                    || case.case_id != case_id
+                {
+                    return Err(chiral_gamma_zero_invalid("case_order"));
+                }
+                check_chiral_gamma_zero_case(case, report.reference_weights)?;
+                position += 1;
+            }
+        }
+    }
+    if report.families != summarize_chiral_gamma_zero_families(&report.cases) {
+        return Err(chiral_gamma_zero_invalid("family_summary"));
+    }
+    if report.protected_or_final_access {
+        return Err(chiral_gamma_zero_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(chiral_gamma_zero_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(chiral_gamma_zero_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(chiral_gamma_zero_invalid("experimental_non_final"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -4524,6 +4743,10 @@ pub enum EvalError {
     },
     /// Direct vs factorized torsor bridge monitor rejected drift or residual.
     TorsorBridgeEquivalenceInvalid {
+        reason: &'static str,
+    },
+    /// Chiral `gamma=0` ablation rejected drifted weights, identity or claims.
+    ChiralGammaZeroAblationInvalid {
         reason: &'static str,
     },
 }
@@ -4608,6 +4831,9 @@ impl fmt::Display for EvalError {
             }
             Self::TorsorBridgeEquivalenceInvalid { reason } => {
                 write!(formatter, "torsor bridge equivalence invalid: {reason}")
+            }
+            Self::ChiralGammaZeroAblationInvalid { reason } => {
+                write!(formatter, "chiral gamma=0 ablation invalid: {reason}")
             }
         }
     }
