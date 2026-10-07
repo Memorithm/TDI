@@ -79,7 +79,10 @@
 //! software semantics on Development/Validation; scientific attribution stays
 //! inadmissible. Slice 41 (Phase E) adds multi-seed replication: the
 //! Stage-C preflight on four frozen, disjoint seed blocks with per-block
-//! paired summaries, pooled counts and descriptive sign tallies.
+//! paired summaries, pooled counts and descriptive sign tallies. Slice 42
+//! adds input-noise robustness: declared deterministic perturbation families
+//! (isotropic, even-only, odd-only) at declared amplitudes, applied
+//! identically to both paired arms, with label-free decision stability.
 //! No training,
 //! confirmatory execution, protected/final evaluation, or scientific claim is
 //! authorised here.
@@ -1916,7 +1919,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::WidthScalingInvalid { .. }
         | EvalError::SequenceLengthScalingInvalid { .. }
         | EvalError::StageDAttributionAuditInvalid { .. }
-        | EvalError::MultiSeedReplicationInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::MultiSeedReplicationInvalid { .. }
+        | EvalError::InputNoiseRobustnessInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -1963,6 +1967,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::SequenceLengthScalingInvalid { .. } => "sequence_length_scaling_invalid",
         EvalError::StageDAttributionAuditInvalid { .. } => "stage_d_attribution_audit_invalid",
         EvalError::MultiSeedReplicationInvalid { .. } => "multi_seed_replication_invalid",
+        EvalError::InputNoiseRobustnessInvalid { .. } => "input_noise_robustness_invalid",
     }
 }
 
@@ -6817,6 +6822,274 @@ pub fn validate_multi_seed_replication_report(
     Ok(())
 }
 
+/// Phase-E input-noise robustness contract pin (slice 42).
+pub const INPUT_NOISE_ROBUSTNESS_CONTRACT: &str = "tdi24-input-noise-robustness-v1";
+
+/// Declared perturbation families on the six chiral components.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NoiseFamily {
+    /// All six components.
+    Isotropic,
+    /// Mirror-even components only.
+    EvenOnly,
+    /// Mirror-odd components only.
+    OddOnly,
+}
+
+impl NoiseFamily {
+    const fn mask(self) -> [bool; 6] {
+        match self {
+            Self::Isotropic => [true; 6],
+            Self::EvenOnly => [true, true, true, false, false, false],
+            Self::OddOnly => [false, false, false, true, true, true],
+        }
+    }
+}
+
+/// Declared perturbation families, all reported.
+pub const NOISE_FAMILIES: [NoiseFamily; 3] = [
+    NoiseFamily::Isotropic,
+    NoiseFamily::EvenOnly,
+    NoiseFamily::OddOnly,
+];
+
+/// Declared absolute amplitudes, all reported.
+pub const NOISE_AMPLITUDES: [f64; 3] = [1e-3, 1e-2, 1e-1];
+
+/// Paired arms: both receive the identical perturbed query and key.
+pub const NOISE_ARMS: [SequenceArm; 2] = [SequenceArm::C6, SequenceArm::DirectOnly];
+
+/// Per (noise family, amplitude, arm, task family) decision stability.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NoiseRobustnessCell {
+    pub noise: NoiseFamily,
+    pub amplitude: f64,
+    pub arm: SequenceArm,
+    pub family: TaskFamily,
+    pub n_cases: u64,
+    /// Cases whose perturbed score keeps the clean score's sign (zero counts
+    /// as its own sign).
+    pub sign_stable: u64,
+    pub max_abs_score_change: f64,
+}
+
+/// Immutable input-noise robustness report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InputNoiseRobustnessReport {
+    pub robustness_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    /// FNV-1a 64 of the contract string; no free seed constant.
+    pub noise_seed: u64,
+    pub capacity: TrainableCapacity,
+    /// Noise-major, then amplitude, arm, task family.
+    pub cells: Vec<NoiseRobustnessCell>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false.
+    pub training_executed: bool,
+    /// Must remain false.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn noise_invalid(reason: &'static str) -> EvalError {
+    EvalError::InputNoiseRobustnessInvalid { reason }
+}
+
+/// Seed of the declared perturbation stream, derived from the contract pin.
+#[must_use]
+pub fn input_noise_seed() -> u64 {
+    INPUT_NOISE_ROBUSTNESS_CONTRACT
+        .bytes()
+        .fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+            (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+        })
+}
+
+fn splitmix64(mut state: u64) -> u64 {
+    state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    state = (state ^ (state >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    state = (state ^ (state >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    state ^ (state >> 31)
+}
+
+/// Deterministic perturbation in `[-amplitude, amplitude]` for one component.
+/// Depends on the case index, the operand (0 query, 1 key) and the component
+/// only; never on the arm, so both arms see identical inputs.
+fn noise_component(case_index: u64, operand: u64, component: u64, amplitude: f64) -> f64 {
+    let mixed = splitmix64(
+        input_noise_seed() ^ splitmix64(case_index ^ splitmix64(operand * 8 + component)),
+    );
+    let unit = (mixed >> 11) as f64 / (1u64 << 53) as f64;
+    amplitude * (2.0 * unit - 1.0)
+}
+
+/// Perturb one operand under a declared family and amplitude.
+pub fn perturb_operand(
+    value: Chiral6,
+    noise: NoiseFamily,
+    amplitude: f64,
+    case_index: u64,
+    operand: u64,
+) -> Result<Chiral6, EvalError> {
+    if !NOISE_AMPLITUDES.contains(&amplitude) {
+        return Err(noise_invalid("amplitude_not_registered"));
+    }
+    let mut data = value.as_array();
+    for (component, (entry, active)) in data.iter_mut().zip(noise.mask()).enumerate() {
+        if active {
+            *entry += noise_component(case_index, operand, component as u64, amplitude);
+        }
+    }
+    Chiral6::from_array(data).map_err(EvalError::ChiralNumerical)
+}
+
+fn collect_noise_cells(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<NoiseRobustnessCell>, EvalError> {
+    let items = collect_sequence_items(split, budget)?;
+    let mut cells = Vec::new();
+    for noise in NOISE_FAMILIES {
+        for amplitude in NOISE_AMPLITUDES {
+            for arm in NOISE_ARMS {
+                for family in STAGE_C_PREFLIGHT_FAMILIES {
+                    let mut cell = NoiseRobustnessCell {
+                        noise,
+                        amplitude,
+                        arm,
+                        family: *family,
+                        n_cases: 0,
+                        sign_stable: 0,
+                        max_abs_score_change: 0.0,
+                    };
+                    for (index, item) in items.iter().enumerate() {
+                        if item.0 != *family {
+                            continue;
+                        }
+                        let clean = chiral_score(item.1, item.2, arm.weights())
+                            .map_err(EvalError::ChiralNumerical)?;
+                        if arm == SequenceArm::C6 && clean.to_bits() != item.3.to_bits() {
+                            return Err(noise_invalid("clean_reference_drift"));
+                        }
+                        let query = perturb_operand(item.1, noise, amplitude, index as u64, 0)?;
+                        let key = perturb_operand(item.2, noise, amplitude, index as u64, 1)?;
+                        let noisy = chiral_score(query, key, arm.weights())
+                            .map_err(EvalError::ChiralNumerical)?;
+                        cell.n_cases += 1;
+                        if noisy.signum() == clean.signum() && (noisy == 0.0) == (clean == 0.0) {
+                            cell.sign_stable += 1;
+                        }
+                        cell.max_abs_score_change =
+                            cell.max_abs_score_change.max((noisy - clean).abs());
+                    }
+                    cells.push(cell);
+                }
+            }
+        }
+    }
+    Ok(cells)
+}
+
+/// Run the input-noise robustness study on the bounded Stage-C stream.
+pub fn run_input_noise_robustness(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<InputNoiseRobustnessReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.cases_per_arm()?;
+    let report = InputNoiseRobustnessReport {
+        robustness_contract: INPUT_NOISE_ROBUSTNESS_CONTRACT,
+        split,
+        budget,
+        noise_seed: input_noise_seed(),
+        capacity: TrainableCapacity::reference_c6(),
+        cells: collect_noise_cells(split, budget)?,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_input_noise_robustness_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_input_noise_robustness_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<InputNoiseRobustnessReport, EvalError> {
+    run_input_noise_robustness(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate an input-noise robustness report: pins, seed, capacity, the
+/// complete declared grid in order, paired case counts, finite changes,
+/// flags and regenerated evidence.
+pub fn validate_input_noise_robustness_report(
+    report: &InputNoiseRobustnessReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.robustness_contract != INPUT_NOISE_ROBUSTNESS_CONTRACT {
+        return Err(noise_invalid("contract_drift"));
+    }
+    if report.noise_seed != input_noise_seed() {
+        return Err(noise_invalid("seed_drift"));
+    }
+    if report.capacity != TrainableCapacity::reference_c6() {
+        return Err(noise_invalid("capacity_mismatch"));
+    }
+    let per_family = report.budget.cases_per_arm()? / STAGE_C_PREFLIGHT_FAMILIES.len() as u64;
+    let expected = NOISE_FAMILIES.len()
+        * NOISE_AMPLITUDES.len()
+        * NOISE_ARMS.len()
+        * STAGE_C_PREFLIGHT_FAMILIES.len();
+    if report.cells.len() != expected {
+        return Err(noise_invalid("cell_count"));
+    }
+    let mut position = 0usize;
+    for noise in NOISE_FAMILIES {
+        for amplitude in NOISE_AMPLITUDES {
+            for arm in NOISE_ARMS {
+                for family in STAGE_C_PREFLIGHT_FAMILIES {
+                    let cell = &report.cells[position];
+                    position += 1;
+                    if cell.noise != noise
+                        || cell.amplitude.to_bits() != amplitude.to_bits()
+                        || cell.arm != arm
+                        || cell.family != *family
+                    {
+                        return Err(noise_invalid("grid_drift"));
+                    }
+                    if cell.n_cases != per_family || cell.sign_stable > cell.n_cases {
+                        return Err(noise_invalid("paired_count_drift"));
+                    }
+                    if !cell.max_abs_score_change.is_finite() || cell.max_abs_score_change < 0.0 {
+                        return Err(noise_invalid("score_change_drift"));
+                    }
+                }
+            }
+        }
+    }
+    if report.protected_or_final_access {
+        return Err(noise_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(noise_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(noise_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(noise_invalid("experimental_non_final"));
+    }
+    if collect_noise_cells(report.split, report.budget)? != report.cells {
+        return Err(noise_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -6919,6 +7192,9 @@ pub enum EvalError {
     /// Multi-seed replication rejected drifted blocks, sums, evidence or
     /// claims.
     MultiSeedReplicationInvalid { reason: &'static str },
+    /// Input-noise robustness rejected a drifted grid, seed, counts, evidence
+    /// or claims.
+    InputNoiseRobustnessInvalid { reason: &'static str },
 }
 
 impl fmt::Display for EvalError {
@@ -7031,6 +7307,9 @@ impl fmt::Display for EvalError {
             }
             Self::MultiSeedReplicationInvalid { reason } => {
                 write!(formatter, "multi-seed replication invalid: {reason}")
+            }
+            Self::InputNoiseRobustnessInvalid { reason } => {
+                write!(formatter, "input-noise robustness invalid: {reason}")
             }
         }
     }
