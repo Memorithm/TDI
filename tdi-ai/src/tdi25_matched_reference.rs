@@ -9,6 +9,7 @@ use super::{
 use crate::experimental::tdi22_torsor::{
     Torsor3, TorsorError, Twist3, Vec3, direct_pairing, factorized_pairing,
 };
+use crate::experimental::tdi24_attention::MaskPolicy;
 use crate::experimental::tdi24_chiral::{Chiral6, ChiralScoreWeights, enantiomorphic_scores};
 use crate::experimental::tdi24_eval::{
     EvalError as Tdi24EvalError, LEARNED_BASIS_PROBE_COUNT, LEARNED_BASIS_TOLERANCE,
@@ -19,7 +20,8 @@ use crate::experimental::tdi25_tasks::{
     PositionGeometryArm, SeedDomain, mix_registered_seed, position_geometry_point,
 };
 use crate::experimental::tdi25_torsor_chiral::{
-    Generic6, chiral_arm_score, generic_arm_score, torsor_arm_score, validate_source_contracts,
+    Generic6, chiral_arm_score, generic_arm_score, normalize_arm_row, torsor_arm_score,
+    validate_source_contracts,
 };
 
 /// Explicitly distinct from the legacy Phase-B population.
@@ -1127,6 +1129,143 @@ pub fn evaluate_position_geometry_ablation(
         }
     }
     Ok(cases)
+}
+
+/// Preregistered sequence lengths of the sequence-length scaling study (TDI-25
+/// slice 38). Every length is reported; none is selected.
+pub const SEQUENCE_SCALING_LENGTHS: [usize; 3] = [2, 4, 8];
+/// Shared TDI-24 mask policies, both consumed through `normalize_arm_row`.
+pub const SEQUENCE_SCALING_POLICIES: [MaskPolicy; 2] = [MaskPolicy::Full, MaskPolicy::Causal];
+/// Matched primary arms, scored on identical windows.
+pub const SEQUENCE_SCALING_ARMS: [ComparisonArm; 2] = [ComparisonArm::T6, ComparisonArm::C6];
+/// Row-sum tolerance of every normalized row.
+pub const SEQUENCE_SCALING_ROW_SUM_TOLERANCE: f64 = 1e-12;
+
+/// Exact per-block resource accounting for one (length, policy, arm) cell.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SequenceScalingCell {
+    pub family: TaskFamily,
+    pub seed_block: u64,
+    pub length: usize,
+    pub policy: MaskPolicy,
+    pub arm: ComparisonArm,
+    /// Non-overlapping windows of `length` consecutive matched cases.
+    pub windows: u64,
+    /// Trailing cases that do not fill a window (counted, never scored).
+    pub unwindowed_cases: u64,
+    /// `windows * length^2` pairwise score evaluations.
+    pub score_evaluations: u64,
+    /// `windows * length` shared normalizer calls.
+    pub normalizer_calls: u64,
+    /// Entries forced to exactly zero by the mask policy.
+    pub masked_entries: u64,
+    /// Rows whose first maximal probability sits on the diagonal.
+    pub self_retrieval_rows: u64,
+    pub max_row_sum_error: f64,
+}
+
+const fn sequence_scaling_invalid(reason: &'static str) -> EvalError {
+    EvalError::SequenceLengthScalingInvalid { reason }
+}
+
+fn cross_input(query: &MatchedInput, key: &MatchedInput) -> MatchedInput {
+    MatchedInput {
+        query: query.query,
+        key: key.key,
+        key_position: key.key_position,
+        query_position: query.query_position,
+    }
+}
+
+fn arm_score(arm: ComparisonArm, input: &MatchedInput) -> Result<f64, EvalError> {
+    match arm {
+        ComparisonArm::T6 => score_t6(input),
+        ComparisonArm::C6 => score_c6(input),
+        _ => Err(sequence_scaling_invalid("arm_not_registered")),
+    }
+}
+
+/// Score one matched block on non-overlapping windows of every registered
+/// length, under every mask policy, for both matched arms.
+///
+/// Row `i` of a window holds the arm score of query `i` against every key of
+/// the window; the diagonal must reproduce the matched primary score bit for
+/// bit. Order: length-major, then policy, then arm.
+pub fn evaluate_sequence_length_scaling(
+    split: DataSplit,
+    family: TaskFamily,
+    seed_block: u64,
+    n_cases: u64,
+) -> Result<Vec<SequenceScalingCell>, EvalError> {
+    let run = MatchedPrimaryRun::evaluate(split, family, seed_block, n_cases)?;
+    let inputs = run.inputs();
+    let mut cells = Vec::new();
+    for length in SEQUENCE_SCALING_LENGTHS {
+        let windows = inputs.len() / length;
+        for policy in SEQUENCE_SCALING_POLICIES {
+            for arm in SEQUENCE_SCALING_ARMS {
+                let reference = match arm {
+                    ComparisonArm::T6 => run.t6_scores(),
+                    _ => run.c6_scores(),
+                };
+                let mut cell = SequenceScalingCell {
+                    family,
+                    seed_block,
+                    length,
+                    policy,
+                    arm,
+                    windows: windows as u64,
+                    unwindowed_cases: (inputs.len() % length) as u64,
+                    score_evaluations: 0,
+                    normalizer_calls: 0,
+                    masked_entries: 0,
+                    self_retrieval_rows: 0,
+                    max_row_sum_error: 0.0,
+                };
+                for window in 0..windows {
+                    let base = window * length;
+                    for i in 0..length {
+                        let mut logits = Vec::with_capacity(length);
+                        for j in 0..length {
+                            let score =
+                                arm_score(arm, &cross_input(&inputs[base + i], &inputs[base + j]))?;
+                            if i == j && score.to_bits() != reference[base + i].to_bits() {
+                                return Err(sequence_scaling_invalid("diagonal_reference_drift"));
+                            }
+                            logits.push(score);
+                        }
+                        cell.score_evaluations += length as u64;
+                        let row = normalize_arm_row(arm, &logits, policy, i)
+                            .map_err(|_| sequence_scaling_invalid("normalizer_failure"))?;
+                        cell.normalizer_calls += 1;
+                        let p = row.probabilities;
+                        for (j, value) in p.iter().enumerate() {
+                            let masked = matches!(policy, MaskPolicy::Causal) && j > i;
+                            if masked {
+                                if *value != 0.0 {
+                                    return Err(sequence_scaling_invalid("mask_drift"));
+                                }
+                                cell.masked_entries += 1;
+                            }
+                        }
+                        let sum: f64 = p.iter().sum();
+                        cell.max_row_sum_error = cell.max_row_sum_error.max((sum - 1.0).abs());
+                        let mut best = 0;
+                        for j in 1..length {
+                            if p[j] > p[best] {
+                                best = j;
+                            }
+                        }
+                        if best == i {
+                            cell.self_retrieval_rows += 1;
+                        }
+                    }
+                }
+                cells.push(cell);
+            }
+        }
+    }
+    Ok(cells)
 }
 
 #[cfg(test)]
