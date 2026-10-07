@@ -68,7 +68,7 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 
 | Slice | Deliverable | Gate / definition of done |
 | ---: | --- | --- |
-| 41 | Multi-seed replication | frozen seed blocks and paired summaries |
+| 41 | Multi-seed replication | **current stacked slice**; frozen seed blocks and paired summaries: the Stage-C preflight on four frozen seed blocks `[0, 1, 2, 3]` at pair-id stride `MAX_PREFLIGHT_PAIRS_PER_FAMILY` (disjoint by construction, checked by case digest), per-block slice-27 paired V6/C6 summaries, pooled counts and descriptive sign tallies; base offset frozen at 0; block 0 reproduces the Stage-C preflight; see `docs/TDI-24-MULTI-SEED-REPLICATION-V1.md` |
 | 42 | Input-noise robustness | declared perturbation families; paired arms |
 | 43 | Reflection adversarial set | hard mirrored pairs generated independently of model outputs |
 | 44 | Numerical precision study | f64/f32 comparison with explicit tolerance and failure accounting |
