@@ -51,6 +51,14 @@
 //! `M' J' M' = -J'`); the canonical basis must reproduce the Stage-C C6
 //! evaluator bit-for-bit and complementary bases must give exactly opposite
 //! parity-odd observables. No basis is selected or tuned.
+//! Slice 36 adds a structure-preserving learned basis prototype: an orthogonal
+//! parameterisation `O(theta)` (product of the 15 Givens rotations of the
+//! carrier) whose effective `O^T M O`, `O^T J O` keep the chiral algebra by
+//! construction; non-orthogonal transforms are rejected. Four declared probes
+//! (identity, gauge `diag(R, R)`, sector mixing, generic) are scored with the
+//! unchanged C6 weights; the identity reproduces Stage-C C6 bit-for-bit and
+//! the gauge probe is score-invariant within a declared tolerance. No angle is
+//! trained or selected.
 //! No training,
 //! confirmatory execution, protected/final evaluation, or scientific claim is
 //! authorised here.
@@ -1878,7 +1886,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::BetaZeroAblationInvalid { .. }
         | EvalError::DirectOnlyCollapseInvalid { .. }
         | EvalError::ParityShuffleControlInvalid { .. }
-        | EvalError::FixedMSensitivityInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::FixedMSensitivityInvalid { .. }
+        | EvalError::LearnedBasisPrototypeInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -1919,6 +1928,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::DirectOnlyCollapseInvalid { .. } => "direct_only_collapse_invalid",
         EvalError::ParityShuffleControlInvalid { .. } => "parity_shuffle_control_invalid",
         EvalError::FixedMSensitivityInvalid { .. } => "fixed_m_sensitivity_invalid",
+        EvalError::LearnedBasisPrototypeInvalid { .. } => "learned_basis_prototype_invalid",
     }
 }
 
@@ -4700,6 +4710,596 @@ pub fn validate_fixed_m_sensitivity_report(
     Ok(())
 }
 
+/// Phase-D structure-preserving learned basis prototype contract pin (slice 36).
+pub const LEARNED_BASIS_PROTOTYPE_CONTRACT: &str = "tdi24-learned-basis-prototype-v1";
+
+/// Number of Givens planes `(i, j)`, `i < j`, of the six-slot carrier:
+/// `C(6,2) = 15`. Derived from the carrier width; not a freeze pin.
+pub const LEARNED_BASIS_PARAMETER_COUNT: usize = 15;
+
+/// Number of declared, non-tuned prototype probes (identity, gauge,
+/// sector-mixing, generic). Not a freeze pin and not selected from outcomes.
+pub const LEARNED_BASIS_PROBE_COUNT: usize = 4;
+
+/// Declared floating-point tolerance for the orthogonality, algebra and gauge
+/// invariance checks of the prototype. A numerical guard, not a freeze pin.
+pub const LEARNED_BASIS_TOLERANCE: f64 = 1e-12;
+
+type RealMatrix = [[f64; CHIRAL_WIDTH]; CHIRAL_WIDTH];
+
+const fn learned_basis_invalid(reason: &'static str) -> EvalError {
+    EvalError::LearnedBasisPrototypeInvalid { reason }
+}
+
+/// Role of a prototype probe in the declared probe set.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LearnedBasisProbeRole {
+    /// All angles zero: must reproduce the Stage-C C6 evaluator bit for bit.
+    Identity,
+    /// `O = diag(R, R)`: commutes with `M` and `J`, scores must be invariant.
+    Gauge,
+    /// One rotation in the `(0, 3)` plane mixing the two parity sectors.
+    SectorMixing,
+    /// Every plane rotated by a distinct declared angle.
+    Generic,
+}
+
+/// One point of the orthogonal parameterisation
+/// `O(theta) = G(0,1) G(0,2) ... G(4,5)`, a product of Givens rotations in
+/// lexicographic plane order. Every point is orthogonal by construction, so
+/// the effective operators `M' = O^T M O`, `J' = O^T J O` satisfy the chiral
+/// algebra; nothing is trained, tuned or selected.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LearnedBasisProbe {
+    pub index: usize,
+    pub role: LearnedBasisProbeRole,
+    /// Angles in lexicographic plane order `(0,1), (0,2), ..., (4,5)`.
+    pub angles: [f64; LEARNED_BASIS_PARAMETER_COUNT],
+}
+
+/// Givens planes in lexicographic order.
+#[must_use]
+pub fn learned_basis_planes() -> [(usize, usize); LEARNED_BASIS_PARAMETER_COUNT] {
+    let mut planes = [(0, 0); LEARNED_BASIS_PARAMETER_COUNT];
+    let mut index = 0;
+    for i in 0..CHIRAL_WIDTH {
+        for j in i + 1..CHIRAL_WIDTH {
+            planes[index] = (i, j);
+            index += 1;
+        }
+    }
+    planes
+}
+
+fn plane_index(i: usize, j: usize) -> usize {
+    learned_basis_planes()
+        .iter()
+        .position(|plane| *plane == (i, j))
+        .expect("declared plane")
+}
+
+/// The declared prototype probe set, in fixed order.
+#[must_use]
+pub fn learned_basis_probes() -> [LearnedBasisProbe; LEARNED_BASIS_PROBE_COUNT] {
+    use core::f64::consts::PI;
+    let identity = [0.0; LEARNED_BASIS_PARAMETER_COUNT];
+    let mut gauge = identity;
+    // The same SO(3) rotation on H+ = {0,1,2} and on H- = {3,4,5}.
+    gauge[plane_index(0, 1)] = PI / 5.0;
+    gauge[plane_index(1, 2)] = PI / 7.0;
+    gauge[plane_index(3, 4)] = PI / 5.0;
+    gauge[plane_index(4, 5)] = PI / 7.0;
+    let mut mixing = identity;
+    mixing[plane_index(0, 3)] = PI / 4.0;
+    let mut generic = identity;
+    for (plane, angle) in generic.iter_mut().enumerate() {
+        *angle = (plane as f64 + 1.0) * PI / 32.0;
+    }
+    [
+        LearnedBasisProbe {
+            index: 0,
+            role: LearnedBasisProbeRole::Identity,
+            angles: identity,
+        },
+        LearnedBasisProbe {
+            index: 1,
+            role: LearnedBasisProbeRole::Gauge,
+            angles: gauge,
+        },
+        LearnedBasisProbe {
+            index: 2,
+            role: LearnedBasisProbeRole::SectorMixing,
+            angles: mixing,
+        },
+        LearnedBasisProbe {
+            index: 3,
+            role: LearnedBasisProbeRole::Generic,
+            angles: generic,
+        },
+    ]
+}
+
+fn real_identity() -> RealMatrix {
+    let mut identity = [[0.0; CHIRAL_WIDTH]; CHIRAL_WIDTH];
+    for (index, row) in identity.iter_mut().enumerate() {
+        row[index] = 1.0;
+    }
+    identity
+}
+
+fn real_matmul(left: &RealMatrix, right: &RealMatrix) -> RealMatrix {
+    let mut product = [[0.0; CHIRAL_WIDTH]; CHIRAL_WIDTH];
+    for (row, out) in product.iter_mut().enumerate() {
+        for (column, value) in out.iter_mut().enumerate() {
+            let mut sum = left[row][0] * right[0][column];
+            for inner in 1..CHIRAL_WIDTH {
+                sum += left[row][inner] * right[inner][column];
+            }
+            *value = sum;
+        }
+    }
+    product
+}
+
+fn real_transpose(matrix: &RealMatrix) -> RealMatrix {
+    let mut transposed = [[0.0; CHIRAL_WIDTH]; CHIRAL_WIDTH];
+    for (row, values) in matrix.iter().enumerate() {
+        for (column, value) in values.iter().enumerate() {
+            transposed[column][row] = *value;
+        }
+    }
+    transposed
+}
+
+fn real_from_signed(matrix: [[i8; CHIRAL_WIDTH]; CHIRAL_WIDTH]) -> RealMatrix {
+    let mut real = [[0.0; CHIRAL_WIDTH]; CHIRAL_WIDTH];
+    for (row, values) in matrix.iter().enumerate() {
+        for (column, value) in values.iter().enumerate() {
+            real[row][column] = f64::from(*value);
+        }
+    }
+    real
+}
+
+/// Max-abs distance `|| left - sign * right ||_inf` over entries.
+fn real_distance(left: &RealMatrix, right: &RealMatrix, sign: f64) -> f64 {
+    let mut distance: f64 = 0.0;
+    for row in 0..CHIRAL_WIDTH {
+        for column in 0..CHIRAL_WIDTH {
+            distance = distance.max((left[row][column] - sign * right[row][column]).abs());
+        }
+    }
+    distance
+}
+
+/// Orthogonal transform of a probe: the Givens product in lexicographic order.
+pub fn learned_basis_transform(probe: &LearnedBasisProbe) -> Result<RealMatrix, EvalError> {
+    if probe.angles.iter().any(|angle| !angle.is_finite()) {
+        return Err(learned_basis_invalid("non_finite_parameter"));
+    }
+    let mut transform = real_identity();
+    for (plane, (i, j)) in learned_basis_planes().iter().enumerate() {
+        let angle = probe.angles[plane];
+        if angle == 0.0 {
+            continue;
+        }
+        let mut givens = real_identity();
+        let (sin, cos) = angle.sin_cos();
+        givens[*i][*i] = cos;
+        givens[*j][*j] = cos;
+        givens[*i][*j] = -sin;
+        givens[*j][*i] = sin;
+        transform = real_matmul(&transform, &givens);
+    }
+    Ok(transform)
+}
+
+/// Validate a candidate basis transform: finite, orthogonal within the
+/// declared tolerance, and the effective `M' = O^T M O`, `J' = O^T J O`
+/// satisfy `M'^2 = I`, `J'^T = -J'`, `J'^2 = -I`, `M' J' M' = -J'`.
+/// Non-orthogonal (e.g. scaling or shearing) transforms are rejected.
+pub fn validate_learned_basis_transform(transform: &RealMatrix) -> Result<(), EvalError> {
+    if transform.iter().flatten().any(|value| !value.is_finite()) {
+        return Err(learned_basis_invalid("non_finite_parameter"));
+    }
+    let identity = real_identity();
+    let transposed = real_transpose(transform);
+    if real_distance(&real_matmul(&transposed, transform), &identity, 1.0) > LEARNED_BASIS_TOLERANCE
+    {
+        return Err(learned_basis_invalid("orthogonality_failure"));
+    }
+    let mirror = real_matmul(
+        &real_matmul(&transposed, &real_from_signed(mirror_matrix())),
+        transform,
+    );
+    let complex = real_matmul(
+        &real_matmul(&transposed, &real_from_signed(complex_structure_matrix())),
+        transform,
+    );
+    if real_distance(&real_matmul(&mirror, &mirror), &identity, 1.0) > LEARNED_BASIS_TOLERANCE
+        || real_distance(&real_transpose(&complex), &complex, -1.0) > LEARNED_BASIS_TOLERANCE
+        || real_distance(&real_matmul(&complex, &complex), &identity, -1.0)
+            > LEARNED_BASIS_TOLERANCE
+        || real_distance(
+            &real_matmul(&real_matmul(&mirror, &complex), &mirror),
+            &complex,
+            -1.0,
+        ) > LEARNED_BASIS_TOLERANCE
+    {
+        return Err(learned_basis_invalid("basis_algebra_failure"));
+    }
+    Ok(())
+}
+
+/// True when the transform commutes with both `M` and `J` within tolerance
+/// (the gauge subgroup `diag(R, R)`, `R` in `O(3)`).
+pub fn learned_basis_commutes_with_structure(transform: &RealMatrix) -> bool {
+    let transposed = real_transpose(transform);
+    let mirror = real_from_signed(mirror_matrix());
+    let complex = real_from_signed(complex_structure_matrix());
+    real_distance(
+        &real_matmul(&real_matmul(&transposed, &mirror), transform),
+        &mirror,
+        1.0,
+    ) <= LEARNED_BASIS_TOLERANCE
+        && real_distance(
+            &real_matmul(&real_matmul(&transposed, &complex), transform),
+            &complex,
+            1.0,
+        ) <= LEARNED_BASIS_TOLERANCE
+}
+
+/// Validate one probe against the declared set and its transform.
+pub fn validate_learned_basis_probe(probe: &LearnedBasisProbe) -> Result<(), EvalError> {
+    if probe.index >= LEARNED_BASIS_PROBE_COUNT {
+        return Err(learned_basis_invalid("probe_order_drift"));
+    }
+    let transform = learned_basis_transform(probe)?;
+    if learned_basis_probes()[probe.index] != *probe {
+        return Err(learned_basis_invalid("probe_order_drift"));
+    }
+    validate_learned_basis_transform(&transform)?;
+    let commutes = learned_basis_commutes_with_structure(&transform);
+    match probe.role {
+        LearnedBasisProbeRole::Identity | LearnedBasisProbeRole::Gauge if !commutes => {
+            Err(learned_basis_invalid("gauge_structure_drift"))
+        }
+        LearnedBasisProbeRole::SectorMixing | LearnedBasisProbeRole::Generic if commutes => {
+            Err(learned_basis_invalid("probe_role_drift"))
+        }
+        _ => Ok(()),
+    }
+}
+
+fn apply_learned_basis(transform: &RealMatrix, carrier: Chiral6) -> Result<Chiral6, EvalError> {
+    let source = carrier.as_array();
+    let mut rotated = [0.0; CHIRAL_WIDTH];
+    for (row, value) in rotated.iter_mut().enumerate() {
+        let mut sum = transform[row][0] * source[0];
+        for column in 1..CHIRAL_WIDTH {
+            sum += transform[row][column] * source[column];
+        }
+        *value = sum;
+    }
+    Chiral6::from_array(rotated).map_err(EvalError::ChiralNumerical)
+}
+
+/// Score an inference view with the C6 reference weights in the basis of one
+/// prototype probe: `chiral_score(O q, O k)`, i.e. using `O^T M O`, `O^T J O`.
+pub fn score_c6_in_learned_basis_from_view(
+    view: &InferenceView,
+    probe: &LearnedBasisProbe,
+) -> Result<f64, EvalError> {
+    validate_learned_basis_probe(probe)?;
+    let transform = learned_basis_transform(probe)?;
+    let query = Chiral6::from_array(view.query.as_array()).map_err(EvalError::ChiralNumerical)?;
+    let key = Chiral6::from_array(view.key.as_array()).map_err(EvalError::ChiralNumerical)?;
+    if probe.role == LearnedBasisProbeRole::Identity {
+        // The identity transform is exact; score the untouched carrier.
+        return chiral_score(query, key, C6_REFERENCE_WEIGHTS).map_err(EvalError::ChiralNumerical);
+    }
+    chiral_score(
+        apply_learned_basis(&transform, query)?,
+        apply_learned_basis(&transform, key)?,
+        C6_REFERENCE_WEIGHTS,
+    )
+    .map_err(EvalError::ChiralNumerical)
+}
+
+/// One case scored under one prototype probe.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LearnedBasisCase {
+    pub family: TaskFamily,
+    pub case_id: u64,
+    pub probe_index: usize,
+    pub score: f64,
+    /// Stage-C C6 reference score of the same case (canonical basis).
+    pub reference_score: f64,
+    pub correct: bool,
+}
+
+/// Per-probe, per-family correct counts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LearnedBasisFamilySummary {
+    pub probe_index: usize,
+    pub family: TaskFamily,
+    pub n_cases: u64,
+    pub correct: u64,
+}
+
+/// Immutable learned-basis prototype report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LearnedBasisPrototypeReport {
+    pub prototype_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    pub probes: Vec<LearnedBasisProbe>,
+    pub weights: ChiralScoreWeights,
+    /// Scored capacity: the non-trained C6 reference under every probe.
+    pub capacity: TrainableCapacity,
+    /// Declared basis parameters of the prototype (`C(6,2) = 15` angles);
+    /// none is trained here.
+    pub basis_parameter_count: usize,
+    /// Case-major, probe-minor order.
+    pub cases: Vec<LearnedBasisCase>,
+    pub summaries: Vec<LearnedBasisFamilySummary>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false: no angle is fitted.
+    pub training_executed: bool,
+    /// Must remain false.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+fn learned_basis_case<T, S>(
+    case: &LabeledCase<T>,
+    split: DataSplit,
+    probes: &[LearnedBasisProbe; LEARNED_BASIS_PROBE_COUNT],
+    oracle_sign: S,
+    cases: &mut Vec<LearnedBasisCase>,
+) -> Result<(), EvalError>
+where
+    S: Fn(&T) -> Result<i8, EvalError>,
+{
+    let view = case.inference_view();
+    if view.split != split {
+        return Err(EvalError::SplitMismatch {
+            expected: split,
+            actual: view.split,
+        });
+    }
+    let sign = oracle_sign(case.protected_label().reveal_for_evaluation())?;
+    if sign != 1 && sign != -1 {
+        return Err(learned_basis_invalid("oracle_sign"));
+    }
+    let sign = f64::from(sign);
+    let reference = run_inference_callback(case, score_c6_from_view)?;
+    for probe in probes {
+        let score = run_inference_callback(case, |view: &InferenceView| {
+            score_c6_in_learned_basis_from_view(view, probe)
+        })?;
+        check_learned_basis_score(probe, score, reference)?;
+        cases.push(LearnedBasisCase {
+            family: view.family,
+            case_id: view.case_id,
+            probe_index: probe.index,
+            score,
+            reference_score: reference,
+            correct: score * sign > 0.0,
+        });
+    }
+    Ok(())
+}
+
+fn check_learned_basis_score(
+    probe: &LearnedBasisProbe,
+    score: f64,
+    reference: f64,
+) -> Result<(), EvalError> {
+    match probe.role {
+        LearnedBasisProbeRole::Identity if score.to_bits() != reference.to_bits() => {
+            Err(learned_basis_invalid("canonical_reference_drift"))
+        }
+        LearnedBasisProbeRole::Gauge
+            if (score - reference).abs() > LEARNED_BASIS_TOLERANCE * reference.abs().max(1.0) =>
+        {
+            Err(learned_basis_invalid("gauge_invariance_drift"))
+        }
+        _ => Ok(()),
+    }
+}
+
+fn summarize_learned_basis(cases: &[LearnedBasisCase]) -> Vec<LearnedBasisFamilySummary> {
+    let mut summaries =
+        Vec::with_capacity(LEARNED_BASIS_PROBE_COUNT * STAGE_C_PREFLIGHT_FAMILIES.len());
+    for probe_index in 0..LEARNED_BASIS_PROBE_COUNT {
+        for family in STAGE_C_PREFLIGHT_FAMILIES {
+            let members = cases
+                .iter()
+                .filter(|case| case.probe_index == probe_index && case.family == *family);
+            summaries.push(LearnedBasisFamilySummary {
+                probe_index,
+                family: *family,
+                n_cases: members.clone().count() as u64,
+                correct: members.filter(|case| case.correct).count() as u64,
+            });
+        }
+    }
+    summaries
+}
+
+fn collect_learned_basis_cases(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<LearnedBasisCase>, EvalError> {
+    validate_non_final_split(split)?;
+    budget.cases_per_arm()?;
+    let probes = learned_basis_probes();
+    for probe in &probes {
+        validate_learned_basis_probe(probe)?;
+    }
+    let mut cases = Vec::new();
+    let last_pair_id = budget.first_pair_id + budget.pairs_per_family;
+    for pair_id in budget.first_pair_id..last_pair_id {
+        let discriminative = reflection_discriminative_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [discriminative.right, discriminative.left] {
+            learned_basis_case(
+                &seal_reflection_discriminative(&member),
+                split,
+                &probes,
+                handedness_sign,
+                &mut cases,
+            )?;
+        }
+        let nuisance = reflection_nuisance_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [nuisance.canonical, nuisance.reflected] {
+            learned_basis_case(
+                &seal_reflection_nuisance(&member),
+                split,
+                &probes,
+                reflection_invariant_sign,
+                &mut cases,
+            )?;
+        }
+        let direction = direction_reversal_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [direction.forward, direction.reverse] {
+            learned_basis_case(
+                &seal_direction_reversal(&member),
+                split,
+                &probes,
+                direction_sign,
+                &mut cases,
+            )?;
+        }
+        let base_case_id = pair_id
+            .checked_mul(STAGE_C_PREFLIGHT_MEMBERS_PER_PAIR)
+            .ok_or_else(preflight_generation_failed)?;
+        for case_id in [base_case_id, base_case_id + 1] {
+            let control = non_chiral_control_case_in_split(case_id, split)
+                .map_err(|_| preflight_generation_failed())?;
+            learned_basis_case(
+                &seal_non_chiral_control(&control),
+                split,
+                &probes,
+                non_chiral_sign,
+                &mut cases,
+            )?;
+        }
+    }
+    Ok(cases)
+}
+
+/// Run the structure-preserving learned basis prototype on the bounded
+/// Stage-C case stream. Every case is scored under every declared probe;
+/// any identity failure aborts fail-closed and nothing is dropped.
+pub fn run_learned_basis_prototype(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<LearnedBasisPrototypeReport, EvalError> {
+    let cases = collect_learned_basis_cases(split, budget)?;
+    let summaries = summarize_learned_basis(&cases);
+    let report = LearnedBasisPrototypeReport {
+        prototype_contract: LEARNED_BASIS_PROTOTYPE_CONTRACT,
+        split,
+        budget,
+        probes: learned_basis_probes().to_vec(),
+        weights: C6_REFERENCE_WEIGHTS,
+        capacity: TrainableCapacity::reference_c6(),
+        basis_parameter_count: LEARNED_BASIS_PARAMETER_COUNT,
+        cases,
+        summaries,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_learned_basis_prototype_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_learned_basis_prototype_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<LearnedBasisPrototypeReport, EvalError> {
+    run_learned_basis_prototype(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a learned-basis prototype report: contract pin, the declared probe
+/// set in order with orthogonality and algebra, weights/capacity/parameter
+/// count, case-major/probe-minor coverage, identity and gauge identities,
+/// recomputed summaries, flags, and regenerated per-case evidence.
+pub fn validate_learned_basis_prototype_report(
+    report: &LearnedBasisPrototypeReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.prototype_contract != LEARNED_BASIS_PROTOTYPE_CONTRACT {
+        return Err(learned_basis_invalid("contract_drift"));
+    }
+    if report.probes.len() != LEARNED_BASIS_PROBE_COUNT {
+        return Err(learned_basis_invalid("probe_set_incomplete"));
+    }
+    for (position, probe) in report.probes.iter().enumerate() {
+        if probe.index != position {
+            return Err(learned_basis_invalid("probe_order_drift"));
+        }
+        validate_learned_basis_probe(probe)?;
+    }
+    if report.weights != C6_REFERENCE_WEIGHTS {
+        return Err(learned_basis_invalid("weights_drift"));
+    }
+    if report.capacity != TrainableCapacity::reference_c6() {
+        return Err(learned_basis_invalid("capacity_mismatch"));
+    }
+    if report.basis_parameter_count != LEARNED_BASIS_PARAMETER_COUNT {
+        return Err(learned_basis_invalid("parameter_count_drift"));
+    }
+    let per_probe = report.budget.cases_per_arm()?;
+    if report.cases.len() as u64 != per_probe * LEARNED_BASIS_PROBE_COUNT as u64 {
+        return Err(learned_basis_invalid("case_count"));
+    }
+    for group in report.cases.chunks(LEARNED_BASIS_PROBE_COUNT) {
+        for (probe_index, case) in group.iter().enumerate() {
+            if case.probe_index != probe_index
+                || case.family != group[0].family
+                || case.case_id != group[0].case_id
+                || case.reference_score.to_bits() != group[0].reference_score.to_bits()
+            {
+                return Err(learned_basis_invalid("case_order"));
+            }
+            check_learned_basis_score(
+                &report.probes[probe_index],
+                case.score,
+                case.reference_score,
+            )?;
+        }
+    }
+    if report.summaries != summarize_learned_basis(&report.cases) {
+        return Err(learned_basis_invalid("summary_drift"));
+    }
+    if report.protected_or_final_access {
+        return Err(learned_basis_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(learned_basis_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(learned_basis_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(learned_basis_invalid("experimental_non_final"));
+    }
+    if collect_learned_basis_cases(report.split, report.budget)? != report.cases {
+        return Err(learned_basis_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -4784,6 +5384,9 @@ pub enum EvalError {
     /// Fixed-M sensitivity rejected a non-algebraic or reordered basis family,
     /// drifted weights/capacity, evidence, budget or flags.
     FixedMSensitivityInvalid { reason: &'static str },
+    /// Learned-basis prototype rejected a non-orthogonal or non-algebraic
+    /// transform, a gauge or identity drift, or drifted evidence/flags.
+    LearnedBasisPrototypeInvalid { reason: &'static str },
 }
 
 impl fmt::Display for EvalError {
@@ -4878,6 +5481,9 @@ impl fmt::Display for EvalError {
             }
             Self::FixedMSensitivityInvalid { reason } => {
                 write!(formatter, "fixed-M sensitivity invalid: {reason}")
+            }
+            Self::LearnedBasisPrototypeInvalid { reason } => {
+                write!(formatter, "learned-basis prototype invalid: {reason}")
             }
         }
     }
