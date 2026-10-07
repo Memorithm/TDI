@@ -121,6 +121,8 @@ fn tampered_reports_fail_closed() {
     );
     tamper(&|r| r.cells[0].masked_entries += 1, "cost_accounting_drift");
     tamper(&|r| r.cells[0].max_row_sum_error = 1.0, "row_sum_drift");
+    tamper(&|r| r.cells[0].length = 0, "length_not_registered");
+    tamper(&|r| r.cells[0].length = 3, "length_not_registered");
     tamper(
         &|r| r.cells[0].self_retrieval_rows ^= 1,
         "case_evidence_drift",

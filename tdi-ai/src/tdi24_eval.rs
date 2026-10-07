@@ -6116,23 +6116,44 @@ pub fn sequence_window_rows(
     policy: MaskPolicy,
     arm: SequenceArm,
 ) -> Result<Vec<Vec<f64>>, EvalError> {
+    normalize_sequence_logits(&sequence_window_logits(queries, keys, arm)?, policy)
+}
+
+/// Logit matrix of one window: entry `(i, j)` is `score(q_i, k_j)`. Exactly
+/// `L^2` score evaluations; nothing else in the slice calls the scorer.
+pub fn sequence_window_logits(
+    queries: &[Chiral6],
+    keys: &[Chiral6],
+    arm: SequenceArm,
+) -> Result<Vec<Vec<f64>>, EvalError> {
     if queries.len() != keys.len() || !SEQUENCE_LENGTHS.contains(&queries.len()) {
         return Err(sequence_invalid("length_not_registered"));
     }
-    let mut rows = Vec::with_capacity(queries.len());
-    for (row, query) in queries.iter().enumerate() {
-        let mut logits = Vec::with_capacity(keys.len());
+    let mut logits = Vec::with_capacity(queries.len());
+    for query in queries {
+        let mut row = Vec::with_capacity(keys.len());
         for key in keys {
-            logits.push(
+            row.push(
                 chiral_score(*query, *key, arm.weights()).map_err(EvalError::ChiralNumerical)?,
             );
         }
-        rows.push(
-            normalize_with_policy(&logits, policy, row)
-                .map_err(|_| sequence_invalid("normalizer_failure"))?,
-        );
+        logits.push(row);
     }
-    Ok(rows)
+    Ok(logits)
+}
+
+fn normalize_sequence_logits(
+    logits: &[Vec<f64>],
+    policy: MaskPolicy,
+) -> Result<Vec<Vec<f64>>, EvalError> {
+    logits
+        .iter()
+        .enumerate()
+        .map(|(row, values)| {
+            normalize_with_policy(values, policy, row)
+                .map_err(|_| sequence_invalid("normalizer_failure"))
+        })
+        .collect()
 }
 
 fn sequence_cell(
@@ -6160,18 +6181,15 @@ fn sequence_cell(
     for window in members.chunks_exact(length) {
         let queries: Vec<Chiral6> = window.iter().map(|item| item.1).collect();
         let keys: Vec<Chiral6> = window.iter().map(|item| item.2).collect();
+        let logits = sequence_window_logits(&queries, &keys, arm)?;
         for (index, item) in window.iter().enumerate() {
-            // The diagonal logit is the single-case Stage-C C6 score.
-            if arm == SequenceArm::C6
-                && chiral_score(queries[index], keys[index], arm.weights())
-                    .map_err(EvalError::ChiralNumerical)?
-                    .to_bits()
-                    != item.3.to_bits()
-            {
+            // The diagonal logit (already counted among the L^2 evaluations)
+            // is the single-case Stage-C C6 score.
+            if arm == SequenceArm::C6 && logits[index][index].to_bits() != item.3.to_bits() {
                 return Err(sequence_invalid("diagonal_reference_drift"));
             }
         }
-        let rows = sequence_window_rows(&queries, &keys, policy, arm)?;
+        let rows = normalize_sequence_logits(&logits, policy)?;
         cell.score_evaluations += (length * length) as u64;
         cell.normalizer_calls += length as u64;
         for (row_index, row) in rows.iter().enumerate() {
@@ -6282,6 +6300,10 @@ pub fn validate_sequence_length_scaling_report(
     }
     let per_family = report.budget.cases_per_arm()? / STAGE_C_PREFLIGHT_FAMILIES.len() as u64;
     for cell in &report.cells {
+        // Reject unregistered lengths before any arithmetic on them.
+        if !SEQUENCE_LENGTHS.contains(&cell.length) {
+            return Err(sequence_invalid("length_not_registered"));
+        }
         let length = cell.length as u64;
         let masked_per_window = match cell.policy {
             MaskPolicy::Full => 0,
