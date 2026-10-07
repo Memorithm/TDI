@@ -37,6 +37,12 @@
 //! collapsed C6 score is checked bit-for-bit against the matched V6 score.
 //! Because the reference already has `beta=0`, the collapse shares its weights
 //! with the slice-31 `gamma=0` ablation; that coincidence is recorded explicitly.
+//! Slice 34 adds the parity-shuffle control: the carrier slots of query and key
+//! are relabelled by one fixed permutation drawn from the reused Slice-18
+//! registered seed, rejecting draws that keep or swap the parity sectors as
+//! blocks. Weights and capacity are unchanged and the direct-product multiset is
+//! preserved bit-for-bit, while `P^T M P != ±M` and `P^T J P != ±J` show the
+//! `H+`/`H-` structure is destroyed reproducibly.
 //! No training,
 //! confirmatory execution, protected/final evaluation, or scientific claim is
 //! authorised here.
@@ -135,6 +141,15 @@ pub const DIRECT_ONLY_COLLAPSE_CONTRACT: &str = "tdi24-direct-only-collapse-v1";
 /// Exactly zero: the collapsed C6 path and V6 share the identical checked dot
 /// accumulation, so the match is required bit-for-bit. Not a freeze pin.
 pub const DIRECT_ONLY_V6_MATCH_TOLERANCE: f64 = 0.0;
+
+/// Phase-D parity-shuffle control contract pin (slice 34).
+pub const PARITY_SHUFFLE_CONTROL_CONTRACT: &str = "tdi24-parity-shuffle-control-v1";
+
+/// Upper bound on deterministic rejection draws for the parity shuffle.
+///
+/// A software termination bound only (about 90% of uniform draws already mix
+/// the sectors); not a freeze pin and not a tuned parameter.
+pub const MAX_PARITY_SHUFFLE_DRAWS: u32 = 64;
 
 /// Matched C6 reference score weights (alpha, beta, gamma) used since slice 22.
 pub const C6_REFERENCE_WEIGHTS: ChiralScoreWeights = ChiralScoreWeights {
@@ -1844,7 +1859,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::StageCPreflightInvalid { .. }
         | EvalError::GammaZeroAblationInvalid { .. }
         | EvalError::BetaZeroAblationInvalid { .. }
-        | EvalError::DirectOnlyCollapseInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::DirectOnlyCollapseInvalid { .. }
+        | EvalError::ParityShuffleControlInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -1883,6 +1899,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::GammaZeroAblationInvalid { .. } => "gamma_zero_ablation_invalid",
         EvalError::BetaZeroAblationInvalid { .. } => "beta_zero_ablation_invalid",
         EvalError::DirectOnlyCollapseInvalid { .. } => "direct_only_collapse_invalid",
+        EvalError::ParityShuffleControlInvalid { .. } => "parity_shuffle_control_invalid",
     }
 }
 
@@ -3657,6 +3674,543 @@ pub fn validate_direct_only_collapse_report(
     Ok(())
 }
 
+/// One case scored by the C6 reference and by the same reference on the
+/// parity-shuffled carrier (slice 34).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ParityShuffleCase {
+    pub family: TaskFamily,
+    pub case_id: u64,
+    pub reference_score: f64,
+    pub shuffled_score: f64,
+    /// Primitive `s/m/chi` observables of the unshuffled pair.
+    pub reference_channels: ChiralObservables,
+    /// Primitive `s/m/chi` observables of the parity-shuffled pair.
+    pub shuffled_channels: ChiralObservables,
+    /// True when the six coordinate products `q_i k_i` are the same multiset
+    /// (bit-for-bit) before and after the shuffle: the shuffle only relabels
+    /// carrier slots, it adds or removes no information.
+    pub direct_products_preserved: bool,
+    pub reference_correct: bool,
+    pub shuffled_correct: bool,
+}
+
+/// Per-family correct counts for the reference and the parity-shuffle control.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ParityShuffleFamilySummary {
+    pub family: TaskFamily,
+    pub n_cases: u64,
+    pub reference_correct: u64,
+    pub shuffled_correct: u64,
+    /// Cases whose parity-odd observable changed under the shuffle.
+    pub parity_odd_changed: u64,
+}
+
+/// Deterministic carrier-slot permutation used by the parity-shuffle control.
+///
+/// `permutation[i]` is the source slot of shuffled slot `i`:
+/// `shuffled[i] = x[permutation[i]]`. The permutation is drawn from an
+/// already-registered seed (no new seed material) and must mix the parity
+/// sectors, so the fixed `M`/`J` act on relabelled coordinates that no longer
+/// carry the `H+`/`H-` split.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ParityShuffle {
+    pub permutation: [usize; CHIRAL_WIDTH],
+    /// Registered mixed seed the permutation was drawn from.
+    pub source_seed: u64,
+    /// One-based index of the accepted draw (bounded by
+    /// [`MAX_PARITY_SHUFFLE_DRAWS`]).
+    pub accepted_draw: u32,
+}
+
+impl ParityShuffle {
+    /// Apply the slot relabelling to one carrier.
+    #[must_use]
+    pub fn apply(&self, carrier: Chiral6) -> Chiral6 {
+        let source = carrier.as_array();
+        let mut shuffled = [0.0; CHIRAL_WIDTH];
+        for (slot, value) in shuffled.iter_mut().enumerate() {
+            *value = source[self.permutation[slot]];
+        }
+        Chiral6::from_array(shuffled).expect("permutation of a finite carrier is finite")
+    }
+
+    /// Number of parity-even source slots moved into the parity-odd sector.
+    #[must_use]
+    pub fn cross_sector_moves(&self) -> usize {
+        self.permutation[CHIRAL_WIDTH / 2..]
+            .iter()
+            .filter(|source| **source < CHIRAL_WIDTH / 2)
+            .count()
+    }
+}
+
+/// Immutable parity-shuffle control report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ParityShuffleControlReport {
+    pub control_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    /// Reused Slice-18 registered seed `(split domain, ReflectionDiscriminative,
+    /// first_pair_id)`; no new seed material.
+    pub registered_seed: RegisteredSeed,
+    pub shuffle: ParityShuffle,
+    /// Identical weights on both sides: the control changes no coefficient.
+    pub reference_weights: ChiralScoreWeights,
+    pub shuffled_weights: ChiralScoreWeights,
+    /// Identical capacity on both sides: the shuffle is a fixed relabelling
+    /// with zero trainable parameters.
+    pub reference_capacity: TrainableCapacity,
+    pub shuffled_capacity: TrainableCapacity,
+    pub cases: Vec<ParityShuffleCase>,
+    pub families: Vec<ParityShuffleFamilySummary>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false: both sides are the non-trained reference.
+    pub training_executed: bool,
+    /// Must remain false: attribution is decided only by the Stage-D audit.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn parity_shuffle_invalid(reason: &'static str) -> EvalError {
+    EvalError::ParityShuffleControlInvalid { reason }
+}
+
+fn parity_shuffle_splitmix(state: &mut u64) -> u64 {
+    *state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    let mut mixed = *state;
+    mixed = (mixed ^ (mixed >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    mixed = (mixed ^ (mixed >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    mixed ^ (mixed >> 31)
+}
+
+const PARITY_EVEN_SIGNS: [i8; CHIRAL_WIDTH] = [1, 1, 1, -1, -1, -1];
+
+/// Mirror involution `M` as an exact signed 6x6 matrix.
+fn mirror_matrix() -> [[i8; CHIRAL_WIDTH]; CHIRAL_WIDTH] {
+    let mut matrix = [[0; CHIRAL_WIDTH]; CHIRAL_WIDTH];
+    for (index, row) in matrix.iter_mut().enumerate() {
+        row[index] = PARITY_EVEN_SIGNS[index];
+    }
+    matrix
+}
+
+/// Complex structure `J(x+,x-)=(x-,-x+)` as an exact signed 6x6 matrix.
+fn complex_structure_matrix() -> [[i8; CHIRAL_WIDTH]; CHIRAL_WIDTH] {
+    let half = CHIRAL_WIDTH / 2;
+    let mut matrix = [[0; CHIRAL_WIDTH]; CHIRAL_WIDTH];
+    for index in 0..half {
+        matrix[index][index + half] = 1;
+        matrix[index + half][index] = -1;
+    }
+    matrix
+}
+
+/// Effective operator `P^T A P` seen by the original coordinates when `A`
+/// acts on the shuffled carrier `P x`.
+fn conjugate_by_shuffle(
+    matrix: [[i8; CHIRAL_WIDTH]; CHIRAL_WIDTH],
+    permutation: [usize; CHIRAL_WIDTH],
+) -> [[i8; CHIRAL_WIDTH]; CHIRAL_WIDTH] {
+    let mut inverse = [0usize; CHIRAL_WIDTH];
+    for (slot, source) in permutation.iter().enumerate() {
+        inverse[*source] = slot;
+    }
+    let mut conjugated = [[0; CHIRAL_WIDTH]; CHIRAL_WIDTH];
+    for (row, out) in conjugated.iter_mut().enumerate() {
+        for (column, value) in out.iter_mut().enumerate() {
+            *value = matrix[inverse[row]][inverse[column]];
+        }
+    }
+    conjugated
+}
+
+fn negate_matrix(matrix: [[i8; CHIRAL_WIDTH]; CHIRAL_WIDTH]) -> [[i8; CHIRAL_WIDTH]; CHIRAL_WIDTH] {
+    let mut negated = matrix;
+    for row in &mut negated {
+        for value in row.iter_mut() {
+            *value = -*value;
+        }
+    }
+    negated
+}
+
+/// True when the slot relabelling keeps or swaps the two parity sectors as
+/// blocks (it then preserves the `H+`/`H-` structure up to sign).
+fn shuffle_preserves_sector_blocks(permutation: [usize; CHIRAL_WIDTH]) -> bool {
+    let half = CHIRAL_WIDTH / 2;
+    let cross = permutation[half..]
+        .iter()
+        .filter(|source| **source < half)
+        .count();
+    cross == 0 || cross == half
+}
+
+/// Draw the parity-shuffle permutation from a registered mixed seed.
+///
+/// Fisher–Yates over a SplitMix64 stream seeded by `source_seed`; draws that
+/// keep or swap the parity sectors as blocks are rejected deterministically
+/// and the next draw is taken, at most [`MAX_PARITY_SHUFFLE_DRAWS`] times.
+/// Same seed, same permutation.
+pub fn parity_shuffle_from_seed(source_seed: u64) -> Result<ParityShuffle, EvalError> {
+    let mut state = source_seed;
+    for draw in 1..=MAX_PARITY_SHUFFLE_DRAWS {
+        let mut permutation = [0, 1, 2, 3, 4, 5];
+        for index in (1..CHIRAL_WIDTH).rev() {
+            let bound = index as u64 + 1;
+            let pick = (parity_shuffle_splitmix(&mut state) % bound) as usize;
+            permutation.swap(index, pick);
+        }
+        if !shuffle_preserves_sector_blocks(permutation) {
+            let shuffle = ParityShuffle {
+                permutation,
+                source_seed,
+                accepted_draw: draw,
+            };
+            validate_parity_shuffle(&shuffle)?;
+            return Ok(shuffle);
+        }
+    }
+    Err(parity_shuffle_invalid("draw_budget_exhausted"))
+}
+
+/// Validate a parity shuffle: bijection, sector mixing, and exact proof that
+/// neither the mirror involution nor the complex structure survives the
+/// relabelling (`P^T M P != ±M`, `P^T J P != ±J`).
+pub fn validate_parity_shuffle(shuffle: &ParityShuffle) -> Result<(), EvalError> {
+    let mut seen = [false; CHIRAL_WIDTH];
+    for source in shuffle.permutation {
+        if source >= CHIRAL_WIDTH || seen[source] {
+            return Err(parity_shuffle_invalid("not_a_permutation"));
+        }
+        seen[source] = true;
+    }
+    if shuffle.accepted_draw == 0 || shuffle.accepted_draw > MAX_PARITY_SHUFFLE_DRAWS {
+        return Err(parity_shuffle_invalid("draw_budget_exhausted"));
+    }
+    if shuffle_preserves_sector_blocks(shuffle.permutation) {
+        return Err(parity_shuffle_invalid("sector_blocks_preserved"));
+    }
+    let mirror = mirror_matrix();
+    let shuffled_mirror = conjugate_by_shuffle(mirror, shuffle.permutation);
+    if shuffled_mirror == mirror || shuffled_mirror == negate_matrix(mirror) {
+        return Err(parity_shuffle_invalid("mirror_structure_preserved"));
+    }
+    let complex = complex_structure_matrix();
+    let shuffled_complex = conjugate_by_shuffle(complex, shuffle.permutation);
+    if shuffled_complex == complex || shuffled_complex == negate_matrix(complex) {
+        return Err(parity_shuffle_invalid("complex_structure_preserved"));
+    }
+    Ok(())
+}
+
+fn sorted_product_bits(query: Chiral6, key: Chiral6) -> [u64; CHIRAL_WIDTH] {
+    let q = query.as_array();
+    let k = key.as_array();
+    let mut bits = [0u64; CHIRAL_WIDTH];
+    for (index, value) in bits.iter_mut().enumerate() {
+        *value = (q[index] * k[index]).to_bits();
+    }
+    bits.sort_unstable();
+    bits
+}
+
+fn control_parity_shuffle_case<T, S>(
+    case: &LabeledCase<T>,
+    split: DataSplit,
+    shuffle: &ParityShuffle,
+    oracle_sign: S,
+    cases: &mut Vec<ParityShuffleCase>,
+) -> Result<(), EvalError>
+where
+    S: Fn(&T) -> Result<i8, EvalError>,
+{
+    let view = case.inference_view();
+    if view.split != split {
+        return Err(EvalError::SplitMismatch {
+            expected: split,
+            actual: view.split,
+        });
+    }
+    let reference_score = run_inference_callback(case, score_c6_from_view)?;
+    let shuffled_score = run_inference_callback(case, |view: &InferenceView| {
+        score_c6_parity_shuffled_from_view(view, shuffle)
+    })?;
+    let query = Chiral6::from_array(view.query.as_array()).map_err(EvalError::ChiralNumerical)?;
+    let key = Chiral6::from_array(view.key.as_array()).map_err(EvalError::ChiralNumerical)?;
+    let shuffled_query = shuffle.apply(query);
+    let shuffled_key = shuffle.apply(key);
+    let reference_channels = observables(query, key).map_err(EvalError::ChiralNumerical)?;
+    let shuffled_channels =
+        observables(shuffled_query, shuffled_key).map_err(EvalError::ChiralNumerical)?;
+    let direct_products_preserved =
+        sorted_product_bits(query, key) == sorted_product_bits(shuffled_query, shuffled_key);
+    if !direct_products_preserved {
+        return Err(parity_shuffle_invalid("direct_product_multiset_drift"));
+    }
+    let sign = oracle_sign(case.protected_label().reveal_for_evaluation())?;
+    if sign != 1 && sign != -1 {
+        return Err(parity_shuffle_invalid("oracle_sign"));
+    }
+    let sign = f64::from(sign);
+    cases.push(ParityShuffleCase {
+        family: view.family,
+        case_id: view.case_id,
+        reference_score,
+        shuffled_score,
+        reference_channels,
+        shuffled_channels,
+        direct_products_preserved,
+        reference_correct: reference_score * sign > 0.0,
+        shuffled_correct: shuffled_score * sign > 0.0,
+    });
+    Ok(())
+}
+
+/// Score an inference view with the C6 reference on the parity-shuffled carrier.
+pub fn score_c6_parity_shuffled_from_view(
+    view: &InferenceView,
+    shuffle: &ParityShuffle,
+) -> Result<f64, EvalError> {
+    validate_parity_shuffle(shuffle)?;
+    let query = Chiral6::from_array(view.query.as_array()).map_err(EvalError::ChiralNumerical)?;
+    let key = Chiral6::from_array(view.key.as_array()).map_err(EvalError::ChiralNumerical)?;
+    chiral_score(
+        shuffle.apply(query),
+        shuffle.apply(key),
+        C6_REFERENCE_WEIGHTS,
+    )
+    .map_err(EvalError::ChiralNumerical)
+}
+
+fn summarize_parity_shuffle_families(
+    cases: &[ParityShuffleCase],
+) -> Vec<ParityShuffleFamilySummary> {
+    STAGE_C_PREFLIGHT_FAMILIES
+        .iter()
+        .map(|family| {
+            let members = cases.iter().filter(|case| case.family == *family);
+            ParityShuffleFamilySummary {
+                family: *family,
+                n_cases: members.clone().count() as u64,
+                reference_correct: members.clone().filter(|c| c.reference_correct).count() as u64,
+                shuffled_correct: members.clone().filter(|c| c.shuffled_correct).count() as u64,
+                parity_odd_changed: members
+                    .filter(|c| {
+                        c.reference_channels.chiral.to_bits()
+                            != c.shuffled_channels.chiral.to_bits()
+                    })
+                    .count() as u64,
+            }
+        })
+        .collect()
+}
+
+fn parity_shuffle_registered_seed(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> RegisteredSeed {
+    register_seed(
+        SeedDomain::from_split(split),
+        STAGE_C_PREFLIGHT_FAMILIES[0],
+        budget.first_pair_id,
+    )
+}
+
+/// Run the parity-shuffle control on the bounded Stage-C case stream.
+///
+/// Same generators, pair ids, split, weights and capacity as the Stage-C
+/// preflight; only the carrier slots are relabelled by a fixed, seed-derived
+/// permutation that mixes `H+` and `H-`. Any scoring or identity failure
+/// aborts fail-closed; nothing is silently dropped.
+pub fn run_parity_shuffle_control(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<ParityShuffleControlReport, EvalError> {
+    let report = collect_parity_shuffle_control(split, budget)?;
+    validate_parity_shuffle_control_report(&report)?;
+    Ok(report)
+}
+
+/// Generate the parity-shuffle control report without validating it.
+///
+/// Shared by [`run_parity_shuffle_control`] and by the validator, which
+/// regenerates every case from the report's split and budget instead of
+/// trusting stored per-case evidence.
+fn collect_parity_shuffle_control(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<ParityShuffleControlReport, EvalError> {
+    validate_non_final_split(split)?;
+    let cases_per_arm = budget.cases_per_arm()?;
+    let registered_seed = parity_shuffle_registered_seed(split, budget);
+    let shuffle = parity_shuffle_from_seed(registered_seed.mixed_seed)?;
+    let mut cases = Vec::new();
+    let last_pair_id = budget.first_pair_id + budget.pairs_per_family;
+    for pair_id in budget.first_pair_id..last_pair_id {
+        let discriminative = reflection_discriminative_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [discriminative.right, discriminative.left] {
+            control_parity_shuffle_case(
+                &seal_reflection_discriminative(&member),
+                split,
+                &shuffle,
+                handedness_sign,
+                &mut cases,
+            )?;
+        }
+        let nuisance = reflection_nuisance_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [nuisance.canonical, nuisance.reflected] {
+            control_parity_shuffle_case(
+                &seal_reflection_nuisance(&member),
+                split,
+                &shuffle,
+                reflection_invariant_sign,
+                &mut cases,
+            )?;
+        }
+        let direction = direction_reversal_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [direction.forward, direction.reverse] {
+            control_parity_shuffle_case(
+                &seal_direction_reversal(&member),
+                split,
+                &shuffle,
+                direction_sign,
+                &mut cases,
+            )?;
+        }
+        let base_case_id = pair_id
+            .checked_mul(STAGE_C_PREFLIGHT_MEMBERS_PER_PAIR)
+            .ok_or_else(preflight_generation_failed)?;
+        for case_id in [base_case_id, base_case_id + 1] {
+            let control = non_chiral_control_case_in_split(case_id, split)
+                .map_err(|_| preflight_generation_failed())?;
+            control_parity_shuffle_case(
+                &seal_non_chiral_control(&control),
+                split,
+                &shuffle,
+                non_chiral_sign,
+                &mut cases,
+            )?;
+        }
+    }
+    if cases.len() as u64 != cases_per_arm {
+        return Err(parity_shuffle_invalid("case_count"));
+    }
+    let families = summarize_parity_shuffle_families(&cases);
+    Ok(ParityShuffleControlReport {
+        control_contract: PARITY_SHUFFLE_CONTROL_CONTRACT,
+        split,
+        budget,
+        registered_seed,
+        shuffle,
+        reference_weights: C6_REFERENCE_WEIGHTS,
+        shuffled_weights: C6_REFERENCE_WEIGHTS,
+        reference_capacity: TrainableCapacity::reference_c6(),
+        shuffled_capacity: TrainableCapacity::reference_c6(),
+        cases,
+        families,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    })
+}
+
+/// Score implied by retained primitive channels, accumulated in exactly the
+/// order of the upstream `chiral_score` (so the comparison is bit-exact).
+fn weighted_channel_score(channels: ChiralObservables, weights: ChiralScoreWeights) -> f64 {
+    (weights.alpha * channels.direct + weights.beta * channels.mirrored)
+        + weights.gamma * channels.chiral
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_parity_shuffle_control_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<ParityShuffleControlReport, EvalError> {
+    run_parity_shuffle_control(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a parity-shuffle control report: pins, reproducible seed and
+/// permutation, structure-destroying shuffle, identical weights and capacity,
+/// bounded coverage, preserved direct-product multiset, recomputed family
+/// counts, and the no-access / no-training / no-claim flags.
+pub fn validate_parity_shuffle_control_report(
+    report: &ParityShuffleControlReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.control_contract != PARITY_SHUFFLE_CONTROL_CONTRACT {
+        return Err(parity_shuffle_invalid("contract_drift"));
+    }
+    if report.registered_seed != parity_shuffle_registered_seed(report.split, report.budget) {
+        return Err(parity_shuffle_invalid("seed_drift"));
+    }
+    validate_parity_shuffle(&report.shuffle)?;
+    if report.shuffle != parity_shuffle_from_seed(report.registered_seed.mixed_seed)? {
+        return Err(parity_shuffle_invalid("shuffle_not_reproducible"));
+    }
+    if report.reference_weights != C6_REFERENCE_WEIGHTS {
+        return Err(parity_shuffle_invalid("reference_weights_drift"));
+    }
+    if report.shuffled_weights != report.reference_weights {
+        return Err(parity_shuffle_invalid("shuffled_weights_drift"));
+    }
+    if report.reference_capacity != report.shuffled_capacity
+        || report.reference_capacity != TrainableCapacity::reference_c6()
+    {
+        return Err(parity_shuffle_invalid("capacity_mismatch"));
+    }
+    let expected = report.budget.cases_per_arm()?;
+    if report.cases.len() as u64 != expected {
+        return Err(parity_shuffle_invalid("case_count"));
+    }
+    if report
+        .cases
+        .iter()
+        .any(|case| !case.direct_products_preserved)
+    {
+        return Err(parity_shuffle_invalid("direct_product_multiset_drift"));
+    }
+    for case in &report.cases {
+        if case.reference_score.to_bits()
+            != weighted_channel_score(case.reference_channels, report.reference_weights).to_bits()
+            || case.shuffled_score.to_bits()
+                != weighted_channel_score(case.shuffled_channels, report.shuffled_weights).to_bits()
+        {
+            return Err(parity_shuffle_invalid("score_channel_drift"));
+        }
+    }
+    if report.families != summarize_parity_shuffle_families(&report.cases)
+        || report.families.iter().map(|f| f.n_cases).sum::<u64>() != expected
+    {
+        return Err(parity_shuffle_invalid("family_summary_drift"));
+    }
+    if report.protected_or_final_access {
+        return Err(parity_shuffle_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(parity_shuffle_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(parity_shuffle_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(parity_shuffle_invalid("experimental_non_final"));
+    }
+    // Stored evidence is never trusted: every case (scores, channels,
+    // preserved-product flag and correctness) is regenerated from the
+    // report's split, budget and reproducible shuffle and compared exactly.
+    let regenerated = collect_parity_shuffle_control(report.split, report.budget)?;
+    if regenerated.shuffle != report.shuffle || regenerated.cases != report.cases {
+        return Err(parity_shuffle_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -3735,6 +4289,9 @@ pub enum EvalError {
     BetaZeroAblationInvalid { reason: &'static str },
     /// Direct-only collapse rejected drifted weights, V6 mismatch, budget or flags.
     DirectOnlyCollapseInvalid { reason: &'static str },
+    /// Parity-shuffle control rejected a structure-preserving or irreproducible
+    /// shuffle, drifted weights/capacity, budget or flags.
+    ParityShuffleControlInvalid { reason: &'static str },
 }
 
 impl fmt::Display for EvalError {
@@ -3823,6 +4380,9 @@ impl fmt::Display for EvalError {
             }
             Self::DirectOnlyCollapseInvalid { reason } => {
                 write!(formatter, "direct-only collapse invalid: {reason}")
+            }
+            Self::ParityShuffleControlInvalid { reason } => {
+                write!(formatter, "parity-shuffle control invalid: {reason}")
             }
         }
     }
