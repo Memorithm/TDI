@@ -55,7 +55,7 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | ---: | --- | --- |
 | 31 | Torsor reduction-point ablation | **landed** in #704, exact head `66265e1ec9627a78e5ce17a658eec900469d784b`, merge `c18189fa5c50d9c224044b5368071947b9a9db89`; remove/alter transport structure under matched capacity |
 | 32 | Direct vs factorized torsor bridge | **landed** in #708, exact head `9a899209a16ba2ac3cd745fa1e601901e66c2caa`, merge `c73f98a9ed69f842ee2d49cdc8b24b5fafc42f7a`; numerical equivalence monitored inside comparison harness |
-| 33 | Chiral `gamma=0` ablation | remove parity-odd channel |
+| 33 | Chiral `gamma=0` ablation | **current candidate**; remove parity-odd channel: matched C6 weights `(1, 0, 1)` with only `gamma` zeroed at matched capacity on the bounded matched population; exact `reference = ablated + gamma*chi` and closed enantiomorphic split per case; ChiralFavorable target equals the reference score, recorded as a degeneracy |
 | 34 | Chiral parity-shuffle control | six values preserved; H+/H- semantics destroyed |
 | 35 | Torsor structure-shuffle control | six values preserved; Varignon pairing semantics destroyed |
 | 36 | G6 orthogonal-basis control | generic capacity under deterministic basis rotations |
