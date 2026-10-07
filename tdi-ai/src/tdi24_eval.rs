@@ -64,6 +64,11 @@
 //! structure (head `h` uses the slice-35 fixed mirror basis of rank `h`), at
 //! identical weights and zero trainable capacity on both arms. The shared arm
 //! reproduces the single-head Stage-C C6 score bit-for-bit.
+//! Slice 38 adds width scaling: C6 and its direct-only matched arm are scored
+//! at every preregistered matched carrier width `2n`, `n = 1..=3` (the
+//! carrier restricted to the first `n` slots of each sector), with identical
+//! weights and zero-trainable capacity; full width reproduces Stage-C C6
+//! bit-for-bit and no width is selected.
 //! No training,
 //! confirmatory execution, protected/final evaluation, or scientific claim is
 //! authorised here.
@@ -1893,7 +1898,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::ParityShuffleControlInvalid { .. }
         | EvalError::FixedMSensitivityInvalid { .. }
         | EvalError::LearnedBasisPrototypeInvalid { .. }
-        | EvalError::HeadSharingAblationInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::HeadSharingAblationInvalid { .. }
+        | EvalError::WidthScalingInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -1936,6 +1942,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::FixedMSensitivityInvalid { .. } => "fixed_m_sensitivity_invalid",
         EvalError::LearnedBasisPrototypeInvalid { .. } => "learned_basis_prototype_invalid",
         EvalError::HeadSharingAblationInvalid { .. } => "head_sharing_ablation_invalid",
+        EvalError::WidthScalingInvalid { .. } => "width_scaling_invalid",
     }
 }
 
@@ -5642,6 +5649,312 @@ pub fn validate_head_sharing_ablation_report(
     Ok(())
 }
 
+/// Phase-D width-scaling contract pin (slice 38).
+pub const WIDTH_SCALING_CONTRACT: &str = "tdi24-width-scaling-v1";
+
+/// Number of matched widths: every sector width `n = 1..=3` of the carrier.
+pub const WIDTH_SCALING_WIDTH_COUNT: usize = 3;
+
+/// Preregistered matched carrier widths `2n`, `n = 1..=3`: all even widths up
+/// to the carrier width, derived from it, evaluated together, never selected.
+pub const WIDTH_SCALING_WIDTHS: [usize; WIDTH_SCALING_WIDTH_COUNT] = [2, 4, 6];
+
+const fn width_scaling_invalid(reason: &'static str) -> EvalError {
+    EvalError::WidthScalingInvalid { reason }
+}
+
+/// Restrict a carrier to the first `width / 2` slots of each sector (the
+/// remaining slots are zero), so `M` and `J` act on the matched sub-carrier.
+pub fn restrict_carrier_to_width(carrier: Chiral6, width: usize) -> Result<Chiral6, EvalError> {
+    if !WIDTH_SCALING_WIDTHS.contains(&width) {
+        return Err(width_scaling_invalid("width_not_registered"));
+    }
+    if width == CHIRAL_WIDTH {
+        return Ok(carrier);
+    }
+    let half = width / 2;
+    let mut even = carrier.even();
+    let mut odd = carrier.odd();
+    for slot in half..3 {
+        even[slot] = 0.0;
+        odd[slot] = 0.0;
+    }
+    Chiral6::new(even, odd).map_err(EvalError::ChiralNumerical)
+}
+
+/// Score a view at one matched width with the given weights.
+pub fn score_at_width_from_view(
+    view: &InferenceView,
+    width: usize,
+    weights: ChiralScoreWeights,
+) -> Result<f64, EvalError> {
+    let query = Chiral6::from_array(view.query.as_array()).map_err(EvalError::ChiralNumerical)?;
+    let key = Chiral6::from_array(view.key.as_array()).map_err(EvalError::ChiralNumerical)?;
+    chiral_score(
+        restrict_carrier_to_width(query, width)?,
+        restrict_carrier_to_width(key, width)?,
+        weights,
+    )
+    .map_err(EvalError::ChiralNumerical)
+}
+
+/// One case scored by C6 and its direct-only matched arm at every width.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WidthScalingCase {
+    pub family: TaskFamily,
+    pub case_id: u64,
+    /// Stage-C C6 reference score at full width.
+    pub reference_score: f64,
+    pub c6_scores: [f64; WIDTH_SCALING_WIDTH_COUNT],
+    pub direct_scores: [f64; WIDTH_SCALING_WIDTH_COUNT],
+    pub c6_correct: [bool; WIDTH_SCALING_WIDTH_COUNT],
+    pub direct_correct: [bool; WIDTH_SCALING_WIDTH_COUNT],
+}
+
+/// Per-width, per-family correct counts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WidthScalingFamilySummary {
+    pub width: usize,
+    pub family: TaskFamily,
+    pub n_cases: u64,
+    pub c6_correct: u64,
+    pub direct_correct: u64,
+}
+
+/// Immutable width-scaling report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WidthScalingReport {
+    pub scaling_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    pub widths: [usize; WIDTH_SCALING_WIDTH_COUNT],
+    pub c6_weights: ChiralScoreWeights,
+    pub direct_weights: ChiralScoreWeights,
+    /// Zero trainable parameters for both arms at every width.
+    pub c6_capacity: TrainableCapacity,
+    pub direct_capacity: TrainableCapacity,
+    pub cases: Vec<WidthScalingCase>,
+    pub summaries: Vec<WidthScalingFamilySummary>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false.
+    pub training_executed: bool,
+    /// Must remain false: no width is selected.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+fn width_scaling_case<T, S>(
+    case: &LabeledCase<T>,
+    split: DataSplit,
+    oracle_sign: S,
+    cases: &mut Vec<WidthScalingCase>,
+) -> Result<(), EvalError>
+where
+    S: Fn(&T) -> Result<i8, EvalError>,
+{
+    let view = case.inference_view();
+    if view.split != split {
+        return Err(EvalError::SplitMismatch {
+            expected: split,
+            actual: view.split,
+        });
+    }
+    let sign = oracle_sign(case.protected_label().reveal_for_evaluation())?;
+    if sign != 1 && sign != -1 {
+        return Err(width_scaling_invalid("oracle_sign"));
+    }
+    let sign = f64::from(sign);
+    let reference_score = run_inference_callback(case, score_c6_from_view)?;
+    let direct_weights = direct_only_weights(C6_REFERENCE_WEIGHTS);
+    let mut record = WidthScalingCase {
+        family: view.family,
+        case_id: view.case_id,
+        reference_score,
+        c6_scores: [0.0; WIDTH_SCALING_WIDTH_COUNT],
+        direct_scores: [0.0; WIDTH_SCALING_WIDTH_COUNT],
+        c6_correct: [false; WIDTH_SCALING_WIDTH_COUNT],
+        direct_correct: [false; WIDTH_SCALING_WIDTH_COUNT],
+    };
+    for (index, width) in WIDTH_SCALING_WIDTHS.iter().enumerate() {
+        let c6 = run_inference_callback(case, |view: &InferenceView| {
+            score_at_width_from_view(view, *width, C6_REFERENCE_WEIGHTS)
+        })?;
+        let direct = run_inference_callback(case, |view: &InferenceView| {
+            score_at_width_from_view(view, *width, direct_weights)
+        })?;
+        record.c6_scores[index] = c6;
+        record.direct_scores[index] = direct;
+        record.c6_correct[index] = c6 * sign > 0.0;
+        record.direct_correct[index] = direct * sign > 0.0;
+    }
+    if record.c6_scores[WIDTH_SCALING_WIDTH_COUNT - 1].to_bits() != reference_score.to_bits() {
+        return Err(width_scaling_invalid("full_width_reference_drift"));
+    }
+    cases.push(record);
+    Ok(())
+}
+
+fn summarize_width_scaling(cases: &[WidthScalingCase]) -> Vec<WidthScalingFamilySummary> {
+    let mut summaries = Vec::new();
+    for (index, width) in WIDTH_SCALING_WIDTHS.iter().enumerate() {
+        for family in STAGE_C_PREFLIGHT_FAMILIES {
+            let members = cases.iter().filter(|case| case.family == *family);
+            summaries.push(WidthScalingFamilySummary {
+                width: *width,
+                family: *family,
+                n_cases: members.clone().count() as u64,
+                c6_correct: members.clone().filter(|c| c.c6_correct[index]).count() as u64,
+                direct_correct: members.filter(|c| c.direct_correct[index]).count() as u64,
+            });
+        }
+    }
+    summaries
+}
+
+fn collect_width_scaling_cases(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<WidthScalingCase>, EvalError> {
+    validate_non_final_split(split)?;
+    budget.cases_per_arm()?;
+    let mut cases = Vec::new();
+    let last_pair_id = budget.first_pair_id + budget.pairs_per_family;
+    for pair_id in budget.first_pair_id..last_pair_id {
+        let discriminative = reflection_discriminative_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [discriminative.right, discriminative.left] {
+            width_scaling_case(
+                &seal_reflection_discriminative(&member),
+                split,
+                handedness_sign,
+                &mut cases,
+            )?;
+        }
+        let nuisance = reflection_nuisance_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [nuisance.canonical, nuisance.reflected] {
+            width_scaling_case(
+                &seal_reflection_nuisance(&member),
+                split,
+                reflection_invariant_sign,
+                &mut cases,
+            )?;
+        }
+        let direction = direction_reversal_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [direction.forward, direction.reverse] {
+            width_scaling_case(
+                &seal_direction_reversal(&member),
+                split,
+                direction_sign,
+                &mut cases,
+            )?;
+        }
+        let base_case_id = pair_id
+            .checked_mul(STAGE_C_PREFLIGHT_MEMBERS_PER_PAIR)
+            .ok_or_else(preflight_generation_failed)?;
+        for case_id in [base_case_id, base_case_id + 1] {
+            let control = non_chiral_control_case_in_split(case_id, split)
+                .map_err(|_| preflight_generation_failed())?;
+            width_scaling_case(
+                &seal_non_chiral_control(&control),
+                split,
+                non_chiral_sign,
+                &mut cases,
+            )?;
+        }
+    }
+    Ok(cases)
+}
+
+/// Run the width-scaling study on the bounded Stage-C case stream.
+pub fn run_width_scaling(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<WidthScalingReport, EvalError> {
+    let cases = collect_width_scaling_cases(split, budget)?;
+    let summaries = summarize_width_scaling(&cases);
+    let report = WidthScalingReport {
+        scaling_contract: WIDTH_SCALING_CONTRACT,
+        split,
+        budget,
+        widths: WIDTH_SCALING_WIDTHS,
+        c6_weights: C6_REFERENCE_WEIGHTS,
+        direct_weights: direct_only_weights(C6_REFERENCE_WEIGHTS),
+        c6_capacity: TrainableCapacity::reference_c6(),
+        direct_capacity: TrainableCapacity::reference_c6(),
+        cases,
+        summaries,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_width_scaling_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_width_scaling_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<WidthScalingReport, EvalError> {
+    run_width_scaling(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a width-scaling report: pin, the complete preregistered width
+/// set, weights and capacity, full-width reproduction, summaries, flags and
+/// regenerated evidence.
+pub fn validate_width_scaling_report(report: &WidthScalingReport) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.scaling_contract != WIDTH_SCALING_CONTRACT {
+        return Err(width_scaling_invalid("contract_drift"));
+    }
+    if report.widths != WIDTH_SCALING_WIDTHS {
+        return Err(width_scaling_invalid("width_set_drift"));
+    }
+    if report.c6_weights != C6_REFERENCE_WEIGHTS
+        || report.direct_weights != direct_only_weights(C6_REFERENCE_WEIGHTS)
+    {
+        return Err(width_scaling_invalid("weights_drift"));
+    }
+    if report.c6_capacity != TrainableCapacity::reference_c6()
+        || report.direct_capacity != report.c6_capacity
+    {
+        return Err(width_scaling_invalid("capacity_mismatch"));
+    }
+    if report.cases.len() as u64 != report.budget.cases_per_arm()? {
+        return Err(width_scaling_invalid("case_count"));
+    }
+    for case in &report.cases {
+        if case.c6_scores[WIDTH_SCALING_WIDTH_COUNT - 1].to_bits() != case.reference_score.to_bits()
+        {
+            return Err(width_scaling_invalid("full_width_reference_drift"));
+        }
+    }
+    if report.summaries != summarize_width_scaling(&report.cases) {
+        return Err(width_scaling_invalid("summary_drift"));
+    }
+    if report.protected_or_final_access {
+        return Err(width_scaling_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(width_scaling_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(width_scaling_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(width_scaling_invalid("experimental_non_final"));
+    }
+    if collect_width_scaling_cases(report.split, report.budget)? != report.cases {
+        return Err(width_scaling_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -5732,6 +6045,9 @@ pub enum EvalError {
     /// Head-sharing ablation rejected drifted heads, bases, weights,
     /// capacity, evidence or flags.
     HeadSharingAblationInvalid { reason: &'static str },
+    /// Width scaling rejected a drifted width set, weights, capacity,
+    /// evidence or flags.
+    WidthScalingInvalid { reason: &'static str },
 }
 
 impl fmt::Display for EvalError {
@@ -5832,6 +6148,9 @@ impl fmt::Display for EvalError {
             }
             Self::HeadSharingAblationInvalid { reason } => {
                 write!(formatter, "head-sharing ablation invalid: {reason}")
+            }
+            Self::WidthScalingInvalid { reason } => {
+                write!(formatter, "width scaling invalid: {reason}")
             }
         }
     }
