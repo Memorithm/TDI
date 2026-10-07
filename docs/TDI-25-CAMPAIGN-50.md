@@ -68,7 +68,7 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 
 | Slice | Deliverable | Gate / definition of done |
 | ---: | --- | --- |
-| 41 | Multi-seed replication | frozen paired seed blocks |
+| 41 | Multi-seed replication | **current candidate**; frozen paired seed blocks: T6 and C6 on eight frozen seed blocks `[0..8)` of the bounded matched population (all families, same cases for both arms, pairing checked by canonical case digest, blocks disjoint by digest), paired discordance (T6-only/C6-only), pooled counts and descriptive block tallies; see `docs/TDI-25-MULTI-SEED-REPLICATION-V1.md` |
 | 42 | Input/noise robustness | identical perturbation distributions by arm |
 | 43 | Translation/origin stress suite | hard torsor-relevant transformations independent of model output |
 | 44 | Mirror/parity stress suite | hard chiral-relevant transformations independent of model output |

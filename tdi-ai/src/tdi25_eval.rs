@@ -104,7 +104,10 @@
 //! `[8, 16, 32]`, never allocated per arm. Slice 40 adds the Stage-D
 //! attribution audit: slices 30 to 39 are regenerated and validated, and the
 //! only admissible claim class is software semantics; structure-specific
-//! scientific attribution stays inadmissible. All arms consume sealed
+//! scientific attribution stays inadmissible. Slice 41 (Phase E) adds
+//! multi-seed replication: T6 and C6 on eight frozen paired seed blocks of
+//! the matched population, with paired discordance, pooled counts and
+//! descriptive block tallies. All arms consume sealed
 //! Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
@@ -232,6 +235,9 @@ pub const SEQUENCE_LENGTH_SCALING_CONTRACT: &str = "tdi25-sequence-length-scalin
 
 /// Phase-D data-volume scaling contract pin (slice 39).
 pub const DATA_VOLUME_SCALING_CONTRACT: &str = "tdi25-data-volume-scaling-v1";
+
+/// Phase-E multi-seed replication contract pin (slice 41).
+pub const MULTI_SEED_REPLICATION_CONTRACT: &str = "tdi25-multi-seed-replication-v1";
 
 /// Relative tolerance of the monitored transport identity; identical to the
 /// matched-reference v1 scalar tolerance shared by every arm.
@@ -3428,7 +3434,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::PositionGeometryAblationInvalid { .. }
         | EvalError::SequenceLengthScalingInvalid { .. }
         | EvalError::DataVolumeScalingInvalid { .. }
-        | EvalError::StageDAttributionAuditInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::StageDAttributionAuditInvalid { .. }
+        | EvalError::MultiSeedReplicationInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -3477,6 +3484,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::SequenceLengthScalingInvalid { .. } => "sequence_length_scaling_invalid",
         EvalError::DataVolumeScalingInvalid { .. } => "data_volume_scaling_invalid",
         EvalError::StageDAttributionAuditInvalid { .. } => "stage_d_attribution_audit_invalid",
+        EvalError::MultiSeedReplicationInvalid { .. } => "multi_seed_replication_invalid",
     }
 }
 
@@ -6299,6 +6307,233 @@ pub fn validate_stage_d_attribution_audit_report(
     Ok(())
 }
 
+/// Frozen paired seed blocks of the multi-seed replication (slice 41). Both
+/// arms always score the same blocks and cases; nothing is selected.
+pub const REPLICATION_SEED_BLOCKS: [u64; 8] = [0, 1, 2, 3, 4, 5, 6, 7];
+
+/// Paired per (seed block, family) counts on the matched population.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ReplicationBlockCell {
+    pub seed_block: u64,
+    pub family: TaskFamily,
+    pub n_cases: u64,
+    pub t6_matches: u64,
+    pub c6_matches: u64,
+    /// Paired discordance: T6 right and C6 wrong, and the reverse.
+    pub t6_only: u64,
+    pub c6_only: u64,
+}
+
+/// Immutable multi-seed replication report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MultiSeedReplicationReport {
+    pub replication_contract: &'static str,
+    pub population_contract: &'static str,
+    pub split: DataSplit,
+    /// Only `cases_per_block` is consumed; blocks come from the registry.
+    pub budget: StageCPreflightBudget,
+    pub seed_blocks: Vec<u64>,
+    /// Block-major, then family.
+    pub cells: Vec<ReplicationBlockCell>,
+    pub pooled_t6_matches: u64,
+    pub pooled_c6_matches: u64,
+    pub pooled_t6_only: u64,
+    pub pooled_c6_only: u64,
+    /// Blocks (pooled over families) with C6 ahead, T6 ahead, tied.
+    /// Descriptive only.
+    pub blocks_c6_ahead: u64,
+    pub blocks_t6_ahead: u64,
+    pub blocks_tied: u64,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false.
+    pub training_executed: bool,
+    /// Must remain false.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn replication_invalid(reason: &'static str) -> EvalError {
+    EvalError::MultiSeedReplicationInvalid { reason }
+}
+
+fn collect_replication_cells(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<ReplicationBlockCell>, EvalError> {
+    let mut cells = Vec::new();
+    let mut digests = Vec::new();
+    for seed_block in REPLICATION_SEED_BLOCKS {
+        for family in REQUIRED_SYNTHESIS_FAMILIES {
+            let run = matched_reference::MatchedPrimaryRun::evaluate(
+                split,
+                *family,
+                seed_block,
+                budget.cases_per_block,
+            )?;
+            let mut cell = ReplicationBlockCell {
+                seed_block,
+                family: *family,
+                n_cases: run.t6_outcomes().len() as u64,
+                t6_matches: 0,
+                c6_matches: 0,
+                t6_only: 0,
+                c6_only: 0,
+            };
+            for (t6, c6) in run.t6_outcomes().iter().zip(run.c6_outcomes()) {
+                // Paired: both arms carry the same canonical case identity.
+                if t6.canonical_digest != c6.canonical_digest || t6.case_id != c6.case_id {
+                    return Err(replication_invalid("pairing_drift"));
+                }
+                digests.push(t6.canonical_digest.clone());
+                cell.t6_matches += u64::from(t6.matches_oracle);
+                cell.c6_matches += u64::from(c6.matches_oracle);
+                cell.t6_only += u64::from(t6.matches_oracle && !c6.matches_oracle);
+                cell.c6_only += u64::from(c6.matches_oracle && !t6.matches_oracle);
+            }
+            cells.push(cell);
+        }
+    }
+    let total = digests.len();
+    digests.sort_unstable();
+    digests.dedup();
+    if digests.len() != total {
+        return Err(replication_invalid("block_overlap"));
+    }
+    Ok(cells)
+}
+
+fn block_tallies(cells: &[ReplicationBlockCell]) -> (u64, u64, u64) {
+    let (mut ahead, mut behind, mut tied) = (0, 0, 0);
+    for seed_block in REPLICATION_SEED_BLOCKS {
+        let members = cells.iter().filter(|c| c.seed_block == seed_block);
+        let t6: u64 = members.clone().map(|c| c.t6_matches).sum();
+        let c6: u64 = members.map(|c| c.c6_matches).sum();
+        match c6.cmp(&t6) {
+            core::cmp::Ordering::Greater => ahead += 1,
+            core::cmp::Ordering::Less => behind += 1,
+            core::cmp::Ordering::Equal => tied += 1,
+        }
+    }
+    (ahead, behind, tied)
+}
+
+/// Run the multi-seed replication over every frozen paired seed block.
+pub fn run_multi_seed_replication(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<MultiSeedReplicationReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.validate()?;
+    let cells = collect_replication_cells(split, budget)?;
+    let (ahead, behind, tied) = block_tallies(&cells);
+    let report = MultiSeedReplicationReport {
+        replication_contract: MULTI_SEED_REPLICATION_CONTRACT,
+        population_contract: matched_reference::MATCHED_POPULATION_CONTRACT,
+        split,
+        budget,
+        seed_blocks: REPLICATION_SEED_BLOCKS.to_vec(),
+        pooled_t6_matches: cells.iter().map(|c| c.t6_matches).sum(),
+        pooled_c6_matches: cells.iter().map(|c| c.c6_matches).sum(),
+        pooled_t6_only: cells.iter().map(|c| c.t6_only).sum(),
+        pooled_c6_only: cells.iter().map(|c| c.c6_only).sum(),
+        blocks_c6_ahead: ahead,
+        blocks_t6_ahead: behind,
+        blocks_tied: tied,
+        cells,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_multi_seed_replication_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_multi_seed_replication_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<MultiSeedReplicationReport, EvalError> {
+    run_multi_seed_replication(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a multi-seed replication report: pins, the frozen block set,
+/// canonical order, per-cell paired consistency, pooled sums, tallies,
+/// flags and regenerated evidence.
+pub fn validate_multi_seed_replication_report(
+    report: &MultiSeedReplicationReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.replication_contract != MULTI_SEED_REPLICATION_CONTRACT {
+        return Err(replication_invalid("contract_drift"));
+    }
+    if report.population_contract != matched_reference::MATCHED_POPULATION_CONTRACT {
+        return Err(replication_invalid("population_drift"));
+    }
+    report.budget.validate()?;
+    if report.seed_blocks != REPLICATION_SEED_BLOCKS.to_vec() {
+        return Err(replication_invalid("block_set_drift"));
+    }
+    if report.cells.len() != REPLICATION_SEED_BLOCKS.len() * REQUIRED_SYNTHESIS_FAMILIES.len() {
+        return Err(replication_invalid("cell_count"));
+    }
+    let mut position = 0usize;
+    for seed_block in REPLICATION_SEED_BLOCKS {
+        for family in REQUIRED_SYNTHESIS_FAMILIES {
+            let cell = &report.cells[position];
+            position += 1;
+            if cell.seed_block != seed_block || cell.family != *family {
+                return Err(replication_invalid("cell_order"));
+            }
+            // Paired identity: matches minus discordant wins are the
+            // concordant correct cases, identical for both arms.
+            if cell.n_cases != report.budget.cases_per_block
+                || cell.t6_matches > cell.n_cases
+                || cell.c6_matches > cell.n_cases
+                || cell.t6_only > cell.t6_matches
+                || cell.c6_only > cell.c6_matches
+                || cell.t6_matches - cell.t6_only != cell.c6_matches - cell.c6_only
+            {
+                return Err(replication_invalid("paired_count_drift"));
+            }
+        }
+    }
+    let cells = &report.cells;
+    if report.pooled_t6_matches != cells.iter().map(|c| c.t6_matches).sum::<u64>()
+        || report.pooled_c6_matches != cells.iter().map(|c| c.c6_matches).sum::<u64>()
+        || report.pooled_t6_only != cells.iter().map(|c| c.t6_only).sum::<u64>()
+        || report.pooled_c6_only != cells.iter().map(|c| c.c6_only).sum::<u64>()
+    {
+        return Err(replication_invalid("pooled_sum_drift"));
+    }
+    if (
+        report.blocks_c6_ahead,
+        report.blocks_t6_ahead,
+        report.blocks_tied,
+    ) != block_tallies(cells)
+    {
+        return Err(replication_invalid("sign_tally_drift"));
+    }
+    if report.protected_or_final_access {
+        return Err(replication_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(replication_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(replication_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(replication_invalid("experimental_non_final"));
+    }
+    if collect_replication_cells(report.split, report.budget)? != report.cells {
+        return Err(replication_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -6416,6 +6651,11 @@ pub enum EvalError {
     StageDAttributionAuditInvalid {
         reason: &'static str,
     },
+    /// Multi-seed replication rejected drifted blocks, pairing, sums,
+    /// evidence or claims.
+    MultiSeedReplicationInvalid {
+        reason: &'static str,
+    },
 }
 
 impl fmt::Display for EvalError {
@@ -6525,6 +6765,9 @@ impl fmt::Display for EvalError {
             }
             Self::StageDAttributionAuditInvalid { reason } => {
                 write!(formatter, "Stage-D attribution audit invalid: {reason}")
+            }
+            Self::MultiSeedReplicationInvalid { reason } => {
+                write!(formatter, "multi-seed replication invalid: {reason}")
             }
         }
     }
