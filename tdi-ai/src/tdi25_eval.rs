@@ -107,7 +107,10 @@
 //! scientific attribution stays inadmissible. Slice 41 (Phase E) adds
 //! multi-seed replication: T6 and C6 on eight frozen paired seed blocks of
 //! the matched population, with paired discordance, pooled counts and
-//! descriptive block tallies. All arms consume sealed
+//! descriptive block tallies. Slice 42 adds input/noise robustness under
+//! `tdi25-input-noise-robustness-v1`: declared deterministic perturbation
+//! families (isotropic, carrier-only, position-only) at declared amplitudes,
+//! applied identically to T6 and C6. All arms consume sealed
 //! Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
@@ -128,6 +131,10 @@ pub use matched_reference::{
 pub use matched_reference::{
     G6OrthogonalBasisCase, evaluate_g6_orthogonal_basis_control, g6_rotation_invariant,
     rotated_generic_and_chiral_scores,
+};
+pub use matched_reference::{
+    INPUT_NOISE_AMPLITUDES, INPUT_NOISE_FAMILIES, InputNoiseCell, InputNoiseFamily,
+    evaluate_input_noise_robustness, perturb_matched_input,
 };
 pub use matched_reference::{
     POSITION_GEOMETRY_ABLATION_ARMS, PositionGeometryCase, evaluate_position_geometry_ablation,
@@ -3435,7 +3442,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::SequenceLengthScalingInvalid { .. }
         | EvalError::DataVolumeScalingInvalid { .. }
         | EvalError::StageDAttributionAuditInvalid { .. }
-        | EvalError::MultiSeedReplicationInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::MultiSeedReplicationInvalid { .. }
+        | EvalError::InputNoiseRobustnessInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -3485,6 +3493,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::DataVolumeScalingInvalid { .. } => "data_volume_scaling_invalid",
         EvalError::StageDAttributionAuditInvalid { .. } => "stage_d_attribution_audit_invalid",
         EvalError::MultiSeedReplicationInvalid { .. } => "multi_seed_replication_invalid",
+        EvalError::InputNoiseRobustnessInvalid { .. } => "input_noise_robustness_invalid",
     }
 }
 
@@ -6534,6 +6543,183 @@ pub fn validate_multi_seed_replication_report(
     Ok(())
 }
 
+/// Phase-E input/noise robustness contract pin (slice 42).
+pub const INPUT_NOISE_ROBUSTNESS_CONTRACT: &str = "tdi25-input-noise-robustness-v1";
+
+/// Immutable input/noise robustness report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InputNoiseRobustnessReport {
+    pub robustness_contract: &'static str,
+    pub population_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    /// FNV-1a 64 of the contract pin; no free seed constant.
+    pub noise_seed: u64,
+    /// Identical reference capacities; no arm receives extra parameters.
+    pub t6_capacity: ParameterReadoutCapacity,
+    pub c6_capacity: ParameterReadoutCapacity,
+    /// Family-major, seed block, then noise family, amplitude, arm.
+    pub cells: Vec<InputNoiseCell>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false.
+    pub training_executed: bool,
+    /// Must remain false: no amplitude or family is selected.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn input_noise_invalid(reason: &'static str) -> EvalError {
+    EvalError::InputNoiseRobustnessInvalid { reason }
+}
+
+/// Seed of the declared perturbation stream, derived from the contract pin.
+#[must_use]
+pub fn input_noise_seed() -> u64 {
+    INPUT_NOISE_ROBUSTNESS_CONTRACT
+        .bytes()
+        .fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+            (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+        })
+}
+
+fn collect_input_noise_cells(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<InputNoiseCell>, EvalError> {
+    let mut cells = Vec::new();
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..budget.seed_blocks {
+            cells.extend(evaluate_input_noise_robustness(
+                split,
+                *family,
+                seed_block,
+                budget.cases_per_block,
+                input_noise_seed(),
+            )?);
+        }
+    }
+    Ok(cells)
+}
+
+/// Run the input/noise robustness study on the bounded matched population.
+pub fn run_input_noise_robustness(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<InputNoiseRobustnessReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.validate()?;
+    let cells = collect_input_noise_cells(split, budget)?;
+    let report = InputNoiseRobustnessReport {
+        robustness_contract: INPUT_NOISE_ROBUSTNESS_CONTRACT,
+        population_contract: matched_reference::MATCHED_POPULATION_CONTRACT,
+        split,
+        budget,
+        noise_seed: input_noise_seed(),
+        t6_capacity: ParameterReadoutCapacity::reference_t6(),
+        c6_capacity: ParameterReadoutCapacity::reference_c6(),
+        cells,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_input_noise_robustness_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_input_noise_robustness_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<InputNoiseRobustnessReport, EvalError> {
+    run_input_noise_robustness(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate an input/noise robustness report: pins, seed, matched capacity,
+/// the complete declared grid in canonical order, paired counts, finite score
+/// changes, flags and regenerated evidence.
+pub fn validate_input_noise_robustness_report(
+    report: &InputNoiseRobustnessReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.robustness_contract != INPUT_NOISE_ROBUSTNESS_CONTRACT {
+        return Err(input_noise_invalid("contract_drift"));
+    }
+    if report.population_contract != matched_reference::MATCHED_POPULATION_CONTRACT {
+        return Err(input_noise_invalid("population_drift"));
+    }
+    if report.noise_seed != input_noise_seed() {
+        return Err(input_noise_invalid("seed_drift"));
+    }
+    report.budget.validate()?;
+    if report.t6_capacity != ParameterReadoutCapacity::reference_t6()
+        || report.c6_capacity != ParameterReadoutCapacity::reference_c6()
+    {
+        return Err(input_noise_invalid("capacity_mismatch"));
+    }
+    let per_block =
+        INPUT_NOISE_FAMILIES.len() * INPUT_NOISE_AMPLITUDES.len() * SEQUENCE_SCALING_ARMS.len();
+    let expected = REQUIRED_SYNTHESIS_FAMILIES.len() as u64 * report.budget.seed_blocks;
+    if report.cells.len() as u64 != expected * per_block as u64 {
+        return Err(input_noise_invalid("cell_count"));
+    }
+    let mut position = 0usize;
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..report.budget.seed_blocks {
+            for noise in INPUT_NOISE_FAMILIES {
+                for amplitude in INPUT_NOISE_AMPLITUDES {
+                    for arm in SEQUENCE_SCALING_ARMS {
+                        let cell = &report.cells[position];
+                        position += 1;
+                        if cell.family != *family
+                            || cell.seed_block != seed_block
+                            || cell.noise != noise
+                            || cell.amplitude.to_bits() != amplitude.to_bits()
+                            || cell.arm != arm
+                        {
+                            return Err(input_noise_invalid("grid_drift"));
+                        }
+                        // Flips are bounded below by the net change and above
+                        // by the cases that are correct on either side.
+                        if cell.n_cases != report.budget.cases_per_block
+                            || cell.clean_matches > cell.n_cases
+                            || cell.noisy_matches > cell.n_cases
+                            || cell.flips > cell.n_cases
+                            || cell.flips < cell.clean_matches.abs_diff(cell.noisy_matches)
+                            || cell.flips > cell.clean_matches + cell.noisy_matches
+                            || (cell.flips + cell.clean_matches + cell.noisy_matches) % 2 != 0
+                        {
+                            return Err(input_noise_invalid("paired_count_drift"));
+                        }
+                        if !cell.max_abs_score_change.is_finite() || cell.max_abs_score_change < 0.0
+                        {
+                            return Err(input_noise_invalid("score_change_drift"));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if report.protected_or_final_access {
+        return Err(input_noise_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(input_noise_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(input_noise_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(input_noise_invalid("experimental_non_final"));
+    }
+    if collect_input_noise_cells(report.split, report.budget)? != report.cells {
+        return Err(input_noise_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -6656,6 +6842,11 @@ pub enum EvalError {
     MultiSeedReplicationInvalid {
         reason: &'static str,
     },
+    /// Input/noise robustness rejected a drifted grid, seed, counts, evidence
+    /// or claims.
+    InputNoiseRobustnessInvalid {
+        reason: &'static str,
+    },
 }
 
 impl fmt::Display for EvalError {
@@ -6768,6 +6959,9 @@ impl fmt::Display for EvalError {
             }
             Self::MultiSeedReplicationInvalid { reason } => {
                 write!(formatter, "multi-seed replication invalid: {reason}")
+            }
+            Self::InputNoiseRobustnessInvalid { reason } => {
+                write!(formatter, "input/noise robustness invalid: {reason}")
             }
         }
     }

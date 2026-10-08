@@ -69,7 +69,7 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 | Slice | Deliverable | Gate / definition of done |
 | ---: | --- | --- |
 | 41 | Multi-seed replication | **landed** in #739, exact head `c0d31dcb233bfaa8d9cab636f69dc52b308ef16c`, merge `325766691cd0e1ecfde954f28b3f811e5a15005b`; frozen paired seed blocks: T6 and C6 on eight frozen seed blocks `[0..8)` of the bounded matched population (all families, same cases for both arms, pairing checked by canonical case digest, blocks disjoint by digest), paired discordance (T6-only/C6-only), pooled counts and descriptive block tallies; see `docs/TDI-25-MULTI-SEED-REPLICATION-V1.md` |
-| 42 | Input/noise robustness | identical perturbation distributions by arm |
+| 42 | Input/noise robustness | **current candidate**; identical perturbation distributions by arm: declared deterministic perturbation families (isotropic on all 18 shared scalars, carrier-only, position-only) at declared absolute amplitudes `[1e-3, 1e-2, 1e-1]` (all reported, none selected), seed derived from the contract pin, T6 and C6 score the identical perturbed matched input on the bounded matched population; clean/perturbed matches against the evaluator-recomputed common target, match flips and label-free max score change per cell; clean scores reproduce the matched primary bit-for-bit; zero flips recorded as a degeneracy; see `docs/TDI-25-INPUT-NOISE-ROBUSTNESS-V1.md` |
 | 43 | Translation/origin stress suite | hard torsor-relevant transformations independent of model output |
 | 44 | Mirror/parity stress suite | hard chiral-relevant transformations independent of model output |
 | 45 | Mixed adversarial suite | both transformation classes combined under deterministic oracle |

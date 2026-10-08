@@ -1268,6 +1268,156 @@ pub fn evaluate_sequence_length_scaling(
     Ok(cells)
 }
 
+/// Declared perturbation families of the input/noise robustness study (TDI-25
+/// slice 42) on the 18 shared input scalars.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InputNoiseFamily {
+    /// All 18 scalars (query, key, key position, query position).
+    Isotropic,
+    /// The 12 query/key carrier scalars only.
+    CarrierOnly,
+    /// The 6 position scalars only.
+    PositionOnly,
+}
+
+/// Declared perturbation families, all reported.
+pub const INPUT_NOISE_FAMILIES: [InputNoiseFamily; 3] = [
+    InputNoiseFamily::Isotropic,
+    InputNoiseFamily::CarrierOnly,
+    InputNoiseFamily::PositionOnly,
+];
+/// Declared absolute amplitudes, all reported.
+pub const INPUT_NOISE_AMPLITUDES: [f64; 3] = [1e-3, 1e-2, 1e-1];
+
+/// Per (block, noise family, amplitude, arm) match accounting.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct InputNoiseCell {
+    pub family: TaskFamily,
+    pub seed_block: u64,
+    pub noise: InputNoiseFamily,
+    pub amplitude: f64,
+    pub arm: ComparisonArm,
+    pub n_cases: u64,
+    /// Matches of the matched primary on clean inputs.
+    pub clean_matches: u64,
+    /// Matches on the perturbed input against the target recomputed from
+    /// that same perturbed input inside the evaluator.
+    pub noisy_matches: u64,
+    /// Cases whose match bit differs between clean and perturbed inputs.
+    pub flips: u64,
+    /// Label-free: maximum absolute change of the arm score.
+    pub max_abs_score_change: f64,
+}
+
+fn noise_mix(mut state: u64) -> u64 {
+    state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    state = (state ^ (state >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    state = (state ^ (state >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    state ^ (state >> 31)
+}
+
+/// Perturb one matched input. The draw depends on the seed, the case and the
+/// scalar index only, never on the arm, so both arms see identical inputs.
+pub fn perturb_matched_input(
+    input: &MatchedInput,
+    noise: InputNoiseFamily,
+    amplitude: f64,
+    seed: u64,
+    case_key: u64,
+) -> Result<MatchedInput, EvalError> {
+    if !INPUT_NOISE_AMPLITUDES.contains(&amplitude) {
+        return Err(EvalError::InputNoiseRobustnessInvalid {
+            reason: "amplitude_not_registered",
+        });
+    }
+    let mut out = input.clone();
+    let draw = |slot: u64| {
+        let mixed = noise_mix(seed ^ noise_mix(case_key ^ noise_mix(slot)));
+        let unit = (mixed >> 11) as f64 / (1u64 << 53) as f64;
+        amplitude * (2.0 * unit - 1.0)
+    };
+    let carriers = matches!(
+        noise,
+        InputNoiseFamily::Isotropic | InputNoiseFamily::CarrierOnly
+    );
+    let positions = matches!(
+        noise,
+        InputNoiseFamily::Isotropic | InputNoiseFamily::PositionOnly
+    );
+    for index in 0..6 {
+        if carriers {
+            out.query[index] += draw(index as u64);
+            out.key[index] += draw(6 + index as u64);
+        }
+    }
+    for index in 0..3 {
+        if positions {
+            out.key_position[index] += draw(12 + index as u64);
+            out.query_position[index] += draw(15 + index as u64);
+        }
+    }
+    Ok(out)
+}
+
+/// Score one matched block under every declared perturbation family and
+/// amplitude for T6 and C6. Order: noise family, amplitude, arm.
+pub fn evaluate_input_noise_robustness(
+    split: DataSplit,
+    family: TaskFamily,
+    seed_block: u64,
+    n_cases: u64,
+    seed: u64,
+) -> Result<Vec<InputNoiseCell>, EvalError> {
+    let run = MatchedPrimaryRun::evaluate(split, family, seed_block, n_cases)?;
+    let mut cells = Vec::new();
+    for noise in INPUT_NOISE_FAMILIES {
+        for amplitude in INPUT_NOISE_AMPLITUDES {
+            for arm in SEQUENCE_SCALING_ARMS {
+                let (clean, clean_scores) = match arm {
+                    ComparisonArm::T6 => (run.t6_outcomes(), run.t6_scores()),
+                    _ => (run.c6_outcomes(), run.c6_scores()),
+                };
+                let mut cell = InputNoiseCell {
+                    family,
+                    seed_block,
+                    noise,
+                    amplitude,
+                    arm,
+                    n_cases: 0,
+                    clean_matches: 0,
+                    noisy_matches: 0,
+                    flips: 0,
+                    max_abs_score_change: 0.0,
+                };
+                for (index, input) in run.inputs().iter().enumerate() {
+                    // The clean arm score must reproduce the matched primary.
+                    let clean_score = arm_score(arm, input)?;
+                    if clean_score.to_bits() != clean_scores[index].to_bits() {
+                        return Err(EvalError::InputNoiseRobustnessInvalid {
+                            reason: "clean_reference_drift",
+                        });
+                    }
+                    let case_key = (seed_block << 32) | index as u64;
+                    let noisy = perturb_matched_input(input, noise, amplitude, seed, case_key)?;
+                    let target = common_target(&noisy, family)?;
+                    let noisy_score = arm_score(arm, &noisy)?;
+                    let matched = shared_match(noisy_score, target);
+                    let clean_match = clean[index].matches_oracle;
+                    cell.n_cases += 1;
+                    cell.clean_matches += u64::from(clean_match);
+                    cell.noisy_matches += u64::from(matched);
+                    cell.flips += u64::from(matched != clean_match);
+                    cell.max_abs_score_change = cell
+                        .max_abs_score_change
+                        .max((noisy_score - clean_score).abs());
+                }
+                cells.push(cell);
+            }
+        }
+    }
+    Ok(cells)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
