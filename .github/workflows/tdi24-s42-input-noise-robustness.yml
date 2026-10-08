@@ -1,0 +1,45 @@
+name: TDI-24.0 slice 42 input-noise robustness
+on:
+  pull_request:
+    paths:
+      - 'tdi-ai/src/tdi24_eval.rs'
+      - 'tdi-ai/src/tdi24_chiral.rs'
+      - 'tdi-ai/src/tdi24_vector.rs'
+      - 'tdi-ai/src/tdi24_tasks.rs'
+      - 'tdi-ai/tests/tdi24_gamma_zero_ablation.rs'
+      - 'tdi-ai/tests/tdi24_beta_zero_ablation.rs'
+      - 'tdi-ai/tests/tdi24_direct_only_collapse.rs'
+      - 'tdi-ai/tests/tdi24_parity_shuffle_control.rs'
+      - 'tdi-ai/tests/tdi24_fixed_m_sensitivity.rs'
+      - 'tdi-ai/tests/tdi24_learned_basis_prototype.rs'
+      - 'tdi-ai/tests/tdi24_head_sharing_ablation.rs'
+      - 'tdi-ai/tests/tdi24_width_scaling.rs'
+      - 'docs/TDI-24-WIDTH-SCALING-V1.md'
+      - 'tdi-ai/src/tdi24_attention.rs'
+      - 'tdi-ai/tests/tdi24_sequence_length_scaling.rs'
+      - 'docs/TDI-24-SEQUENCE-LENGTH-SCALING-V1.md'
+      - 'tdi-ai/tests/tdi24_stage_d_attribution_audit.rs'
+      - 'docs/TDI-24-STAGE-D-ATTRIBUTION-AUDIT-V1.md'
+      - 'tdi-ai/tests/tdi24_multi_seed_replication.rs'
+      - 'docs/TDI-24-MULTI-SEED-REPLICATION-V1.md'
+      - 'tdi-ai/tests/tdi24_input_noise_robustness.rs'
+      - 'docs/TDI-24-INPUT-NOISE-ROBUSTNESS-V1.md'
+      - 'tdi-ai/tests/tdi24_stage_c_preflight.rs'
+      - 'docs/TDI-24-CAMPAIGN-50.md'
+      - 'scripts/check-tdi24-s42.sh'
+      - '.github/workflows/tdi24-s42-input-noise-robustness.yml'
+permissions:
+  contents: read
+jobs:
+  input-noise-robustness:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+      - run: bash scripts/check-tdi24-s42.sh

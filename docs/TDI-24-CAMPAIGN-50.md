@@ -69,7 +69,7 @@ This is a dependency-ordered research campaign, not a requirement to manufacture
 | Slice | Deliverable | Gate / definition of done |
 | ---: | --- | --- |
 | 41 | Multi-seed replication | **landed** in #737, exact head `05344dba224e16cf6c7dd205d07090163083e2cc`, merge `cee0db74ca17f675c52ab66b8188bfc2760c2ede`; frozen seed blocks and paired summaries: the Stage-C preflight on four frozen seed blocks `[0, 1, 2, 3]` at pair-id stride `MAX_PREFLIGHT_PAIRS_PER_FAMILY` (disjoint by construction, checked by case digest), per-block slice-27 paired V6/C6 summaries, pooled counts and descriptive sign tallies; base offset frozen at 0; block 0 reproduces the Stage-C preflight; see `docs/TDI-24-MULTI-SEED-REPLICATION-V1.md` |
-| 42 | Input-noise robustness | declared perturbation families; paired arms |
+| 42 | Input-noise robustness | **current stacked slice**; declared perturbation families; paired arms: isotropic, mirror-even-only and mirror-odd-only deterministic perturbations at declared amplitudes `[1e-3, 1e-2, 1e-1]` (all reported), seed derived from the contract pin, identical perturbed query/key for C6 `(1, 0, 1)` and direct-only `(1, 0, 0)`; label-free decision stability (sign agreement with the clean score) and max score change per task family; clean C6 reproduces Stage-C bit-for-bit; see `docs/TDI-24-INPUT-NOISE-ROBUSTNESS-V1.md` |
 | 43 | Reflection adversarial set | hard mirrored pairs generated independently of model outputs |
 | 44 | Numerical precision study | f64/f32 comparison with explicit tolerance and failure accounting |
 | 45 | Gradient/stability study | finite gradients, norm/variance diagnostics for trained arms |
