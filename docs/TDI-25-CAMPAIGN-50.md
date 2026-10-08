@@ -68,7 +68,7 @@ This campaign is dependency ordered. A PR number is earned by a concrete researc
 
 | Slice | Deliverable | Gate / definition of done |
 | ---: | --- | --- |
-| 41 | Multi-seed replication | **current candidate**; frozen paired seed blocks: T6 and C6 on eight frozen seed blocks `[0..8)` of the bounded matched population (all families, same cases for both arms, pairing checked by canonical case digest, blocks disjoint by digest), paired discordance (T6-only/C6-only), pooled counts and descriptive block tallies; see `docs/TDI-25-MULTI-SEED-REPLICATION-V1.md` |
+| 41 | Multi-seed replication | **landed** in #739, exact head `c0d31dcb233bfaa8d9cab636f69dc52b308ef16c`, merge `325766691cd0e1ecfde954f28b3f811e5a15005b`; frozen paired seed blocks: T6 and C6 on eight frozen seed blocks `[0..8)` of the bounded matched population (all families, same cases for both arms, pairing checked by canonical case digest, blocks disjoint by digest), paired discordance (T6-only/C6-only), pooled counts and descriptive block tallies; see `docs/TDI-25-MULTI-SEED-REPLICATION-V1.md` |
 | 42 | Input/noise robustness | identical perturbation distributions by arm |
 | 43 | Translation/origin stress suite | hard torsor-relevant transformations independent of model output |
 | 44 | Mirror/parity stress suite | hard chiral-relevant transformations independent of model output |
@@ -94,4 +94,4 @@ Pause the campaign when any of the following occurs:
 
 ## Progress accounting
 
-**40/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606, #607, #612, #654, #656, #658, #660, #661, #663, #666, #669, #673, #679, #683, #689, #699, #701, #704, #708, #714, #717, #722, #725, #728, #731, #733, #736). Slice 41 is next. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
+**41/50 merged** (#408, #489, #552, #553, #554, #555, #557, #561, #563, #566, #568, #603, #605, #606, #607, #612, #654, #656, #658, #660, #661, #663, #666, #669, #673, #679, #683, #689, #699, #701, #704, #708, #714, #717, #722, #725, #728, #731, #733, #736, #739). Slice 42 is next. Only merged, exact-head-qualified substantive PRs increment the campaign counter.
