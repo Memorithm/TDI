@@ -22,3 +22,5 @@ grep -Fq '| 41 | Multi-seed replication | **landed** in #737, exact head `05344d
 grep -Eq '\| 42 \| Input-noise robustness \| \*\*(current stacked slice|landed)' docs/TDI-24-CAMPAIGN-50.md
 merged_count="$(grep -Eo '\*\*[0-9]+/50 merged\*\*' docs/TDI-24-CAMPAIGN-50.md | head -n 1 | tr -dc '0-9/' | cut -d/ -f1)"
 test "${merged_count:-0}" -ge 41
+# Slice 43 runs under this exact-head gate (no dedicated workflow file).
+bash scripts/check-tdi24-s43.sh
