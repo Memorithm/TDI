@@ -2004,7 +2004,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::StageDAttributionAuditInvalid { .. }
         | EvalError::MultiSeedReplicationInvalid { .. }
         | EvalError::InputNoiseRobustnessInvalid { .. }
-        | EvalError::ReflectionAdversarialInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::ReflectionAdversarialInvalid { .. }
+        | EvalError::NumericalPrecisionInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -2053,6 +2054,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::MultiSeedReplicationInvalid { .. } => "multi_seed_replication_invalid",
         EvalError::InputNoiseRobustnessInvalid { .. } => "input_noise_robustness_invalid",
         EvalError::ReflectionAdversarialInvalid { .. } => "reflection_adversarial_invalid",
+        EvalError::NumericalPrecisionInvalid { .. } => "numerical_precision_invalid",
     }
 }
 
@@ -7942,6 +7944,288 @@ pub fn validate_reflection_adversarial_report(
     Ok(())
 }
 
+/// Phase-E numerical precision study contract pin (slice 44).
+pub const NUMERICAL_PRECISION_CONTRACT: &str = "tdi24-numerical-precision-v1";
+
+/// Declared error-bound factor: an f32 score is within tolerance iff
+/// `|score_f32 - score_f64| <= PRECISION_BOUND_FACTOR * f32::EPSILON * condition`,
+/// where `condition` is the sum of the absolute weighted products entering the
+/// score (a forward-error bound for 12-term f32 dot products with rounded
+/// inputs). Declared before any run; not tuned.
+pub const PRECISION_BOUND_FACTOR: f64 = 32.0;
+
+/// Paired arms evaluated in f64 (reference) and f32.
+pub const PRECISION_ARMS: [SequenceArm; 2] = [SequenceArm::C6, SequenceArm::DirectOnly];
+
+/// Case groups of the precision study: the four Stage-C task families and
+/// the slice-43 reflection adversarial set.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PrecisionGroup {
+    StageC(TaskFamily),
+    ReflectionAdversarial,
+}
+
+/// Per (group, arm) f64-vs-f32 accounting.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NumericalPrecisionCell {
+    pub group: PrecisionGroup,
+    pub arm: SequenceArm,
+    pub n_cases: u64,
+    /// f32 score finite and within the declared bound.
+    pub within_tolerance: u64,
+    /// f32 score finite but outside the declared bound.
+    pub tolerance_failures: u64,
+    /// f32 score non-finite (overflow); counted, never dropped.
+    pub non_finite_f32: u64,
+    /// Cases whose f32 decision sign differs from the f64 sign.
+    pub sign_flips: u64,
+    pub max_abs_error: f64,
+    /// Largest `|error| / bound`; `<= 1` iff every finite case is within.
+    pub max_error_to_bound: f64,
+}
+
+/// Immutable numerical precision report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NumericalPrecisionReport {
+    pub precision_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    pub bound_factor: f64,
+    pub capacity: TrainableCapacity,
+    /// Stage-C families in canonical order, then the adversarial set; arm-minor.
+    pub cells: Vec<NumericalPrecisionCell>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false.
+    pub training_executed: bool,
+    /// Must remain false.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn precision_invalid(reason: &'static str) -> EvalError {
+    EvalError::NumericalPrecisionInvalid { reason }
+}
+
+/// f32 evaluation of `alpha*s + beta*m + gamma*chi` with the same term
+/// order as the f64 reference; inputs and weights are rounded to f32.
+/// Returns the f32 score (widened) and the condition `sum |weighted terms|`.
+#[must_use]
+pub fn chiral_score_f32(query: Chiral6, key: Chiral6, weights: ChiralScoreWeights) -> (f64, f64) {
+    let q = query.as_array().map(|value| value as f32);
+    let k = key.as_array().map(|value| value as f32);
+    let (alpha, beta, gamma) = (
+        weights.alpha as f32,
+        weights.beta as f32,
+        weights.gamma as f32,
+    );
+    let mirrored_key = [k[0], k[1], k[2], -k[3], -k[4], -k[5]];
+    let mut direct = 0.0f32;
+    let mut mirrored = 0.0f32;
+    let mut condition = 0.0f64;
+    for index in 0..6 {
+        direct += q[index] * k[index];
+        mirrored += q[index] * mirrored_key[index];
+        let product = f64::from(q[index]) * f64::from(k[index]);
+        condition += (weights.alpha.abs() + weights.beta.abs()) * product.abs();
+    }
+    let mut chiral = 0.0f32;
+    for index in 0..3 {
+        chiral += q[index] * k[index + 3] - q[index + 3] * k[index];
+        condition += weights.gamma.abs() * (f64::from(q[index]) * f64::from(k[index + 3])).abs()
+            + weights.gamma.abs() * (f64::from(q[index + 3]) * f64::from(k[index])).abs();
+    }
+    let score = alpha * direct + beta * mirrored + gamma * chiral;
+    (f64::from(score), condition)
+}
+
+fn precision_case(
+    cell: &mut NumericalPrecisionCell,
+    query: Chiral6,
+    key: Chiral6,
+) -> Result<(), EvalError> {
+    let weights = cell.arm.weights();
+    let reference = chiral_score(query, key, weights).map_err(EvalError::ChiralNumerical)?;
+    let (single, condition) = chiral_score_f32(query, key, weights);
+    cell.n_cases += 1;
+    if !single.is_finite() {
+        cell.non_finite_f32 += 1;
+        return Ok(());
+    }
+    let error = (single - reference).abs();
+    let bound = PRECISION_BOUND_FACTOR * f64::from(f32::EPSILON) * condition;
+    let ratio = if bound > 0.0 {
+        error / bound
+    } else if error == 0.0 {
+        0.0
+    } else {
+        f64::INFINITY
+    };
+    if ratio <= 1.0 {
+        cell.within_tolerance += 1;
+    } else {
+        cell.tolerance_failures += 1;
+    }
+    if single.signum() != reference.signum() || (single == 0.0) != (reference == 0.0) {
+        cell.sign_flips += 1;
+    }
+    cell.max_abs_error = cell.max_abs_error.max(error);
+    cell.max_error_to_bound = cell.max_error_to_bound.max(ratio);
+    Ok(())
+}
+
+fn precision_groups() -> Vec<PrecisionGroup> {
+    let mut groups: Vec<PrecisionGroup> = STAGE_C_PREFLIGHT_FAMILIES
+        .iter()
+        .map(|family| PrecisionGroup::StageC(*family))
+        .collect();
+    groups.push(PrecisionGroup::ReflectionAdversarial);
+    groups
+}
+
+fn collect_precision_cells(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<NumericalPrecisionCell>, EvalError> {
+    let items = collect_sequence_items(split, budget)?;
+    let pairs = reflection_adversarial_pairs(split, budget)?;
+    let mut cells = Vec::new();
+    for group in precision_groups() {
+        for arm in PRECISION_ARMS {
+            let mut cell = NumericalPrecisionCell {
+                group,
+                arm,
+                n_cases: 0,
+                within_tolerance: 0,
+                tolerance_failures: 0,
+                non_finite_f32: 0,
+                sign_flips: 0,
+                max_abs_error: 0.0,
+                max_error_to_bound: 0.0,
+            };
+            match group {
+                PrecisionGroup::StageC(family) => {
+                    for item in items.iter().filter(|item| item.0 == family) {
+                        precision_case(&mut cell, item.1, item.2)?;
+                    }
+                }
+                PrecisionGroup::ReflectionAdversarial => {
+                    for pair in &pairs {
+                        precision_case(&mut cell, pair.right_query, pair.right_key)?;
+                        precision_case(&mut cell, pair.left_query, pair.left_key)?;
+                    }
+                }
+            }
+            cells.push(cell);
+        }
+    }
+    Ok(cells)
+}
+
+/// Run the f64/f32 numerical precision study on one non-final split.
+pub fn run_numerical_precision(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<NumericalPrecisionReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.cases_per_arm()?;
+    let report = NumericalPrecisionReport {
+        precision_contract: NUMERICAL_PRECISION_CONTRACT,
+        split,
+        budget,
+        bound_factor: PRECISION_BOUND_FACTOR,
+        capacity: TrainableCapacity::reference_c6(),
+        cells: collect_precision_cells(split, budget)?,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_numerical_precision_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_numerical_precision_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<NumericalPrecisionReport, EvalError> {
+    run_numerical_precision(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a numerical precision report: pins, declared bound, capacity,
+/// the complete group/arm grid in order, complete failure accounting,
+/// finite error statistics, flags and regenerated evidence.
+pub fn validate_numerical_precision_report(
+    report: &NumericalPrecisionReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.precision_contract != NUMERICAL_PRECISION_CONTRACT {
+        return Err(precision_invalid("contract_drift"));
+    }
+    if report.bound_factor.to_bits() != PRECISION_BOUND_FACTOR.to_bits() {
+        return Err(precision_invalid("tolerance_drift"));
+    }
+    if report.capacity != TrainableCapacity::reference_c6() {
+        return Err(precision_invalid("capacity_mismatch"));
+    }
+    let per_family = report.budget.cases_per_arm()? / STAGE_C_PREFLIGHT_FAMILIES.len() as u64;
+    let adversarial = 2
+        * report.budget.pairs_per_family
+        * (ADVERSARIAL_CHIRALITY_SCALES.len() * ADVERSARIAL_DOMINANCE_RATIOS.len()) as u64;
+    let groups = precision_groups();
+    if report.cells.len() != groups.len() * PRECISION_ARMS.len() {
+        return Err(precision_invalid("cell_count"));
+    }
+    let mut position = 0usize;
+    for group in groups {
+        for arm in PRECISION_ARMS {
+            let cell = &report.cells[position];
+            position += 1;
+            if cell.group != group || cell.arm != arm {
+                return Err(precision_invalid("grid_drift"));
+            }
+            let expected = match group {
+                PrecisionGroup::StageC(_) => per_family,
+                PrecisionGroup::ReflectionAdversarial => adversarial,
+            };
+            // Every case is accounted exactly once; none is dropped.
+            if cell.n_cases != expected
+                || cell.within_tolerance + cell.tolerance_failures + cell.non_finite_f32
+                    != cell.n_cases
+                || cell.sign_flips > cell.n_cases
+            {
+                return Err(precision_invalid("failure_accounting_drift"));
+            }
+            if !cell.max_abs_error.is_finite()
+                || cell.max_abs_error < 0.0
+                || cell.max_error_to_bound.is_nan()
+                || cell.max_error_to_bound < 0.0
+                || ((cell.tolerance_failures == 0) != (cell.max_error_to_bound <= 1.0))
+            {
+                return Err(precision_invalid("error_statistic_drift"));
+            }
+        }
+    }
+    if report.protected_or_final_access {
+        return Err(precision_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(precision_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(precision_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(precision_invalid("experimental_non_final"));
+    }
+    if collect_precision_cells(report.split, report.budget)? != report.cells {
+        return Err(precision_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -8050,6 +8334,9 @@ pub enum EvalError {
     /// Reflection adversarial set rejected a drifted grid, seed, pair
     /// construction, counts, evidence or claims.
     ReflectionAdversarialInvalid { reason: &'static str },
+    /// Numerical precision study rejected a drifted bound, grid, failure
+    /// accounting, evidence or claims.
+    NumericalPrecisionInvalid { reason: &'static str },
 }
 
 impl fmt::Display for EvalError {
@@ -8168,6 +8455,9 @@ impl fmt::Display for EvalError {
             }
             Self::ReflectionAdversarialInvalid { reason } => {
                 write!(formatter, "reflection adversarial set invalid: {reason}")
+            }
+            Self::NumericalPrecisionInvalid { reason } => {
+                write!(formatter, "numerical precision study invalid: {reason}")
             }
         }
     }
