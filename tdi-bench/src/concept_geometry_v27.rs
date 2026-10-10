@@ -652,6 +652,7 @@ pub enum ConceptGeometryError {
     InvalidTargetOutcomeIndex,
     InvalidNonTargetOutcomeIndices,
     InconsistentZeroDoseOutcomes,
+    InvalidSyntheticNoiseScale,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -3068,6 +3069,136 @@ pub fn sequential_innovations(
     Ok(steps)
 }
 
+const SYNTHETIC_POSITIVE_DOMAIN: u64 = 0x5444_4932_3747_5053;
+const SYNTHETIC_CONTROL_DOMAIN: u64 = 0x5444_4932_3747_4354;
+
+/// Caller-declared synthetic Gaussian population with a known mean signal.
+///
+/// Positive rows are `signal + noise_scale * z` and control rows are
+/// `noise_scale * z`, with `z` independent standard normal draws, so the true
+/// P-minus-C contrast is exactly `signal`. A zero signal is the null. The
+/// seed, cardinalities, signal and noise scale are all caller-supplied; there
+/// is no default that could masquerade as a frozen statistical choice. This
+/// is a Development calibration fixture only, never a real-model population.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SyntheticGaussianSpec {
+    pub positive_count: usize,
+    pub control_count: usize,
+    pub signal: Vec<f64>,
+    pub noise_scale: f64,
+    pub seed: u64,
+}
+
+/// Generated synthetic groups together with the known true contrast.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SyntheticGaussianGroups {
+    positive: Vec<Vec<f64>>,
+    control: Vec<Vec<f64>>,
+    true_contrast: Vec<f64>,
+}
+
+impl SyntheticGaussianGroups {
+    #[must_use]
+    pub fn positive(&self) -> &[Vec<f64>] {
+        &self.positive
+    }
+
+    #[must_use]
+    pub fn control(&self) -> &[Vec<f64>] {
+        &self.control
+    }
+
+    /// The known population contrast `E[P] - E[C]`, equal to the signal.
+    #[must_use]
+    pub fn true_contrast(&self) -> &[f64] {
+        &self.true_contrast
+    }
+}
+
+/// Uniform draw in `(0, 1]` with 53 bits of resolution; never zero.
+fn open_unit(rng: &mut SplitMix64) -> f64 {
+    ((rng.next_u64() >> 11) as f64 + 1.0) / (1u64 << 53) as f64
+}
+
+/// Standard normal pair by the Box-Muller transform.
+fn standard_normal_pair(rng: &mut SplitMix64) -> (f64, f64) {
+    let radius = (-2.0 * open_unit(rng).ln()).sqrt();
+    let angle = core::f64::consts::TAU * open_unit(rng);
+    (radius * angle.cos(), radius * angle.sin())
+}
+
+fn synthetic_rows(
+    count: usize,
+    mean: &[f64],
+    noise_scale: f64,
+    rng: &mut SplitMix64,
+) -> Result<Vec<Vec<f64>>, ConceptGeometryError> {
+    let mut rows = Vec::new();
+    rows.try_reserve_exact(count)
+        .map_err(|_| ConceptGeometryError::SampleCountTooLarge)?;
+    let mut spare = None;
+    for _ in 0..count {
+        let mut row = Vec::new();
+        row.try_reserve_exact(mean.len())
+            .map_err(|_| ConceptGeometryError::SampleCountTooLarge)?;
+        for center in mean {
+            let z = match spare.take() {
+                Some(z) => z,
+                None => {
+                    let (first, second) = standard_normal_pair(rng);
+                    spare = Some(second);
+                    first
+                }
+            };
+            let value = center + noise_scale * z;
+            if !value.is_finite() {
+                return Err(ConceptGeometryError::NonFiniteValue);
+            }
+            row.push(value);
+        }
+        rows.push(row);
+    }
+    Ok(rows)
+}
+
+/// Generate the declared synthetic Gaussian positive/control groups.
+///
+/// The positive and control groups use domain-separated deterministic
+/// streams, so changing one cardinality does not perturb the other group.
+pub fn synthetic_gaussian_groups(
+    spec: &SyntheticGaussianSpec,
+) -> Result<SyntheticGaussianGroups, ConceptGeometryError> {
+    if spec.positive_count == 0 || spec.control_count == 0 {
+        return Err(ConceptGeometryError::EmptyGroup);
+    }
+    validate_vector(&spec.signal)?;
+    if !spec.noise_scale.is_finite() || spec.noise_scale <= 0.0 {
+        return Err(ConceptGeometryError::InvalidSyntheticNoiseScale);
+    }
+    let mut positive_rng =
+        SplitMix64::new(domain_separated_seed(spec.seed, SYNTHETIC_POSITIVE_DOMAIN));
+    let mut control_rng =
+        SplitMix64::new(domain_separated_seed(spec.seed, SYNTHETIC_CONTROL_DOMAIN));
+    let zero = vec![0.0; spec.signal.len()];
+    let positive = synthetic_rows(
+        spec.positive_count,
+        &spec.signal,
+        spec.noise_scale,
+        &mut positive_rng,
+    )?;
+    let control = synthetic_rows(
+        spec.control_count,
+        &zero,
+        spec.noise_scale,
+        &mut control_rng,
+    )?;
+    Ok(SyntheticGaussianGroups {
+        positive,
+        control,
+        true_contrast: spec.signal.clone(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4801,5 +4932,244 @@ mod tests {
             cosine_similarity(&[0.0, 0.0], &[1.0, 0.0], DEFAULT_TOLERANCE),
             Err(ConceptGeometryError::ZeroNorm)
         );
+    }
+}
+
+/// Known-truth calibration of the Development resampling substrate on the
+/// synthetic Gaussian generator. These are software checks against a known
+/// generating process, not a pinned statistical rule: no threshold here is a
+/// TDI-27 decision criterion.
+#[cfg(test)]
+mod synthetic_gaussian_tests {
+    use super::*;
+
+    fn spec(signal: Vec<f64>, count: usize, seed: u64) -> SyntheticGaussianSpec {
+        SyntheticGaussianSpec {
+            positive_count: count,
+            control_count: count,
+            signal,
+            noise_scale: 1.0,
+            seed,
+        }
+    }
+
+    fn norm(values: &[f64]) -> f64 {
+        values.iter().map(|value| value * value).sum::<f64>().sqrt()
+    }
+
+    /// Defined shuffled residual norms at least the observed one, and total.
+    fn residual_norm_exceedances(
+        groups: &SyntheticGaussianGroups,
+        basis: &[Vec<f64>],
+        plan: DevelopmentResamplingPlan,
+    ) -> (usize, usize) {
+        let observed = residualize(
+            &mean_difference(groups.positive(), groups.control()).unwrap(),
+            basis,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap()
+        .residual_norm();
+        let nulls = label_shuffle_residual_geometries(
+            groups.positive(),
+            groups.control(),
+            basis,
+            DEFAULT_TOLERANCE,
+            plan,
+        )
+        .unwrap();
+        let exceed = nulls
+            .iter()
+            .filter(|null| {
+                null.residual()
+                    .is_none_or(|residual| residual.residual_norm() >= observed)
+            })
+            .count();
+        (exceed, nulls.len())
+    }
+
+    #[test]
+    fn generator_rejects_invalid_specs() {
+        let mut invalid = spec(vec![1.0, 0.0], 4, 7);
+        invalid.positive_count = 0;
+        assert_eq!(
+            synthetic_gaussian_groups(&invalid),
+            Err(ConceptGeometryError::EmptyGroup)
+        );
+        let invalid = spec(Vec::new(), 4, 7);
+        assert_eq!(
+            synthetic_gaussian_groups(&invalid),
+            Err(ConceptGeometryError::EmptyVector)
+        );
+        let invalid = spec(vec![f64::NAN], 4, 7);
+        assert_eq!(
+            synthetic_gaussian_groups(&invalid),
+            Err(ConceptGeometryError::NonFiniteValue)
+        );
+        for noise_scale in [0.0, -1.0, f64::INFINITY, f64::NAN] {
+            let mut invalid = spec(vec![1.0], 4, 7);
+            invalid.noise_scale = noise_scale;
+            assert_eq!(
+                synthetic_gaussian_groups(&invalid),
+                Err(ConceptGeometryError::InvalidSyntheticNoiseScale)
+            );
+        }
+    }
+
+    #[test]
+    fn generator_is_deterministic_shaped_and_domain_separated() {
+        let declared = spec(vec![0.5, -0.25, 0.0], 9, 11);
+        let groups = synthetic_gaussian_groups(&declared).unwrap();
+        assert_eq!(groups, synthetic_gaussian_groups(&declared).unwrap());
+        assert_eq!(groups.positive().len(), 9);
+        assert_eq!(groups.control().len(), 9);
+        assert!(
+            groups
+                .positive()
+                .iter()
+                .chain(groups.control())
+                .all(|row| { row.len() == 3 && row.iter().all(|value| value.is_finite()) })
+        );
+        assert_eq!(groups.true_contrast(), &[0.5, -0.25, 0.0]);
+        // Changing the control cardinality leaves the positive stream intact.
+        let mut wider = declared.clone();
+        wider.control_count = 20;
+        let other = synthetic_gaussian_groups(&wider).unwrap();
+        assert_eq!(other.positive(), groups.positive());
+        assert_eq!(&other.control()[..9], groups.control());
+        // A different seed changes both groups.
+        let mut reseeded = declared;
+        reseeded.seed = 12;
+        let other = synthetic_gaussian_groups(&reseeded).unwrap();
+        assert_ne!(other.positive(), groups.positive());
+        assert_ne!(other.control(), groups.control());
+    }
+
+    #[test]
+    fn generator_moments_recover_the_known_signal_and_noise() {
+        let count = 4_000;
+        let signal = vec![1.0, -0.5, 0.0, 0.25];
+        let mut declared = spec(signal.clone(), count, 2_027);
+        declared.noise_scale = 2.0;
+        let groups = synthetic_gaussian_groups(&declared).unwrap();
+        let contrast = mean_difference(groups.positive(), groups.control()).unwrap();
+        // Standard error of each contrast coordinate: 2 * sqrt(2 / n).
+        let standard_error = 2.0 * (2.0 / count as f64).sqrt();
+        for (estimate, truth) in contrast.iter().zip(&signal) {
+            assert!(
+                (estimate - truth).abs() < 5.0 * standard_error,
+                "estimate={estimate} truth={truth}"
+            );
+        }
+        for coordinate in 0..signal.len() {
+            let variance = groups
+                .control()
+                .iter()
+                .map(|row| row[coordinate] * row[coordinate])
+                .sum::<f64>()
+                / count as f64;
+            assert!((variance / 4.0 - 1.0).abs() < 0.1, "variance={variance}");
+        }
+    }
+
+    #[test]
+    fn bootstrap_separates_a_known_signal_from_the_null() {
+        let replicates = 200;
+        // Signal: 1.5 along e1 with n = 60 per group (about 8 standard errors).
+        let groups = synthetic_gaussian_groups(&spec(vec![1.5, 0.0, 0.0], 60, 1)).unwrap();
+        let plan = DevelopmentResamplingPlan::new(replicates, 101).unwrap();
+        let projections = bootstrap_mean_contrasts(groups.positive(), groups.control(), plan)
+            .unwrap()
+            .iter()
+            .map(|replicate| replicate.contrast()[0])
+            .collect::<Vec<_>>();
+        let interval = development_order_interval(&projections, 4, replicates - 5).unwrap();
+        assert!(interval.lower_value() > 0.0, "{interval:?}");
+        assert!(interval.lower_value() < 1.5 && interval.upper_value() > 1.5);
+
+        // Null: across declared seeds the same ordered-value interval
+        // excludes zero only rarely (about 5% expected).
+        let mut excluded = 0;
+        for seed in 0..20 {
+            let groups = synthetic_gaussian_groups(&spec(vec![0.0, 0.0, 0.0], 60, seed)).unwrap();
+            let plan = DevelopmentResamplingPlan::new(replicates, 1_000 + seed).unwrap();
+            let projections = bootstrap_mean_contrasts(groups.positive(), groups.control(), plan)
+                .unwrap()
+                .iter()
+                .map(|replicate| replicate.contrast()[0])
+                .collect::<Vec<_>>();
+            let interval = development_order_interval(&projections, 4, replicates - 5).unwrap();
+            excluded += usize::from(interval.lower_value() > 0.0 || interval.upper_value() < 0.0);
+        }
+        assert!(excluded <= 4, "excluded={excluded}");
+    }
+
+    #[test]
+    fn label_permutation_separates_a_known_signal_from_the_null() {
+        let replicates = 199;
+        let groups = synthetic_gaussian_groups(&spec(vec![1.0, -1.0, 0.5], 40, 3)).unwrap();
+        let observed = norm(&mean_difference(groups.positive(), groups.control()).unwrap());
+        let plan = DevelopmentResamplingPlan::new(replicates, 303).unwrap();
+        let nulls =
+            label_shuffle_mean_contrasts(groups.positive(), groups.control(), plan).unwrap();
+        assert_eq!(nulls.len(), replicates);
+        assert!(nulls.iter().all(|null| norm(null.contrast()) < observed));
+
+        // Null: the observed norm sits inside the shuffled distribution.
+        let mut extreme = 0;
+        let mut exceed_fraction = 0.0;
+        for seed in 0..20 {
+            let groups = synthetic_gaussian_groups(&spec(vec![0.0; 3], 40, seed)).unwrap();
+            let observed = norm(&mean_difference(groups.positive(), groups.control()).unwrap());
+            let plan = DevelopmentResamplingPlan::new(replicates, 2_000 + seed).unwrap();
+            let exceed = label_shuffle_mean_contrasts(groups.positive(), groups.control(), plan)
+                .unwrap()
+                .iter()
+                .filter(|null| norm(null.contrast()) >= observed)
+                .count();
+            extreme += usize::from(exceed == 0);
+            exceed_fraction += exceed as f64 / replicates as f64 / 20.0;
+        }
+        assert!(extreme <= 2, "extreme={extreme}");
+        assert!(
+            (0.3..=0.7).contains(&exceed_fraction),
+            "fraction={exceed_fraction}"
+        );
+    }
+
+    #[test]
+    fn residual_permutation_separates_novel_signal_from_known_subspace_signal() {
+        let basis = vec![vec![1.0, 0.0, 0.0, 0.0]];
+        let plan = DevelopmentResamplingPlan::new(199, 404).unwrap();
+        // Novel component along e2 survives residualisation against e1.
+        let novel = synthetic_gaussian_groups(&spec(vec![1.5, 1.0, 0.0, 0.0], 50, 5)).unwrap();
+        assert_eq!(residual_norm_exceedances(&novel, &basis, plan), (0, 199));
+        let stability = bootstrap_direction_stability(
+            novel.positive(),
+            novel.control(),
+            &basis,
+            DEFAULT_TOLERANCE,
+            DevelopmentResamplingPlan::new(100, 505).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            stability
+                .replicate_cosines()
+                .iter()
+                .all(|cosine| cosine.is_some_and(|cosine| cosine > 0.5))
+        );
+
+        // Signal entirely inside the known subspace: the residual is noise
+        // and is not extreme against the shuffled residuals.
+        let mut extreme = 0;
+        for seed in 0..20 {
+            let known =
+                synthetic_gaussian_groups(&spec(vec![1.5, 0.0, 0.0, 0.0], 50, 100 + seed)).unwrap();
+            let plan = DevelopmentResamplingPlan::new(199, 3_000 + seed).unwrap();
+            let (exceed, total) = residual_norm_exceedances(&known, &basis, plan);
+            assert_eq!(total, 199);
+            extreme += usize::from(exceed == 0);
+        }
+        assert!(extreme <= 2, "extreme={extreme}");
     }
 }
