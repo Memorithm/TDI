@@ -115,7 +115,10 @@
 //! torsor-relevant transformations (rigid origin shift, key re-reduction,
 //! query re-reduction) at declared offsets `[1, 1e3, 1e6]`, drawn from the
 //! contract seed independently of any score and applied identically to T6
-//! and C6. All arms consume sealed
+//! and C6. Slice 44 adds the mirror/parity stress suite under
+//! `tdi25-mirror-parity-stress-v1`: declared chiral-relevant transformations
+//! (simultaneous mirror, complex structure, key-only mirror) applied
+//! identically to T6 and C6. All arms consume sealed
 //! Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
@@ -140,6 +143,10 @@ pub use matched_reference::{
 pub use matched_reference::{
     INPUT_NOISE_AMPLITUDES, INPUT_NOISE_FAMILIES, InputNoiseCell, InputNoiseFamily,
     evaluate_input_noise_robustness, perturb_matched_input,
+};
+pub use matched_reference::{
+    MIRROR_STRESS_TRANSFORMS, MirrorStressCell, MirrorStressTransform,
+    evaluate_mirror_parity_stress, mirror_stress_matched_input,
 };
 pub use matched_reference::{
     ORIGIN_STRESS_OFFSETS, ORIGIN_STRESS_TRANSFORMS, OriginStressCell, OriginStressTransform,
@@ -3453,7 +3460,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::StageDAttributionAuditInvalid { .. }
         | EvalError::MultiSeedReplicationInvalid { .. }
         | EvalError::InputNoiseRobustnessInvalid { .. }
-        | EvalError::TranslationOriginStressInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::TranslationOriginStressInvalid { .. }
+        | EvalError::MirrorParityStressInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -3505,6 +3513,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::MultiSeedReplicationInvalid { .. } => "multi_seed_replication_invalid",
         EvalError::InputNoiseRobustnessInvalid { .. } => "input_noise_robustness_invalid",
         EvalError::TranslationOriginStressInvalid { .. } => "translation_origin_stress_invalid",
+        EvalError::MirrorParityStressInvalid { .. } => "mirror_parity_stress_invalid",
     }
 }
 
@@ -6918,6 +6927,179 @@ pub fn validate_translation_origin_stress_report(
     Ok(())
 }
 
+/// Phase-E mirror/parity stress suite contract pin (slice 44).
+pub const MIRROR_PARITY_STRESS_CONTRACT: &str = "tdi25-mirror-parity-stress-v1";
+
+/// Immutable mirror/parity stress report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MirrorParityStressReport {
+    pub stress_contract: &'static str,
+    pub population_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    /// Identical reference capacities; no arm receives extra parameters.
+    pub t6_capacity: ParameterReadoutCapacity,
+    pub c6_capacity: ParameterReadoutCapacity,
+    /// Family-major, seed block, then transformation, arm.
+    pub cells: Vec<MirrorStressCell>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false.
+    pub training_executed: bool,
+    /// Must remain false: no transformation is selected.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn mirror_stress_invalid(reason: &'static str) -> EvalError {
+    EvalError::MirrorParityStressInvalid { reason }
+}
+
+fn collect_mirror_stress_cells(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<MirrorStressCell>, EvalError> {
+    let mut cells = Vec::new();
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..budget.seed_blocks {
+            cells.extend(evaluate_mirror_parity_stress(
+                split,
+                *family,
+                seed_block,
+                budget.cases_per_block,
+            )?);
+        }
+    }
+    Ok(cells)
+}
+
+/// Run the mirror/parity stress suite on the bounded matched population.
+pub fn run_mirror_parity_stress(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<MirrorParityStressReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.validate()?;
+    let cells = collect_mirror_stress_cells(split, budget)?;
+    let report = MirrorParityStressReport {
+        stress_contract: MIRROR_PARITY_STRESS_CONTRACT,
+        population_contract: matched_reference::MATCHED_POPULATION_CONTRACT,
+        split,
+        budget,
+        t6_capacity: ParameterReadoutCapacity::reference_t6(),
+        c6_capacity: ParameterReadoutCapacity::reference_c6(),
+        cells,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_mirror_parity_stress_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_mirror_parity_stress_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<MirrorParityStressReport, EvalError> {
+    run_mirror_parity_stress(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a mirror/parity stress report: pins, matched capacity, the
+/// complete declared grid in canonical order, paired counts, the structural
+/// C6 invariants, finite changes, flags and regenerated evidence.
+pub fn validate_mirror_parity_stress_report(
+    report: &MirrorParityStressReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.stress_contract != MIRROR_PARITY_STRESS_CONTRACT {
+        return Err(mirror_stress_invalid("contract_drift"));
+    }
+    if report.population_contract != matched_reference::MATCHED_POPULATION_CONTRACT {
+        return Err(mirror_stress_invalid("population_drift"));
+    }
+    report.budget.validate()?;
+    if report.t6_capacity != ParameterReadoutCapacity::reference_t6()
+        || report.c6_capacity != ParameterReadoutCapacity::reference_c6()
+    {
+        return Err(mirror_stress_invalid("capacity_mismatch"));
+    }
+    let per_block = MIRROR_STRESS_TRANSFORMS.len() * SEQUENCE_SCALING_ARMS.len();
+    let expected = REQUIRED_SYNTHESIS_FAMILIES.len() as u64 * report.budget.seed_blocks;
+    if report.cells.len() as u64 != expected * per_block as u64 {
+        return Err(mirror_stress_invalid("cell_count"));
+    }
+    let mut position = 0usize;
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..report.budget.seed_blocks {
+            for transform in MIRROR_STRESS_TRANSFORMS {
+                for arm in SEQUENCE_SCALING_ARMS {
+                    let cell = &report.cells[position];
+                    position += 1;
+                    if cell.family != *family
+                        || cell.seed_block != seed_block
+                        || cell.transform != transform
+                        || cell.arm != arm
+                    {
+                        return Err(mirror_stress_invalid("grid_drift"));
+                    }
+                    if cell.n_cases != report.budget.cases_per_block
+                        || cell.clean_matches > cell.n_cases
+                        || cell.stressed_matches > cell.n_cases
+                        || cell.flips > cell.n_cases
+                        || cell.flips < cell.clean_matches.abs_diff(cell.stressed_matches)
+                        || cell.flips > cell.clean_matches + cell.stressed_matches
+                        || (cell.flips + cell.clean_matches + cell.stressed_matches) % 2 != 0
+                    {
+                        return Err(mirror_stress_invalid("paired_count_drift"));
+                    }
+                    if !cell.max_abs_score_change.is_finite()
+                        || cell.max_abs_score_change < 0.0
+                        || !cell.max_abs_target_change.is_finite()
+                        || cell.max_abs_target_change < 0.0
+                    {
+                        return Err(mirror_stress_invalid("score_change_drift"));
+                    }
+                    if arm == ComparisonArm::C6 {
+                        // `chi(Jq, Jk)` is bit-for-bit `chi(q, k)` and the
+                        // direct pairing only reorders exact dyadic products.
+                        if transform == MirrorStressTransform::ComplexStructure
+                            && cell.max_abs_score_change != 0.0
+                        {
+                            return Err(mirror_stress_invalid("c6_complex_structure_drift"));
+                        }
+                        // On the chiral-favorable family the common target is
+                        // the C6 reference score recomputed on the same input.
+                        if *family == TaskFamily::ChiralFavorable
+                            && cell.stressed_matches != cell.n_cases
+                        {
+                            return Err(mirror_stress_invalid("c6_chiral_target_drift"));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if report.protected_or_final_access {
+        return Err(mirror_stress_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(mirror_stress_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(mirror_stress_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(mirror_stress_invalid("experimental_non_final"));
+    }
+    if collect_mirror_stress_cells(report.split, report.budget)? != report.cells {
+        return Err(mirror_stress_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -7050,6 +7232,11 @@ pub enum EvalError {
     TranslationOriginStressInvalid {
         reason: &'static str,
     },
+    /// Mirror/parity stress rejected a drifted grid, transform, counts,
+    /// invariants, evidence or claims.
+    MirrorParityStressInvalid {
+        reason: &'static str,
+    },
 }
 
 impl fmt::Display for EvalError {
@@ -7168,6 +7355,9 @@ impl fmt::Display for EvalError {
             }
             Self::TranslationOriginStressInvalid { reason } => {
                 write!(formatter, "translation/origin stress invalid: {reason}")
+            }
+            Self::MirrorParityStressInvalid { reason } => {
+                write!(formatter, "mirror/parity stress invalid: {reason}")
             }
         }
     }
