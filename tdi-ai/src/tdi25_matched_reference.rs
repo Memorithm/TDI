@@ -13,8 +13,9 @@ use crate::experimental::tdi24_attention::MaskPolicy;
 use crate::experimental::tdi24_chiral::{Chiral6, ChiralScoreWeights, enantiomorphic_scores};
 use crate::experimental::tdi24_eval::{
     EvalError as Tdi24EvalError, LEARNED_BASIS_PROBE_COUNT, LEARNED_BASIS_TOLERANCE,
-    LearnedBasisProbe, LearnedBasisProbeRole, ParityShuffle, learned_basis_probes,
-    learned_basis_transform, validate_learned_basis_probe, validate_parity_shuffle,
+    LearnedBasisProbe, LearnedBasisProbeRole, PRECISION_BOUND_FACTOR, ParityShuffle,
+    chiral_score_f32, learned_basis_probes, learned_basis_transform, validate_learned_basis_probe,
+    validate_parity_shuffle,
 };
 use crate::experimental::tdi25_tasks::{
     PositionGeometryArm, SeedDomain, mix_registered_seed, position_geometry_point,
@@ -1861,6 +1862,180 @@ pub fn evaluate_mixed_adversarial_stress(
                     cells.push(cell);
                 }
             }
+        }
+    }
+    Ok(cells)
+}
+
+/// Input class of the numerical precision study (TDI-25 slice 46): the clean
+/// matched input, or the slice-43 translation/origin stress at one declared
+/// transformation and offset (large-magnitude, cancellation-prone inputs).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum PrecisionInput {
+    Clean,
+    OriginStress(OriginStressTransform, f64),
+}
+
+/// Per (block, input class, arm) f64/f32 accounting.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MatchedPrecisionCell {
+    pub family: TaskFamily,
+    pub seed_block: u64,
+    pub input: PrecisionInput,
+    pub arm: ComparisonArm,
+    pub n_cases: u64,
+    /// Finite f32 score within the declared forward-error bound.
+    pub within_tolerance: u64,
+    /// Finite f32 score outside the declared bound.
+    pub tolerance_failures: u64,
+    /// Non-finite f32 score (overflow); never dropped.
+    pub non_finite_f32: u64,
+    /// Cases whose f32 score sign differs from the f64 score sign.
+    pub sign_flips: u64,
+    pub max_abs_error: f64,
+    pub max_error_to_bound: f64,
+}
+
+fn f32_vec(data: [f64; 3]) -> [f32; 3] {
+    data.map(|value| value as f32)
+}
+
+fn f32_cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+fn f32_dot(a: [f32; 3], b: [f32; 3]) -> f32 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+fn abs_cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [
+        (a[1] * b[2]).abs() + (a[2] * b[1]).abs(),
+        (a[2] * b[0]).abs() + (a[0] * b[2]).abs(),
+        (a[0] * b[1]).abs() + (a[1] * b[0]).abs(),
+    ]
+}
+
+/// T6 factorized score `(v + Q x omega).R + omega.(M + P x R)` evaluated in
+/// f32 (inputs rounded to f32, reference operation order), returned with the
+/// f64 condition: the sum of absolute elementary products of the expansion.
+#[must_use]
+pub fn t6_score_f32(input: &MatchedInput) -> (f64, f64) {
+    let v = [input.query[0], input.query[1], input.query[2]];
+    let omega = [input.query[3], input.query[4], input.query[5]];
+    let resultant = [input.key[0], input.key[1], input.key[2]];
+    let moment = [input.key[3], input.key[4], input.key[5]];
+    let (q32, w32) = (f32_vec(input.query_position), f32_vec(omega));
+    let (r32, p32) = (f32_vec(resultant), f32_vec(input.key_position));
+    let qw = f32_cross(q32, w32);
+    let v32 = f32_vec(v);
+    let dual = [v32[0] + qw[0], v32[1] + qw[1], v32[2] + qw[2]];
+    let pr = f32_cross(p32, r32);
+    let m32 = f32_vec(moment);
+    let origin = [m32[0] + pr[0], m32[1] + pr[1], m32[2] + pr[2]];
+    let score = f32_dot(dual, r32) + f32_dot(w32, origin);
+    let qw_abs = abs_cross(input.query_position, omega);
+    let pr_abs = abs_cross(input.key_position, resultant);
+    let mut condition = 0.0;
+    for index in 0..3 {
+        condition += (v[index].abs() + qw_abs[index]) * resultant[index].abs();
+        condition += omega[index].abs() * (moment[index].abs() + pr_abs[index]);
+    }
+    (f64::from(score), condition)
+}
+
+/// C6 score `(1, 0, 1)` in f32 through the upstream TDI-24 slice-44 kernel.
+#[must_use]
+pub fn c6_score_f32(input: &MatchedInput) -> Option<(f64, f64)> {
+    let (query, key) = chiral_carriers(input).ok()?;
+    Some(chiral_score_f32(query, key, MATCHED_CHIRAL_WEIGHTS))
+}
+
+/// Declared input classes, all reported: clean, then every slice-43
+/// transformation at every slice-43 offset.
+#[must_use]
+pub fn precision_inputs() -> Vec<PrecisionInput> {
+    let mut inputs = vec![PrecisionInput::Clean];
+    for transform in ORIGIN_STRESS_TRANSFORMS {
+        for offset in ORIGIN_STRESS_OFFSETS {
+            inputs.push(PrecisionInput::OriginStress(transform, offset));
+        }
+    }
+    inputs
+}
+
+/// Score one matched block in f64 and f32 for T6 and C6 under every declared
+/// input class. Order: input class, arm.
+pub fn evaluate_matched_numerical_precision(
+    split: DataSplit,
+    family: TaskFamily,
+    seed_block: u64,
+    n_cases: u64,
+    seed: u64,
+) -> Result<Vec<MatchedPrecisionCell>, EvalError> {
+    let run = MatchedPrimaryRun::evaluate(split, family, seed_block, n_cases)?;
+    let tolerance = PRECISION_BOUND_FACTOR * f64::from(f32::EPSILON);
+    let mut cells = Vec::new();
+    for class in precision_inputs() {
+        for arm in SEQUENCE_SCALING_ARMS {
+            let mut cell = MatchedPrecisionCell {
+                family,
+                seed_block,
+                input: class,
+                arm,
+                n_cases: 0,
+                within_tolerance: 0,
+                tolerance_failures: 0,
+                non_finite_f32: 0,
+                sign_flips: 0,
+                max_abs_error: 0.0,
+                max_error_to_bound: 0.0,
+            };
+            for (index, clean) in run.inputs().iter().enumerate() {
+                let input = match class {
+                    PrecisionInput::Clean => clean.clone(),
+                    PrecisionInput::OriginStress(transform, offset) => {
+                        let case_key = (seed_block << 32) | index as u64;
+                        stress_matched_input(clean, transform, offset, seed, case_key)?
+                    }
+                };
+                let reference = arm_score(arm, &input)?;
+                let (single, condition) = match arm {
+                    ComparisonArm::T6 => t6_score_f32(&input),
+                    _ => c6_score_f32(&input).ok_or(EvalError::MatchedPrecisionInvalid {
+                        reason: "carrier_invalid",
+                    })?,
+                };
+                cell.n_cases += 1;
+                if !single.is_finite() {
+                    cell.non_finite_f32 += 1;
+                    continue;
+                }
+                let error = (single - reference).abs();
+                let bound = tolerance * condition;
+                let ratio = if bound > 0.0 {
+                    error / bound
+                } else if error == 0.0 {
+                    0.0
+                } else {
+                    f64::INFINITY
+                };
+                if ratio <= 1.0 {
+                    cell.within_tolerance += 1;
+                } else {
+                    cell.tolerance_failures += 1;
+                }
+                cell.sign_flips += u64::from(
+                    (single > 0.0) != (reference > 0.0) || (single < 0.0) != (reference < 0.0),
+                );
+                cell.max_abs_error = cell.max_abs_error.max(error);
+                cell.max_error_to_bound = cell.max_error_to_bound.max(ratio);
+            }
+            cells.push(cell);
         }
     }
     Ok(cells)
