@@ -83,6 +83,12 @@
 //! adds input-noise robustness: declared deterministic perturbation families
 //! (isotropic, even-only, odd-only) at declared amplitudes, applied
 //! identically to both paired arms, with label-free decision stability.
+//! Issue #690 makes the Stage-C provenance authoritative (envelope v2): no
+//! case can be scored without a validated envelope; the envelope binds the
+//! complete canonical [`EvaluatorConfig`], the exact admitted population
+//! (per-case family, `group_id`, canonical digest and registered seed), a
+//! source-content digest of the TDI-24 evaluator surface, and the version of
+//! the compiler that actually built this crate.
 //! No training,
 //! confirmatory execution, protected/final evaluation, or scientific claim is
 //! authorised here.
@@ -165,7 +171,62 @@ pub const PAIRED_UNCERTAINTY_CONTRACT: &str = "tdi24-paired-uncertainty-v1";
 pub const FAILURE_TAXONOMY_CONTRACT: &str = "tdi24-failure-taxonomy-v1";
 
 /// Versioned provenance-envelope contract: code/config/data/seed/toolchain identity.
-pub const PROVENANCE_ENVELOPE_CONTRACT: &str = "tdi24-provenance-envelope-v1";
+///
+/// v2 (issue #690) binds the complete evaluator configuration, the exact
+/// admitted population with per-case seeds, a source-content digest and the
+/// actual build compiler. Envelopes under the superseded
+/// [`LEGACY_PROVENANCE_ENVELOPE_CONTRACT`] are rejected as `contract_drift`.
+pub const PROVENANCE_ENVELOPE_CONTRACT: &str = "tdi24-provenance-envelope-v2";
+
+/// Superseded slice-29 envelope contract (`tdi24-provenance-envelope-v1`).
+///
+/// Retained for lineage only: it carried semantic contract labels instead of
+/// exact code/config/data/seed/compiler identity and is never admitted.
+pub const LEGACY_PROVENANCE_ENVELOPE_CONTRACT: &str = "tdi24-provenance-envelope-v1";
+
+/// Canonical evaluator-configuration identity contract bound by envelope v2.
+pub const PROVENANCE_CONFIG_IDENTITY_CONTRACT: &str = "tdi24-evaluator-config-identity-v1";
+
+/// Source-content digest contract for the code identity bound by envelope v2.
+///
+/// FNV-1a 64 over the ordered `(path, byte length, bytes)` of every TDI-24
+/// evaluator source file compiled into this crate. Non-cryptographic: it
+/// identifies the exact source text, it does not authenticate it.
+pub const PROVENANCE_SOURCE_DIGEST_CONTRACT: &str = "tdi24-source-digest-fnv1a64-v1";
+
+/// Admitted-population identity contract bound by envelope v2.
+pub const PROVENANCE_POPULATION_CONTRACT: &str = "tdi24-admitted-population-v1";
+
+/// Per-case seed identity contract bound by envelope v2.
+pub const PROVENANCE_CASE_SEED_CONTRACT: &str = "tdi24-case-seed-binding-v1";
+
+/// `rustc --version` of the compiler that actually built this crate.
+///
+/// Captured by `tdi-ai/build.rs` from Cargo's `RUSTC`; `unavailable` when the
+/// compiler could not be queried, which makes every envelope fail closed.
+pub const BUILD_RUSTC_VERSION: &str = env!("TDI_AI_BUILD_RUSTC_VERSION");
+
+/// Ordered TDI-24 evaluator source surface bound into the code identity.
+const PROVENANCE_SOURCE_FILES: [(&str, &str); 6] = [
+    (
+        "tdi-ai/src/tdi24_accounting.rs",
+        include_str!("tdi24_accounting.rs"),
+    ),
+    (
+        "tdi-ai/src/tdi24_attention.rs",
+        include_str!("tdi24_attention.rs"),
+    ),
+    (
+        "tdi-ai/src/tdi24_chiral.rs",
+        include_str!("tdi24_chiral.rs"),
+    ),
+    ("tdi-ai/src/tdi24_eval.rs", include_str!("tdi24_eval.rs")),
+    ("tdi-ai/src/tdi24_tasks.rs", include_str!("tdi24_tasks.rs")),
+    (
+        "tdi-ai/src/tdi24_vector.rs",
+        include_str!("tdi24_vector.rs"),
+    ),
+];
 
 /// Versioned Stage-C bounded preflight contract (slice 30).
 pub const STAGE_C_PREFLIGHT_CONTRACT: &str = "tdi24-stage-c-preflight-v1";
@@ -210,20 +271,25 @@ pub const C6_REFERENCE_WEIGHTS: ChiralScoreWeights = ChiralScoreWeights {
     gamma: 1.0,
 };
 
-/// Declared rustc channel string for Stage-C provenance (matches CI gate `1.97.1`).
+/// Declared CI rustc release for the TDI-24 gates (`1.97.1`).
 ///
-/// Software-surface identity only — does **not** invent a configuration-freeze pin
-/// and does not authorise protected/final execution.
+/// Since issue #690 this is a declaration only: envelopes record the release
+/// of the compiler that actually built the evaluator ([`build_rustc_release`]),
+/// never this constant. Does **not** invent a configuration-freeze pin and does
+/// not authorise protected/final execution.
 pub const PROVENANCE_TOOLCHAIN_CHANNEL: &str = "1.97.1";
 
 /// Declared Cargo feature set retained in the provenance toolchain identity.
 pub const PROVENANCE_TOOLCHAIN_FEATURES: &str = "experimental";
 
-/// Combined toolchain identity token: `{channel}/{features}`.
+/// Declared CI toolchain identity token: `{channel}/{features}`.
+///
+/// Equal to an envelope's [`ProvenanceEnvelope::toolchain_identity`] only when
+/// the evaluator was actually built by the declared CI release.
 pub const PROVENANCE_TOOLCHAIN_ID: &str = "1.97.1/experimental";
 
 /// Maximum UTF-8 byte length admitted for code/config/data/seed identity strings.
-pub const MAX_PROVENANCE_IDENTITY_BYTES: usize = 384;
+pub const MAX_PROVENANCE_IDENTITY_BYTES: usize = 1024;
 
 /// Nominal two-sided confidence level for Stage-C paired uncertainty summaries.
 pub const PAIRED_UNCERTAINTY_LEVEL: f64 = 0.95;
@@ -418,31 +484,46 @@ pub struct EvaluatorRun {
 impl EvaluatorRun {
     /// Open a bounded non-final run without a bound provenance envelope.
     ///
-    /// Prefer [`Self::open_with_provenance`] when a Stage-C identity envelope is available.
+    /// Such a run validates its configuration but **cannot evaluate**: every
+    /// `evaluate_*` call fails closed with `provenance_required` (issue #690).
+    /// Use [`Self::open_with_provenance`] to score cases.
     pub fn open(config: EvaluatorConfig) -> Result<Self, EvalError> {
         Self::open_inner(config, None)
     }
 
     /// Open a bounded non-final run bound to a validated provenance envelope.
     ///
-    /// Fail-closed when the envelope drifts from the run arm/split or fails
+    /// Fail-closed when the envelope drifts from the run arm/split, from the
+    /// complete canonical configuration, or fails
     /// [`validate_provenance_envelope`]. Does not execute protected/final data.
     pub fn open_with_provenance(
         config: EvaluatorConfig,
         envelope: ProvenanceEnvelope,
     ) -> Result<Self, EvalError> {
-        validate_provenance_envelope(&envelope)?;
-        if envelope.arm != config.arm {
-            return Err(EvalError::ProvenanceEnvelopeInvalid {
-                reason: "arm_mismatch",
-            });
-        }
-        if envelope.split != config.split {
-            return Err(EvalError::ProvenanceEnvelopeInvalid {
-                reason: "split_mismatch",
-            });
-        }
+        validate_provenance_binding(&envelope, &config)?;
         Self::open_inner(config, Some(envelope))
+    }
+
+    /// Admit one case before scoring: a bound envelope must exist, list this
+    /// exact case (family, `case_id`, `group_id`, canonical digest) and bind it
+    /// to its registered per-case seed; each admitted case is scored once.
+    fn admit_case(&self, view: &InferenceView) -> Result<(), EvalError> {
+        let Some(envelope) = self.provenance.as_ref() else {
+            return Err(EvalError::ProvenanceEnvelopeInvalid {
+                reason: "provenance_required",
+            });
+        };
+        admit_view_against_population(&envelope.admitted_cases, view)?;
+        if self
+            .records
+            .iter()
+            .any(|record| record.family == view.family && record.case_id == view.case_id)
+        {
+            return Err(EvalError::ProvenanceEnvelopeInvalid {
+                reason: "case_already_evaluated",
+            });
+        }
+        Ok(())
     }
 
     fn open_inner(
@@ -512,6 +593,7 @@ impl EvaluatorRun {
                 actual: view.split,
             });
         }
+        self.admit_case(view)?;
 
         // Inference callback sees only the view; sealed target stays outside.
         let scored = run_inference_callback(case, score_v6_from_view);
@@ -577,6 +659,7 @@ impl EvaluatorRun {
                 actual: view.split,
             });
         }
+        self.admit_case(view)?;
         let scored = run_inference_callback(case, score_c6_from_view);
         let outcome = match scored {
             Ok(score) if self.config.budget.max_readout_scalars_per_case >= 2 => {
@@ -2118,32 +2201,86 @@ pub fn retain_from_eval_record(record: &EvalRecord) -> Result<Option<FailureReco
     }
 }
 
+/// One admitted case bound into a provenance envelope (issue #690).
+///
+/// Identifies the exact inference-visible case and the registered per-case
+/// seed `register_seed(domain(split), family, group_id)` that the Phase-B
+/// generators derive it from. Never carries a target or oracle label.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AdmittedCase {
+    pub family: TaskFamily,
+    pub case_id: u64,
+    pub group_id: u64,
+    /// Canonical inference-view digest (slice 19).
+    pub canonical_digest: String,
+    /// Registered seed bound to this case's family and `group_id` (slice 18).
+    pub seed: RegisteredSeed,
+}
+
+impl AdmittedCase {
+    /// Bind one inference view: canonical digest plus its registered seed.
+    #[must_use]
+    pub fn from_view(view: &InferenceView) -> Self {
+        Self {
+            family: view.family,
+            case_id: view.case_id,
+            group_id: view.group_id,
+            canonical_digest: canonicalize_inference_view(view).digest,
+            seed: register_seed(
+                SeedDomain::from_split(view.split),
+                view.family,
+                view.group_id,
+            ),
+        }
+    }
+
+    fn canonical_line(&self) -> String {
+        format!(
+            "family={};case={:016x};group={:016x};digest={};seed={:016x}\n",
+            self.family.as_str(),
+            self.case_id,
+            self.group_id,
+            self.canonical_digest,
+            self.seed.mixed_seed
+        )
+    }
+}
+
 /// One immutable provenance envelope for a single non-final evaluator run.
 ///
-/// Captures code/config/data/seed/toolchain identity so later Stage-C preflight
-/// (slice 30) can bind run identity without inventing freeze pins.
-/// Development/Validation only — protected/final splits are rejected.
+/// Envelope v2 (issue #690) binds the exact source surface, the complete
+/// canonical evaluator configuration, the admitted population and its per-case
+/// seeds, and the compiler that actually built the evaluator. No freeze pin is
+/// invented. Development/Validation only — protected/final splits are rejected.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProvenanceEnvelope {
     pub provenance_contract: &'static str,
     pub arm: EvalArm,
     pub split: DataSplit,
-    /// Code-surface identity (crate/module contract pins or content-digest placeholder).
+    /// Source-content digest of the TDI-24 evaluator surface plus arm contracts.
     pub code_identity: String,
-    /// Configuration identity (evaluator/matcher/metric registry contract pins).
+    /// Canonical rendering of the complete [`EvaluatorConfig`].
     pub config_identity: String,
-    /// Data identity (split + dataset/canonical digest contract refs already used).
+    /// Admitted-population digest (count, ordered case digests and seeds).
     pub data_identity: String,
-    /// Seed identity (registered seed / group_id domain tags; no new seed material).
+    /// Per-case seed binding digest under the slice-18 registry.
     pub seed_identity: String,
-    /// Declared rustc channel (see [`PROVENANCE_TOOLCHAIN_CHANNEL`]).
+    /// Ordered admitted population; every scored case must appear here.
+    pub admitted_cases: Vec<AdmittedCase>,
+    /// Release of the compiler that built the evaluator (see [`build_rustc_release`]).
     pub toolchain_channel: &'static str,
     /// Declared Cargo features (see [`PROVENANCE_TOOLCHAIN_FEATURES`]).
     pub toolchain_features: &'static str,
+    /// Full `rustc --version` of the build compiler ([`BUILD_RUSTC_VERSION`]).
+    pub compiler_identity: &'static str,
 }
 
 impl ProvenanceEnvelope {
     /// Construct and validate a provenance envelope for a Development/Validation run.
+    ///
+    /// Every identity is checked against the values recomputed from the
+    /// admitted population and the compiled source; use
+    /// [`Self::for_pinned_stage_c_run`] to derive them.
     #[allow(clippy::too_many_arguments)]
     pub fn for_non_final_run(
         arm: EvalArm,
@@ -2152,6 +2289,7 @@ impl ProvenanceEnvelope {
         config_identity: impl Into<String>,
         data_identity: impl Into<String>,
         seed_identity: impl Into<String>,
+        admitted_cases: Vec<AdmittedCase>,
         toolchain_channel: &'static str,
         toolchain_features: &'static str,
     ) -> Result<Self, EvalError> {
@@ -2163,31 +2301,34 @@ impl ProvenanceEnvelope {
             config_identity: config_identity.into(),
             data_identity: data_identity.into(),
             seed_identity: seed_identity.into(),
+            admitted_cases,
             toolchain_channel,
             toolchain_features,
+            compiler_identity: BUILD_RUSTC_VERSION,
         };
         validate_provenance_envelope(&envelope)?;
         Ok(envelope)
     }
 
-    /// Canonical Stage-C reference envelope using pinned toolchain channel/features
-    /// and identity bundles derived from already-landed contracts / registered seeds.
+    /// Authoritative Stage-C envelope derived from the actual run configuration
+    /// and the exact admitted population (issue #690).
     pub fn for_pinned_stage_c_run(
-        arm: EvalArm,
-        split: DataSplit,
-        registered: &RegisteredSeed,
-        group_id: u64,
+        config: &EvaluatorConfig,
+        admitted_cases: Vec<AdmittedCase>,
     ) -> Result<Self, EvalError> {
-        Self::for_non_final_run(
-            arm,
-            split,
-            stage_c_code_identity_bundle(arm),
-            stage_c_config_identity_bundle(),
-            stage_c_data_identity_bundle(split),
-            stage_c_seed_identity(registered, group_id),
-            PROVENANCE_TOOLCHAIN_CHANNEL,
+        let envelope = Self::for_non_final_run(
+            config.arm,
+            config.split,
+            stage_c_code_identity_bundle(config.arm),
+            stage_c_config_identity_bundle(config),
+            stage_c_data_identity_bundle(config.split, &admitted_cases),
+            stage_c_seed_identity(config.split, &admitted_cases),
+            admitted_cases,
+            build_rustc_release(),
             PROVENANCE_TOOLCHAIN_FEATURES,
-        )
+        )?;
+        validate_provenance_binding(&envelope, config)?;
+        Ok(envelope)
     }
 
     /// Combined toolchain identity token `{channel}/{features}`.
@@ -2195,6 +2336,55 @@ impl ProvenanceEnvelope {
     pub fn toolchain_identity(&self) -> String {
         format!("{}/{}", self.toolchain_channel, self.toolchain_features)
     }
+}
+
+/// Release token of the build compiler, e.g. `1.97.1` from
+/// `rustc 1.97.1 (hash date)`; `unavailable` when it cannot be parsed.
+#[must_use]
+pub fn build_rustc_release() -> &'static str {
+    parse_rustc_release(BUILD_RUSTC_VERSION).unwrap_or("unavailable")
+}
+
+/// Parse the release token of a `rustc --version` line.
+#[must_use]
+pub fn parse_rustc_release(version: &str) -> Option<&str> {
+    let mut parts = version.split_whitespace();
+    if parts.next() != Some("rustc") {
+        return None;
+    }
+    let release = parts.next()?;
+    let numeric = release.split('-').next()?;
+    let mut fields = 0_usize;
+    for field in numeric.split('.') {
+        if field.is_empty() || !field.bytes().all(|byte| byte.is_ascii_digit()) {
+            return None;
+        }
+        fields += 1;
+    }
+    (fields == 3).then_some(release)
+}
+
+fn fnv1a64_update(mut hash: u64, bytes: &[u8]) -> u64 {
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
+const FNV1A64_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+
+/// FNV-1a 64 digest of the ordered TDI-24 evaluator source surface.
+#[must_use]
+pub fn stage_c_source_digest() -> String {
+    let mut hash = FNV1A64_OFFSET;
+    for (path, text) in PROVENANCE_SOURCE_FILES {
+        hash = fnv1a64_update(hash, path.as_bytes());
+        hash = fnv1a64_update(hash, &[0]);
+        hash = fnv1a64_update(hash, &(text.len() as u64).to_le_bytes());
+        hash = fnv1a64_update(hash, text.as_bytes());
+    }
+    format!("{hash:016x}")
 }
 
 fn validate_identity_string(field: &'static str, value: &str) -> Result<(), EvalError> {
@@ -2222,7 +2412,41 @@ fn validate_identity_string(field: &'static str, value: &str) -> Result<(), Eval
     Ok(())
 }
 
+fn validate_admitted_case(split: DataSplit, case: &AdmittedCase) -> Result<(), EvalError> {
+    if case.seed.domain != SeedDomain::from_split(split) {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "seed_domain_split_mismatch",
+        });
+    }
+    if case.seed.registry_contract != SEED_REGISTRY_CONTRACT {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "seed_registry_contract_missing",
+        });
+    }
+    if case.seed != register_seed(SeedDomain::from_split(split), case.family, case.group_id) {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "case_seed_mismatch",
+        });
+    }
+    if case.canonical_digest.len() != 16
+        || !case
+            .canonical_digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "malformed_case_digest",
+        });
+    }
+    Ok(())
+}
+
 /// Validate a provenance envelope against the closed contract and identity rules.
+///
+/// Recomputes the code, data and seed identities from the compiled source and
+/// the admitted population, and requires the actual build compiler. The
+/// configuration identity is checked against a concrete configuration by
+/// [`validate_provenance_binding`].
 pub fn validate_provenance_envelope(envelope: &ProvenanceEnvelope) -> Result<(), EvalError> {
     validate_non_final_split(envelope.split)?;
     if envelope.provenance_contract != PROVENANCE_ENVELOPE_CONTRACT {
@@ -2244,90 +2468,232 @@ pub fn validate_provenance_envelope(envelope: &ProvenanceEnvelope) -> Result<(),
             reason: "empty_toolchain_features",
         });
     }
-    if envelope.toolchain_channel != PROVENANCE_TOOLCHAIN_CHANNEL
+    if parse_rustc_release(envelope.compiler_identity).is_none() {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "compiler_identity_unavailable",
+        });
+    }
+    if envelope.compiler_identity != BUILD_RUSTC_VERSION
+        || envelope.toolchain_channel != build_rustc_release()
         || envelope.toolchain_features != PROVENANCE_TOOLCHAIN_FEATURES
     {
         return Err(EvalError::ProvenanceEnvelopeInvalid {
             reason: "toolchain_drift",
         });
     }
-    if envelope.toolchain_identity() != PROVENANCE_TOOLCHAIN_ID {
+    if envelope.code_identity != stage_c_code_identity_bundle(envelope.arm) {
         return Err(EvalError::ProvenanceEnvelopeInvalid {
-            reason: "toolchain_drift",
+            reason: "code_identity_drift",
         });
     }
-    // Seed-domain tag must agree with the declared non-final split.
-    let expected_domain = SeedDomain::from_split(envelope.split);
-    let domain_needle = format!("domain={}", expected_domain.as_str());
-    if !envelope.seed_identity.contains(&domain_needle) {
+    if !envelope
+        .config_identity
+        .starts_with(PROVENANCE_CONFIG_IDENTITY_CONTRACT)
+    {
         return Err(EvalError::ProvenanceEnvelopeInvalid {
-            reason: "seed_domain_split_mismatch",
+            reason: "config_identity_contract_missing",
         });
     }
-    if !envelope.seed_identity.contains(SEED_REGISTRY_CONTRACT) {
+    if envelope.admitted_cases.is_empty() {
         return Err(EvalError::ProvenanceEnvelopeInvalid {
-            reason: "seed_registry_contract_missing",
+            reason: "empty_population",
+        });
+    }
+    if envelope.admitted_cases.len() as u64 > MAX_CASES_PER_RUN {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "population_exceeds_case_cap",
+        });
+    }
+    for (index, case) in envelope.admitted_cases.iter().enumerate() {
+        validate_admitted_case(envelope.split, case)?;
+        if envelope.admitted_cases[..index]
+            .iter()
+            .any(|earlier| earlier.family == case.family && earlier.case_id == case.case_id)
+        {
+            return Err(EvalError::ProvenanceEnvelopeInvalid {
+                reason: "duplicate_admitted_case",
+            });
+        }
+    }
+    if envelope.data_identity
+        != stage_c_data_identity_bundle(envelope.split, &envelope.admitted_cases)
+    {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "data_identity_drift",
+        });
+    }
+    if envelope.seed_identity != stage_c_seed_identity(envelope.split, &envelope.admitted_cases) {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "seed_identity_drift",
         });
     }
     Ok(())
 }
 
-/// Build a deterministic config-identity bundle from the live Stage-C contract pins.
+/// Validate an envelope and bind it to one concrete evaluator configuration:
+/// arm, split, the complete canonical configuration and the case budget.
+pub fn validate_provenance_binding(
+    envelope: &ProvenanceEnvelope,
+    config: &EvaluatorConfig,
+) -> Result<(), EvalError> {
+    validate_provenance_envelope(envelope)?;
+    if envelope.arm != config.arm {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "arm_mismatch",
+        });
+    }
+    if envelope.split != config.split {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "split_mismatch",
+        });
+    }
+    if envelope.config_identity != stage_c_config_identity_bundle(config) {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "config_identity_mismatch",
+        });
+    }
+    if envelope.admitted_cases.len() as u64 > config.budget.max_cases {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "population_exceeds_budget",
+        });
+    }
+    Ok(())
+}
+
+/// Check one inference view against an admitted population before scoring.
+fn admit_view_against_population(
+    admitted: &[AdmittedCase],
+    view: &InferenceView,
+) -> Result<(), EvalError> {
+    let Some(entry) = admitted
+        .iter()
+        .find(|case| case.family == view.family && case.case_id == view.case_id)
+    else {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "case_not_admitted",
+        });
+    };
+    if entry.group_id != view.group_id {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "case_seed_mismatch",
+        });
+    }
+    if entry.seed
+        != register_seed(
+            SeedDomain::from_split(view.split),
+            view.family,
+            view.group_id,
+        )
+    {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "case_seed_mismatch",
+        });
+    }
+    if entry.canonical_digest != canonicalize_inference_view(view).digest {
+        return Err(EvalError::ProvenanceEnvelopeInvalid {
+            reason: "case_population_mismatch",
+        });
+    }
+    Ok(())
+}
+
+/// Canonical identity of the complete evaluator configuration.
 ///
-/// Concatenates known evaluator/matcher/metric/uncertainty/failure/provenance
-/// contract ids in a stable order. Does not invent freeze pins.
+/// Renders arm, split, every budget field, the envelope/budget/arm contracts,
+/// the metric registry with its ordered diagnostics, and the Stage-C matcher,
+/// uncertainty, failure and provenance contracts in a stable order. Does not
+/// invent freeze pins.
 #[must_use]
-pub fn stage_c_config_identity_bundle() -> String {
-    [
-        EVALUATOR_ENVELOPE_CONTRACT,
-        READOUT_BUDGET_CONTRACT,
+pub fn stage_c_config_identity_bundle(config: &EvaluatorConfig) -> String {
+    let secondaries = config
+        .metric_registry
+        .secondaries
+        .iter()
+        .map(|diagnostic| diagnostic.as_str())
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{PROVENANCE_CONFIG_IDENTITY_CONTRACT};arm={};arm_contract={};split={};envelope={};\
+         budget_contract={};max_cases={};max_readout_scalars_per_case={};updates={};\
+         registry={};primary={};secondaries=[{}];registry_non_final={};matchers={}|{}|{};\
+         uncertainty={};failure_taxonomy={};provenance={}",
+        config.arm.as_str(),
+        config.arm.evaluator_contract(),
+        config.split.as_str(),
+        config.envelope_contract,
+        config.budget.contract,
+        config.budget.max_cases,
+        config.budget.max_readout_scalars_per_case,
+        config.budget.updates,
+        config.metric_registry.registry_contract,
+        config.metric_registry.primary.as_str(),
+        secondaries,
+        config.metric_registry.experimental_non_final,
         PARAMETER_COUNT_MATCHER_CONTRACT,
         INITIALIZATION_MATCHER_CONTRACT,
         OPTIMIZER_UPDATE_BUDGET_CONTRACT,
-        METRIC_REGISTRY_CONTRACT,
         PAIRED_UNCERTAINTY_CONTRACT,
         FAILURE_TAXONOMY_CONTRACT,
         PROVENANCE_ENVELOPE_CONTRACT,
-    ]
-    .join("|")
+    )
 }
 
-/// Build a deterministic code-identity bundle for the V6/C6 evaluator surface.
+/// Code identity: exact source-content digest of the TDI-24 evaluator surface
+/// compiled into this crate, plus the envelope and arm contracts.
 #[must_use]
 pub fn stage_c_code_identity_bundle(arm: EvalArm) -> String {
     format!(
-        "{}|{}|{}",
+        "{}:{}|files={}|{}|{}|{}",
+        PROVENANCE_SOURCE_DIGEST_CONTRACT,
+        stage_c_source_digest(),
+        PROVENANCE_SOURCE_FILES.len(),
         EVALUATOR_ENVELOPE_CONTRACT,
         arm.evaluator_contract(),
         PROVENANCE_ENVELOPE_CONTRACT
     )
 }
 
-/// Build a data-identity bundle from already-used split + dataset canonical refs.
+/// Data identity: split manifest + canonicalization contracts and a digest of
+/// the exact ordered admitted population.
 #[must_use]
-pub fn stage_c_data_identity_bundle(split: DataSplit) -> String {
+pub fn stage_c_data_identity_bundle(split: DataSplit, admitted: &[AdmittedCase]) -> String {
+    let mut hash = FNV1A64_OFFSET;
+    for case in admitted {
+        hash = fnv1a64_update(hash, case.canonical_line().as_bytes());
+    }
     format!(
-        "{}|{}|split={}",
+        "{}|{}|{}|split={}|cases={}|population={:016x}",
+        PROVENANCE_POPULATION_CONTRACT,
         SPLIT_MANIFEST_CONTRACT,
         DATASET_CANONICALIZATION_CONTRACT,
-        split.as_str()
+        split.as_str(),
+        admitted.len(),
+        hash
     )
 }
 
-/// Build a seed-identity string from a registered seed and group_id domain tags.
-///
-/// Reuses the Slice-18 registry contract and mixed seed — does not invent new
-/// seed material.
+/// Seed identity: per-case binding of every admitted case's family and
+/// `group_id` to its slice-18 registered seed. No new seed material.
 #[must_use]
-pub fn stage_c_seed_identity(registered: &RegisteredSeed, group_id: u64) -> String {
+pub fn stage_c_seed_identity(split: DataSplit, admitted: &[AdmittedCase]) -> String {
+    let mut hash = FNV1A64_OFFSET;
+    for case in admitted {
+        let line = format!(
+            "{}:{:016x}:{:016x}:{:016x}\n",
+            case.family.as_str(),
+            case.group_id,
+            case.seed.local_seed,
+            case.seed.mixed_seed
+        );
+        hash = fnv1a64_update(hash, line.as_bytes());
+    }
     format!(
-        "{}|domain={}|family={}|local={:016x}|mixed={:016x}|group={:016x}",
+        "{}|{}|domain={}|cases={}|case_seeds={:016x}",
         SEED_REGISTRY_CONTRACT,
-        registered.domain.as_str(),
-        registered.family.as_str(),
-        registered.local_seed,
-        registered.mixed_seed,
-        group_id
+        PROVENANCE_CASE_SEED_CONTRACT,
+        SeedDomain::from_split(split).as_str(),
+        admitted.len(),
+        hash
     )
 }
 
@@ -2460,6 +2826,9 @@ fn retain_preflight_outcome(
             Ok(())
         }
         Err(EvalError::ProtectedOrFinalSplit) => Err(EvalError::ProtectedOrFinalSplit),
+        // Provenance/admission violations abort the run (issue #690): an
+        // unadmitted case is never converted into a retained failure.
+        Err(error @ EvalError::ProvenanceEnvelopeInvalid { .. }) => Err(error),
         Err(error) => {
             ledger.retain_eval_error(&error, arm, Some(case_id))?;
             Ok(())
@@ -2500,12 +2869,97 @@ const fn preflight_generation_failed() -> EvalError {
     }
 }
 
+/// One sealed Stage-C preflight case, tagged by family-specific oracle.
+enum PreflightCase {
+    Discriminative(LabeledCase<HandednessTarget>),
+    Nuisance(LabeledCase<ReflectionInvariantTarget>),
+    Direction(LabeledCase<DirectionTarget>),
+    NonChiral(LabeledCase<NonChiralTarget>),
+}
+
+impl PreflightCase {
+    fn inference_view(&self) -> &InferenceView {
+        match self {
+            Self::Discriminative(case) => case.inference_view(),
+            Self::Nuisance(case) => case.inference_view(),
+            Self::Direction(case) => case.inference_view(),
+            Self::NonChiral(case) => case.inference_view(),
+        }
+    }
+}
+
+/// Generate the exact ordered preflight population from landed Phase-B generators.
+fn stage_c_preflight_population(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<PreflightCase>, EvalError> {
+    validate_stage_c_preflight_budget(budget)?;
+    let mut cases = Vec::new();
+    let last_pair_id = budget.first_pair_id + budget.pairs_per_family;
+    for pair_id in budget.first_pair_id..last_pair_id {
+        let discriminative = reflection_discriminative_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [discriminative.right, discriminative.left] {
+            cases.push(PreflightCase::Discriminative(
+                seal_reflection_discriminative(&member),
+            ));
+        }
+        let nuisance = reflection_nuisance_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [nuisance.canonical, nuisance.reflected] {
+            cases.push(PreflightCase::Nuisance(seal_reflection_nuisance(&member)));
+        }
+        let direction = direction_reversal_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [direction.forward, direction.reverse] {
+            cases.push(PreflightCase::Direction(seal_direction_reversal(&member)));
+        }
+        let base_case_id = pair_id
+            .checked_mul(STAGE_C_PREFLIGHT_MEMBERS_PER_PAIR)
+            .ok_or_else(preflight_generation_failed)?;
+        for case_id in [base_case_id, base_case_id + 1] {
+            let control = non_chiral_control_case_in_split(case_id, split)
+                .map_err(|_| preflight_generation_failed())?;
+            cases.push(PreflightCase::NonChiral(seal_non_chiral_control(&control)));
+        }
+    }
+    Ok(cases)
+}
+
+/// Admitted population (canonical digests and per-case seeds) of one
+/// bounded Stage-C preflight, in evaluation order (issue #690).
+pub fn stage_c_preflight_admitted_cases(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<AdmittedCase>, EvalError> {
+    validate_non_final_split(split)?;
+    Ok(stage_c_preflight_population(split, budget)?
+        .iter()
+        .map(|case| AdmittedCase::from_view(case.inference_view()))
+        .collect())
+}
+
+/// Expected Stage-C preflight configuration for one arm (`max_cases = cases_per_arm`).
+pub fn stage_c_preflight_config(
+    split: DataSplit,
+    arm: EvalArm,
+    cases_per_arm: u64,
+) -> Result<EvaluatorConfig, EvalError> {
+    let mut config = match arm {
+        EvalArm::V6 => EvaluatorConfig::v6(split)?,
+        EvalArm::C6 => EvaluatorConfig::c6(split)?,
+    };
+    config.budget.max_cases = cases_per_arm;
+    Ok(config)
+}
+
 /// Run one bounded Stage-C preflight smoke campaign on a non-final split.
 ///
 /// Deterministic; no RNG, no training, no protected/final population. The
-/// initialization / ordering seed and provenance seed identity reuse the
-/// Slice-18 registered seed for `(split domain, ReflectionDiscriminative,
-/// first_pair_id)` — no new seed material and no freeze pin is invented.
+/// initialization / ordering seed reuses the Slice-18 registered seed for
+/// `(split domain, ReflectionDiscriminative, first_pair_id)`; each admitted
+/// case carries its own registered seed in the provenance envelope (issue
+/// #690). No new seed material and no freeze pin is invented.
 pub fn run_stage_c_preflight(
     split: DataSplit,
     budget: StageCPreflightBudget,
@@ -2533,79 +2987,60 @@ pub fn run_stage_c_preflight(
     let metric_registry = MetricRegistry::pinned();
     validate_metric_registry(&metric_registry)?;
 
-    let v6_provenance = ProvenanceEnvelope::for_pinned_stage_c_run(
-        EvalArm::V6,
-        split,
-        &registered,
-        budget.first_pair_id,
-    )?;
-    let c6_provenance = ProvenanceEnvelope::for_pinned_stage_c_run(
-        EvalArm::C6,
-        split,
-        &registered,
-        budget.first_pair_id,
-    )?;
-    let mut v6_config = EvaluatorConfig::v6(split)?;
-    v6_config.budget.max_cases = cases_per_arm;
-    let mut c6_config = EvaluatorConfig::c6(split)?;
-    c6_config.budget.max_cases = cases_per_arm;
+    // Admit the exact population before any case is scored.
+    let population = stage_c_preflight_population(split, budget)?;
+    let admitted: Vec<AdmittedCase> = population
+        .iter()
+        .map(|case| AdmittedCase::from_view(case.inference_view()))
+        .collect();
+    if admitted.len() as u64 != cases_per_arm {
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "population_size_mismatch",
+        });
+    }
+    let v6_config = stage_c_preflight_config(split, EvalArm::V6, cases_per_arm)?;
+    let c6_config = stage_c_preflight_config(split, EvalArm::C6, cases_per_arm)?;
+    let v6_provenance = ProvenanceEnvelope::for_pinned_stage_c_run(&v6_config, admitted.clone())?;
+    let c6_provenance = ProvenanceEnvelope::for_pinned_stage_c_run(&c6_config, admitted)?;
     let mut v6_run = EvaluatorRun::open_with_provenance(v6_config, v6_provenance.clone())?;
     let mut c6_run = EvaluatorRun::open_with_provenance(c6_config, c6_provenance.clone())?;
     let mut v6_failures = FailureLedger::open(split)?;
     let mut c6_failures = FailureLedger::open(split)?;
 
-    let last_pair_id = budget.first_pair_id + budget.pairs_per_family;
-    for pair_id in budget.first_pair_id..last_pair_id {
-        let discriminative = reflection_discriminative_pair_in_split(pair_id, split)
-            .map_err(|_| preflight_generation_failed())?;
-        for member in [discriminative.right, discriminative.left] {
-            evaluate_preflight_pair(
-                &seal_reflection_discriminative(&member),
+    for case in &population {
+        match case {
+            PreflightCase::Discriminative(sealed) => evaluate_preflight_pair(
+                sealed,
                 handedness_sign,
                 &mut v6_run,
                 &mut c6_run,
                 &mut v6_failures,
                 &mut c6_failures,
-            )?;
-        }
-        let nuisance = reflection_nuisance_pair_in_split(pair_id, split)
-            .map_err(|_| preflight_generation_failed())?;
-        for member in [nuisance.canonical, nuisance.reflected] {
-            evaluate_preflight_pair(
-                &seal_reflection_nuisance(&member),
+            )?,
+            PreflightCase::Nuisance(sealed) => evaluate_preflight_pair(
+                sealed,
                 reflection_invariant_sign,
                 &mut v6_run,
                 &mut c6_run,
                 &mut v6_failures,
                 &mut c6_failures,
-            )?;
-        }
-        let direction = direction_reversal_pair_in_split(pair_id, split)
-            .map_err(|_| preflight_generation_failed())?;
-        for member in [direction.forward, direction.reverse] {
-            evaluate_preflight_pair(
-                &seal_direction_reversal(&member),
+            )?,
+            PreflightCase::Direction(sealed) => evaluate_preflight_pair(
+                sealed,
                 direction_sign,
                 &mut v6_run,
                 &mut c6_run,
                 &mut v6_failures,
                 &mut c6_failures,
-            )?;
-        }
-        let base_case_id = pair_id
-            .checked_mul(STAGE_C_PREFLIGHT_MEMBERS_PER_PAIR)
-            .ok_or_else(preflight_generation_failed)?;
-        for case_id in [base_case_id, base_case_id + 1] {
-            let control = non_chiral_control_case_in_split(case_id, split)
-                .map_err(|_| preflight_generation_failed())?;
-            evaluate_preflight_pair(
-                &seal_non_chiral_control(&control),
+            )?,
+            PreflightCase::NonChiral(sealed) => evaluate_preflight_pair(
+                sealed,
                 non_chiral_sign,
                 &mut v6_run,
                 &mut c6_run,
                 &mut v6_failures,
                 &mut c6_failures,
-            )?;
+            )?,
         }
     }
 
@@ -2671,6 +3106,19 @@ fn validate_preflight_arm(
             reason: "provenance_binding_mismatch",
         });
     }
+    // Issue #690: the envelope must bind the exact preflight configuration
+    // and an admitted population of exactly `cases_per_arm` cases.
+    let expected_config = stage_c_preflight_config(split, arm, cases_per_arm)?;
+    validate_provenance_binding(provenance, &expected_config).map_err(|_| {
+        EvalError::StageCPreflightInvalid {
+            reason: "provenance_config_mismatch",
+        }
+    })?;
+    if provenance.admitted_cases.len() as u64 != cases_per_arm {
+        return Err(EvalError::StageCPreflightInvalid {
+            reason: "population_size_mismatch",
+        });
+    }
     if failures.split() != split || failures.taxonomy_contract() != FAILURE_TAXONOMY_CONTRACT {
         return Err(EvalError::StageCPreflightInvalid {
             reason: "failure_ledger_binding_mismatch",
@@ -2697,6 +3145,10 @@ fn validate_preflight_arm(
             reason: "unaccounted_cases",
         });
     }
+    // Records bind injectively and in admission order to the full admitted
+    // identity (family, case, group, canonical digest); a hard failure may
+    // only skip an admitted case, never duplicate or reorder one.
+    let mut next_admitted = 0usize;
     for record in records {
         validate_eval_record_contracts(record)?;
         if record.arm != arm || record.split != split {
@@ -2704,12 +3156,40 @@ fn validate_preflight_arm(
                 reason: "record_binding_mismatch",
             });
         }
+        let Some(offset) = provenance.admitted_cases[next_admitted..]
+            .iter()
+            .position(|case| case.family == record.family && case.case_id == record.case_id)
+        else {
+            return Err(EvalError::StageCPreflightInvalid {
+                reason: "record_not_admitted",
+            });
+        };
+        let admitted = &provenance.admitted_cases[next_admitted + offset];
+        if admitted.group_id != record.group_id
+            || admitted.canonical_digest != record.canonical_digest
+        {
+            return Err(EvalError::StageCPreflightInvalid {
+                reason: "record_identity_mismatch",
+            });
+        }
+        next_admitted += offset + 1;
     }
     for failure in failures.records() {
         validate_failure_record(failure)?;
         if failure.arm != arm {
             return Err(EvalError::StageCPreflightInvalid {
                 reason: "failure_arm_mismatch",
+            });
+        }
+        let unadmitted = failure.case_id.is_some_and(|case_id| {
+            !provenance
+                .admitted_cases
+                .iter()
+                .any(|case| case.case_id == case_id)
+        });
+        if unadmitted {
+            return Err(EvalError::StageCPreflightInvalid {
+                reason: "failure_not_admitted",
             });
         }
     }
@@ -2792,9 +3272,13 @@ pub fn validate_stage_c_preflight_report(report: &StageCPreflightReport) -> Resu
         &report.c6_failures,
         &report.c6_provenance,
     )?;
+    // Config identities differ by arm only; each was bound to its expected
+    // arm configuration above. Population and per-case seeds must be paired.
     if report.v6_provenance.seed_identity != report.c6_provenance.seed_identity
-        || report.v6_provenance.config_identity != report.c6_provenance.config_identity
         || report.v6_provenance.data_identity != report.c6_provenance.data_identity
+        || report.v6_provenance.admitted_cases != report.c6_provenance.admitted_cases
+        || report.v6_provenance.code_identity.split('|').next()
+            != report.c6_provenance.code_identity.split('|').next()
     {
         return Err(EvalError::StageCPreflightInvalid {
             reason: "unpaired_provenance",
@@ -7359,6 +7843,16 @@ mod tests {
         seal_reflection_discriminative, seal_reflection_nuisance,
     };
 
+    /// Open a run whose provenance envelope admits exactly `views` (issue #690).
+    fn admitted_run(config: EvaluatorConfig, views: &[&InferenceView]) -> EvaluatorRun {
+        let admitted = views
+            .iter()
+            .map(|view| AdmittedCase::from_view(view))
+            .collect();
+        let envelope = ProvenanceEnvelope::for_pinned_stage_c_run(&config, admitted).unwrap();
+        EvaluatorRun::open_with_provenance(config, envelope).unwrap()
+    }
+
     #[test]
     fn c6_evaluator_contract_and_budget_match_v6() {
         assert_eq!(C6_EVALUATOR_CONTRACT, "tdi24-c6-evaluator-v1");
@@ -7375,12 +7869,18 @@ mod tests {
                 .unwrap()
                 .right;
             let labeled = seal_reflection_discriminative(&case);
-            let mut first = EvaluatorRun::open(EvaluatorConfig::c6(split).unwrap()).unwrap();
+            let mut first = admitted_run(
+                EvaluatorConfig::c6(split).unwrap(),
+                &[labeled.inference_view()],
+            );
             let a = first
                 .evaluate_c6_binary(&labeled, handedness_sign)
                 .unwrap()
                 .clone();
-            let mut second = EvaluatorRun::open(EvaluatorConfig::c6(split).unwrap()).unwrap();
+            let mut second = admitted_run(
+                EvaluatorConfig::c6(split).unwrap(),
+                &[labeled.inference_view()],
+            );
             let b = second
                 .evaluate_c6_binary(&labeled, handedness_sign)
                 .unwrap()
@@ -7413,10 +7913,12 @@ mod tests {
 
     #[test]
     fn v6_development_path_is_deterministic_and_label_sealed() {
-        let mut run =
-            EvaluatorRun::open(EvaluatorConfig::v6(DataSplit::Development).unwrap()).unwrap();
         let labeled =
             seal_reflection_discriminative(&reflection_discriminative_pair(3).unwrap().right);
+        let mut run = admitted_run(
+            EvaluatorConfig::v6(DataSplit::Development).unwrap(),
+            &[labeled.inference_view()],
+        );
         let rendered = run_inference_callback(&labeled, |view| format!("{view:?}"));
         assert!(!rendered.contains("Right"));
         assert!(!rendered.contains("Left"));
@@ -7427,8 +7929,10 @@ mod tests {
             .unwrap()
             .clone();
         let second = {
-            let mut again =
-                EvaluatorRun::open(EvaluatorConfig::v6(DataSplit::Development).unwrap()).unwrap();
+            let mut again = admitted_run(
+                EvaluatorConfig::v6(DataSplit::Development).unwrap(),
+                &[labeled.inference_view()],
+            );
             again
                 .evaluate_v6_binary(&labeled, handedness_sign)
                 .unwrap()
@@ -7446,12 +7950,14 @@ mod tests {
 
     #[test]
     fn v6_validation_path_accepts_split_manifest_cases() {
-        let mut run =
-            EvaluatorRun::open(EvaluatorConfig::v6(DataSplit::Validation).unwrap()).unwrap();
         let labeled = seal_reflection_discriminative(
             &reflection_discriminative_pair_in_split(5, DataSplit::Validation)
                 .unwrap()
                 .left,
+        );
+        let mut run = admitted_run(
+            EvaluatorConfig::v6(DataSplit::Validation).unwrap(),
+            &[labeled.inference_view()],
         );
         let record = run.evaluate_v6_binary(&labeled, handedness_sign).unwrap();
         assert_eq!(record.split, DataSplit::Validation);
@@ -7460,8 +7966,12 @@ mod tests {
 
     #[test]
     fn v6_rejects_split_mismatch_and_budget_overflow() {
-        let mut run =
-            EvaluatorRun::open(EvaluatorConfig::v6(DataSplit::Development).unwrap()).unwrap();
+        let development =
+            seal_reflection_discriminative(&reflection_discriminative_pair(1).unwrap().right);
+        let mut run = admitted_run(
+            EvaluatorConfig::v6(DataSplit::Development).unwrap(),
+            &[development.inference_view()],
+        );
         let validation = seal_reflection_discriminative(
             &reflection_discriminative_pair_in_split(1, DataSplit::Validation)
                 .unwrap()
@@ -7474,9 +7984,9 @@ mod tests {
 
         let mut tight = EvaluatorConfig::v6(DataSplit::Development).unwrap();
         tight.budget.max_cases = 1;
-        let mut limited = EvaluatorRun::open(tight).unwrap();
         let a = seal_non_chiral_control(&non_chiral_control_case(0).unwrap());
         let b = seal_non_chiral_control(&non_chiral_control_case(1).unwrap());
+        let mut limited = admitted_run(tight, &[a.inference_view()]);
         assert!(limited.evaluate_v6_binary(&a, non_chiral_sign).is_ok());
         assert_eq!(
             limited.evaluate_v6_binary(&b, non_chiral_sign),
@@ -7486,10 +7996,12 @@ mod tests {
 
     #[test]
     fn v6_scores_nuisance_and_non_chiral_families_without_oracle_leakage() {
-        let mut run =
-            EvaluatorRun::open(EvaluatorConfig::v6(DataSplit::Development).unwrap()).unwrap();
         let nuisance = seal_reflection_nuisance(&reflection_nuisance_pair(2).unwrap().canonical);
         let control = seal_non_chiral_control(&non_chiral_control_case(4).unwrap());
+        let mut run = admitted_run(
+            EvaluatorConfig::v6(DataSplit::Development).unwrap(),
+            &[nuisance.inference_view(), control.inference_view()],
+        );
         let n = run
             .evaluate_v6_binary(&nuisance, reflection_invariant_sign)
             .unwrap();
@@ -7500,8 +8012,10 @@ mod tests {
         let mut hits = 0u32;
         for case_id in 0..8u64 {
             let sealed = seal_non_chiral_control(&non_chiral_control_case(case_id).unwrap());
-            let mut probe =
-                EvaluatorRun::open(EvaluatorConfig::v6(DataSplit::Development).unwrap()).unwrap();
+            let mut probe = admitted_run(
+                EvaluatorConfig::v6(DataSplit::Development).unwrap(),
+                &[sealed.inference_view()],
+            );
             let record = probe.evaluate_v6_binary(&sealed, non_chiral_sign).unwrap();
             if matches!(record.outcome, EvalOutcome::Scored { correct: true, .. }) {
                 hits += 1;
@@ -8677,25 +9191,29 @@ mod tests {
         );
     }
 
+    fn invalid<T>(reason: &'static str) -> Result<T, EvalError> {
+        Err(EvalError::ProvenanceEnvelopeInvalid { reason })
+    }
+
+    fn sample_admitted(split: DataSplit, pairs: u64) -> Vec<AdmittedCase> {
+        stage_c_preflight_admitted_cases(split, StageCPreflightBudget::bounded(pairs, 0)).unwrap()
+    }
+
     #[test]
     fn provenance_envelope_accepts_pinned_non_final_run() {
-        assert_eq!(PROVENANCE_ENVELOPE_CONTRACT, "tdi24-provenance-envelope-v1");
+        assert_eq!(PROVENANCE_ENVELOPE_CONTRACT, "tdi24-provenance-envelope-v2");
+        assert_eq!(
+            LEGACY_PROVENANCE_ENVELOPE_CONTRACT,
+            "tdi24-provenance-envelope-v1"
+        );
         assert_eq!(PROVENANCE_TOOLCHAIN_CHANNEL, "1.97.1");
         assert_eq!(PROVENANCE_TOOLCHAIN_FEATURES, "experimental");
         assert_eq!(PROVENANCE_TOOLCHAIN_ID, "1.97.1/experimental");
 
-        let registered = register_seed(
-            SeedDomain::Development,
-            TaskFamily::ReflectionDiscriminative,
-            42,
-        );
-        let envelope = ProvenanceEnvelope::for_pinned_stage_c_run(
-            EvalArm::V6,
-            DataSplit::Development,
-            &registered,
-            0x11,
-        )
-        .unwrap();
+        let config = EvaluatorConfig::v6(DataSplit::Development).unwrap();
+        let admitted = sample_admitted(DataSplit::Development, 1);
+        let envelope =
+            ProvenanceEnvelope::for_pinned_stage_c_run(&config, admitted.clone()).unwrap();
 
         assert_eq!(envelope.provenance_contract, PROVENANCE_ENVELOPE_CONTRACT);
         assert_eq!(envelope.arm, EvalArm::V6);
@@ -8704,10 +9222,22 @@ mod tests {
             envelope.code_identity,
             stage_c_code_identity_bundle(EvalArm::V6)
         );
-        assert_eq!(envelope.config_identity, stage_c_config_identity_bundle());
+        assert!(
+            envelope
+                .code_identity
+                .contains(PROVENANCE_SOURCE_DIGEST_CONTRACT)
+        );
+        assert!(envelope.code_identity.contains(&stage_c_source_digest()));
+        assert_eq!(
+            envelope.config_identity,
+            stage_c_config_identity_bundle(&config)
+        );
+        assert!(envelope.config_identity.contains("max_cases=64"));
+        assert!(envelope.config_identity.contains("updates=0"));
+        assert!(envelope.config_identity.contains("primary="));
         assert_eq!(
             envelope.data_identity,
-            stage_c_data_identity_bundle(DataSplit::Development)
+            stage_c_data_identity_bundle(DataSplit::Development, &admitted)
         );
         assert!(envelope.data_identity.contains(SPLIT_MANIFEST_CONTRACT));
         assert!(
@@ -8715,193 +9245,234 @@ mod tests {
                 .data_identity
                 .contains(DATASET_CANONICALIZATION_CONTRACT)
         );
+        assert!(envelope.data_identity.contains("cases=8"));
         assert_eq!(
             envelope.seed_identity,
-            stage_c_seed_identity(&registered, 0x11)
+            stage_c_seed_identity(DataSplit::Development, &admitted)
         );
         assert!(envelope.seed_identity.contains(SEED_REGISTRY_CONTRACT));
         assert!(envelope.seed_identity.contains("domain=development"));
-        assert_eq!(envelope.toolchain_channel, PROVENANCE_TOOLCHAIN_CHANNEL);
+        for case in &envelope.admitted_cases {
+            assert_eq!(
+                case.seed,
+                register_seed(SeedDomain::Development, case.family, case.group_id)
+            );
+        }
+        // Toolchain is the compiler that actually built this crate.
+        assert!(BUILD_RUSTC_VERSION.starts_with("rustc "));
+        assert_eq!(envelope.compiler_identity, BUILD_RUSTC_VERSION);
+        assert_eq!(envelope.toolchain_channel, build_rustc_release());
         assert_eq!(envelope.toolchain_features, PROVENANCE_TOOLCHAIN_FEATURES);
-        assert_eq!(envelope.toolchain_identity(), PROVENANCE_TOOLCHAIN_ID);
+        assert_eq!(
+            envelope.toolchain_identity(),
+            format!(
+                "{}/{}",
+                build_rustc_release(),
+                PROVENANCE_TOOLCHAIN_FEATURES
+            )
+        );
         validate_provenance_envelope(&envelope).unwrap();
+        validate_provenance_binding(&envelope, &config).unwrap();
 
-        let config = EvaluatorConfig::v6(DataSplit::Development).unwrap();
         let run = EvaluatorRun::open_with_provenance(config, envelope.clone()).unwrap();
         assert_eq!(run.provenance(), Some(&envelope));
         assert!(run.records().is_empty());
 
-        let registered_v = register_seed(
-            SeedDomain::Validation,
-            TaskFamily::ReflectionDiscriminative,
-            7,
-        );
+        let c6_config = EvaluatorConfig::c6(DataSplit::Validation).unwrap();
         let c6 = ProvenanceEnvelope::for_pinned_stage_c_run(
-            EvalArm::C6,
-            DataSplit::Validation,
-            &registered_v,
-            0x22,
+            &c6_config,
+            sample_admitted(DataSplit::Validation, 1),
         )
         .unwrap();
         assert_eq!(c6.arm, EvalArm::C6);
         assert_eq!(c6.split, DataSplit::Validation);
         assert!(c6.code_identity.contains(C6_EVALUATOR_CONTRACT));
         assert!(c6.seed_identity.contains("domain=validation"));
+        assert_ne!(c6.data_identity, envelope.data_identity);
+    }
+
+    #[test]
+    fn rustc_release_parser_fails_closed() {
+        assert_eq!(
+            parse_rustc_release("rustc 1.97.1 (abcdef012 2026-08-01)"),
+            Some("1.97.1")
+        );
+        assert_eq!(
+            parse_rustc_release("rustc 1.99.0-nightly (abc 2026-09-01)"),
+            Some("1.99.0-nightly")
+        );
+        assert_eq!(parse_rustc_release("unavailable"), None);
+        assert_eq!(parse_rustc_release("rustc"), None);
+        assert_eq!(parse_rustc_release("rustc 1.97"), None);
+        assert_eq!(parse_rustc_release("cargo 1.97.1"), None);
+        assert!(parse_rustc_release(BUILD_RUSTC_VERSION).is_some());
     }
 
     #[test]
     fn provenance_envelope_rejects_empty_protected_and_toolchain_drift() {
-        let registered = register_seed(
-            SeedDomain::Development,
-            TaskFamily::ReflectionDiscriminative,
-            1,
-        );
-        let seed = stage_c_seed_identity(&registered, 0);
-        let data = stage_c_data_identity_bundle(DataSplit::Development);
+        let split = DataSplit::Development;
+        let admitted = sample_admitted(split, 1);
+        let code = stage_c_code_identity_bundle(EvalArm::V6);
+        let config_identity = stage_c_config_identity_bundle(&EvaluatorConfig::v6(split).unwrap());
+        let data = stage_c_data_identity_bundle(split, &admitted);
+        let seed = stage_c_seed_identity(split, &admitted);
+        let release = build_rustc_release();
+        let build = |code: &str,
+                     config: &str,
+                     data: &str,
+                     seed: &str,
+                     cases: Vec<AdmittedCase>,
+                     channel: &'static str,
+                     features: &'static str| {
+            ProvenanceEnvelope::for_non_final_run(
+                EvalArm::V6,
+                split,
+                code,
+                config,
+                data,
+                seed,
+                cases,
+                channel,
+                features,
+            )
+        };
 
-        assert_eq!(
-            ProvenanceEnvelope::for_non_final_run(
-                EvalArm::V6,
-                DataSplit::Development,
-                "",
-                "config",
-                data.clone(),
-                seed.clone(),
-                PROVENANCE_TOOLCHAIN_CHANNEL,
+        assert!(
+            build(
+                &code,
+                &config_identity,
+                &data,
+                &seed,
+                admitted.clone(),
+                release,
+                PROVENANCE_TOOLCHAIN_FEATURES
+            )
+            .is_ok()
+        );
+        let ok = |code: &str, config: &str, data: &str, seed: &str| {
+            build(
+                code,
+                config,
+                data,
+                seed,
+                admitted.clone(),
+                release,
                 PROVENANCE_TOOLCHAIN_FEATURES,
-            ),
-            Err(EvalError::ProvenanceEnvelopeInvalid {
-                reason: "empty_code_identity",
-            })
+            )
+        };
+        assert_eq!(
+            ok("", &config_identity, &data, &seed),
+            invalid("empty_code_identity")
         );
         assert_eq!(
-            ProvenanceEnvelope::for_non_final_run(
-                EvalArm::V6,
-                DataSplit::Development,
-                "code",
+            ok(&code, "", &data, &seed),
+            invalid("empty_config_identity")
+        );
+        assert_eq!(
+            ok(&code, &config_identity, "", &seed),
+            invalid("empty_data_identity")
+        );
+        assert_eq!(
+            ok(&code, &config_identity, &data, ""),
+            invalid("empty_seed_identity")
+        );
+        // Semantic labels are no longer accepted as identities.
+        assert_eq!(
+            ok("code", &config_identity, &data, &seed),
+            invalid("code_identity_drift")
+        );
+        assert_eq!(
+            ok(&code, "config", &data, &seed),
+            invalid("config_identity_contract_missing")
+        );
+        assert_eq!(
+            ok(&code, &config_identity, "data", &seed),
+            invalid("data_identity_drift")
+        );
+        assert_eq!(
+            ok(&code, &config_identity, &data, "seed"),
+            invalid("seed_identity_drift")
+        );
+        assert_eq!(
+            build(
+                &code,
+                &config_identity,
+                &data,
+                &seed,
+                admitted.clone(),
                 "",
-                data.clone(),
-                seed.clone(),
-                PROVENANCE_TOOLCHAIN_CHANNEL,
-                PROVENANCE_TOOLCHAIN_FEATURES,
+                PROVENANCE_TOOLCHAIN_FEATURES
             ),
-            Err(EvalError::ProvenanceEnvelopeInvalid {
-                reason: "empty_config_identity",
-            })
+            invalid("empty_toolchain_channel")
         );
         assert_eq!(
-            ProvenanceEnvelope::for_non_final_run(
-                EvalArm::V6,
-                DataSplit::Development,
-                "code",
-                "config",
-                "",
-                seed.clone(),
-                PROVENANCE_TOOLCHAIN_CHANNEL,
-                PROVENANCE_TOOLCHAIN_FEATURES,
+            build(
+                &code,
+                &config_identity,
+                &data,
+                &seed,
+                admitted.clone(),
+                release,
+                ""
             ),
-            Err(EvalError::ProvenanceEnvelopeInvalid {
-                reason: "empty_data_identity",
-            })
+            invalid("empty_toolchain_features")
         );
         assert_eq!(
-            ProvenanceEnvelope::for_non_final_run(
-                EvalArm::V6,
-                DataSplit::Development,
-                "code",
-                "config",
-                data.clone(),
-                "",
-                PROVENANCE_TOOLCHAIN_CHANNEL,
-                PROVENANCE_TOOLCHAIN_FEATURES,
+            build(
+                &code,
+                &config_identity,
+                &data,
+                &seed,
+                admitted.clone(),
+                "1.96.0-not-the-build-compiler",
+                PROVENANCE_TOOLCHAIN_FEATURES
             ),
-            Err(EvalError::ProvenanceEnvelopeInvalid {
-                reason: "empty_seed_identity",
-            })
+            invalid("toolchain_drift")
         );
         assert_eq!(
-            ProvenanceEnvelope::for_non_final_run(
-                EvalArm::V6,
-                DataSplit::Development,
-                "code",
-                "config",
-                data.clone(),
-                seed.clone(),
-                "",
-                PROVENANCE_TOOLCHAIN_FEATURES,
+            build(
+                &code,
+                &config_identity,
+                &data,
+                &seed,
+                admitted.clone(),
+                release,
+                "default"
             ),
-            Err(EvalError::ProvenanceEnvelopeInvalid {
-                reason: "empty_toolchain_channel",
-            })
+            invalid("toolchain_drift")
         );
+        let mut unknown_compiler = ProvenanceEnvelope::for_pinned_stage_c_run(
+            &EvaluatorConfig::v6(split).unwrap(),
+            admitted.clone(),
+        )
+        .unwrap();
+        unknown_compiler.compiler_identity = "unavailable";
         assert_eq!(
-            ProvenanceEnvelope::for_non_final_run(
-                EvalArm::V6,
-                DataSplit::Development,
-                "code",
-                "config",
-                data.clone(),
-                seed.clone(),
-                PROVENANCE_TOOLCHAIN_CHANNEL,
-                "",
-            ),
-            Err(EvalError::ProvenanceEnvelopeInvalid {
-                reason: "empty_toolchain_features",
-            })
+            validate_provenance_envelope(&unknown_compiler),
+            invalid("compiler_identity_unavailable")
         );
+        unknown_compiler.compiler_identity = "rustc 1.0.0 (000000000 2015-05-15)";
         assert_eq!(
-            ProvenanceEnvelope::for_non_final_run(
-                EvalArm::V6,
-                DataSplit::Development,
-                "code",
-                "config",
-                data.clone(),
-                seed.clone(),
-                "1.96.0",
-                PROVENANCE_TOOLCHAIN_FEATURES,
-            ),
-            Err(EvalError::ProvenanceEnvelopeInvalid {
-                reason: "toolchain_drift",
-            })
-        );
-        assert_eq!(
-            ProvenanceEnvelope::for_non_final_run(
-                EvalArm::V6,
-                DataSplit::Development,
-                "code",
-                "config",
-                data.clone(),
-                seed.clone(),
-                PROVENANCE_TOOLCHAIN_CHANNEL,
-                "default",
-            ),
-            Err(EvalError::ProvenanceEnvelopeInvalid {
-                reason: "toolchain_drift",
-            })
+            validate_provenance_envelope(&unknown_compiler),
+            invalid("toolchain_drift")
         );
 
         let overlong = "x".repeat(MAX_PROVENANCE_IDENTITY_BYTES + 1);
         assert_eq!(
-            ProvenanceEnvelope::for_non_final_run(
-                EvalArm::C6,
-                DataSplit::Validation,
-                overlong,
-                "config",
-                stage_c_data_identity_bundle(DataSplit::Validation),
-                stage_c_seed_identity(
-                    &register_seed(
-                        SeedDomain::Validation,
-                        TaskFamily::ReflectionDiscriminative,
-                        1,
-                    ),
-                    0,
-                ),
-                PROVENANCE_TOOLCHAIN_CHANNEL,
-                PROVENANCE_TOOLCHAIN_FEATURES,
+            ok(&overlong, &config_identity, &data, &seed),
+            invalid("identity_too_long")
+        );
+        assert_eq!(
+            build(
+                &code,
+                &config_identity,
+                &stage_c_data_identity_bundle(split, &[]),
+                &stage_c_seed_identity(split, &[]),
+                Vec::new(),
+                release,
+                PROVENANCE_TOOLCHAIN_FEATURES
             ),
-            Err(EvalError::ProvenanceEnvelopeInvalid {
-                reason: "identity_too_long",
-            })
+            invalid("empty_population")
         );
 
         assert_eq!(
@@ -8913,71 +9484,62 @@ mod tests {
             Err(EvalError::ProtectedOrFinalSplit)
         );
 
-        // Seed domain must match split.
-        let mismatched_seed = stage_c_seed_identity(
-            &register_seed(
-                SeedDomain::Validation,
-                TaskFamily::ReflectionDiscriminative,
-                1,
-            ),
-            0,
-        );
+        // Per-case seed domain must match the split.
+        let validation_cases = sample_admitted(DataSplit::Validation, 1);
         assert_eq!(
-            ProvenanceEnvelope::for_non_final_run(
-                EvalArm::V6,
-                DataSplit::Development,
-                "code",
-                "config",
-                data.clone(),
-                mismatched_seed,
-                PROVENANCE_TOOLCHAIN_CHANNEL,
-                PROVENANCE_TOOLCHAIN_FEATURES,
+            build(
+                &code,
+                &config_identity,
+                &stage_c_data_identity_bundle(split, &validation_cases),
+                &stage_c_seed_identity(split, &validation_cases),
+                validation_cases,
+                release,
+                PROVENANCE_TOOLCHAIN_FEATURES
             ),
-            Err(EvalError::ProvenanceEnvelopeInvalid {
-                reason: "seed_domain_split_mismatch",
-            })
+            invalid("seed_domain_split_mismatch")
         );
 
         let mut drifted = ProvenanceEnvelope::for_pinned_stage_c_run(
-            EvalArm::V6,
-            DataSplit::Development,
-            &registered,
-            0,
+            &EvaluatorConfig::v6(split).unwrap(),
+            admitted.clone(),
         )
         .unwrap();
         drifted.provenance_contract = "tdi24-provenance-envelope-v0-drift";
         assert_eq!(
             validate_provenance_envelope(&drifted),
-            Err(EvalError::ProvenanceEnvelopeInvalid {
-                reason: "contract_drift",
-            })
+            invalid("contract_drift")
+        );
+        drifted.provenance_contract = LEGACY_PROVENANCE_ENVELOPE_CONTRACT;
+        assert_eq!(
+            validate_provenance_envelope(&drifted),
+            invalid("contract_drift")
         );
 
-        // Arm/split binding on open_with_provenance.
+        // Arm/split/config binding on open_with_provenance.
         let envelope = ProvenanceEnvelope::for_pinned_stage_c_run(
-            EvalArm::V6,
-            DataSplit::Development,
-            &registered,
-            0,
+            &EvaluatorConfig::v6(split).unwrap(),
+            admitted,
         )
         .unwrap();
         assert_eq!(
             EvaluatorRun::open_with_provenance(
-                EvaluatorConfig::c6(DataSplit::Development).unwrap(),
+                EvaluatorConfig::c6(split).unwrap(),
                 envelope.clone(),
             ),
-            Err(EvalError::ProvenanceEnvelopeInvalid {
-                reason: "arm_mismatch",
-            })
+            invalid("arm_mismatch")
         );
         assert_eq!(
             EvaluatorRun::open_with_provenance(
                 EvaluatorConfig::v6(DataSplit::Validation).unwrap(),
-                envelope,
+                envelope.clone(),
             ),
-            Err(EvalError::ProvenanceEnvelopeInvalid {
-                reason: "split_mismatch",
-            })
+            invalid("split_mismatch")
+        );
+        let mut other_budget = EvaluatorConfig::v6(split).unwrap();
+        other_budget.budget.max_cases = 8;
+        assert_eq!(
+            EvaluatorRun::open_with_provenance(other_budget, envelope),
+            invalid("config_identity_mismatch")
         );
 
         assert_eq!(
@@ -8994,7 +9556,7 @@ mod tests {
             "provenance_envelope_invalid"
         );
 
-        let bundle = stage_c_config_identity_bundle();
+        let bundle = stage_c_config_identity_bundle(&EvaluatorConfig::v6(split).unwrap());
         assert!(bundle.contains(FAILURE_TAXONOMY_CONTRACT));
         assert!(bundle.contains(PROVENANCE_ENVELOPE_CONTRACT));
         assert!(!bundle.contains("freeze"));
@@ -9076,6 +9638,9 @@ mod tests {
             }),
             "stage_c_preflight_invalid"
         );
-        assert!(!stage_c_config_identity_bundle().contains(STAGE_C_PREFLIGHT_CONTRACT));
+        assert!(
+            !stage_c_config_identity_bundle(&EvaluatorConfig::v6(DataSplit::Development).unwrap())
+                .contains(STAGE_C_PREFLIGHT_CONTRACT)
+        );
     }
 }

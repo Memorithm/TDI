@@ -22,3 +22,6 @@ grep -Fq 'scientific_claim: false' docs/tdi24-stage-c-preflight.yaml
 grep -Fq '| 29 | Provenance envelope | **landed** in #687, exact head `cd098d81ccbedce5f0a75a9216b4d72350729f14`, merge `11245ad9e4ba93cd0580a82e1a78aa2d11760a34`;' docs/TDI-24-CAMPAIGN-50.md
 grep -Fq '| 30 | Stage-C preflight | **landed** in #698, exact head `586de6338a486bb9cbef3183f2be8faf2450d75f`, merge `60bb25afa271079181df17ca6a4f1201b291c5b5`;' docs/TDI-24-CAMPAIGN-50.md
 # Do not pin the global merged count here: later qualified slices must advance it.
+# Issue #690: authoritative provenance (envelope v2) runs under the slice-30
+# exact-head gate.
+bash scripts/check-tdi24-s30-provenance-authority.sh
