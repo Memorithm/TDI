@@ -24,3 +24,5 @@ grep -Eq '\| 44 \| Mirror/parity stress suite \| \*\*(current candidate|landed)'
 merged_count="$(grep -Eo '\*\*[0-9]+/50 merged\*\*' docs/TDI-25-CAMPAIGN-50.md | head -n 1 | tr -dc '0-9/' | cut -d/ -f1)"
 test "${merged_count:-0}" -ge 43
 ! grep -Fq '#PRNUM' docs/TDI-25-CAMPAIGN-50.md
+# Slice 45 runs under this exact-head gate (no dedicated workflow file).
+bash scripts/check-tdi25-s45.sh

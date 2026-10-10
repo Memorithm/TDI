@@ -118,6 +118,10 @@
 //! and C6. Slice 44 adds the mirror/parity stress suite under
 //! `tdi25-mirror-parity-stress-v1`: declared chiral-relevant transformations
 //! (simultaneous mirror, complex structure, key-only mirror) applied
+//! identically to T6 and C6. Slice 45 adds the mixed adversarial suite under
+//! `tdi25-mixed-adversarial-suite-v1`: every declared slice-44 mirror/parity
+//! transformation composed with every declared slice-43 translation/origin
+//! transformation and offset, reusing the slice-43 contract seed, applied
 //! identically to T6 and C6. All arms consume sealed
 //! Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
@@ -147,6 +151,9 @@ pub use matched_reference::{
 pub use matched_reference::{
     MIRROR_STRESS_TRANSFORMS, MirrorStressCell, MirrorStressTransform,
     evaluate_mirror_parity_stress, mirror_stress_matched_input,
+};
+pub use matched_reference::{
+    MixedStressCell, evaluate_mixed_adversarial_stress, mixed_stress_matched_input,
 };
 pub use matched_reference::{
     ORIGIN_STRESS_OFFSETS, ORIGIN_STRESS_TRANSFORMS, OriginStressCell, OriginStressTransform,
@@ -3461,7 +3468,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::MultiSeedReplicationInvalid { .. }
         | EvalError::InputNoiseRobustnessInvalid { .. }
         | EvalError::TranslationOriginStressInvalid { .. }
-        | EvalError::MirrorParityStressInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::MirrorParityStressInvalid { .. }
+        | EvalError::MixedAdversarialStressInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -3514,6 +3522,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::InputNoiseRobustnessInvalid { .. } => "input_noise_robustness_invalid",
         EvalError::TranslationOriginStressInvalid { .. } => "translation_origin_stress_invalid",
         EvalError::MirrorParityStressInvalid { .. } => "mirror_parity_stress_invalid",
+        EvalError::MixedAdversarialStressInvalid { .. } => "mixed_adversarial_stress_invalid",
     }
 }
 
@@ -7100,6 +7109,199 @@ pub fn validate_mirror_parity_stress_report(
     Ok(())
 }
 
+/// Phase-E mixed adversarial suite contract pin (slice 45).
+pub const MIXED_ADVERSARIAL_SUITE_CONTRACT: &str = "tdi25-mixed-adversarial-suite-v1";
+
+/// Immutable mixed adversarial suite report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MixedAdversarialSuiteReport {
+    pub suite_contract: &'static str,
+    pub population_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    /// The slice-43 direction seed, reused unchanged: no new seed material.
+    pub stress_seed: u64,
+    /// Identical reference capacities; no arm receives extra parameters.
+    pub t6_capacity: ParameterReadoutCapacity,
+    pub c6_capacity: ParameterReadoutCapacity,
+    /// Family-major, seed block, then mirror, origin, offset, arm.
+    pub cells: Vec<MixedStressCell>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false.
+    pub training_executed: bool,
+    /// Must remain false: no composition is selected.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn mixed_suite_invalid(reason: &'static str) -> EvalError {
+    EvalError::MixedAdversarialStressInvalid { reason }
+}
+
+fn collect_mixed_suite_cells(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<MixedStressCell>, EvalError> {
+    let mut cells = Vec::new();
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..budget.seed_blocks {
+            cells.extend(evaluate_mixed_adversarial_stress(
+                split,
+                *family,
+                seed_block,
+                budget.cases_per_block,
+                translation_origin_stress_seed(),
+            )?);
+        }
+    }
+    Ok(cells)
+}
+
+/// Run the mixed adversarial suite on the bounded matched population.
+pub fn run_mixed_adversarial_suite(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<MixedAdversarialSuiteReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.validate()?;
+    let cells = collect_mixed_suite_cells(split, budget)?;
+    let report = MixedAdversarialSuiteReport {
+        suite_contract: MIXED_ADVERSARIAL_SUITE_CONTRACT,
+        population_contract: matched_reference::MATCHED_POPULATION_CONTRACT,
+        split,
+        budget,
+        stress_seed: translation_origin_stress_seed(),
+        t6_capacity: ParameterReadoutCapacity::reference_t6(),
+        c6_capacity: ParameterReadoutCapacity::reference_c6(),
+        cells,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_mixed_adversarial_suite_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_mixed_adversarial_suite_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<MixedAdversarialSuiteReport, EvalError> {
+    run_mixed_adversarial_suite(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a mixed adversarial suite report: pins, reused seed, matched
+/// capacity, the complete declared composition grid in canonical order,
+/// paired counts, the structural C6 invariants, finite changes, flags and
+/// regenerated evidence.
+pub fn validate_mixed_adversarial_suite_report(
+    report: &MixedAdversarialSuiteReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.suite_contract != MIXED_ADVERSARIAL_SUITE_CONTRACT {
+        return Err(mixed_suite_invalid("contract_drift"));
+    }
+    if report.population_contract != matched_reference::MATCHED_POPULATION_CONTRACT {
+        return Err(mixed_suite_invalid("population_drift"));
+    }
+    if report.stress_seed != translation_origin_stress_seed() {
+        return Err(mixed_suite_invalid("seed_drift"));
+    }
+    report.budget.validate()?;
+    if report.t6_capacity != ParameterReadoutCapacity::reference_t6()
+        || report.c6_capacity != ParameterReadoutCapacity::reference_c6()
+    {
+        return Err(mixed_suite_invalid("capacity_mismatch"));
+    }
+    let per_block = MIRROR_STRESS_TRANSFORMS.len()
+        * ORIGIN_STRESS_TRANSFORMS.len()
+        * ORIGIN_STRESS_OFFSETS.len()
+        * SEQUENCE_SCALING_ARMS.len();
+    let expected = REQUIRED_SYNTHESIS_FAMILIES.len() as u64 * report.budget.seed_blocks;
+    if report.cells.len() as u64 != expected * per_block as u64 {
+        return Err(mixed_suite_invalid("cell_count"));
+    }
+    let mut position = 0usize;
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..report.budget.seed_blocks {
+            for mirror in MIRROR_STRESS_TRANSFORMS {
+                for origin in ORIGIN_STRESS_TRANSFORMS {
+                    for offset in ORIGIN_STRESS_OFFSETS {
+                        for arm in SEQUENCE_SCALING_ARMS {
+                            let cell = &report.cells[position];
+                            position += 1;
+                            if cell.family != *family
+                                || cell.seed_block != seed_block
+                                || cell.mirror != mirror
+                                || cell.origin != origin
+                                || cell.offset.to_bits() != offset.to_bits()
+                                || cell.arm != arm
+                            {
+                                return Err(mixed_suite_invalid("grid_drift"));
+                            }
+                            if cell.n_cases != report.budget.cases_per_block
+                                || cell.clean_matches > cell.n_cases
+                                || cell.stressed_matches > cell.n_cases
+                                || cell.flips > cell.n_cases
+                                || cell.flips < cell.clean_matches.abs_diff(cell.stressed_matches)
+                                || cell.flips > cell.clean_matches + cell.stressed_matches
+                                || (cell.flips + cell.clean_matches + cell.stressed_matches) % 2
+                                    != 0
+                            {
+                                return Err(mixed_suite_invalid("paired_count_drift"));
+                            }
+                            if !cell.max_abs_score_change.is_finite()
+                                || cell.max_abs_score_change < 0.0
+                                || !cell.max_abs_target_change.is_finite()
+                                || cell.max_abs_target_change < 0.0
+                                || !cell.max_abs_origin_effect.is_finite()
+                                || cell.max_abs_origin_effect < 0.0
+                            {
+                                return Err(mixed_suite_invalid("score_change_drift"));
+                            }
+                            if arm == ComparisonArm::C6 {
+                                // C6 reads no position: the origin-shift
+                                // component cannot move its score.
+                                if origin == OriginStressTransform::OriginShift
+                                    && cell.max_abs_origin_effect != 0.0
+                                {
+                                    return Err(mixed_suite_invalid("c6_origin_shift_drift"));
+                                }
+                                // The chiral-favorable target is the C6
+                                // reference score on the same composed input.
+                                if *family == TaskFamily::ChiralFavorable
+                                    && cell.stressed_matches != cell.n_cases
+                                {
+                                    return Err(mixed_suite_invalid("c6_chiral_target_drift"));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if report.protected_or_final_access {
+        return Err(mixed_suite_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(mixed_suite_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(mixed_suite_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(mixed_suite_invalid("experimental_non_final"));
+    }
+    if collect_mixed_suite_cells(report.split, report.budget)? != report.cells {
+        return Err(mixed_suite_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -7237,6 +7439,11 @@ pub enum EvalError {
     MirrorParityStressInvalid {
         reason: &'static str,
     },
+    /// Mixed adversarial suite rejected a drifted grid, seed, composition,
+    /// counts, invariants, evidence or claims.
+    MixedAdversarialStressInvalid {
+        reason: &'static str,
+    },
 }
 
 impl fmt::Display for EvalError {
@@ -7358,6 +7565,9 @@ impl fmt::Display for EvalError {
             }
             Self::MirrorParityStressInvalid { reason } => {
                 write!(formatter, "mirror/parity stress invalid: {reason}")
+            }
+            Self::MixedAdversarialStressInvalid { reason } => {
+                write!(formatter, "mixed adversarial stress invalid: {reason}")
             }
         }
     }

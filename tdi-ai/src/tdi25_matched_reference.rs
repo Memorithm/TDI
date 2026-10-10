@@ -1747,6 +1747,125 @@ pub fn evaluate_mirror_parity_stress(
     Ok(cells)
 }
 
+/// Per (block, mirror transformation, origin transformation, offset, arm)
+/// match and invariance accounting of the mixed adversarial suite (TDI-25
+/// slice 44 mirror/parity classes composed with slice 43 translation/origin
+/// classes).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MixedStressCell {
+    pub family: TaskFamily,
+    pub seed_block: u64,
+    pub mirror: MirrorStressTransform,
+    pub origin: OriginStressTransform,
+    pub offset: f64,
+    pub arm: ComparisonArm,
+    pub n_cases: u64,
+    /// Matches of the matched primary on clean inputs.
+    pub clean_matches: u64,
+    /// Matches on the composed input against the common target recomputed
+    /// from that same composed input inside the evaluator.
+    pub stressed_matches: u64,
+    /// Cases whose match bit differs between clean and composed inputs.
+    pub flips: u64,
+    /// Label-free: maximum absolute change of the arm score.
+    pub max_abs_score_change: f64,
+    /// Maximum absolute change of the recomputed common target.
+    pub max_abs_target_change: f64,
+    /// Maximum absolute difference between the arm score on the composed
+    /// input and on the mirror-only input (the origin component's effect).
+    pub max_abs_origin_effect: f64,
+}
+
+/// Compose one declared mirror/parity transformation with one declared
+/// translation/origin transformation: the mirror acts first on the carriers,
+/// then the origin stress acts on the mirrored input with the slice-43
+/// per-case direction. No arm, score, target or label enters the composition.
+pub fn mixed_stress_matched_input(
+    input: &MatchedInput,
+    mirror: MirrorStressTransform,
+    origin: OriginStressTransform,
+    offset: f64,
+    seed: u64,
+    case_key: u64,
+) -> Result<MatchedInput, EvalError> {
+    let mirrored = mirror_stress_matched_input(input, mirror)?;
+    stress_matched_input(&mirrored, origin, offset, seed, case_key)
+}
+
+/// Score one matched block under every declared composition for T6 and C6.
+/// Order: mirror transformation, origin transformation, offset, arm.
+pub fn evaluate_mixed_adversarial_stress(
+    split: DataSplit,
+    family: TaskFamily,
+    seed_block: u64,
+    n_cases: u64,
+    seed: u64,
+) -> Result<Vec<MixedStressCell>, EvalError> {
+    let run = MatchedPrimaryRun::evaluate(split, family, seed_block, n_cases)?;
+    let mut cells = Vec::new();
+    for mirror in MIRROR_STRESS_TRANSFORMS {
+        for origin in ORIGIN_STRESS_TRANSFORMS {
+            for offset in ORIGIN_STRESS_OFFSETS {
+                for arm in SEQUENCE_SCALING_ARMS {
+                    let (clean, clean_scores) = match arm {
+                        ComparisonArm::T6 => (run.t6_outcomes(), run.t6_scores()),
+                        _ => (run.c6_outcomes(), run.c6_scores()),
+                    };
+                    let mut cell = MixedStressCell {
+                        family,
+                        seed_block,
+                        mirror,
+                        origin,
+                        offset,
+                        arm,
+                        n_cases: 0,
+                        clean_matches: 0,
+                        stressed_matches: 0,
+                        flips: 0,
+                        max_abs_score_change: 0.0,
+                        max_abs_target_change: 0.0,
+                        max_abs_origin_effect: 0.0,
+                    };
+                    for (index, input) in run.inputs().iter().enumerate() {
+                        let clean_score = arm_score(arm, input)?;
+                        if clean_score.to_bits() != clean_scores[index].to_bits() {
+                            return Err(EvalError::MixedAdversarialStressInvalid {
+                                reason: "clean_reference_drift",
+                            });
+                        }
+                        let case_key = (seed_block << 32) | index as u64;
+                        let mirrored = mirror_stress_matched_input(input, mirror)?;
+                        let composed = mixed_stress_matched_input(
+                            input, mirror, origin, offset, seed, case_key,
+                        )?;
+                        let clean_target = common_target(input, family)?;
+                        let target = common_target(&composed, family)?;
+                        let mirrored_score = arm_score(arm, &mirrored)?;
+                        let stressed_score = arm_score(arm, &composed)?;
+                        let matched = shared_match(stressed_score, target);
+                        let clean_match = clean[index].matches_oracle;
+                        cell.n_cases += 1;
+                        cell.clean_matches += u64::from(clean_match);
+                        cell.stressed_matches += u64::from(matched);
+                        cell.flips += u64::from(matched != clean_match);
+                        cell.max_abs_score_change = cell
+                            .max_abs_score_change
+                            .max((stressed_score - clean_score).abs());
+                        cell.max_abs_target_change = cell
+                            .max_abs_target_change
+                            .max((target - clean_target).abs());
+                        cell.max_abs_origin_effect = cell
+                            .max_abs_origin_effect
+                            .max((stressed_score - mirrored_score).abs());
+                    }
+                    cells.push(cell);
+                }
+            }
+        }
+    }
+    Ok(cells)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
