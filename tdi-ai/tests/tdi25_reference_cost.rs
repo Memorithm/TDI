@@ -132,6 +132,12 @@ fn qualified_environment_is_the_frozen_t430_manifest() {
     assert_eq!((env.warmup_iterations, env.measured_iterations), (5, 31));
     assert_eq!(env.max_iqr_fraction_of_median, 0.05);
     assert_eq!(env.max_load_average_1min, 2.0);
+    assert_eq!(
+        env.environment_contract,
+        "tdi25-qualified-timing-environment-v2"
+    );
+    assert_eq!(env.fixed_frequency_khz, 2_100_000);
+    assert_eq!(env.frequency_tolerance_fraction, 0.01);
 }
 
 #[test]

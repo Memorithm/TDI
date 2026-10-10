@@ -50,12 +50,16 @@ and reports totals (one pair score per case per arm). At the smoke budget
 
 The qualified environment and protocol are frozen in
 `docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V1.md` and
-`docs/tdi25-qualified-timing-environment.yaml`.
+`docs/tdi25-qualified-timing-environment.yaml`, amended for attempts ≥ 2 by
+`docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V2.md` and
+`docs/tdi25-qualified-timing-environment-v2.yaml` (APERF/MPERF frequency
+rule, load precondition, numbered attempts).
 `QUALIFIED_TIMING_ENVIRONMENT` is exactly `T430_QUALIFIED_TIMING_ENVIRONMENT`.
 `run_qualified_reference_timing_cell` (one split × arm cell) refuses
 (`timing_environment_mismatch`, `attestation_*`) unless the running host and
 process attest to that manifest (CPU model, kernel, BIOS, rustc 1.97.1,
-`Cpus_allowed_list` = 28, governor `performance` on CPUs 28/60, turbo off).
+`Cpus_allowed_list` = 28, governor `performance` on CPUs 28/60, turbo off, and since V2 a readable
+`/dev/cpu/28/msr` whose `MSR_PLATFORM_INFO` base ratio is 21).
 CI and development hosts are therefore refused before the clock is touched.
 `summarize_timing_cell` computes median (primary), min and IQR, and applies
 the in-process rejection rules. The measurement script

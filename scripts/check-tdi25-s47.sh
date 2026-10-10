@@ -33,6 +33,23 @@ for value in 'environment_contract: tdi25-qualified-timing-environment-v1' 'bios
   grep -Fq "$value" docs/tdi25-qualified-timing-environment.yaml
 done
 bash -n scripts/tdi25-s47-qualified-timing.sh
+grep -Fq 'pub const QUALIFIED_TIMING_ENVIRONMENT_CONTRACT: &str = "tdi25-qualified-timing-environment-v2";' tdi-ai/src/tdi25_eval.rs
+grep -Fq 'pub const QUALIFIED_TIMING_ENVIRONMENT_V1_CONTRACT: &str = "tdi25-qualified-timing-environment-v1";' tdi-ai/src/tdi25_eval.rs
+grep -Fq 'pub fn effective_frequency_khz(' tdi-ai/src/tdi25_eval.rs
+grep -Fq 'cost_invalid("attestation_msr_unreadable")' tdi-ai/src/tdi25_eval.rs
+if grep -Fq 'scaling_cur_freq"' tdi-ai/src/tdi25_eval.rs; then echo "scaling_cur_freq still used" >&2; exit 1; fi
+grep -Fq 'tdi25-qualified-timing-environment-v2' docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V2.md
+grep -Fq 'Recorded degeneracies' docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V2.md
+grep -Fq 'Pre-run checklist' docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V2.md
+grep -Fq 'No fishing' docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V2.md
+for value in 'environment_contract: tdi25-qualified-timing-environment-v2' 'fixed_frequency_khz: 2100000' \
+  'tolerance: 0.01' 'load_average_1min_max: 2.0' 'measured_runs: 31' 'warmup_runs: 5' 'pinned_cpu: 28'; do
+  grep -Fq "$value" docs/tdi25-qualified-timing-environment-v2.yaml
+done
+grep -Fq 'msr="/dev/cpu/$PINNED_CPU/msr"' scripts/tdi25-s47-qualified-timing.sh
+grep -Fq 'ps -eo pid,user,pcpu,etime,comm --sort=-pcpu' scripts/tdi25-s47-qualified-timing.sh
+grep -Fq 'run_id="tdi25-s47-timing-${commit:0:12}-attempt-$attempt"' scripts/tdi25-s47-qualified-timing.sh
+if grep -Eq 'systemctl (stop|kill)|virsh (suspend|shutdown|destroy)|docker (pause|stop|kill)|kill -STOP' scripts/tdi25-s47-qualified-timing.sh; then echo "script must not stop services" >&2; exit 1; fi
 grep -Fq 'trap restore EXIT' scripts/tdi25-s47-qualified-timing.sh
 grep -Fq 'numactl --membind=$NUMA_NODE taskset -c $PINNED_CPU' scripts/tdi25-s47-qualified-timing.sh
 # Note: `! cmd` does not trip `set -e`; the timing-artifact guards use explicit exits.
