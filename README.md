@@ -221,7 +221,7 @@ TDI-27 tests whether residual geometry is stable and causally specific; a large 
 
 ## Current frontier
 
-The current `main` line is advancing **TDI-27.1 resampling and null calibration**. Independent positive/control bootstrap streams are now part of the Development substrate, while confirmatory and final TDI-27 execution remain disabled.
+The current `main` line is advancing **TDI-27.1 resampling and null calibration**. Independent positive/control bootstrap streams are part of the Development substrate, and a synthetic Gaussian known-truth generator (declared signal plus noise) now checks that the bootstrap and label-permutation primitives separate a known signal from the null, including after residualisation against a known subspace. These are Development calibration checks with no pinned statistical rule; confirmatory and final TDI-27 execution remain disabled.
 
 Parallel active work continues in the matched representation programmes (TDI-24/TDI-25), sparse recurrent topology (TDI-26), and the existing attention, memory, inference, operator and formal-representation lines.
 

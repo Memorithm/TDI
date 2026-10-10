@@ -243,6 +243,24 @@ emits machine-readable non-pinning/non-confirmatory markers.
 These slices still define no statistical confidence interval, p-value,
 acceptance threshold, or scientific verdict.
 
+A synthetic Gaussian known-truth fixture now calibrates this substrate.
+`synthetic_gaussian_groups` draws caller-declared positive rows
+`signal + noise_scale * z` and control rows `noise_scale * z` (Box-Muller
+normals from domain-separated deterministic streams, caller-supplied seed,
+cardinalities, signal and noise scale, no defaults), so the true P-minus-C
+contrast is exactly the declared signal and a zero signal is the null.
+Development tests check that the generator recovers its declared moments and
+that, on known synthetic truth, the existing primitives separate signal from
+null: bootstrap ordered-value intervals exclude zero for a declared signal
+and only rarely under the null; label-permutation contrast norms are never
+reached by shuffles under a declared signal while the null observed value
+sits inside the shuffled distribution; and residualised permutation separates
+a novel component from a signal lying entirely inside the declared known
+subspace. The numeric bounds in those tests are software calibration checks
+on a known generating process, not pinned TDI-27 statistical rules; no
+interval level, p-value, threshold or verdict is defined, and the fixture
+authorizes no real-model, confirmatory or final execution.
+
 ### TDI-27.2 — projection-method differential
 
 Compare the current two-pass modified Gram-Schmidt reference against an
