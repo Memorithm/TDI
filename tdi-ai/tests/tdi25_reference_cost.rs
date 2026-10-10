@@ -2,8 +2,9 @@
 //!
 //! Deterministic source-level operation counts and logical memory for T6 and
 //! C6 (C6 through the unchanged TDI-24 slice-09 accounting); the timing
-//! harness refuses to measure until a qualified-environment manifest is
-//! frozen (timing non qualifie). No training, no protected/final access, no
+//! harness accepts exactly the frozen T430 manifest and refuses on any host
+//! that does not attest to it; results stay timing non qualifie until the
+//! user's run on the T430 lands. No training, no protected/final access, no
 //! scientific or performance claim.
 #![cfg(feature = "experimental")]
 
@@ -12,9 +13,10 @@ use tdi_ai::experimental::tdi24_accounting::{
 };
 use tdi_ai::experimental::tdi25_eval::matched_reference::SHARED_INPUT_SCALARS;
 use tdi_ai::experimental::tdi25_eval::{
-    EvalError, QUALIFIED_TIMING_ENVIRONMENT, REFERENCE_COST_CONTRACT, REFERENCE_TIMING_STATUS,
-    REQUIRED_SYNTHESIS_FAMILIES, ReferenceCostReport, StageCPreflightBudget,
-    T6_REFERENCE_ACCOUNTING_CONTRACT, c6_pair_accounting, run_qualified_reference_timing,
+    EvalError, QUALIFIED_TIMING_ENVIRONMENT, QUALIFIED_TIMING_ENVIRONMENT_CONTRACT,
+    REFERENCE_COST_CONTRACT, REFERENCE_TIMING_STATUS, REQUIRED_SYNTHESIS_FAMILIES,
+    ReferenceCostReport, StageCPreflightBudget, T6_REFERENCE_ACCOUNTING_CONTRACT,
+    T430_QUALIFIED_TIMING_ENVIRONMENT, c6_pair_accounting, run_qualified_reference_timing_cell,
     run_reference_cost, run_reference_cost_for_label, t6_pair_accounting,
     validate_reference_cost_report,
 };
@@ -40,7 +42,10 @@ fn contracts_and_timing_status_are_declared() {
         "tdi25-t6-reference-accounting-v1"
     );
     assert_eq!(REFERENCE_TIMING_STATUS, "timing_non_qualifie");
-    assert!(QUALIFIED_TIMING_ENVIRONMENT.is_none());
+    assert_eq!(
+        QUALIFIED_TIMING_ENVIRONMENT,
+        Some(T430_QUALIFIED_TIMING_ENVIRONMENT)
+    );
 }
 
 #[test]
@@ -107,14 +112,44 @@ fn smoke_report_totals_scale_with_the_scored_population() {
 }
 
 #[test]
-fn timing_harness_refuses_without_a_qualified_environment() {
+fn qualified_environment_is_the_frozen_t430_manifest() {
+    let env = T430_QUALIFIED_TIMING_ENVIRONMENT;
+    assert_eq!(
+        env.environment_contract,
+        QUALIFIED_TIMING_ENVIRONMENT_CONTRACT
+    );
+    assert_eq!(env.machine_id, "dell-poweredge-t430-debian");
+    assert_eq!(env.bios_version, "2.19.0");
+    assert_eq!(env.cpu_model, "E5-2683 v4");
+    assert_eq!(env.kernel_release, "6.12.88+deb13-amd64");
+    assert_eq!(env.toolchain, "1.97.1");
+    assert_eq!(
+        (env.pinned_cpu, env.smt_sibling_cpu, env.numa_node),
+        (28, 60, 0)
+    );
+    assert_eq!(env.governor, "performance");
+    assert!(env.turbo_disabled);
+    assert_eq!((env.warmup_iterations, env.measured_iterations), (5, 31));
+    assert_eq!(env.max_iqr_fraction_of_median, 0.05);
+    assert_eq!(env.max_load_average_1min, 2.0);
+}
+
+#[test]
+fn timing_harness_refuses_on_an_unattested_host() {
+    let pinned = std::fs::read_to_string("/proc/self/status")
+        .unwrap_or_default()
+        .lines()
+        .any(|line| line.starts_with("Cpus_allowed_list:") && line.trim_end().ends_with("\t28"));
+    if pinned {
+        return;
+    }
     for split in [DataSplit::Development, DataSplit::Validation] {
-        assert_eq!(
-            run_qualified_reference_timing(split, StageCPreflightBudget::smoke()),
-            Err(EvalError::ReferenceCostInvalid {
-                reason: "timing_environment_not_qualified"
-            })
-        );
+        for arm in [ComparisonArm::T6, ComparisonArm::C6] {
+            assert!(matches!(
+                run_qualified_reference_timing_cell(split, StageCPreflightBudget::smoke(), arm),
+                Err(EvalError::ReferenceCostInvalid { .. })
+            ));
+        }
     }
 }
 

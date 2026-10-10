@@ -46,18 +46,26 @@ and reports totals (one pair score per case per arm). At the smoke budget
 | T6 | 1152 | 1088 | 640 | 9216 |
 | C6 | 1344 | 1664 | 2624 | 6144 |
 
-## Timing harness (refuses)
+## Timing harness (gated on the frozen T430 environment)
 
-`run_qualified_reference_timing` reads the checked-in constant
-`QUALIFIED_TIMING_ENVIRONMENT`. While it is `None`, the harness returns
-`timing_environment_not_qualified` without touching the clock. A future
-human freeze must pin a `QualifiedTimingEnvironment`
-(`tdi25-qualified-timing-environment-v1`): dedicated machine identity,
-exact toolchain, warm-up and measured iteration counts. Even then the
-harness only returns raw per-pass nanosecond samples for T6 and C6; choosing
-a summary statistic and a variance rejection rule is part of that freeze.
-A unit test exercises the mechanics with a test-only fixture whose samples
-are never reported.
+The qualified environment and protocol are frozen in
+`docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V1.md` and
+`docs/tdi25-qualified-timing-environment.yaml`.
+`QUALIFIED_TIMING_ENVIRONMENT` is exactly `T430_QUALIFIED_TIMING_ENVIRONMENT`.
+`run_qualified_reference_timing_cell` (one split × arm cell) refuses
+(`timing_environment_mismatch`, `attestation_*`) unless the running host and
+process attest to that manifest (CPU model, kernel, BIOS, rustc 1.97.1,
+`Cpus_allowed_list` = 28, governor `performance` on CPUs 28/60, turbo off).
+CI and development hosts are therefore refused before the clock is touched.
+`summarize_timing_cell` computes median (primary), min and IQR, and applies
+the in-process rejection rules. The measurement script
+`scripts/tdi25-s47-qualified-timing.sh` adds pinning, NUMA binding,
+governor/turbo set-and-restore, the SMT-sibling and load-average checks.
+
+**No timing has been run.** The slice stays **timing non qualifié** in its
+results until the user's run on the T430 lands in a separate, user-approved
+PR. The cost report (`timing_measured = false`, `timing_status =
+timing_non_qualifie`) is unchanged.
 
 ## Validation
 
@@ -65,7 +73,7 @@ are never reported.
 `population_drift`, `capacity_mismatch`, `accounting_drift` (per-pair
 counts differ from the declared accounting), `population_size_drift`,
 `totals_drift`, `timing_status_drift` (any status other than
-`timing_non_qualifie`, `timing_measured`, or a set qualified environment),
+`timing_non_qualifie` or `timing_measured`),
 the protected/training/scientific/performance/non-final flags, and
 regenerates the scored population (`case_evidence_drift`).
 
