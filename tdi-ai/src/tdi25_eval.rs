@@ -126,7 +126,12 @@
 //! under `tdi25-numerical-precision-v1`: T6 and C6 scored in f64 (reference)
 //! and f32 on clean and slice-43 stressed matched inputs, against the
 //! upstream TDI-24 slice-44 declared forward-error bound, with complete
-//! failure accounting. All arms consume sealed
+//! failure accounting. Slice 47 adds the reference cost study under
+//! `tdi25-reference-cost-v1`: deterministic source-level operation counts
+//! and logical carrier memory for T6 and C6 (C6 reusing the TDI-24 slice-09
+//! accounting), plus a timing harness that refuses to measure until a
+//! qualified-environment manifest is frozen (timing non qualifie). All arms
+//! consume sealed
 //! Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
@@ -3478,7 +3483,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::TranslationOriginStressInvalid { .. }
         | EvalError::MirrorParityStressInvalid { .. }
         | EvalError::MixedAdversarialStressInvalid { .. }
-        | EvalError::MatchedPrecisionInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::MatchedPrecisionInvalid { .. }
+        | EvalError::ReferenceCostInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -3533,6 +3539,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::MirrorParityStressInvalid { .. } => "mirror_parity_stress_invalid",
         EvalError::MixedAdversarialStressInvalid { .. } => "mixed_adversarial_stress_invalid",
         EvalError::MatchedPrecisionInvalid { .. } => "matched_precision_invalid",
+        EvalError::ReferenceCostInvalid { .. } => "reference_cost_invalid",
     }
 }
 
@@ -7478,6 +7485,415 @@ pub fn validate_numerical_precision_report(
     Ok(())
 }
 
+/// Phase-E reference cost study contract pin (slice 47).
+pub const REFERENCE_COST_CONTRACT: &str = "tdi25-reference-cost-v1";
+/// T6 source-level accounting contract (this slice). C6 reuses the TDI-24
+/// slice-09 `tdi24-reference-accounting-v3` unchanged.
+pub const T6_REFERENCE_ACCOUNTING_CONTRACT: &str = "tdi25-t6-reference-accounting-v1";
+/// Contract a future frozen qualified-environment manifest must carry.
+pub const QUALIFIED_TIMING_ENVIRONMENT_CONTRACT: &str = "tdi25-qualified-timing-environment-v1";
+/// Timing status recorded by this slice: no environment is qualified.
+pub const REFERENCE_TIMING_STATUS: &str = "timing_non_qualifie";
+
+/// Fields a human-frozen qualified timing environment must pin. This slice
+/// chooses none of them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct QualifiedTimingEnvironment {
+    pub environment_contract: &'static str,
+    /// Identity of the dedicated reference machine (CPU, OS).
+    pub machine_id: &'static str,
+    /// Exact toolchain identity.
+    pub toolchain: &'static str,
+    pub warmup_iterations: u32,
+    pub measured_iterations: u32,
+}
+
+/// The checked-in qualified timing environment. `None`: timing non qualifie.
+/// Only a separate human-reviewed freeze may set it.
+pub const QUALIFIED_TIMING_ENVIRONMENT: Option<QualifiedTimingEnvironment> = None;
+
+/// Source-level scalar work and logical storage for one matched pair score.
+/// Counts describe the bounded Rust reference algorithms; they are not CPU
+/// instructions, latency, allocator peak or resident memory.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArmCostAccounting {
+    pub arm: ComparisonArm,
+    pub multiplications: u64,
+    pub additions: u64,
+    /// Fail-closed finiteness predicates in the score path (after carrier
+    /// construction).
+    pub validity_predicates: u64,
+    /// Scalars the arm reads from the shared matched input.
+    pub read_scalars: u64,
+    /// Logical f64 bytes of those scalars.
+    pub read_bytes: u64,
+    pub accounting_contract: &'static str,
+}
+
+/// T6 factorized pairing `(v + Q x omega).R + omega.(M + P x R)`:
+/// two cross products (6M + 3A each), two vector additions (3A each), two
+/// dot products (3M + 2A each) and the final sum (1A): 18M + 17A. The
+/// score path checks the query position (3), the factorized resultant dual
+/// (3), the origin moment (3) and the final pairing (1): 10 predicates. T6
+/// reads all 18 shared scalars (query, key, both reduction points).
+#[must_use]
+pub const fn t6_pair_accounting() -> ArmCostAccounting {
+    ArmCostAccounting {
+        arm: ComparisonArm::T6,
+        multiplications: 18,
+        additions: 17,
+        validity_predicates: 10,
+        read_scalars: 18,
+        read_bytes: 18 * core::mem::size_of::<f64>() as u64,
+        accounting_contract: T6_REFERENCE_ACCOUNTING_CONTRACT,
+    }
+}
+
+/// C6 `(1, 0, 1)` through the unchanged TDI-24 slice-09 accounting (the
+/// reference evaluates all three channel pairings and weights, including the
+/// zero-weight mirror channel). C6 reads the 12 carrier scalars only.
+#[must_use]
+pub const fn c6_pair_accounting() -> ArmCostAccounting {
+    let upstream = crate::experimental::tdi24_accounting::pair_score_accounting(
+        crate::experimental::tdi24_accounting::ScoreArm::C6,
+    );
+    ArmCostAccounting {
+        arm: ComparisonArm::C6,
+        multiplications: upstream.multiplications as u64,
+        additions: upstream.additions as u64,
+        validity_predicates: upstream.validity_predicates as u64,
+        read_scalars: (upstream.query_scalars + upstream.key_scalars) as u64,
+        read_bytes: upstream.carrier_bytes as u64,
+        accounting_contract: upstream.accounting_contract,
+    }
+}
+
+/// Population totals for one arm: one pair score per matched case.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArmCostTotals {
+    pub arm: ComparisonArm,
+    pub pair_scores: u64,
+    pub multiplications: u64,
+    pub additions: u64,
+    pub validity_predicates: u64,
+    pub read_bytes: u64,
+}
+
+/// Immutable reference cost report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReferenceCostReport {
+    pub cost_contract: &'static str,
+    pub population_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    pub t6_capacity: ParameterReadoutCapacity,
+    pub c6_capacity: ParameterReadoutCapacity,
+    pub t6: ArmCostAccounting,
+    pub c6: ArmCostAccounting,
+    /// Shared numeric input payload per case (identical for both arms).
+    pub shared_input_bytes_per_case: u64,
+    /// Matched cases actually generated and scored by both arms.
+    pub cases: u64,
+    /// T6 then C6.
+    pub totals: [ArmCostTotals; 2],
+    /// Always `timing_non_qualifie` in this slice.
+    pub timing_status: &'static str,
+    /// Must remain false: no wall-clock value is measured or reported.
+    pub timing_measured: bool,
+    pub protected_or_final_access: bool,
+    pub training_executed: bool,
+    pub scientific_claim: bool,
+    /// Must remain false: no production, GPU or hardware claim.
+    pub performance_claim: bool,
+    pub experimental_non_final: bool,
+}
+
+const fn cost_invalid(reason: &'static str) -> EvalError {
+    EvalError::ReferenceCostInvalid { reason }
+}
+
+fn totals_for(accounting: ArmCostAccounting, cases: u64) -> Result<ArmCostTotals, EvalError> {
+    let scale = |value: u64| {
+        value
+            .checked_mul(cases)
+            .ok_or(cost_invalid("size_overflow"))
+    };
+    Ok(ArmCostTotals {
+        arm: accounting.arm,
+        pair_scores: cases,
+        multiplications: scale(accounting.multiplications)?,
+        additions: scale(accounting.additions)?,
+        validity_predicates: scale(accounting.validity_predicates)?,
+        read_bytes: scale(accounting.read_bytes)?,
+    })
+}
+
+/// Generate and score the bounded matched population; return the case count
+/// and the shared input payload per case.
+fn matched_cost_population(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<(u64, u64), EvalError> {
+    let mut cases = 0u64;
+    let mut shared = None;
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..budget.seed_blocks {
+            let run = matched_reference::MatchedPrimaryRun::evaluate(
+                split,
+                *family,
+                seed_block,
+                budget.cases_per_block,
+            )?;
+            if run.t6_scores().len() != run.inputs().len()
+                || run.c6_scores().len() != run.inputs().len()
+            {
+                return Err(cost_invalid("unpaired_scores"));
+            }
+            cases += run.inputs().len() as u64;
+            let bytes = run.shared_input_bytes_per_case() as u64;
+            if *shared.get_or_insert(bytes) != bytes {
+                return Err(cost_invalid("shared_input_drift"));
+            }
+        }
+    }
+    Ok((cases, shared.unwrap_or(0)))
+}
+
+/// Run the reference cost study (operations and logical memory only).
+pub fn run_reference_cost(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<ReferenceCostReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.validate()?;
+    let (cases, shared_input_bytes_per_case) = matched_cost_population(split, budget)?;
+    let (t6, c6) = (t6_pair_accounting(), c6_pair_accounting());
+    let report = ReferenceCostReport {
+        cost_contract: REFERENCE_COST_CONTRACT,
+        population_contract: matched_reference::MATCHED_POPULATION_CONTRACT,
+        split,
+        budget,
+        t6_capacity: ParameterReadoutCapacity::reference_t6(),
+        c6_capacity: ParameterReadoutCapacity::reference_c6(),
+        t6,
+        c6,
+        shared_input_bytes_per_case,
+        cases,
+        totals: [totals_for(t6, cases)?, totals_for(c6, cases)?],
+        timing_status: REFERENCE_TIMING_STATUS,
+        timing_measured: false,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        performance_claim: false,
+        experimental_non_final: true,
+    };
+    validate_reference_cost_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_reference_cost_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<ReferenceCostReport, EvalError> {
+    run_reference_cost(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a reference cost report: pins, per-pair accounting, matched
+/// capacity, population size, totals, timing status, flags and regenerated
+/// evidence.
+pub fn validate_reference_cost_report(report: &ReferenceCostReport) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.cost_contract != REFERENCE_COST_CONTRACT {
+        return Err(cost_invalid("contract_drift"));
+    }
+    if report.population_contract != matched_reference::MATCHED_POPULATION_CONTRACT {
+        return Err(cost_invalid("population_drift"));
+    }
+    report.budget.validate()?;
+    if report.t6_capacity != ParameterReadoutCapacity::reference_t6()
+        || report.c6_capacity != ParameterReadoutCapacity::reference_c6()
+    {
+        return Err(cost_invalid("capacity_mismatch"));
+    }
+    if report.t6 != t6_pair_accounting() || report.c6 != c6_pair_accounting() {
+        return Err(cost_invalid("accounting_drift"));
+    }
+    let expected_cases = REQUIRED_SYNTHESIS_FAMILIES.len() as u64
+        * report.budget.seed_blocks
+        * report.budget.cases_per_block;
+    if report.cases != expected_cases
+        || report.shared_input_bytes_per_case
+            != (matched_reference::SHARED_INPUT_SCALARS * core::mem::size_of::<f64>()) as u64
+    {
+        return Err(cost_invalid("population_size_drift"));
+    }
+    if report.totals
+        != [
+            totals_for(report.t6, report.cases)?,
+            totals_for(report.c6, report.cases)?,
+        ]
+    {
+        return Err(cost_invalid("totals_drift"));
+    }
+    if report.timing_status != REFERENCE_TIMING_STATUS
+        || report.timing_measured
+        || QUALIFIED_TIMING_ENVIRONMENT.is_some()
+    {
+        return Err(cost_invalid("timing_status_drift"));
+    }
+    if report.protected_or_final_access {
+        return Err(cost_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(cost_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(cost_invalid("scientific_claim"));
+    }
+    if report.performance_claim {
+        return Err(cost_invalid("performance_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(cost_invalid("experimental_non_final"));
+    }
+    if matched_cost_population(report.split, report.budget)?
+        != (report.cases, report.shared_input_bytes_per_case)
+    {
+        return Err(cost_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
+/// Raw wall-clock samples from a qualified environment. No statistic is
+/// computed: summarising the samples is part of the frozen protocol.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct QualifiedTimingSamples {
+    pub environment: QualifiedTimingEnvironment,
+    pub split: DataSplit,
+    /// Nanoseconds per measured pass over the population, T6 then C6.
+    pub t6_nanos: Vec<u128>,
+    pub c6_nanos: Vec<u128>,
+}
+
+/// Timing harness. Refuses to touch the clock while no qualified-environment
+/// manifest is frozen (`QUALIFIED_TIMING_ENVIRONMENT` is `None`): timing non
+/// qualifie.
+pub fn run_qualified_reference_timing(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<QualifiedTimingSamples, EvalError> {
+    validate_non_final_split(split)?;
+    match QUALIFIED_TIMING_ENVIRONMENT {
+        None => Err(cost_invalid("timing_environment_not_qualified")),
+        Some(environment) => time_reference_population(environment, split, budget),
+    }
+}
+
+fn time_reference_population(
+    environment: QualifiedTimingEnvironment,
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<QualifiedTimingSamples, EvalError> {
+    if environment.environment_contract != QUALIFIED_TIMING_ENVIRONMENT_CONTRACT
+        || environment.machine_id.is_empty()
+        || environment.toolchain.is_empty()
+        || environment.measured_iterations == 0
+    {
+        return Err(cost_invalid("timing_environment_invalid"));
+    }
+    validate_non_final_split(split)?;
+    budget.validate()?;
+    let mut inputs = Vec::new();
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..budget.seed_blocks {
+            let run = matched_reference::MatchedPrimaryRun::evaluate(
+                split,
+                *family,
+                seed_block,
+                budget.cases_per_block,
+            )?;
+            inputs.extend(run.inputs().iter().cloned());
+        }
+    }
+    let pass = |arm: ComparisonArm| -> Result<u128, EvalError> {
+        let start = std::time::Instant::now();
+        for input in &inputs {
+            let score = match arm {
+                ComparisonArm::T6 => matched_reference::t6_score_f64(input)?,
+                _ => matched_reference::c6_score_f64(input)?,
+            };
+            core::hint::black_box(score);
+        }
+        Ok(start.elapsed().as_nanos())
+    };
+    let mut samples = QualifiedTimingSamples {
+        environment,
+        split,
+        t6_nanos: Vec::new(),
+        c6_nanos: Vec::new(),
+    };
+    for arm in SEQUENCE_SCALING_ARMS {
+        for _ in 0..environment.warmup_iterations {
+            pass(arm)?;
+        }
+        for _ in 0..environment.measured_iterations {
+            let nanos = pass(arm)?;
+            match arm {
+                ComparisonArm::T6 => samples.t6_nanos.push(nanos),
+                _ => samples.c6_nanos.push(nanos),
+            }
+        }
+    }
+    Ok(samples)
+}
+
+#[cfg(test)]
+mod reference_cost_timing_tests {
+    use super::*;
+
+    #[test]
+    fn harness_refuses_without_a_qualified_environment() {
+        assert!(QUALIFIED_TIMING_ENVIRONMENT.is_none());
+        assert_eq!(
+            run_qualified_reference_timing(DataSplit::Development, StageCPreflightBudget::smoke()),
+            Err(cost_invalid("timing_environment_not_qualified"))
+        );
+    }
+
+    #[test]
+    fn harness_mechanics_retain_every_sample_for_a_test_only_environment() {
+        // Test-only fixture: exercises the mechanics; it is not a qualified
+        // environment and its samples are never reported.
+        let fixture = QualifiedTimingEnvironment {
+            environment_contract: QUALIFIED_TIMING_ENVIRONMENT_CONTRACT,
+            machine_id: "test-fixture",
+            toolchain: "test-fixture",
+            warmup_iterations: 0,
+            measured_iterations: 2,
+        };
+        let samples = time_reference_population(
+            fixture,
+            DataSplit::Development,
+            StageCPreflightBudget::smoke(),
+        )
+        .unwrap();
+        assert_eq!(samples.t6_nanos.len(), 2);
+        assert_eq!(samples.c6_nanos.len(), 2);
+        let mut invalid = fixture;
+        invalid.measured_iterations = 0;
+        assert!(
+            time_reference_population(
+                invalid,
+                DataSplit::Development,
+                StageCPreflightBudget::smoke()
+            )
+            .is_err()
+        );
+    }
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -7625,6 +8041,11 @@ pub enum EvalError {
     MatchedPrecisionInvalid {
         reason: &'static str,
     },
+    /// Reference cost study rejected drifted accounting, an unqualified
+    /// timing request, evidence or claims.
+    ReferenceCostInvalid {
+        reason: &'static str,
+    },
 }
 
 impl fmt::Display for EvalError {
@@ -7752,6 +8173,9 @@ impl fmt::Display for EvalError {
             }
             Self::MatchedPrecisionInvalid { reason } => {
                 write!(formatter, "numerical precision invalid: {reason}")
+            }
+            Self::ReferenceCostInvalid { reason } => {
+                write!(formatter, "reference cost invalid: {reason}")
             }
         }
     }
