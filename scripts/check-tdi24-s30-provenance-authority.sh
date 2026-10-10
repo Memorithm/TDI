@@ -30,3 +30,5 @@ grep -Fq 'provenance_envelope: tdi24-provenance-envelope-v2' docs/tdi24-stage-c-
 grep -Fq 'Provenance authority (issue #690, envelope v2)' docs/TDI-24-STAGE-C-PREFLIGHT.md
 # The declared CI gate compiler must be the compiler that ran these tests.
 rustc +1.97.1 --version | grep -Eq '^rustc 1\.97\.1 '
+grep -Fq 'reason: "record_identity_mismatch"' tdi-ai/src/tdi24_eval.rs
+grep -Fq '"record_identity_mismatch"' tdi-ai/tests/tdi24_provenance_authority.rs

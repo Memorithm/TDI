@@ -3145,6 +3145,10 @@ fn validate_preflight_arm(
             reason: "unaccounted_cases",
         });
     }
+    // Records bind injectively and in admission order to the full admitted
+    // identity (family, case, group, canonical digest); a hard failure may
+    // only skip an admitted case, never duplicate or reorder one.
+    let mut next_admitted = 0usize;
     for record in records {
         validate_eval_record_contracts(record)?;
         if record.arm != arm || record.split != split {
@@ -3152,15 +3156,23 @@ fn validate_preflight_arm(
                 reason: "record_binding_mismatch",
             });
         }
-        if !provenance
-            .admitted_cases
+        let Some(offset) = provenance.admitted_cases[next_admitted..]
             .iter()
-            .any(|case| case.family == record.family && case.case_id == record.case_id)
-        {
+            .position(|case| case.family == record.family && case.case_id == record.case_id)
+        else {
             return Err(EvalError::StageCPreflightInvalid {
                 reason: "record_not_admitted",
             });
+        };
+        let admitted = &provenance.admitted_cases[next_admitted + offset];
+        if admitted.group_id != record.group_id
+            || admitted.canonical_digest != record.canonical_digest
+        {
+            return Err(EvalError::StageCPreflightInvalid {
+                reason: "record_identity_mismatch",
+            });
         }
+        next_admitted += offset + 1;
     }
     for failure in failures.records() {
         validate_failure_record(failure)?;

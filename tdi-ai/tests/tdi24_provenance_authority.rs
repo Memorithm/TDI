@@ -310,6 +310,41 @@ fn preflight_report_binds_population_config_and_seeds() {
         consistent_envelope(&swapped_config(report.cases_per_arm), other).unwrap();
     assert!(validate_stage_c_preflight_report(&swapped).is_err());
 
+    // Records must bind to the full admitted identity, injectively and in order.
+    let invalid_report = |reason| Err(EvalError::StageCPreflightInvalid { reason });
+    let mut tampered = report.clone();
+    for records in [&mut tampered.v6_records, &mut tampered.c6_records] {
+        records[0].group_id += 1;
+    }
+    assert_eq!(
+        validate_stage_c_preflight_report(&tampered),
+        invalid_report("record_identity_mismatch")
+    );
+    let mut tampered = report.clone();
+    for records in [&mut tampered.v6_records, &mut tampered.c6_records] {
+        records[0].canonical_digest = "0000000000000000".to_string();
+    }
+    assert_eq!(
+        validate_stage_c_preflight_report(&tampered),
+        invalid_report("record_identity_mismatch")
+    );
+    let mut tampered = report.clone();
+    for records in [&mut tampered.v6_records, &mut tampered.c6_records] {
+        records[1] = records[0].clone();
+    }
+    assert_eq!(
+        validate_stage_c_preflight_report(&tampered),
+        invalid_report("record_not_admitted")
+    );
+    let mut tampered = report.clone();
+    for records in [&mut tampered.v6_records, &mut tampered.c6_records] {
+        records.swap(0, 1);
+    }
+    assert_eq!(
+        validate_stage_c_preflight_report(&tampered),
+        invalid_report("record_not_admitted")
+    );
+
     // Envelope bound to a different configuration is rejected.
     let mut drifted = report.clone();
     let wide = EvaluatorConfig::v6(DEV).unwrap();
