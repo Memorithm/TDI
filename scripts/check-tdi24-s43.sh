@@ -22,3 +22,5 @@ grep -Fq '| 42 | Input-noise robustness | **landed** in #740, exact head `9de1c9
 grep -Eq '\| 43 \| Reflection adversarial set \| \*\*(current stacked slice|landed)' docs/TDI-24-CAMPAIGN-50.md
 merged_count="$(grep -Eo '\*\*[0-9]+/50 merged\*\*' docs/TDI-24-CAMPAIGN-50.md | head -n 1 | tr -dc '0-9/' | cut -d/ -f1)"
 test "${merged_count:-0}" -ge 42
+# Slice 44 runs under this exact-head gate (no dedicated workflow file).
+bash scripts/check-tdi24-s44.sh
