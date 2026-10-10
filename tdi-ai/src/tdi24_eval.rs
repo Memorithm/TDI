@@ -2003,7 +2003,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::SequenceLengthScalingInvalid { .. }
         | EvalError::StageDAttributionAuditInvalid { .. }
         | EvalError::MultiSeedReplicationInvalid { .. }
-        | EvalError::InputNoiseRobustnessInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::InputNoiseRobustnessInvalid { .. }
+        | EvalError::ReflectionAdversarialInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -2051,6 +2052,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::StageDAttributionAuditInvalid { .. } => "stage_d_attribution_audit_invalid",
         EvalError::MultiSeedReplicationInvalid { .. } => "multi_seed_replication_invalid",
         EvalError::InputNoiseRobustnessInvalid { .. } => "input_noise_robustness_invalid",
+        EvalError::ReflectionAdversarialInvalid { .. } => "reflection_adversarial_invalid",
     }
 }
 
@@ -7574,6 +7576,372 @@ pub fn validate_input_noise_robustness_report(
     Ok(())
 }
 
+/// Phase-E reflection adversarial set contract pin (slice 43).
+pub const REFLECTION_ADVERSARIAL_CONTRACT: &str = "tdi24-reflection-adversarial-set-v1";
+
+/// Declared direct-to-chiral dominance ratios `|s| / chi` of the hard
+/// mirrored pairs, straddling the C6 decision boundary `1`; all reported.
+pub const ADVERSARIAL_DOMINANCE_RATIOS: [f64; 5] = [0.5, 0.9, 0.99, 1.01, 2.0];
+
+/// Declared chirality scales `chi / |q|^2` (ordinary and near-achiral); all
+/// reported.
+pub const ADVERSARIAL_CHIRALITY_SCALES: [f64; 2] = [1.0, 1e-3];
+
+/// Declared norm of the orthogonal nuisance component relative to `|q|`.
+pub const ADVERSARIAL_NUISANCE_RATIO: f64 = 2.0;
+
+/// Paired arms scored on the identical adversarial pairs.
+pub const ADVERSARIAL_ARMS: [SequenceArm; 2] = [SequenceArm::C6, SequenceArm::DirectOnly];
+
+/// Relative tolerance of the construction check on `s` and `chi`.
+const ADVERSARIAL_CONSTRUCTION_TOLERANCE: f64 = 1e-9;
+
+/// One hard mirrored pair: the left member is the exact mirror `(Mq, Mk)`
+/// of the right member. Generated from the declared geometry and the
+/// registered seed only; no arm score is consulted.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AdversarialMirrorPair {
+    pub pair_id: u64,
+    pub scale: f64,
+    pub ratio: f64,
+    /// Declared sign of the direct channel `s` (alternates by pair).
+    pub direct_sign: i8,
+    pub right_query: Chiral6,
+    pub right_key: Chiral6,
+    pub left_query: Chiral6,
+    pub left_key: Chiral6,
+}
+
+/// Per (scale, ratio, arm) handedness accounting on the adversarial pairs.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ReflectionAdversarialCell {
+    pub scale: f64,
+    pub ratio: f64,
+    pub arm: SequenceArm,
+    pub n_pairs: u64,
+    /// Members (two per pair) whose score sign matches the declared
+    /// handedness (right `+1`, left `-1`).
+    pub members_correct: u64,
+    /// Pairs whose two members are both correct.
+    pub pairs_discriminated: u64,
+}
+
+/// Immutable reflection adversarial set report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReflectionAdversarialReport {
+    pub adversarial_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    /// FNV-1a 64 of the contract string; no free seed constant.
+    pub generator_seed: u64,
+    pub capacity: TrainableCapacity,
+    /// FNV-1a 64 over the bit patterns of every generated pair.
+    pub pair_digest: u64,
+    /// Scale-major, then ratio, then arm.
+    pub cells: Vec<ReflectionAdversarialCell>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false.
+    pub training_executed: bool,
+    /// Must remain false.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn adversarial_invalid(reason: &'static str) -> EvalError {
+    EvalError::ReflectionAdversarialInvalid { reason }
+}
+
+/// Seed of the adversarial generator, derived from the contract pin.
+#[must_use]
+pub fn reflection_adversarial_seed() -> u64 {
+    REFLECTION_ADVERSARIAL_CONTRACT
+        .bytes()
+        .fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+            (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+        })
+}
+
+fn adversarial_unit(state: u64, index: u64) -> f64 {
+    let mixed = splitmix64(state ^ splitmix64(index));
+    let unit = (mixed >> 11) as f64 / (1u64 << 53) as f64;
+    2.0 * unit - 1.0
+}
+
+fn dot6(lhs: &[f64; 6], rhs: &[f64; 6]) -> f64 {
+    lhs.iter().zip(rhs).map(|(a, b)| a * b).sum()
+}
+
+/// Base geometry of one pair: query `q` and nuisance `r` orthogonal to
+/// `q` and `Jq` with `|r| = ADVERSARIAL_NUISANCE_RATIO * |q|`.
+fn adversarial_base(
+    split: DataSplit,
+    pair_id: u64,
+) -> Result<([f64; 6], [f64; 6], f64), EvalError> {
+    let registered = register_seed(
+        SeedDomain::from_split(split),
+        TaskFamily::ReflectionDiscriminative,
+        pair_id,
+    );
+    let state = reflection_adversarial_seed() ^ splitmix64(registered.mixed_seed);
+    let mut query = [0.0; 6];
+    for (index, entry) in query.iter_mut().enumerate() {
+        let unit = adversarial_unit(state, index as u64);
+        // Magnitudes in [0.5, 1] keep |q|^2 >= 1.5: no degenerate query.
+        *entry = (0.5 + 0.5 * unit.abs()).copysign(unit);
+    }
+    let q = Chiral6::from_array(query).map_err(EvalError::ChiralNumerical)?;
+    let jq = q.complex_structure().as_array();
+    let norm_sq = dot6(&query, &query);
+    let mut nuisance = [0.0; 6];
+    for (index, entry) in nuisance.iter_mut().enumerate() {
+        *entry = adversarial_unit(state, 6 + index as u64);
+    }
+    // Gram-Schmidt against the orthogonal pair (q, Jq), applied twice.
+    for _ in 0..2 {
+        let along_q = dot6(&nuisance, &query) / norm_sq;
+        let along_jq = dot6(&nuisance, &jq) / norm_sq;
+        for index in 0..6 {
+            nuisance[index] -= along_q * query[index] + along_jq * jq[index];
+        }
+    }
+    let residual = dot6(&nuisance, &nuisance).sqrt();
+    if !residual.is_finite() || residual < 1e-6 {
+        return Err(adversarial_invalid("degenerate_nuisance"));
+    }
+    let target = ADVERSARIAL_NUISANCE_RATIO * norm_sq.sqrt();
+    for entry in &mut nuisance {
+        *entry *= target / residual;
+    }
+    Ok((query, nuisance, norm_sq))
+}
+
+/// Generate one hard mirrored pair: `k = sigma*rho*scale*q - scale*Jq + r`
+/// gives `chi(q, k) = scale*|q|^2 > 0` and `s(q, k) = sigma*rho*chi`.
+fn adversarial_pair(
+    split: DataSplit,
+    pair_id: u64,
+    pair_index: u64,
+    scale: f64,
+    ratio: f64,
+) -> Result<AdversarialMirrorPair, EvalError> {
+    let (query, nuisance, norm_sq) = adversarial_base(split, pair_id)?;
+    let direct_sign: i8 = if pair_index % 2 == 0 { 1 } else { -1 };
+    let q = Chiral6::from_array(query).map_err(EvalError::ChiralNumerical)?;
+    let jq = q.complex_structure().as_array();
+    let along = f64::from(direct_sign) * ratio * scale;
+    let mut key = [0.0; 6];
+    for index in 0..6 {
+        key[index] = along * query[index] - scale * jq[index] + nuisance[index];
+    }
+    let k = Chiral6::from_array(key).map_err(EvalError::ChiralNumerical)?;
+    let channels = observables(q, k).map_err(EvalError::ChiralNumerical)?;
+    let chi = scale * norm_sq;
+    let tolerance = ADVERSARIAL_CONSTRUCTION_TOLERANCE * (1.0 + norm_sq);
+    if (channels.chiral - chi).abs() > tolerance * scale.max(1e-3)
+        || (channels.direct - along * norm_sq).abs() > tolerance * scale.max(1e-3)
+        || channels.chiral <= 0.0
+    {
+        return Err(adversarial_invalid("construction_drift"));
+    }
+    Ok(AdversarialMirrorPair {
+        pair_id,
+        scale,
+        ratio,
+        direct_sign,
+        right_query: q,
+        right_key: k,
+        left_query: q.mirror(),
+        left_key: k.mirror(),
+    })
+}
+
+/// Generate the full adversarial set (scale-major, then ratio, then pair).
+///
+/// Depends only on the split, the budget, the declared grid and the
+/// registered seeds; it takes no arm and never evaluates a score.
+pub fn reflection_adversarial_pairs(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<AdversarialMirrorPair>, EvalError> {
+    validate_non_final_split(split)?;
+    budget.cases_per_arm()?;
+    let mut pairs = Vec::new();
+    for scale in ADVERSARIAL_CHIRALITY_SCALES {
+        for ratio in ADVERSARIAL_DOMINANCE_RATIOS {
+            for pair_index in 0..budget.pairs_per_family {
+                let pair_id = budget.first_pair_id + pair_index;
+                pairs.push(adversarial_pair(split, pair_id, pair_index, scale, ratio)?);
+            }
+        }
+    }
+    Ok(pairs)
+}
+
+fn adversarial_pair_digest(pairs: &[AdversarialMirrorPair]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for pair in pairs {
+        for operand in [
+            pair.right_query,
+            pair.right_key,
+            pair.left_query,
+            pair.left_key,
+        ] {
+            for value in operand.as_array() {
+                for byte in value.to_bits().to_le_bytes() {
+                    hash = (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3);
+                }
+            }
+        }
+    }
+    hash
+}
+
+fn collect_adversarial_cells(
+    pairs: &[AdversarialMirrorPair],
+) -> Result<Vec<ReflectionAdversarialCell>, EvalError> {
+    let mut cells = Vec::new();
+    for scale in ADVERSARIAL_CHIRALITY_SCALES {
+        for ratio in ADVERSARIAL_DOMINANCE_RATIOS {
+            for arm in ADVERSARIAL_ARMS {
+                let mut cell = ReflectionAdversarialCell {
+                    scale,
+                    ratio,
+                    arm,
+                    n_pairs: 0,
+                    members_correct: 0,
+                    pairs_discriminated: 0,
+                };
+                for pair in pairs.iter().filter(|pair| {
+                    pair.scale.to_bits() == scale.to_bits()
+                        && pair.ratio.to_bits() == ratio.to_bits()
+                }) {
+                    if pair.left_query != pair.right_query.mirror()
+                        || pair.left_key != pair.right_key.mirror()
+                    {
+                        return Err(adversarial_invalid("mirror_drift"));
+                    }
+                    let right = chiral_score(pair.right_query, pair.right_key, arm.weights())
+                        .map_err(EvalError::ChiralNumerical)?;
+                    let left = chiral_score(pair.left_query, pair.left_key, arm.weights())
+                        .map_err(EvalError::ChiralNumerical)?;
+                    let right_ok = right > 0.0;
+                    let left_ok = left < 0.0;
+                    cell.n_pairs += 1;
+                    cell.members_correct += u64::from(right_ok) + u64::from(left_ok);
+                    cell.pairs_discriminated += u64::from(right_ok && left_ok);
+                }
+                cells.push(cell);
+            }
+        }
+    }
+    Ok(cells)
+}
+
+/// Run the reflection adversarial set on one non-final split.
+pub fn run_reflection_adversarial_set(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<ReflectionAdversarialReport, EvalError> {
+    let pairs = reflection_adversarial_pairs(split, budget)?;
+    let report = ReflectionAdversarialReport {
+        adversarial_contract: REFLECTION_ADVERSARIAL_CONTRACT,
+        split,
+        budget,
+        generator_seed: reflection_adversarial_seed(),
+        capacity: TrainableCapacity::reference_c6(),
+        pair_digest: adversarial_pair_digest(&pairs),
+        cells: collect_adversarial_cells(&pairs)?,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_reflection_adversarial_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a pair.
+pub fn run_reflection_adversarial_set_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<ReflectionAdversarialReport, EvalError> {
+    run_reflection_adversarial_set(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a reflection adversarial report: pins, seed, capacity, the
+/// complete declared grid in order, bounded counts, the structural
+/// direct-only invariant, flags and regenerated evidence.
+pub fn validate_reflection_adversarial_report(
+    report: &ReflectionAdversarialReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.adversarial_contract != REFLECTION_ADVERSARIAL_CONTRACT {
+        return Err(adversarial_invalid("contract_drift"));
+    }
+    if report.generator_seed != reflection_adversarial_seed() {
+        return Err(adversarial_invalid("seed_drift"));
+    }
+    if report.capacity != TrainableCapacity::reference_c6() {
+        return Err(adversarial_invalid("capacity_mismatch"));
+    }
+    report.budget.cases_per_arm()?;
+    let expected = ADVERSARIAL_CHIRALITY_SCALES.len()
+        * ADVERSARIAL_DOMINANCE_RATIOS.len()
+        * ADVERSARIAL_ARMS.len();
+    if report.cells.len() != expected {
+        return Err(adversarial_invalid("cell_count"));
+    }
+    let mut position = 0usize;
+    for scale in ADVERSARIAL_CHIRALITY_SCALES {
+        for ratio in ADVERSARIAL_DOMINANCE_RATIOS {
+            for arm in ADVERSARIAL_ARMS {
+                let cell = &report.cells[position];
+                position += 1;
+                if cell.scale.to_bits() != scale.to_bits()
+                    || cell.ratio.to_bits() != ratio.to_bits()
+                    || cell.arm != arm
+                {
+                    return Err(adversarial_invalid("grid_drift"));
+                }
+                if cell.n_pairs != report.budget.pairs_per_family
+                    || cell.members_correct > 2 * cell.n_pairs
+                    || cell.pairs_discriminated > cell.n_pairs
+                    || 2 * cell.pairs_discriminated > cell.members_correct
+                {
+                    return Err(adversarial_invalid("paired_count_drift"));
+                }
+                // Mirrored members share every even channel, so an arm
+                // without the parity-odd channel scores them identically.
+                if arm == SequenceArm::DirectOnly && cell.pairs_discriminated != 0 {
+                    return Err(adversarial_invalid("direct_only_discrimination"));
+                }
+            }
+        }
+    }
+    if report.protected_or_final_access {
+        return Err(adversarial_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(adversarial_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(adversarial_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(adversarial_invalid("experimental_non_final"));
+    }
+    let pairs = reflection_adversarial_pairs(report.split, report.budget)?;
+    if adversarial_pair_digest(&pairs) != report.pair_digest {
+        return Err(adversarial_invalid("pair_digest_drift"));
+    }
+    if collect_adversarial_cells(&pairs)? != report.cells {
+        return Err(adversarial_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -7679,6 +8047,9 @@ pub enum EvalError {
     /// Input-noise robustness rejected a drifted grid, seed, counts, evidence
     /// or claims.
     InputNoiseRobustnessInvalid { reason: &'static str },
+    /// Reflection adversarial set rejected a drifted grid, seed, pair
+    /// construction, counts, evidence or claims.
+    ReflectionAdversarialInvalid { reason: &'static str },
 }
 
 impl fmt::Display for EvalError {
@@ -7794,6 +8165,9 @@ impl fmt::Display for EvalError {
             }
             Self::InputNoiseRobustnessInvalid { reason } => {
                 write!(formatter, "input-noise robustness invalid: {reason}")
+            }
+            Self::ReflectionAdversarialInvalid { reason } => {
+                write!(formatter, "reflection adversarial set invalid: {reason}")
             }
         }
     }
