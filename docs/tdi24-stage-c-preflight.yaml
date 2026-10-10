@@ -13,7 +13,8 @@ contract_versions:
   metric_registry: tdi24-metric-registry-v1
   paired_uncertainty: tdi24-paired-uncertainty-v1
   failure_taxonomy: tdi24-failure-taxonomy-v1
-  provenance_envelope: tdi24-provenance-envelope-v1
+  provenance_envelope: tdi24-provenance-envelope-v2
+  superseded_provenance_envelope: tdi24-provenance-envelope-v1
   preflight: tdi24-stage-c-preflight-v1
 smoke_budget:
   splits: [development, validation]
