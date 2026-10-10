@@ -1624,6 +1624,129 @@ pub fn evaluate_translation_origin_stress(
     Ok(cells)
 }
 
+/// Declared chiral-relevant mirror/parity transformations of the mirror/parity
+/// stress suite (TDI-25 slice 44), acting on the two six-carriers with the
+/// upstream TDI-24 involutions; reduction points are unchanged.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MirrorStressTransform {
+    /// `(q, k) -> (Mq, Mk)`: the direct pairing is invariant and the
+    /// parity-odd pairing changes sign.
+    SimultaneousMirror,
+    /// `(q, k) -> (Jq, Jk)`: both the direct and the parity-odd pairings are
+    /// invariant in real arithmetic (`J` is orthogonal and commutes with `J`).
+    ComplexStructure,
+    /// `(q, k) -> (q, Mk)`: one-sided reflection of the key only; neither
+    /// pairing is preserved in general.
+    KeyMirror,
+}
+
+/// Declared transformations, all reported (none selected).
+pub const MIRROR_STRESS_TRANSFORMS: [MirrorStressTransform; 3] = [
+    MirrorStressTransform::SimultaneousMirror,
+    MirrorStressTransform::ComplexStructure,
+    MirrorStressTransform::KeyMirror,
+];
+
+/// Per (block, transformation, arm) match and invariance accounting.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MirrorStressCell {
+    pub family: TaskFamily,
+    pub seed_block: u64,
+    pub transform: MirrorStressTransform,
+    pub arm: ComparisonArm,
+    pub n_cases: u64,
+    /// Matches of the matched primary on clean inputs.
+    pub clean_matches: u64,
+    /// Matches on the transformed input against the common target
+    /// recomputed from that same transformed input inside the evaluator.
+    pub stressed_matches: u64,
+    /// Cases whose match bit differs between clean and transformed inputs.
+    pub flips: u64,
+    /// Label-free: maximum absolute change of the arm score.
+    pub max_abs_score_change: f64,
+    /// Maximum absolute change of the recomputed common target.
+    pub max_abs_target_change: f64,
+}
+
+/// Apply one declared mirror/parity transformation to a matched input. The
+/// transformation depends on the declared transform only, never on an arm,
+/// score, target or label.
+pub fn mirror_stress_matched_input(
+    input: &MatchedInput,
+    transform: MirrorStressTransform,
+) -> Result<MatchedInput, EvalError> {
+    let (query, key) = chiral_carriers(input)?;
+    let (query, key) = match transform {
+        MirrorStressTransform::SimultaneousMirror => (query.mirror(), key.mirror()),
+        MirrorStressTransform::ComplexStructure => {
+            (query.complex_structure(), key.complex_structure())
+        }
+        MirrorStressTransform::KeyMirror => (query, key.mirror()),
+    };
+    let mut out = input.clone();
+    out.query = query.as_array();
+    out.key = key.as_array();
+    Ok(out)
+}
+
+/// Score one matched block under every declared mirror/parity transformation
+/// for T6 and C6. Order: transformation, arm.
+pub fn evaluate_mirror_parity_stress(
+    split: DataSplit,
+    family: TaskFamily,
+    seed_block: u64,
+    n_cases: u64,
+) -> Result<Vec<MirrorStressCell>, EvalError> {
+    let run = MatchedPrimaryRun::evaluate(split, family, seed_block, n_cases)?;
+    let mut cells = Vec::new();
+    for transform in MIRROR_STRESS_TRANSFORMS {
+        for arm in SEQUENCE_SCALING_ARMS {
+            let (clean, clean_scores) = match arm {
+                ComparisonArm::T6 => (run.t6_outcomes(), run.t6_scores()),
+                _ => (run.c6_outcomes(), run.c6_scores()),
+            };
+            let mut cell = MirrorStressCell {
+                family,
+                seed_block,
+                transform,
+                arm,
+                n_cases: 0,
+                clean_matches: 0,
+                stressed_matches: 0,
+                flips: 0,
+                max_abs_score_change: 0.0,
+                max_abs_target_change: 0.0,
+            };
+            for (index, input) in run.inputs().iter().enumerate() {
+                let clean_score = arm_score(arm, input)?;
+                if clean_score.to_bits() != clean_scores[index].to_bits() {
+                    return Err(EvalError::MirrorParityStressInvalid {
+                        reason: "clean_reference_drift",
+                    });
+                }
+                let stressed = mirror_stress_matched_input(input, transform)?;
+                let clean_target = common_target(input, family)?;
+                let target = common_target(&stressed, family)?;
+                let stressed_score = arm_score(arm, &stressed)?;
+                let matched = shared_match(stressed_score, target);
+                let clean_match = clean[index].matches_oracle;
+                cell.n_cases += 1;
+                cell.clean_matches += u64::from(clean_match);
+                cell.stressed_matches += u64::from(matched);
+                cell.flips += u64::from(matched != clean_match);
+                cell.max_abs_score_change = cell
+                    .max_abs_score_change
+                    .max((stressed_score - clean_score).abs());
+                cell.max_abs_target_change = cell
+                    .max_abs_target_change
+                    .max((target - clean_target).abs());
+            }
+            cells.push(cell);
+        }
+    }
+    Ok(cells)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
