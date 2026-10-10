@@ -1418,6 +1418,212 @@ pub fn evaluate_input_noise_robustness(
     Ok(cells)
 }
 
+/// Declared torsor-relevant translation/origin transformations of the
+/// translation/origin stress suite (TDI-25 slice 43). Each leaves the physical
+/// twist/torsor pairing exactly invariant in real arithmetic.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OriginStressTransform {
+    /// Rigid frame translation: both reduction points move by `d`; the twist
+    /// `(v, omega)` at `Q` and the torsor `(R, M(P))` at `P` are unchanged.
+    OriginShift,
+    /// The key torsor is re-reduced at `P + d` through the upstream
+    /// `Torsor3::transport` (`M(P + d) = M(P) - d x R`); `Q` is unchanged.
+    KeyReduction,
+    /// The query twist is re-reduced at `Q + d` (`v' = v + omega x d`); the
+    /// key is unchanged.
+    QueryReduction,
+}
+
+/// Declared transformations, all reported.
+pub const ORIGIN_STRESS_TRANSFORMS: [OriginStressTransform; 3] = [
+    OriginStressTransform::OriginShift,
+    OriginStressTransform::KeyReduction,
+    OriginStressTransform::QueryReduction,
+];
+/// Declared offset magnitudes `|d|`, all reported (none selected).
+pub const ORIGIN_STRESS_OFFSETS: [f64; 3] = [1.0, 1e3, 1e6];
+
+/// Per (block, transformation, offset, arm) match and invariance accounting.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct OriginStressCell {
+    pub family: TaskFamily,
+    pub seed_block: u64,
+    pub transform: OriginStressTransform,
+    pub offset: f64,
+    pub arm: ComparisonArm,
+    pub n_cases: u64,
+    /// Matches of the matched primary on clean inputs.
+    pub clean_matches: u64,
+    /// Matches on the transformed input against the common target
+    /// recomputed from that same transformed input inside the evaluator.
+    pub stressed_matches: u64,
+    /// Cases whose match bit differs between clean and transformed inputs.
+    pub flips: u64,
+    /// Label-free: maximum absolute change of the arm score.
+    pub max_abs_score_change: f64,
+    /// Maximum absolute change of the recomputed common target.
+    pub max_abs_target_change: f64,
+}
+
+/// Deterministic direction of the offset for one case: a unit vector drawn
+/// from the contract seed and the case key only, never from an arm or score.
+pub fn origin_stress_direction(seed: u64, case_key: u64) -> Result<[f64; 3], EvalError> {
+    let mut direction = [0.0; 3];
+    for (slot, entry) in direction.iter_mut().enumerate() {
+        let mixed = noise_mix(seed ^ noise_mix(case_key ^ noise_mix(slot as u64)));
+        let unit = (mixed >> 11) as f64 / (1u64 << 53) as f64;
+        // Magnitudes in [0.5, 1]: never a degenerate direction.
+        let signed = 2.0 * unit - 1.0;
+        *entry = (0.5 + 0.5 * signed.abs()).copysign(signed);
+    }
+    let norm = direction
+        .iter()
+        .map(|value| value * value)
+        .sum::<f64>()
+        .sqrt();
+    if !norm.is_finite() || norm <= 0.0 {
+        return Err(EvalError::TranslationOriginStressInvalid {
+            reason: "degenerate_direction",
+        });
+    }
+    Ok(direction.map(|value| value / norm))
+}
+
+/// Apply one declared transformation with offset magnitude `offset`.
+pub fn stress_matched_input(
+    input: &MatchedInput,
+    transform: OriginStressTransform,
+    offset: f64,
+    seed: u64,
+    case_key: u64,
+) -> Result<MatchedInput, EvalError> {
+    if !ORIGIN_STRESS_OFFSETS.contains(&offset) {
+        return Err(EvalError::TranslationOriginStressInvalid {
+            reason: "offset_not_registered",
+        });
+    }
+    let direction = origin_stress_direction(seed, case_key)?;
+    let shift = direction.map(|value| value * offset);
+    let mut out = input.clone();
+    match transform {
+        OriginStressTransform::OriginShift => {
+            for ((key_point, query_point), delta) in out
+                .key_position
+                .iter_mut()
+                .zip(out.query_position.iter_mut())
+                .zip(shift)
+            {
+                *key_point += delta;
+                *query_point += delta;
+            }
+        }
+        OriginStressTransform::KeyReduction => {
+            let (_, key, _) = torsor_carriers(input)?;
+            let target = vec3([
+                input.key_position[0] + shift[0],
+                input.key_position[1] + shift[1],
+                input.key_position[2] + shift[2],
+            ])?;
+            let moved = key
+                .transport(target)
+                .map_err(Tdi25Error::Torsor)
+                .map_err(EvalError::Bridge)?;
+            let moment = moved.moment();
+            out.key[3] = moment.x;
+            out.key[4] = moment.y;
+            out.key[5] = moment.z;
+            out.key_position = [target.x, target.y, target.z];
+        }
+        OriginStressTransform::QueryReduction => {
+            let omega = vec3([input.query[3], input.query[4], input.query[5]])?;
+            let transported = omega.cross(vec3(shift)?);
+            out.query[0] += transported.x;
+            out.query[1] += transported.y;
+            out.query[2] += transported.z;
+            for (query_point, delta) in out.query_position.iter_mut().zip(shift) {
+                *query_point += delta;
+            }
+        }
+    }
+    for value in out
+        .query
+        .iter()
+        .chain(&out.key)
+        .chain(&out.key_position)
+        .chain(&out.query_position)
+    {
+        if !value.is_finite() {
+            return Err(EvalError::TranslationOriginStressInvalid {
+                reason: "non_finite_transform",
+            });
+        }
+    }
+    Ok(out)
+}
+
+/// Score one matched block under every declared transformation and offset for
+/// T6 and C6. Order: transformation, offset, arm.
+pub fn evaluate_translation_origin_stress(
+    split: DataSplit,
+    family: TaskFamily,
+    seed_block: u64,
+    n_cases: u64,
+    seed: u64,
+) -> Result<Vec<OriginStressCell>, EvalError> {
+    let run = MatchedPrimaryRun::evaluate(split, family, seed_block, n_cases)?;
+    let mut cells = Vec::new();
+    for transform in ORIGIN_STRESS_TRANSFORMS {
+        for offset in ORIGIN_STRESS_OFFSETS {
+            for arm in SEQUENCE_SCALING_ARMS {
+                let (clean, clean_scores) = match arm {
+                    ComparisonArm::T6 => (run.t6_outcomes(), run.t6_scores()),
+                    _ => (run.c6_outcomes(), run.c6_scores()),
+                };
+                let mut cell = OriginStressCell {
+                    family,
+                    seed_block,
+                    transform,
+                    offset,
+                    arm,
+                    n_cases: 0,
+                    clean_matches: 0,
+                    stressed_matches: 0,
+                    flips: 0,
+                    max_abs_score_change: 0.0,
+                    max_abs_target_change: 0.0,
+                };
+                for (index, input) in run.inputs().iter().enumerate() {
+                    let clean_score = arm_score(arm, input)?;
+                    if clean_score.to_bits() != clean_scores[index].to_bits() {
+                        return Err(EvalError::TranslationOriginStressInvalid {
+                            reason: "clean_reference_drift",
+                        });
+                    }
+                    let case_key = (seed_block << 32) | index as u64;
+                    let stressed = stress_matched_input(input, transform, offset, seed, case_key)?;
+                    let clean_target = common_target(input, family)?;
+                    let target = common_target(&stressed, family)?;
+                    let stressed_score = arm_score(arm, &stressed)?;
+                    let matched = shared_match(stressed_score, target);
+                    let clean_match = clean[index].matches_oracle;
+                    cell.n_cases += 1;
+                    cell.clean_matches += u64::from(clean_match);
+                    cell.stressed_matches += u64::from(matched);
+                    cell.flips += u64::from(matched != clean_match);
+                    cell.max_abs_score_change = cell
+                        .max_abs_score_change
+                        .max((stressed_score - clean_score).abs());
+                    cell.max_abs_target_change = cell
+                        .max_abs_target_change
+                        .max((target - clean_target).abs());
+                }
+                cells.push(cell);
+            }
+        }
+    }
+    Ok(cells)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

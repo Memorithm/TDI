@@ -110,7 +110,12 @@
 //! descriptive block tallies. Slice 42 adds input/noise robustness under
 //! `tdi25-input-noise-robustness-v1`: declared deterministic perturbation
 //! families (isotropic, carrier-only, position-only) at declared amplitudes,
-//! applied identically to T6 and C6. All arms consume sealed
+//! applied identically to T6 and C6. Slice 43 adds the translation/origin
+//! stress suite under `tdi25-translation-origin-stress-v1`: declared
+//! torsor-relevant transformations (rigid origin shift, key re-reduction,
+//! query re-reduction) at declared offsets `[1, 1e3, 1e6]`, drawn from the
+//! contract seed independently of any score and applied identically to T6
+//! and C6. All arms consume sealed
 //! Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
@@ -135,6 +140,10 @@ pub use matched_reference::{
 pub use matched_reference::{
     INPUT_NOISE_AMPLITUDES, INPUT_NOISE_FAMILIES, InputNoiseCell, InputNoiseFamily,
     evaluate_input_noise_robustness, perturb_matched_input,
+};
+pub use matched_reference::{
+    ORIGIN_STRESS_OFFSETS, ORIGIN_STRESS_TRANSFORMS, OriginStressCell, OriginStressTransform,
+    evaluate_translation_origin_stress, origin_stress_direction, stress_matched_input,
 };
 pub use matched_reference::{
     POSITION_GEOMETRY_ABLATION_ARMS, PositionGeometryCase, evaluate_position_geometry_ablation,
@@ -3443,7 +3452,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::DataVolumeScalingInvalid { .. }
         | EvalError::StageDAttributionAuditInvalid { .. }
         | EvalError::MultiSeedReplicationInvalid { .. }
-        | EvalError::InputNoiseRobustnessInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::InputNoiseRobustnessInvalid { .. }
+        | EvalError::TranslationOriginStressInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -3494,6 +3504,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::StageDAttributionAuditInvalid { .. } => "stage_d_attribution_audit_invalid",
         EvalError::MultiSeedReplicationInvalid { .. } => "multi_seed_replication_invalid",
         EvalError::InputNoiseRobustnessInvalid { .. } => "input_noise_robustness_invalid",
+        EvalError::TranslationOriginStressInvalid { .. } => "translation_origin_stress_invalid",
     }
 }
 
@@ -6720,6 +6731,193 @@ pub fn validate_input_noise_robustness_report(
     Ok(())
 }
 
+/// Phase-E translation/origin stress suite contract pin (slice 43).
+pub const TRANSLATION_ORIGIN_STRESS_CONTRACT: &str = "tdi25-translation-origin-stress-v1";
+
+/// Immutable translation/origin stress report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TranslationOriginStressReport {
+    pub stress_contract: &'static str,
+    pub population_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    /// FNV-1a 64 of the contract pin; no free seed constant.
+    pub stress_seed: u64,
+    /// Identical reference capacities; no arm receives extra parameters.
+    pub t6_capacity: ParameterReadoutCapacity,
+    pub c6_capacity: ParameterReadoutCapacity,
+    /// Family-major, seed block, then transformation, offset, arm.
+    pub cells: Vec<OriginStressCell>,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false.
+    pub training_executed: bool,
+    /// Must remain false: no transformation or offset is selected.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn origin_stress_invalid(reason: &'static str) -> EvalError {
+    EvalError::TranslationOriginStressInvalid { reason }
+}
+
+/// Seed of the declared offset directions, derived from the contract pin.
+#[must_use]
+pub fn translation_origin_stress_seed() -> u64 {
+    TRANSLATION_ORIGIN_STRESS_CONTRACT
+        .bytes()
+        .fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+            (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+        })
+}
+
+fn collect_origin_stress_cells(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<OriginStressCell>, EvalError> {
+    let mut cells = Vec::new();
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..budget.seed_blocks {
+            cells.extend(evaluate_translation_origin_stress(
+                split,
+                *family,
+                seed_block,
+                budget.cases_per_block,
+                translation_origin_stress_seed(),
+            )?);
+        }
+    }
+    Ok(cells)
+}
+
+/// Run the translation/origin stress suite on the bounded matched population.
+pub fn run_translation_origin_stress(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<TranslationOriginStressReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.validate()?;
+    let cells = collect_origin_stress_cells(split, budget)?;
+    let report = TranslationOriginStressReport {
+        stress_contract: TRANSLATION_ORIGIN_STRESS_CONTRACT,
+        population_contract: matched_reference::MATCHED_POPULATION_CONTRACT,
+        split,
+        budget,
+        stress_seed: translation_origin_stress_seed(),
+        t6_capacity: ParameterReadoutCapacity::reference_t6(),
+        c6_capacity: ParameterReadoutCapacity::reference_c6(),
+        cells,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_translation_origin_stress_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_translation_origin_stress_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<TranslationOriginStressReport, EvalError> {
+    run_translation_origin_stress(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a translation/origin stress report: pins, seed, matched capacity,
+/// the complete declared grid in canonical order, paired counts, the
+/// structural C6 origin-shift invariant, finite changes, flags and
+/// regenerated evidence.
+pub fn validate_translation_origin_stress_report(
+    report: &TranslationOriginStressReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.stress_contract != TRANSLATION_ORIGIN_STRESS_CONTRACT {
+        return Err(origin_stress_invalid("contract_drift"));
+    }
+    if report.population_contract != matched_reference::MATCHED_POPULATION_CONTRACT {
+        return Err(origin_stress_invalid("population_drift"));
+    }
+    if report.stress_seed != translation_origin_stress_seed() {
+        return Err(origin_stress_invalid("seed_drift"));
+    }
+    report.budget.validate()?;
+    if report.t6_capacity != ParameterReadoutCapacity::reference_t6()
+        || report.c6_capacity != ParameterReadoutCapacity::reference_c6()
+    {
+        return Err(origin_stress_invalid("capacity_mismatch"));
+    }
+    let per_block =
+        ORIGIN_STRESS_TRANSFORMS.len() * ORIGIN_STRESS_OFFSETS.len() * SEQUENCE_SCALING_ARMS.len();
+    let expected = REQUIRED_SYNTHESIS_FAMILIES.len() as u64 * report.budget.seed_blocks;
+    if report.cells.len() as u64 != expected * per_block as u64 {
+        return Err(origin_stress_invalid("cell_count"));
+    }
+    let mut position = 0usize;
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..report.budget.seed_blocks {
+            for transform in ORIGIN_STRESS_TRANSFORMS {
+                for offset in ORIGIN_STRESS_OFFSETS {
+                    for arm in SEQUENCE_SCALING_ARMS {
+                        let cell = &report.cells[position];
+                        position += 1;
+                        if cell.family != *family
+                            || cell.seed_block != seed_block
+                            || cell.transform != transform
+                            || cell.offset.to_bits() != offset.to_bits()
+                            || cell.arm != arm
+                        {
+                            return Err(origin_stress_invalid("grid_drift"));
+                        }
+                        if cell.n_cases != report.budget.cases_per_block
+                            || cell.clean_matches > cell.n_cases
+                            || cell.stressed_matches > cell.n_cases
+                            || cell.flips > cell.n_cases
+                            || cell.flips < cell.clean_matches.abs_diff(cell.stressed_matches)
+                            || cell.flips > cell.clean_matches + cell.stressed_matches
+                            || (cell.flips + cell.clean_matches + cell.stressed_matches) % 2 != 0
+                        {
+                            return Err(origin_stress_invalid("paired_count_drift"));
+                        }
+                        if !cell.max_abs_score_change.is_finite()
+                            || cell.max_abs_score_change < 0.0
+                            || !cell.max_abs_target_change.is_finite()
+                            || cell.max_abs_target_change < 0.0
+                        {
+                            return Err(origin_stress_invalid("score_change_drift"));
+                        }
+                        // C6 reads no position: a rigid origin shift leaves
+                        // its input, hence its score, bit-for-bit unchanged.
+                        if transform == OriginStressTransform::OriginShift
+                            && arm == ComparisonArm::C6
+                            && cell.max_abs_score_change != 0.0
+                        {
+                            return Err(origin_stress_invalid("c6_origin_shift_drift"));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if report.protected_or_final_access {
+        return Err(origin_stress_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(origin_stress_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(origin_stress_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(origin_stress_invalid("experimental_non_final"));
+    }
+    if collect_origin_stress_cells(report.split, report.budget)? != report.cells {
+        return Err(origin_stress_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -6847,6 +7045,11 @@ pub enum EvalError {
     InputNoiseRobustnessInvalid {
         reason: &'static str,
     },
+    /// Translation/origin stress rejected a drifted grid, seed, transform,
+    /// counts, evidence or claims.
+    TranslationOriginStressInvalid {
+        reason: &'static str,
+    },
 }
 
 impl fmt::Display for EvalError {
@@ -6962,6 +7165,9 @@ impl fmt::Display for EvalError {
             }
             Self::InputNoiseRobustnessInvalid { reason } => {
                 write!(formatter, "input/noise robustness invalid: {reason}")
+            }
+            Self::TranslationOriginStressInvalid { reason } => {
+                write!(formatter, "translation/origin stress invalid: {reason}")
             }
         }
     }
