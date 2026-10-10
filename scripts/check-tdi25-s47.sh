@@ -35,7 +35,17 @@ done
 bash -n scripts/tdi25-s47-qualified-timing.sh
 grep -Fq 'trap restore EXIT' scripts/tdi25-s47-qualified-timing.sh
 grep -Fq 'numactl --membind=$NUMA_NODE taskset -c $PINNED_CPU' scripts/tdi25-s47-qualified-timing.sh
-! git ls-files | grep -Eq 'tdi25-s47-timing-|results\.jsonl'
+# Note: `! cmd` does not trip `set -e`; the timing-artifact guards use explicit exits.
+timing_files="$(git ls-files | grep -E 'tdi25-s47-timing-|tdi25_s47_timing|results\.jsonl' || true)"
+stray="$(grep -Ev '^results/tdi25_s47_timing/attempt-[0-9]+/(results\.jsonl|build-provenance\.txt|fingerprint\.json|SHA256SUMS)$' <<<"$timing_files" | grep -v '^$' || true)"
+if [[ -n "$stray" ]]; then echo "stray timing artifacts: $stray" >&2; exit 1; fi
+(cd results/tdi25_s47_timing/attempt-1 && sha256sum -c --quiet SHA256SUMS)
+grep -Fq 'ab2db3cd203dcc29054616127fff7475ac73967f918deab8d60180f651cf2f40  results.jsonl' results/tdi25_s47_timing/attempt-1/SHA256SUMS
+test "$(grep -c '"cell_status":"non_qualifiee"' results/tdi25_s47_timing/attempt-1/results.jsonl)" -eq 4
+grep -Fq 'non qualifiée' docs/TDI-25-S47-TIMING-ATTEMPT-1.md
+grep -Fq 'NON QUALIFIÉS' docs/TDI-25-S47-TIMING-ATTEMPT-1.md
+grep -Fq 'Recorded degeneracies' docs/TDI-25-S47-TIMING-ATTEMPT-1.md
+if grep -Fq '"cell_status":"qualifiee"' results/tdi25_s47_timing/attempt-1/results.jsonl; then exit 1; fi
 ! grep -Eq 'DataSplit::(Protected|Final|Holdout)' tdi-ai/src/tdi25_eval.rs tdi-ai/tests/tdi25_reference_cost.rs
 grep -Eq '\| 46 \| Numerical precision study \| \*\*landed\*\* in #[0-9]+, exact head `[0-9a-f]{40}`, merge `[0-9a-f]{40}`;' docs/TDI-25-CAMPAIGN-50.md
 grep -Eq '\| 47 \| Reference cost study \| \*\*(current candidate|landed)[^|]*timing non qualifié' docs/TDI-25-CAMPAIGN-50.md

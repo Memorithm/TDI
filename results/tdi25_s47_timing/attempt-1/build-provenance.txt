@@ -1,0 +1,14 @@
+run_id=tdi25-s47-timing-8bd8aea
+attempt=1
+operator=user (Tarek Zekriti) on the Dell PowerEdge T430
+date=2026-10-10 ~23:18 Europe/Paris
+commit=8bd8aeacec96f05f64508a509faa2b45b147eb6a
+tree=daffdc043bb2af3117716818d8abc009a0ad23d5
+binary=target/release/examples/tdi25_s47_qualified_timing
+binary_sha256=c87d237f79891f872ae4e8443fd3da467730a08412348eb556fa340751be1a89
+rustc=rustc 1.97.1 (8bab26f4f 2026-07-14), LLVM 22.1.6
+build_user=tdi
+protocol=tdi25-qualified-timing-environment-v1
+script_end=done: tdi25-s47-timing-8bd8aea/fingerprint.json tdi25-s47-timing-8bd8aea/results.jsonl
+restore=restored governor=schedutil/schedutil no_turbo=0
+fingerprint_json=PENDING (not yet provided by the user; to be added later without altering results.jsonl)

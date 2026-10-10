@@ -62,9 +62,10 @@ the in-process rejection rules. The measurement script
 `scripts/tdi25-s47-qualified-timing.sh` adds pinning, NUMA binding,
 governor/turbo set-and-restore, the SMT-sibling and load-average checks.
 
-**No timing has been run.** The slice stays **timing non qualifié** in its
-results until the user's run on the T430 lands in a separate, user-approved
-PR. The cost report (`timing_measured = false`, `timing_status =
+**Attempt 1** (run `tdi25-s47-timing-8bd8aea`, user's T430) was rejected
+in all 4 cells (`docs/TDI-25-S47-TIMING-ATTEMPT-1.md`). The slice stays
+**timing non qualifié** in its results until a qualified attempt lands in a
+separate, user-approved PR. The cost report (`timing_measured = false`, `timing_status =
 timing_non_qualifie`) is unchanged.
 
 ## Validation
