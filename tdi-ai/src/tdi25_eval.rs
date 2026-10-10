@@ -122,7 +122,11 @@
 //! `tdi25-mixed-adversarial-suite-v1`: every declared slice-44 mirror/parity
 //! transformation composed with every declared slice-43 translation/origin
 //! transformation and offset, reusing the slice-43 contract seed, applied
-//! identically to T6 and C6. All arms consume sealed
+//! identically to T6 and C6. Slice 46 adds the numerical precision study
+//! under `tdi25-numerical-precision-v1`: T6 and C6 scored in f64 (reference)
+//! and f32 on clean and slice-43 stressed matched inputs, against the
+//! upstream TDI-24 slice-44 declared forward-error bound, with complete
+//! failure accounting. All arms consume sealed
 //! Development/Validation cases, keep task oracles outside inference
 //! callbacks, and reject split or contract drift. They do not train, access
 //! protected/final data, or authorize a scientific claim.
@@ -151,6 +155,10 @@ pub use matched_reference::{
 pub use matched_reference::{
     MIRROR_STRESS_TRANSFORMS, MirrorStressCell, MirrorStressTransform,
     evaluate_mirror_parity_stress, mirror_stress_matched_input,
+};
+pub use matched_reference::{
+    MatchedPrecisionCell, PrecisionInput, c6_score_f32, evaluate_matched_numerical_precision,
+    precision_inputs, t6_score_f32,
 };
 pub use matched_reference::{
     MixedStressCell, evaluate_mixed_adversarial_stress, mixed_stress_matched_input,
@@ -3469,7 +3477,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::InputNoiseRobustnessInvalid { .. }
         | EvalError::TranslationOriginStressInvalid { .. }
         | EvalError::MirrorParityStressInvalid { .. }
-        | EvalError::MixedAdversarialStressInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::MixedAdversarialStressInvalid { .. }
+        | EvalError::MatchedPrecisionInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -3523,6 +3532,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::TranslationOriginStressInvalid { .. } => "translation_origin_stress_invalid",
         EvalError::MirrorParityStressInvalid { .. } => "mirror_parity_stress_invalid",
         EvalError::MixedAdversarialStressInvalid { .. } => "mixed_adversarial_stress_invalid",
+        EvalError::MatchedPrecisionInvalid { .. } => "matched_precision_invalid",
     }
 }
 
@@ -7302,6 +7312,172 @@ pub fn validate_mixed_adversarial_suite_report(
     Ok(())
 }
 
+/// Phase-E numerical precision study contract pin (slice 46).
+pub const NUMERICAL_PRECISION_CONTRACT: &str = "tdi25-numerical-precision-v1";
+
+/// Immutable f64/f32 precision report on one non-final split.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NumericalPrecisionReport {
+    pub precision_contract: &'static str,
+    pub population_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    /// The slice-43 direction seed, reused unchanged.
+    pub stress_seed: u64,
+    /// The upstream TDI-24 slice-44 bound factor, reused unchanged.
+    pub bound_factor: f64,
+    pub t6_capacity: ParameterReadoutCapacity,
+    pub c6_capacity: ParameterReadoutCapacity,
+    /// Family-major, seed block, then input class, arm.
+    pub cells: Vec<MatchedPrecisionCell>,
+    pub protected_or_final_access: bool,
+    pub training_executed: bool,
+    pub scientific_claim: bool,
+    pub experimental_non_final: bool,
+}
+
+const fn precision_invalid(reason: &'static str) -> EvalError {
+    EvalError::MatchedPrecisionInvalid { reason }
+}
+
+fn collect_precision_cells(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<MatchedPrecisionCell>, EvalError> {
+    let mut cells = Vec::new();
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..budget.seed_blocks {
+            cells.extend(evaluate_matched_numerical_precision(
+                split,
+                *family,
+                seed_block,
+                budget.cases_per_block,
+                translation_origin_stress_seed(),
+            )?);
+        }
+    }
+    Ok(cells)
+}
+
+/// Run the numerical precision study on the bounded matched population.
+pub fn run_numerical_precision(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<NumericalPrecisionReport, EvalError> {
+    validate_non_final_split(split)?;
+    budget.validate()?;
+    let cells = collect_precision_cells(split, budget)?;
+    let report = NumericalPrecisionReport {
+        precision_contract: NUMERICAL_PRECISION_CONTRACT,
+        population_contract: matched_reference::MATCHED_POPULATION_CONTRACT,
+        split,
+        budget,
+        stress_seed: translation_origin_stress_seed(),
+        bound_factor: crate::experimental::tdi24_eval::PRECISION_BOUND_FACTOR,
+        t6_capacity: ParameterReadoutCapacity::reference_t6(),
+        c6_capacity: ParameterReadoutCapacity::reference_c6(),
+        cells,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_numerical_precision_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_numerical_precision_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<NumericalPrecisionReport, EvalError> {
+    run_numerical_precision(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a precision report: pins, reused seed and bound factor, matched
+/// capacity, complete grid in canonical order, complete failure accounting,
+/// consistent statistics, flags and regenerated evidence.
+pub fn validate_numerical_precision_report(
+    report: &NumericalPrecisionReport,
+) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.precision_contract != NUMERICAL_PRECISION_CONTRACT {
+        return Err(precision_invalid("contract_drift"));
+    }
+    if report.population_contract != matched_reference::MATCHED_POPULATION_CONTRACT {
+        return Err(precision_invalid("population_drift"));
+    }
+    if report.stress_seed != translation_origin_stress_seed() {
+        return Err(precision_invalid("seed_drift"));
+    }
+    if report.bound_factor.to_bits()
+        != crate::experimental::tdi24_eval::PRECISION_BOUND_FACTOR.to_bits()
+    {
+        return Err(precision_invalid("tolerance_drift"));
+    }
+    report.budget.validate()?;
+    if report.t6_capacity != ParameterReadoutCapacity::reference_t6()
+        || report.c6_capacity != ParameterReadoutCapacity::reference_c6()
+    {
+        return Err(precision_invalid("capacity_mismatch"));
+    }
+    let classes = precision_inputs();
+    let per_block = classes.len() * SEQUENCE_SCALING_ARMS.len();
+    let expected = REQUIRED_SYNTHESIS_FAMILIES.len() as u64 * report.budget.seed_blocks;
+    if report.cells.len() as u64 != expected * per_block as u64 {
+        return Err(precision_invalid("cell_count"));
+    }
+    let mut position = 0usize;
+    for family in REQUIRED_SYNTHESIS_FAMILIES {
+        for seed_block in 0..report.budget.seed_blocks {
+            for class in &classes {
+                for arm in SEQUENCE_SCALING_ARMS {
+                    let cell = &report.cells[position];
+                    position += 1;
+                    if cell.family != *family
+                        || cell.seed_block != seed_block
+                        || cell.input != *class
+                        || cell.arm != arm
+                    {
+                        return Err(precision_invalid("grid_drift"));
+                    }
+                    if cell.n_cases != report.budget.cases_per_block
+                        || cell.within_tolerance + cell.tolerance_failures + cell.non_finite_f32
+                            != cell.n_cases
+                        || cell.sign_flips > cell.n_cases - cell.non_finite_f32
+                    {
+                        return Err(precision_invalid("failure_accounting_drift"));
+                    }
+                    if !cell.max_abs_error.is_finite()
+                        || cell.max_abs_error < 0.0
+                        || cell.max_error_to_bound.is_nan()
+                        || cell.max_error_to_bound < 0.0
+                        || (cell.tolerance_failures > 0) != (cell.max_error_to_bound > 1.0)
+                    {
+                        return Err(precision_invalid("error_statistic_drift"));
+                    }
+                }
+            }
+        }
+    }
+    if report.protected_or_final_access {
+        return Err(precision_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(precision_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(precision_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(precision_invalid("experimental_non_final"));
+    }
+    if collect_precision_cells(report.split, report.budget)? != report.cells {
+        return Err(precision_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -7444,6 +7620,11 @@ pub enum EvalError {
     MixedAdversarialStressInvalid {
         reason: &'static str,
     },
+    /// Numerical precision study rejected a drifted grid, tolerance,
+    /// accounting, statistic, evidence or claims.
+    MatchedPrecisionInvalid {
+        reason: &'static str,
+    },
 }
 
 impl fmt::Display for EvalError {
@@ -7568,6 +7749,9 @@ impl fmt::Display for EvalError {
             }
             Self::MixedAdversarialStressInvalid { reason } => {
                 write!(formatter, "mixed adversarial stress invalid: {reason}")
+            }
+            Self::MatchedPrecisionInvalid { reason } => {
+                write!(formatter, "numerical precision invalid: {reason}")
             }
         }
     }
