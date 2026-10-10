@@ -1,0 +1,50 @@
+# TDI-25 slice 47 qualified timing environment manifest.
+# Frozen by the user (Tarek Zekriti), approved 2026-10-10 22:02 Europe/Paris.
+# Mirrors T430_QUALIFIED_TIMING_ENVIRONMENT in tdi-ai/src/tdi25_eval.rs; the
+# harness accepts exactly this manifest. Results valid for this machine only.
+environment_contract: tdi25-qualified-timing-environment-v1
+machine:
+  machine_id: dell-poweredge-t430-debian
+  system: Dell PowerEdge T430
+  hostname: debian
+  bios_version: "2.19.0"   # 2024-02-22
+  bare_metal: true
+  shared_host: true
+  cpu_model: "Intel(R) Xeon(R) CPU E5-2683 v4 @ 2.10GHz"   # attested by substring "E5-2683 v4"
+  sockets: 2
+  physical_cores: 32
+  logical_cpus: 64
+  smt: true
+  numa_nodes: 2            # node0 = even CPUs; SMT sibling of CPU n is n+32
+  memory: 128 GB DDR4-2133
+  os: Debian 13.4
+  kernel_release: 6.12.88+deb13-amd64
+  mitigations: on
+toolchain:
+  rustc: "1.97.1"          # must be installed with rustup; build stamp checks `release: 1.97.1`
+  build: cargo +1.97.1 build --release --locked -p tdi-ai --features experimental --example tdi25_s47_qualified_timing
+protocol:
+  pinned_cpu: 28           # taskset -c 28
+  numa_membind: 0          # numactl --membind=0
+  smt_sibling_cpu: 60      # must be idle: busy fraction <= 0.01 over a 1 s /proc/stat sample before each cell
+  governor: performance    # CPUs 28 and 60; original values restored on exit
+  intel_pstate_no_turbo: 1 # original value restored on exit; refuse if it cannot be set
+  requires_root: true
+  cells: [development/T6, development/C6, validation/T6, validation/C6]
+  budget: smoke            # one run = one pass over the bounded matched population
+  warmup_runs: 5
+  measured_runs: 31
+  statistics:
+    primary: median
+    also: [min, iqr]
+    quartiles: order statistics of rank 8, 16, 24 of 31 (no interpolation)
+  rejection:               # cell reported "non_qualifiee"; no rerun
+    iqr_over_median_max: 0.05
+    load_average_1min_max: 2.0          # at start and end of the cell
+    swap_in_out_change: reject           # /proc/vmstat pswpin/pswpout during the cell
+    frequency_deviation_tolerance: 0.01  # every post-run scaling_cur_freq of CPU 28 within 1% of scaling_max_freq
+  memory:
+    primary: logical bytes (slice-47 accounting)
+    informational: VmHWM
+fingerprint: [cpu_model, kernel, bios, rustc -Vv, git commit, git tree, binary sha256, governor, no_turbo, loadavg, pswpin, pswpout, kernel cmdline]
+operator: user             # the bot never runs the timing

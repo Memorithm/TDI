@@ -150,3 +150,7 @@ required-features = ["experimental"]
 [[example]]
 name = "tdi2_intuition_deterministic_replay"
 required-features = ["experimental"]
+
+[[example]]
+name = "tdi25_s47_qualified_timing"
+required-features = ["experimental"]

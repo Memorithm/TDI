@@ -7490,27 +7490,75 @@ pub const REFERENCE_COST_CONTRACT: &str = "tdi25-reference-cost-v1";
 /// T6 source-level accounting contract (this slice). C6 reuses the TDI-24
 /// slice-09 `tdi24-reference-accounting-v3` unchanged.
 pub const T6_REFERENCE_ACCOUNTING_CONTRACT: &str = "tdi25-t6-reference-accounting-v1";
-/// Contract a future frozen qualified-environment manifest must carry.
+/// Contract of the frozen qualified timing environment and protocol.
 pub const QUALIFIED_TIMING_ENVIRONMENT_CONTRACT: &str = "tdi25-qualified-timing-environment-v1";
-/// Timing status recorded by this slice: no environment is qualified.
+/// Timing status recorded by the slice-47 cost report: results stay
+/// `timing_non_qualifie` until the user's run on the qualified machine lands.
 pub const REFERENCE_TIMING_STATUS: &str = "timing_non_qualifie";
 
-/// Fields a human-frozen qualified timing environment must pin. This slice
-/// chooses none of them.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Frozen qualified timing environment and protocol (approved by the user,
+/// see `docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V1.md` and
+/// `docs/tdi25-qualified-timing-environment.yaml`).
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct QualifiedTimingEnvironment {
     pub environment_contract: &'static str,
-    /// Identity of the dedicated reference machine (CPU, OS).
+    /// Identity of the reference machine.
     pub machine_id: &'static str,
-    /// Exact toolchain identity.
+    pub system: &'static str,
+    pub bios_version: &'static str,
+    /// Substring that must appear in the `/proc/cpuinfo` model name.
+    pub cpu_model: &'static str,
+    pub kernel_release: &'static str,
+    /// Exact rustc release that must build the harness.
     pub toolchain: &'static str,
+    pub pinned_cpu: u32,
+    pub smt_sibling_cpu: u32,
+    pub numa_node: u32,
+    pub governor: &'static str,
+    pub turbo_disabled: bool,
     pub warmup_iterations: u32,
     pub measured_iterations: u32,
+    /// A cell is rejected when `IQR > max_iqr_fraction_of_median * median`.
+    pub max_iqr_fraction_of_median: f64,
+    /// A cell is rejected when the 1-min load average exceeds this value at
+    /// its start or end (checked by the measurement script).
+    pub max_load_average_1min: f64,
+    /// Implementation tolerance for "CPU frequency deviates from the fixed
+    /// value": every post-run `scaling_cur_freq` reading must lie within this
+    /// fraction of the fixed `scaling_max_freq`.
+    pub frequency_tolerance_fraction: f64,
+    /// Implementation threshold for "SMT sibling idle": busy fraction of the
+    /// sibling over a 1 s sample before the run (checked by the script).
+    pub smt_sibling_max_busy_fraction: f64,
 }
 
-/// The checked-in qualified timing environment. `None`: timing non qualifie.
-/// Only a separate human-reviewed freeze may set it.
-pub const QUALIFIED_TIMING_ENVIRONMENT: Option<QualifiedTimingEnvironment> = None;
+/// The single accepted manifest: Dell PowerEdge T430 (user-approved
+/// 2026-10-10).
+pub const T430_QUALIFIED_TIMING_ENVIRONMENT: QualifiedTimingEnvironment =
+    QualifiedTimingEnvironment {
+        environment_contract: QUALIFIED_TIMING_ENVIRONMENT_CONTRACT,
+        machine_id: "dell-poweredge-t430-debian",
+        system: "Dell PowerEdge T430",
+        bios_version: "2.19.0",
+        cpu_model: "E5-2683 v4",
+        kernel_release: "6.12.88+deb13-amd64",
+        toolchain: "1.97.1",
+        pinned_cpu: 28,
+        smt_sibling_cpu: 60,
+        numa_node: 0,
+        governor: "performance",
+        turbo_disabled: true,
+        warmup_iterations: 5,
+        measured_iterations: 31,
+        max_iqr_fraction_of_median: 0.05,
+        max_load_average_1min: 2.0,
+        frequency_tolerance_fraction: 0.01,
+        smt_sibling_max_busy_fraction: 0.01,
+    };
+
+/// The checked-in qualified timing environment: exactly the T430 manifest.
+pub const QUALIFIED_TIMING_ENVIRONMENT: Option<QualifiedTimingEnvironment> =
+    Some(T430_QUALIFIED_TIMING_ENVIRONMENT);
 
 /// Source-level scalar work and logical storage for one matched pair score.
 /// Counts describe the bounded Rust reference algorithms; they are not CPU
@@ -7737,10 +7785,7 @@ pub fn validate_reference_cost_report(report: &ReferenceCostReport) -> Result<()
     {
         return Err(cost_invalid("totals_drift"));
     }
-    if report.timing_status != REFERENCE_TIMING_STATUS
-        || report.timing_measured
-        || QUALIFIED_TIMING_ENVIRONMENT.is_some()
-    {
+    if report.timing_status != REFERENCE_TIMING_STATUS || report.timing_measured {
         return Err(cost_invalid("timing_status_drift"));
     }
     if report.protected_or_final_access {
@@ -7766,45 +7811,152 @@ pub fn validate_reference_cost_report(report: &ReferenceCostReport) -> Result<()
     Ok(())
 }
 
-/// Raw wall-clock samples from a qualified environment. No statistic is
-/// computed: summarising the samples is part of the frozen protocol.
+/// Facts read from the running process and host, compared with the frozen
+/// manifest before the clock is touched.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct QualifiedTimingSamples {
-    pub environment: QualifiedTimingEnvironment,
-    pub split: DataSplit,
-    /// Nanoseconds per measured pass over the population, T6 then C6.
-    pub t6_nanos: Vec<u128>,
-    pub c6_nanos: Vec<u128>,
+pub struct TimingAttestation {
+    pub cpu_model: String,
+    pub kernel_release: String,
+    pub bios_version: String,
+    pub cpus_allowed: String,
+    pub governor: String,
+    pub sibling_governor: String,
+    pub no_turbo: String,
+    pub build_rustc: &'static str,
 }
 
-/// Timing harness. Refuses to touch the clock while no qualified-environment
-/// manifest is frozen (`QUALIFIED_TIMING_ENVIRONMENT` is `None`): timing non
-/// qualifie.
-pub fn run_qualified_reference_timing(
-    split: DataSplit,
-    budget: StageCPreflightBudget,
-) -> Result<QualifiedTimingSamples, EvalError> {
-    validate_non_final_split(split)?;
-    match QUALIFIED_TIMING_ENVIRONMENT {
-        None => Err(cost_invalid("timing_environment_not_qualified")),
-        Some(environment) => time_reference_population(environment, split, budget),
+fn read_trimmed(path: &str) -> Result<String, EvalError> {
+    std::fs::read_to_string(path)
+        .map(|text| text.trim().to_string())
+        .map_err(|_| cost_invalid("attestation_unreadable"))
+}
+
+fn status_field(field: &str) -> Result<String, EvalError> {
+    let status = read_trimmed("/proc/self/status")?;
+    status
+        .lines()
+        .find_map(|line| line.strip_prefix(field))
+        .map(|value| value.trim_start_matches(':').trim().to_string())
+        .ok_or(cost_invalid("attestation_unreadable"))
+}
+
+fn cpu_sysfs(cpu: u32, leaf: &str) -> String {
+    format!("/sys/devices/system/cpu/cpu{cpu}/cpufreq/{leaf}")
+}
+
+/// Compare the running host and process with the frozen manifest. Every
+/// mismatch refuses timing.
+pub fn attest_timing_environment(
+    environment: &QualifiedTimingEnvironment,
+) -> Result<TimingAttestation, EvalError> {
+    if *environment != T430_QUALIFIED_TIMING_ENVIRONMENT {
+        return Err(cost_invalid("timing_environment_mismatch"));
     }
-}
-
-fn time_reference_population(
-    environment: QualifiedTimingEnvironment,
-    split: DataSplit,
-    budget: StageCPreflightBudget,
-) -> Result<QualifiedTimingSamples, EvalError> {
-    if environment.environment_contract != QUALIFIED_TIMING_ENVIRONMENT_CONTRACT
-        || environment.machine_id.is_empty()
-        || environment.toolchain.is_empty()
-        || environment.measured_iterations == 0
+    let cpuinfo = read_trimmed("/proc/cpuinfo")?;
+    let attestation = TimingAttestation {
+        cpu_model: cpuinfo
+            .lines()
+            .find_map(|line| line.strip_prefix("model name"))
+            .map(|value| {
+                value
+                    .trim_start_matches([' ', '\t', ':'])
+                    .trim()
+                    .to_string()
+            })
+            .unwrap_or_default(),
+        kernel_release: read_trimmed("/proc/sys/kernel/osrelease")?,
+        bios_version: read_trimmed("/sys/class/dmi/id/bios_version").unwrap_or_default(),
+        cpus_allowed: status_field("Cpus_allowed_list")?,
+        governor: read_trimmed(&cpu_sysfs(environment.pinned_cpu, "scaling_governor"))
+            .unwrap_or_default(),
+        sibling_governor: read_trimmed(&cpu_sysfs(environment.smt_sibling_cpu, "scaling_governor"))
+            .unwrap_or_default(),
+        no_turbo: read_trimmed("/sys/devices/system/cpu/intel_pstate/no_turbo").unwrap_or_default(),
+        build_rustc: env!("TDI_AI_BUILD_RUSTC_VERSION"),
+    };
+    let toolchain = attestation
+        .build_rustc
+        .strip_prefix("rustc ")
+        .and_then(|rest| rest.split_whitespace().next());
+    if toolchain != Some(environment.toolchain) {
+        return Err(cost_invalid("attestation_toolchain"));
+    }
+    if !attestation.cpu_model.contains(environment.cpu_model) {
+        return Err(cost_invalid("attestation_cpu_model"));
+    }
+    if attestation.kernel_release != environment.kernel_release {
+        return Err(cost_invalid("attestation_kernel"));
+    }
+    if attestation.bios_version != environment.bios_version {
+        return Err(cost_invalid("attestation_bios"));
+    }
+    if attestation.cpus_allowed != environment.pinned_cpu.to_string() {
+        return Err(cost_invalid("attestation_pinning"));
+    }
+    if attestation.governor != environment.governor
+        || attestation.sibling_governor != environment.governor
     {
-        return Err(cost_invalid("timing_environment_invalid"));
+        return Err(cost_invalid("attestation_governor"));
     }
+    if environment.turbo_disabled && attestation.no_turbo != "1" {
+        return Err(cost_invalid("attestation_turbo"));
+    }
+    Ok(attestation)
+}
+
+/// Raw samples of one timing cell (one split x arm) on the qualified machine.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TimingCellSamples {
+    pub environment: QualifiedTimingEnvironment,
+    pub attestation: TimingAttestation,
+    pub split: DataSplit,
+    pub arm: ComparisonArm,
+    pub cases: u64,
+    /// Nanoseconds per measured pass over the bounded matched population.
+    pub nanos: Vec<u128>,
+    /// Fixed frequency (`scaling_max_freq`, kHz) read before the cell.
+    pub fixed_frequency_khz: u64,
+    /// `scaling_cur_freq` (kHz) read after every measured pass, outside the
+    /// timed window.
+    pub frequency_khz: Vec<u64>,
+    pub swap_in_start: u64,
+    pub swap_in_end: u64,
+    pub swap_out_start: u64,
+    pub swap_out_end: u64,
+    /// Informational only: process peak RSS (`VmHWM`, kB).
+    pub peak_rss_kib: Option<u64>,
+}
+
+fn vmstat_counter(name: &str) -> Result<u64, EvalError> {
+    read_trimmed("/proc/vmstat")?
+        .lines()
+        .find_map(|line| line.strip_prefix(name))
+        .and_then(|value| value.trim().parse().ok())
+        .ok_or(cost_invalid("attestation_unreadable"))
+}
+
+fn read_khz(path: &str) -> Result<u64, EvalError> {
+    read_trimmed(path)?
+        .parse()
+        .map_err(|_| cost_invalid("attestation_unreadable"))
+}
+
+/// Measure one cell under the frozen protocol. Refuses unless the checked-in
+/// environment is exactly the T430 manifest and the running host and process
+/// attest to it (CPU, kernel, BIOS, toolchain, pinning, governor, turbo).
+pub fn run_qualified_reference_timing_cell(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+    arm: ComparisonArm,
+) -> Result<TimingCellSamples, EvalError> {
     validate_non_final_split(split)?;
     budget.validate()?;
+    if !SEQUENCE_SCALING_ARMS.contains(&arm) {
+        return Err(cost_invalid("arm_not_registered"));
+    }
+    let environment =
+        QUALIFIED_TIMING_ENVIRONMENT.ok_or(cost_invalid("timing_environment_not_qualified"))?;
+    let attestation = attest_timing_environment(&environment)?;
     let mut inputs = Vec::new();
     for family in REQUIRED_SYNTHESIS_FAMILIES {
         for seed_block in 0..budget.seed_blocks {
@@ -7817,7 +7969,7 @@ fn time_reference_population(
             inputs.extend(run.inputs().iter().cloned());
         }
     }
-    let pass = |arm: ComparisonArm| -> Result<u128, EvalError> {
+    let pass = || -> Result<u128, EvalError> {
         let start = std::time::Instant::now();
         for input in &inputs {
             let score = match arm {
@@ -7828,68 +7980,189 @@ fn time_reference_population(
         }
         Ok(start.elapsed().as_nanos())
     };
-    let mut samples = QualifiedTimingSamples {
-        environment,
-        split,
-        t6_nanos: Vec::new(),
-        c6_nanos: Vec::new(),
-    };
-    for arm in SEQUENCE_SCALING_ARMS {
-        for _ in 0..environment.warmup_iterations {
-            pass(arm)?;
-        }
-        for _ in 0..environment.measured_iterations {
-            let nanos = pass(arm)?;
-            match arm {
-                ComparisonArm::T6 => samples.t6_nanos.push(nanos),
-                _ => samples.c6_nanos.push(nanos),
-            }
-        }
+    let cur_freq = cpu_sysfs(environment.pinned_cpu, "scaling_cur_freq");
+    let fixed_frequency_khz = read_khz(&cpu_sysfs(environment.pinned_cpu, "scaling_max_freq"))?;
+    let swap_in_start = vmstat_counter("pswpin ")?;
+    let swap_out_start = vmstat_counter("pswpout ")?;
+    for _ in 0..environment.warmup_iterations {
+        pass()?;
     }
-    Ok(samples)
+    let mut nanos = Vec::with_capacity(environment.measured_iterations as usize);
+    let mut frequency_khz = Vec::with_capacity(environment.measured_iterations as usize);
+    for _ in 0..environment.measured_iterations {
+        nanos.push(pass()?);
+        frequency_khz.push(read_khz(&cur_freq)?);
+    }
+    let swap_in_end = vmstat_counter("pswpin ")?;
+    let swap_out_end = vmstat_counter("pswpout ")?;
+    let peak_rss_kib = status_field("VmHWM")
+        .ok()
+        .and_then(|value| value.trim_end_matches("kB").trim().parse::<u64>().ok());
+    Ok(TimingCellSamples {
+        environment,
+        attestation,
+        split,
+        arm,
+        cases: inputs.len() as u64,
+        nanos,
+        fixed_frequency_khz,
+        frequency_khz,
+        swap_in_start,
+        swap_in_end,
+        swap_out_start,
+        swap_out_end,
+        peak_rss_kib,
+    })
+}
+
+/// Frozen summary of one cell: median (primary), min and IQR from the 31
+/// measured passes, plus the in-process rejection rules. Quartiles are the
+/// order statistics of rank 8, 16 and 24 of 31 (exact for n = 31: the
+/// `(n + 1) p` rule and Tukey's hinges coincide, no interpolation). The
+/// load-average rule is applied by the measurement script.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TimingCellSummary {
+    pub median_nanos: u128,
+    pub min_nanos: u128,
+    pub q1_nanos: u128,
+    pub q3_nanos: u128,
+    pub iqr_nanos: u128,
+    pub iqr_ok: bool,
+    pub frequency_ok: bool,
+    pub swap_ok: bool,
+    /// `iqr_ok && frequency_ok && swap_ok`; otherwise the cell is reported
+    /// as non qualifiee (no rerun).
+    pub qualified_in_process: bool,
+}
+
+/// Summarise one cell under the frozen protocol.
+pub fn summarize_timing_cell(samples: &TimingCellSamples) -> Result<TimingCellSummary, EvalError> {
+    let environment = samples.environment;
+    if environment != T430_QUALIFIED_TIMING_ENVIRONMENT {
+        return Err(cost_invalid("timing_environment_mismatch"));
+    }
+    let n = environment.measured_iterations as usize;
+    if n != 31 || samples.nanos.len() != n || samples.frequency_khz.len() != n {
+        return Err(cost_invalid("timing_sample_count"));
+    }
+    let mut sorted = samples.nanos.clone();
+    sorted.sort_unstable();
+    let (q1, median, q3) = (sorted[7], sorted[15], sorted[23]);
+    let iqr = q3 - q1;
+    let iqr_ok = (iqr as f64) <= environment.max_iqr_fraction_of_median * median as f64;
+    let fixed = samples.fixed_frequency_khz as f64;
+    let frequency_ok = fixed > 0.0
+        && samples.frequency_khz.iter().all(|reading| {
+            ((*reading as f64) - fixed).abs() <= environment.frequency_tolerance_fraction * fixed
+        });
+    let swap_ok = samples.swap_in_start == samples.swap_in_end
+        && samples.swap_out_start == samples.swap_out_end;
+    Ok(TimingCellSummary {
+        median_nanos: median,
+        min_nanos: sorted[0],
+        q1_nanos: q1,
+        q3_nanos: q3,
+        iqr_nanos: iqr,
+        iqr_ok,
+        frequency_ok,
+        swap_ok,
+        qualified_in_process: iqr_ok && frequency_ok && swap_ok,
+    })
 }
 
 #[cfg(test)]
 mod reference_cost_timing_tests {
     use super::*;
 
+    fn fixture_samples(nanos: Vec<u128>) -> TimingCellSamples {
+        TimingCellSamples {
+            environment: T430_QUALIFIED_TIMING_ENVIRONMENT,
+            attestation: TimingAttestation {
+                cpu_model: String::new(),
+                kernel_release: String::new(),
+                bios_version: String::new(),
+                cpus_allowed: String::new(),
+                governor: String::new(),
+                sibling_governor: String::new(),
+                no_turbo: String::new(),
+                build_rustc: "",
+            },
+            split: DataSplit::Development,
+            arm: ComparisonArm::T6,
+            cases: 64,
+            frequency_khz: vec![2_100_000; nanos.len()],
+            nanos,
+            fixed_frequency_khz: 2_100_000,
+            swap_in_start: 3,
+            swap_in_end: 3,
+            swap_out_start: 4,
+            swap_out_end: 4,
+            peak_rss_kib: None,
+        }
+    }
+
     #[test]
-    fn harness_refuses_without_a_qualified_environment() {
-        assert!(QUALIFIED_TIMING_ENVIRONMENT.is_none());
+    fn checked_in_environment_is_exactly_the_t430_manifest() {
         assert_eq!(
-            run_qualified_reference_timing(DataSplit::Development, StageCPreflightBudget::smoke()),
-            Err(cost_invalid("timing_environment_not_qualified"))
+            QUALIFIED_TIMING_ENVIRONMENT,
+            Some(T430_QUALIFIED_TIMING_ENVIRONMENT)
+        );
+        let mut other = T430_QUALIFIED_TIMING_ENVIRONMENT;
+        other.pinned_cpu = 0;
+        assert_eq!(
+            attest_timing_environment(&other),
+            Err(cost_invalid("timing_environment_mismatch"))
         );
     }
 
     #[test]
-    fn harness_mechanics_retain_every_sample_for_a_test_only_environment() {
-        // Test-only fixture: exercises the mechanics; it is not a qualified
-        // environment and its samples are never reported.
-        let fixture = QualifiedTimingEnvironment {
-            environment_contract: QUALIFIED_TIMING_ENVIRONMENT_CONTRACT,
-            machine_id: "test-fixture",
-            toolchain: "test-fixture",
-            warmup_iterations: 0,
-            measured_iterations: 2,
-        };
-        let samples = time_reference_population(
-            fixture,
-            DataSplit::Development,
-            StageCPreflightBudget::smoke(),
-        )
-        .unwrap();
-        assert_eq!(samples.t6_nanos.len(), 2);
-        assert_eq!(samples.c6_nanos.len(), 2);
-        let mut invalid = fixture;
-        invalid.measured_iterations = 0;
-        assert!(
-            time_reference_population(
-                invalid,
-                DataSplit::Development,
-                StageCPreflightBudget::smoke()
-            )
-            .is_err()
+    fn harness_refuses_on_an_unattested_host() {
+        // CI and development hosts are not the pinned T430: the harness must
+        // refuse before touching the clock.
+        let pinned = status_field("Cpus_allowed_list").ok();
+        if pinned.as_deref() != Some("28") {
+            assert!(attest_timing_environment(&T430_QUALIFIED_TIMING_ENVIRONMENT).is_err());
+            assert!(
+                run_qualified_reference_timing_cell(
+                    DataSplit::Development,
+                    StageCPreflightBudget::smoke(),
+                    ComparisonArm::T6
+                )
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn summary_uses_order_statistics_and_frozen_rejection_rules() {
+        let nanos: Vec<u128> = (1..=31).rev().map(|value| 1_000 + value).collect();
+        let summary = summarize_timing_cell(&fixture_samples(nanos)).unwrap();
+        assert_eq!(summary.min_nanos, 1_001);
+        assert_eq!(summary.q1_nanos, 1_008);
+        assert_eq!(summary.median_nanos, 1_016);
+        assert_eq!(summary.q3_nanos, 1_024);
+        assert_eq!(summary.iqr_nanos, 16);
+        assert!(summary.iqr_ok && summary.frequency_ok && summary.swap_ok);
+        assert!(summary.qualified_in_process);
+
+        // IQR above 5% of the median rejects the cell.
+        let wide: Vec<u128> = (0..31).map(|value| 100 + 2 * value).collect();
+        let summary = summarize_timing_cell(&fixture_samples(wide)).unwrap();
+        assert_eq!((summary.median_nanos, summary.iqr_nanos), (130, 32));
+        assert!(!summary.iqr_ok && !summary.qualified_in_process);
+
+        // A frequency excursion or a swap counter change rejects the cell.
+        let mut drift = fixture_samples(vec![1_000; 31]);
+        drift.frequency_khz[30] = 2_200_000;
+        assert!(!summarize_timing_cell(&drift).unwrap().frequency_ok);
+        let mut swap = fixture_samples(vec![1_000; 31]);
+        swap.swap_out_end += 1;
+        assert!(!summarize_timing_cell(&swap).unwrap().swap_ok);
+
+        // Exactly 31 measured passes are required.
+        assert_eq!(
+            summarize_timing_cell(&fixture_samples(vec![1_000; 30])),
+            Err(cost_invalid("timing_sample_count"))
         );
     }
 }
