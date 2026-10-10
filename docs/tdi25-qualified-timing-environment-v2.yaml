@@ -1,0 +1,50 @@
+# TDI-25 slice 47 qualified timing environment manifest, V2 amendment.
+# Approved by the user (Tarek Zekriti) on 2026-10-10 after attempt 1.
+# Supersedes docs/tdi25-qualified-timing-environment.yaml (V1, kept intact)
+# for attempts >= 2. Mirrors T430_QUALIFIED_TIMING_ENVIRONMENT in
+# tdi-ai/src/tdi25_eval.rs; the harness accepts exactly this manifest.
+environment_contract: tdi25-qualified-timing-environment-v2
+amends: tdi25-qualified-timing-environment-v1
+machine:                   # unchanged from V1
+  machine_id: dell-poweredge-t430-debian
+  system: Dell PowerEdge T430
+  hostname: debian
+  bios_version: "2.19.0"
+  cpu_model: "Intel(R) Xeon(R) CPU E5-2683 v4 @ 2.10GHz"
+  kernel_release: 6.12.88+deb13-amd64
+toolchain:
+  rustc: "1.97.1"
+protocol:                  # unchanged from V1 unless marked CHANGED / NEW
+  pinned_cpu: 28
+  numa_membind: 0
+  smt_sibling_cpu: 60
+  governor: performance
+  intel_pstate_no_turbo: 1
+  requires_root: true
+  cells: [development/T6, development/C6, validation/T6, validation/C6]
+  budget: smoke
+  warmup_runs: 5
+  measured_runs: 31
+  statistics: {primary: median, also: [min, iqr], quartiles: "ranks 8, 16, 24 of 31"}
+  frequency:               # CHANGED
+    method: APERF/MPERF MSR deltas on CPU 28 around the 31 measured runs of each cell
+    msr_device: /dev/cpu/28/msr      # msr kernel module; root-only; refuse if unreadable
+    registers: {IA32_MPERF: 0xE7, IA32_APERF: 0xE8, MSR_PLATFORM_INFO: 0xCE}
+    fixed_frequency_khz: 2100000     # must equal MSR_PLATFORM_INFO[15:8] x 100 MHz (ratio 21)
+    effective: fixed_frequency_khz * dAPERF / dMPERF
+    tolerance: 0.01                  # unchanged
+    scaling_cur_freq: not used       # intel_pstate kernel estimate, unreliable (attempt 1)
+  load:
+    load_average_1min_max: 2.0       # unchanged
+    start_precondition: refuse without measuring if load1 > 2.0, printing top CPU consumers   # NEW
+    services: never stopped by the script; user follows the pause checklist                    # NEW
+  rejection:               # cell reported "non_qualifiee"; no rerun
+    iqr_over_median_max: 0.05
+    load_average_1min_max: 2.0       # at start and end of every cell
+    swap_in_out_change: reject
+    frequency_deviation_tolerance: 0.01
+  attempts:                # NEW
+    numbering: sequential; attempt 1 = run tdi25-s47-timing-8bd8aea under V1 (non qualifiée)
+    run_id: tdi25-s47-timing-<commit12>-attempt-<N>
+    all_attempts_recorded: true
+operator: user

@@ -1,10 +1,19 @@
 #!/usr/bin/env bash
-# TDI-25 slice 47: qualified timing run under the frozen T430 protocol
-# (docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V1.md,
-#  docs/tdi25-qualified-timing-environment.yaml).
+# TDI-25 slice 47: qualified timing run under the frozen T430 protocol,
+# V2 amendment (docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V2.md,
+#  docs/tdi25-qualified-timing-environment-v2.yaml; V1 kept for the record).
 #
-#   bash scripts/tdi25-s47-qualified-timing.sh build          # normal user
-#   sudo bash scripts/tdi25-s47-qualified-timing.sh run <outdir>
+#   bash scripts/tdi25-s47-qualified-timing.sh build                 # normal user
+#   sudo bash scripts/tdi25-s47-qualified-timing.sh run <attempt> [parent-dir]
+#
+# Attempts are numbered (attempt 1 was run under V1 and is recorded in
+# results/tdi25_s47_timing/attempt-1); every attempt is recorded, whatever
+# its outcome. The run id is tdi25-s47-timing-<commit12>-attempt-<N> and the
+# output goes to <parent-dir>/<run id> (default: ../tdi25-s47-timing-runs).
+# Preconditions refuse WITHOUT measuring (no attempt consumed): load1 > 2 at
+# start (top CPU consumers are printed; pause them per the V2 checklist),
+# /dev/cpu/28/msr unreadable (run `modprobe msr`). The script never stops
+# services itself.
 #
 # The run mode refuses on any host other than the frozen Dell PowerEdge T430,
 # pins to CPU 28 + NUMA node 0, sets governor=performance on CPUs 28/60 and
@@ -30,17 +39,20 @@ SIBLING_CPU=60
 NUMA_NODE=0
 GOVERNOR="performance"
 MAX_LOAD="2.0"
+PROTOCOL="tdi25-qualified-timing-environment-v2"
 SIBLING_MAX_BUSY="0.01"
 CELLS=("development t6" "development c6" "validation t6" "validation c6")
 
 die() { echo "tdi25-s47-qualified-timing: REFUSED: $*" >&2; exit 1; }
 git_() { git -c safe.directory="$repo" "$@"; }
+# Clean tree, ignoring untracked run directories left inside the checkout.
+dirty() { git_ status --porcelain | grep -Ev '^\?\? tdi25-s47-timing-[^/]*/?$' || true; }
 
 mode="${1:-}"
 case "$mode" in
 build)
   [[ $EUID -ne 0 ]] || die "build as the normal user, not root"
-  [[ -z "$(git_ status --porcelain)" ]] || die "git tree is not clean"
+  [[ -z "$(dirty)" ]] || die "git tree is not clean"
   rustc_vv="$(rustc +"$TOOLCHAIN" -Vv)" || die "rustc $TOOLCHAIN missing (rustup toolchain install $TOOLCHAIN)"
   grep -q "^release: $TOOLCHAIN\$" <<<"$rustc_vv" || die "rustc is not $TOOLCHAIN"
   cargo +"$TOOLCHAIN" build --release --locked -p tdi-ai --features experimental \
@@ -55,20 +67,35 @@ build)
   cat "$stamp"
   ;;
 run)
-  out="${2:-}"
-  [[ -n "$out" ]] || die "usage: sudo bash $0 run <outdir>"
-  [[ $EUID -eq 0 ]] || die "run mode needs root (governor/turbo)"
-  [[ ! -e "$out/results.jsonl" ]] || die "$out/results.jsonl exists: no rerun"
-  for tool in taskset numactl awk sha256sum; do
+  attempt="${2:-}"
+  [[ "$attempt" =~ ^[0-9]+$ ]] && ((attempt >= 2)) \
+    || die "usage: sudo bash $0 run <attempt number, >= 2 under V2> [parent-dir]"
+  [[ $EUID -eq 0 ]] || die "run mode needs root (governor/turbo/MSR)"
+  [[ ! -e "results/tdi25_s47_timing/attempt-$attempt" ]] || die "attempt $attempt is already recorded"
+  for tool in taskset numactl awk sha256sum ps; do
     command -v "$tool" >/dev/null || die "$tool missing"
   done
-  [[ -z "$(git_ status --porcelain)" ]] || die "git tree is not clean"
+  [[ -z "$(dirty)" ]] || die "git tree is not clean"
   commit="$(git_ rev-parse HEAD)"
+  run_id="tdi25-s47-timing-${commit:0:12}-attempt-$attempt"
+  parent="${3:-$(dirname "$repo")/tdi25-s47-timing-runs}"
+  out="$parent/$run_id"
+  [[ ! -e "$out" ]] || die "$out exists: no rerun of attempt $attempt"
   tree="$(git_ rev-parse 'HEAD^{tree}')"
   [[ -x "$bin" && -f "$stamp" ]] || die "binary missing: run 'bash $0 build' first"
   grep -qx "commit=$commit" "$stamp" || die "binary was built from another commit"
   grep -qx "sha256=$(sha256sum "$bin" | cut -d' ' -f1)" "$stamp" || die "binary hash drift"
   grep -qx "rustc_vv: release: $TOOLCHAIN" "$stamp" || die "binary not built with rustc $TOOLCHAIN"
+
+  # Preconditions (refuse without measuring).
+  load_now="$(awk '{print $1}' /proc/loadavg)"
+  if ! awk -v x="$load_now" -v y="$MAX_LOAD" 'BEGIN{exit !(x<=y)}'; then
+    echo "load1=$load_now > $MAX_LOAD. Top CPU consumers:" >&2
+    ps -eo pid,user,pcpu,etime,comm --sort=-pcpu | head -n 16 >&2
+    die "load1 $load_now > $MAX_LOAD at start: pause the heavy services (see docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V2.md checklist), wait for load1 <= $MAX_LOAD, retry; no measurement was taken"
+  fi
+  msr="/dev/cpu/$PINNED_CPU/msr"
+  [[ -r "$msr" ]] || die "$msr unreadable: run 'modprobe msr' as root, then retry; no measurement was taken"
 
   # Fingerprint.
   model="$(awk -F': ' '/^model name/{print $2; exit}' /proc/cpuinfo)"
@@ -86,6 +113,7 @@ run)
     || die "cannot set governor/turbo"
 
   mkdir -p "$out"
+  echo "run_id=$run_id attempt=$attempt protocol=$PROTOCOL" | tee "$out/run-id.txt"
   orig_gov_p="$(cat "$(gov_path $PINNED_CPU)")"
   orig_gov_s="$(cat "$(gov_path $SIBLING_CPU)")"
   orig_turbo="$(cat "$turbo")"
@@ -119,7 +147,7 @@ run)
   }
   le() { awk -v x="$1" -v y="$2" 'BEGIN{exit !(x<=y)}'; }
   {
-    echo "{\"environment_contract\":\"tdi25-qualified-timing-environment-v1\",\"date_utc\":\"$(date -u +%FT%TZ)\","
+    echo "{\"environment_contract\":\"$PROTOCOL\",\"run_id\":\"$run_id\",\"attempt\":$attempt,\"date_utc\":\"$(date -u +%FT%TZ)\","
     echo "\"commit\":\"$commit\",\"tree\":\"$tree\",\"hostname\":\"$(hostname)\",\"cpu_model\":\"$model\","
     echo "\"kernel\":\"$(uname -r)\",\"bios\":\"$bios\",\"binary_sha256\":\"$(sha256sum "$bin" | cut -d' ' -f1)\","
     echo "\"rustc_vv\":\"$(grep '^rustc_vv: ' "$stamp" | sed 's/^rustc_vv: //' | paste -sd'|')\","
@@ -150,13 +178,13 @@ run)
       joined="$(printf '"%s",' "${reasons[@]}")"
       joined="${joined%,}"
     fi
-    printf '{"split":"%s","arm":"%s","cell_status":"%s","rejection_reasons":[%s],"smt_sibling_busy_fraction":%s,"load1_start":%s,"load1_end":%s,"harness":%s}\n' \
-      "$split" "$arm" "$status" "$joined" "$busy" "$l0" "$l1" "$json" \
+    printf '{"run_id":"%s","attempt":%s,"split":"%s","arm":"%s","cell_status":"%s","rejection_reasons":[%s],"smt_sibling_busy_fraction":%s,"load1_start":%s,"load1_end":%s,"harness":%s}\n' \
+      "$run_id" "$attempt" "$split" "$arm" "$status" "$joined" "$busy" "$l0" "$l1" "$json" \
       | tee -a "$out/results.jsonl"
   done
   echo "done: $out/fingerprint.json $out/results.jsonl (timing results valid for this machine only)"
   ;;
 *)
-  die "usage: bash $0 build | sudo bash $0 run <outdir>"
+  die "usage: bash $0 build | sudo bash $0 run <attempt> [parent-dir]"
   ;;
 esac

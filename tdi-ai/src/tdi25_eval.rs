@@ -7490,8 +7490,19 @@ pub const REFERENCE_COST_CONTRACT: &str = "tdi25-reference-cost-v1";
 /// T6 source-level accounting contract (this slice). C6 reuses the TDI-24
 /// slice-09 `tdi24-reference-accounting-v3` unchanged.
 pub const T6_REFERENCE_ACCOUNTING_CONTRACT: &str = "tdi25-t6-reference-accounting-v1";
-/// Contract of the frozen qualified timing environment and protocol.
-pub const QUALIFIED_TIMING_ENVIRONMENT_CONTRACT: &str = "tdi25-qualified-timing-environment-v1";
+/// Contract of the frozen qualified timing environment and protocol, V2
+/// amendment (`docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V2.md`): the
+/// frequency rule is measured with APERF/MPERF MSR deltas instead of
+/// `scaling_cur_freq`.
+pub const QUALIFIED_TIMING_ENVIRONMENT_CONTRACT: &str = "tdi25-qualified-timing-environment-v2";
+/// Superseded V1 contract, kept for the record (attempt 1 was judged under it).
+pub const QUALIFIED_TIMING_ENVIRONMENT_V1_CONTRACT: &str = "tdi25-qualified-timing-environment-v1";
+/// `IA32_MPERF`: counts at the fixed (TSC/base) frequency while in C0.
+pub const MSR_IA32_MPERF: u64 = 0xE7;
+/// `IA32_APERF`: counts at the actual frequency while in C0.
+pub const MSR_IA32_APERF: u64 = 0xE8;
+/// `MSR_PLATFORM_INFO`: bits 15:8 hold the maximum non-turbo ratio (x100 MHz).
+pub const MSR_PLATFORM_INFO: u64 = 0xCE;
 /// Timing status recorded by the slice-47 cost report: results stay
 /// `timing_non_qualifie` until the user's run on the qualified machine lands.
 pub const REFERENCE_TIMING_STATUS: &str = "timing_non_qualifie";
@@ -7523,9 +7534,12 @@ pub struct QualifiedTimingEnvironment {
     /// A cell is rejected when the 1-min load average exceeds this value at
     /// its start or end (checked by the measurement script).
     pub max_load_average_1min: f64,
-    /// Implementation tolerance for "CPU frequency deviates from the fixed
-    /// value": every post-run `scaling_cur_freq` reading must lie within this
-    /// fraction of the fixed `scaling_max_freq`.
+    /// Fixed (base, non-turbo) frequency in kHz; must equal the
+    /// `MSR_PLATFORM_INFO` maximum non-turbo ratio x 100 MHz.
+    pub fixed_frequency_khz: u64,
+    /// "CPU frequency deviates from the fixed value": the effective frequency
+    /// `fixed * dAPERF / dMPERF` over the measured passes of a cell must lie
+    /// within this fraction of `fixed_frequency_khz`.
     pub frequency_tolerance_fraction: f64,
     /// Implementation threshold for "SMT sibling idle": busy fraction of the
     /// sibling over a 1 s sample before the run (checked by the script).
@@ -7533,7 +7547,7 @@ pub struct QualifiedTimingEnvironment {
 }
 
 /// The single accepted manifest: Dell PowerEdge T430 (user-approved
-/// 2026-10-10).
+/// 2026-10-10; V2 amendment approved the same day after attempt 1).
 pub const T430_QUALIFIED_TIMING_ENVIRONMENT: QualifiedTimingEnvironment =
     QualifiedTimingEnvironment {
         environment_contract: QUALIFIED_TIMING_ENVIRONMENT_CONTRACT,
@@ -7552,6 +7566,7 @@ pub const T430_QUALIFIED_TIMING_ENVIRONMENT: QualifiedTimingEnvironment =
         measured_iterations: 31,
         max_iqr_fraction_of_median: 0.05,
         max_load_average_1min: 2.0,
+        fixed_frequency_khz: 2_100_000,
         frequency_tolerance_fraction: 0.01,
         smt_sibling_max_busy_fraction: 0.01,
     };
@@ -7823,6 +7838,8 @@ pub struct TimingAttestation {
     pub sibling_governor: String,
     pub no_turbo: String,
     pub build_rustc: &'static str,
+    /// Maximum non-turbo ratio read from `MSR_PLATFORM_INFO` on the pinned CPU.
+    pub platform_ratio: u64,
 }
 
 fn read_trimmed(path: &str) -> Result<String, EvalError> {
@@ -7840,6 +7857,37 @@ fn status_field(field: &str) -> Result<String, EvalError> {
         .ok_or(cost_invalid("attestation_unreadable"))
 }
 
+#[cfg(unix)]
+fn read_msr(cpu: u32, register: u64) -> Result<u64, EvalError> {
+    use std::os::unix::fs::FileExt;
+    let file = std::fs::File::open(format!("/dev/cpu/{cpu}/msr"))
+        .map_err(|_| cost_invalid("attestation_msr_unreadable"))?;
+    let mut bytes = [0u8; 8];
+    file.read_exact_at(&mut bytes, register)
+        .map_err(|_| cost_invalid("attestation_msr_unreadable"))?;
+    Ok(u64::from_le_bytes(bytes))
+}
+
+#[cfg(not(unix))]
+fn read_msr(_cpu: u32, _register: u64) -> Result<u64, EvalError> {
+    Err(cost_invalid("attestation_msr_unreadable"))
+}
+
+/// Effective frequency (kHz) from APERF/MPERF deltas:
+/// `fixed_frequency_khz * dAPERF / dMPERF`. `None` when MPERF did not advance
+/// (or a counter went backwards).
+pub fn effective_frequency_khz(
+    fixed_frequency_khz: u64,
+    delta_aperf: u64,
+    delta_mperf: u64,
+) -> Option<u64> {
+    if delta_mperf == 0 {
+        return None;
+    }
+    let value = (fixed_frequency_khz as u128) * (delta_aperf as u128) / (delta_mperf as u128);
+    u64::try_from(value).ok()
+}
+
 fn cpu_sysfs(cpu: u32, leaf: &str) -> String {
     format!("/sys/devices/system/cpu/cpu{cpu}/cpufreq/{leaf}")
 }
@@ -7853,7 +7901,7 @@ pub fn attest_timing_environment(
         return Err(cost_invalid("timing_environment_mismatch"));
     }
     let cpuinfo = read_trimmed("/proc/cpuinfo")?;
-    let attestation = TimingAttestation {
+    let mut attestation = TimingAttestation {
         cpu_model: cpuinfo
             .lines()
             .find_map(|line| line.strip_prefix("model name"))
@@ -7873,6 +7921,7 @@ pub fn attest_timing_environment(
             .unwrap_or_default(),
         no_turbo: read_trimmed("/sys/devices/system/cpu/intel_pstate/no_turbo").unwrap_or_default(),
         build_rustc: env!("TDI_AI_BUILD_RUSTC_VERSION"),
+        platform_ratio: 0,
     };
     let toolchain = attestation
         .build_rustc
@@ -7901,6 +7950,10 @@ pub fn attest_timing_environment(
     if environment.turbo_disabled && attestation.no_turbo != "1" {
         return Err(cost_invalid("attestation_turbo"));
     }
+    attestation.platform_ratio = (read_msr(environment.pinned_cpu, MSR_PLATFORM_INFO)? >> 8) & 0xFF;
+    if attestation.platform_ratio * 100_000 != environment.fixed_frequency_khz {
+        return Err(cost_invalid("attestation_msr_base_frequency"));
+    }
     Ok(attestation)
 }
 
@@ -7914,11 +7967,9 @@ pub struct TimingCellSamples {
     pub cases: u64,
     /// Nanoseconds per measured pass over the bounded matched population.
     pub nanos: Vec<u128>,
-    /// Fixed frequency (`scaling_max_freq`, kHz) read before the cell.
-    pub fixed_frequency_khz: u64,
-    /// `scaling_cur_freq` (kHz) read after every measured pass, outside the
-    /// timed window.
-    pub frequency_khz: Vec<u64>,
+    /// APERF/MPERF deltas on the pinned CPU around the 31 measured passes.
+    pub delta_aperf: u64,
+    pub delta_mperf: u64,
     pub swap_in_start: u64,
     pub swap_in_end: u64,
     pub swap_out_start: u64,
@@ -7933,12 +7984,6 @@ fn vmstat_counter(name: &str) -> Result<u64, EvalError> {
         .find_map(|line| line.strip_prefix(name))
         .and_then(|value| value.trim().parse().ok())
         .ok_or(cost_invalid("attestation_unreadable"))
-}
-
-fn read_khz(path: &str) -> Result<u64, EvalError> {
-    read_trimmed(path)?
-        .parse()
-        .map_err(|_| cost_invalid("attestation_unreadable"))
 }
 
 /// Measure one cell under the frozen protocol. Refuses unless the checked-in
@@ -7980,19 +8025,20 @@ pub fn run_qualified_reference_timing_cell(
         }
         Ok(start.elapsed().as_nanos())
     };
-    let cur_freq = cpu_sysfs(environment.pinned_cpu, "scaling_cur_freq");
-    let fixed_frequency_khz = read_khz(&cpu_sysfs(environment.pinned_cpu, "scaling_max_freq"))?;
     let swap_in_start = vmstat_counter("pswpin ")?;
     let swap_out_start = vmstat_counter("pswpout ")?;
     for _ in 0..environment.warmup_iterations {
         pass()?;
     }
     let mut nanos = Vec::with_capacity(environment.measured_iterations as usize);
-    let mut frequency_khz = Vec::with_capacity(environment.measured_iterations as usize);
+    let cpu = environment.pinned_cpu;
+    let mperf_start = read_msr(cpu, MSR_IA32_MPERF)?;
+    let aperf_start = read_msr(cpu, MSR_IA32_APERF)?;
     for _ in 0..environment.measured_iterations {
         nanos.push(pass()?);
-        frequency_khz.push(read_khz(&cur_freq)?);
     }
+    let aperf_end = read_msr(cpu, MSR_IA32_APERF)?;
+    let mperf_end = read_msr(cpu, MSR_IA32_MPERF)?;
     let swap_in_end = vmstat_counter("pswpin ")?;
     let swap_out_end = vmstat_counter("pswpout ")?;
     let peak_rss_kib = status_field("VmHWM")
@@ -8005,8 +8051,8 @@ pub fn run_qualified_reference_timing_cell(
         arm,
         cases: inputs.len() as u64,
         nanos,
-        fixed_frequency_khz,
-        frequency_khz,
+        delta_aperf: aperf_end.wrapping_sub(aperf_start),
+        delta_mperf: mperf_end.wrapping_sub(mperf_start),
         swap_in_start,
         swap_in_end,
         swap_out_start,
@@ -8027,6 +8073,8 @@ pub struct TimingCellSummary {
     pub q1_nanos: u128,
     pub q3_nanos: u128,
     pub iqr_nanos: u128,
+    /// `fixed * dAPERF / dMPERF` over the measured passes (kHz).
+    pub effective_frequency_khz: Option<u64>,
     pub iqr_ok: bool,
     pub frequency_ok: bool,
     pub swap_ok: bool,
@@ -8042,7 +8090,7 @@ pub fn summarize_timing_cell(samples: &TimingCellSamples) -> Result<TimingCellSu
         return Err(cost_invalid("timing_environment_mismatch"));
     }
     let n = environment.measured_iterations as usize;
-    if n != 31 || samples.nanos.len() != n || samples.frequency_khz.len() != n {
+    if n != 31 || samples.nanos.len() != n {
         return Err(cost_invalid("timing_sample_count"));
     }
     let mut sorted = samples.nanos.clone();
@@ -8050,11 +8098,12 @@ pub fn summarize_timing_cell(samples: &TimingCellSamples) -> Result<TimingCellSu
     let (q1, median, q3) = (sorted[7], sorted[15], sorted[23]);
     let iqr = q3 - q1;
     let iqr_ok = (iqr as f64) <= environment.max_iqr_fraction_of_median * median as f64;
-    let fixed = samples.fixed_frequency_khz as f64;
-    let frequency_ok = fixed > 0.0
-        && samples.frequency_khz.iter().all(|reading| {
-            ((*reading as f64) - fixed).abs() <= environment.frequency_tolerance_fraction * fixed
-        });
+    let fixed = environment.fixed_frequency_khz;
+    let effective = effective_frequency_khz(fixed, samples.delta_aperf, samples.delta_mperf);
+    let frequency_ok = effective.is_some_and(|value| {
+        (value as f64 - fixed as f64).abs()
+            <= environment.frequency_tolerance_fraction * fixed as f64
+    });
     let swap_ok = samples.swap_in_start == samples.swap_in_end
         && samples.swap_out_start == samples.swap_out_end;
     Ok(TimingCellSummary {
@@ -8063,6 +8112,7 @@ pub fn summarize_timing_cell(samples: &TimingCellSamples) -> Result<TimingCellSu
         q1_nanos: q1,
         q3_nanos: q3,
         iqr_nanos: iqr,
+        effective_frequency_khz: effective,
         iqr_ok,
         frequency_ok,
         swap_ok,
@@ -8086,13 +8136,14 @@ mod reference_cost_timing_tests {
                 sibling_governor: String::new(),
                 no_turbo: String::new(),
                 build_rustc: "",
+                platform_ratio: 21,
             },
             split: DataSplit::Development,
             arm: ComparisonArm::T6,
             cases: 64,
-            frequency_khz: vec![2_100_000; nanos.len()],
             nanos,
-            fixed_frequency_khz: 2_100_000,
+            delta_aperf: 2_100_000,
+            delta_mperf: 2_100_000,
             swap_in_start: 3,
             swap_in_end: 3,
             swap_out_start: 4,
@@ -8102,7 +8153,22 @@ mod reference_cost_timing_tests {
     }
 
     #[test]
+    fn effective_frequency_follows_aperf_over_mperf() {
+        assert_eq!(effective_frequency_khz(2_100_000, 3, 3), Some(2_100_000));
+        assert_eq!(effective_frequency_khz(2_100_000, 1, 2), Some(1_050_000));
+        assert_eq!(effective_frequency_khz(2_100_000, 5, 0), None);
+    }
+
+    #[test]
     fn checked_in_environment_is_exactly_the_t430_manifest() {
+        assert_eq!(
+            T430_QUALIFIED_TIMING_ENVIRONMENT.environment_contract,
+            "tdi25-qualified-timing-environment-v2"
+        );
+        assert_eq!(
+            T430_QUALIFIED_TIMING_ENVIRONMENT.fixed_frequency_khz,
+            2_100_000
+        );
         assert_eq!(
             QUALIFIED_TIMING_ENVIRONMENT,
             Some(T430_QUALIFIED_TIMING_ENVIRONMENT)
@@ -8153,8 +8219,20 @@ mod reference_cost_timing_tests {
 
         // A frequency excursion or a swap counter change rejects the cell.
         let mut drift = fixture_samples(vec![1_000; 31]);
-        drift.frequency_khz[30] = 2_200_000;
-        assert!(!summarize_timing_cell(&drift).unwrap().frequency_ok);
+        drift.delta_aperf = 1_567_895;
+        let summary = summarize_timing_cell(&drift).unwrap();
+        assert_eq!(summary.effective_frequency_khz, Some(1_567_895));
+        assert!(!summary.frequency_ok);
+        let mut edge = fixture_samples(vec![1_000; 31]);
+        edge.delta_aperf = 2_121_000; // +1.0 % exactly: accepted
+        assert!(summarize_timing_cell(&edge).unwrap().frequency_ok);
+        edge.delta_aperf = 2_121_001;
+        assert!(!summarize_timing_cell(&edge).unwrap().frequency_ok);
+        let mut stalled = fixture_samples(vec![1_000; 31]);
+        stalled.delta_mperf = 0;
+        let summary = summarize_timing_cell(&stalled).unwrap();
+        assert_eq!(summary.effective_frequency_khz, None);
+        assert!(!summary.frequency_ok);
         let mut swap = fixture_samples(vec![1_000; 31]);
         swap.swap_out_end += 1;
         assert!(!summarize_timing_cell(&swap).unwrap().swap_ok);
