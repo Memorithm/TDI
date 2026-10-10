@@ -24,3 +24,5 @@ grep -Eq '\| 46 \| Numerical precision study \| \*\*(current candidate|landed)' 
 merged_count="$(grep -Eo '\*\*[0-9]+/50 merged\*\*' docs/TDI-25-CAMPAIGN-50.md | head -n 1 | tr -dc '0-9/' | cut -d/ -f1)"
 test "${merged_count:-0}" -ge 45
 ! grep -Fq '#PRNUM' docs/TDI-25-CAMPAIGN-50.md
+# Slice 47 runs under this exact-head gate (no dedicated workflow file).
+bash scripts/check-tdi25-s47.sh

@@ -2041,6 +2041,16 @@ pub fn evaluate_matched_numerical_precision(
     Ok(cells)
 }
 
+/// Public f64 T6 primary score of one matched input (timing harness only).
+pub fn t6_score_f64(input: &MatchedInput) -> Result<f64, EvalError> {
+    score_t6(input)
+}
+
+/// Public f64 C6 primary score of one matched input (timing harness only).
+pub fn c6_score_f64(input: &MatchedInput) -> Result<f64, EvalError> {
+    score_c6(input)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
