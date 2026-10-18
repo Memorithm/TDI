@@ -60,6 +60,13 @@ if [[ -n "$stray" ]]; then echo "stray timing artifacts: $stray" >&2; exit 1; fi
 grep -Fq 'ab2db3cd203dcc29054616127fff7475ac73967f918deab8d60180f651cf2f40  results.jsonl' results/tdi25_s47_timing/attempt-1/SHA256SUMS
 test "$(grep -c '"cell_status":"non_qualifiee"' results/tdi25_s47_timing/attempt-1/results.jsonl)" -eq 4
 grep -Fq 'non qualifiée' docs/TDI-25-S47-TIMING-ATTEMPT-1.md
+grep -Fq 'non qualifiée' docs/TDI-25-S47-TIMING-ATTEMPT-2.md
+grep -Fq 'NON QUALIFIÉS' docs/TDI-25-S47-TIMING-ATTEMPT-2.md
+grep -Fq 'Recorded degeneracies' docs/TDI-25-S47-TIMING-ATTEMPT-2.md
+grep -Fq 'raw-pending' docs/TDI-25-S47-TIMING-ATTEMPT-2.md
+grep -Fq 'recorded-but-raw-pending' docs/TDI-25-S47-TIMING-ATTEMPT-2.md
+# Attempt 2 raw lines are pending: no invented results.jsonl may be present.
+if [[ -e results/tdi25_s47_timing/attempt-2/results.jsonl ]]; then echo "attempt-2 raw is pending; results.jsonl must not be invented" >&2; exit 1; fi
 grep -Fq 'NON QUALIFIÉS' docs/TDI-25-S47-TIMING-ATTEMPT-1.md
 grep -Fq 'Recorded degeneracies' docs/TDI-25-S47-TIMING-ATTEMPT-1.md
 if grep -Fq '"cell_status":"qualifiee"' results/tdi25_s47_timing/attempt-1/results.jsonl; then exit 1; fi
