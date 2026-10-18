@@ -83,6 +83,10 @@
 //! adds input-noise robustness: declared deterministic perturbation families
 //! (isotropic, even-only, odd-only) at declared amplitudes, applied
 //! identically to both paired arms, with label-free decision stability.
+//! Slice 46 (Phase E) adds the CPU reference cost study: deterministic
+//! source-level operation counts and logical carrier memory of the unchanged
+//! slice-09 accounting, executed over the bounded Stage-C stream for V6 and
+//! C6; no wall-clock timing is measured and no performance claim is made.
 //! Issue #690 makes the Stage-C provenance authoritative (envelope v2): no
 //! case can be scored without a validated envelope; the envelope binds the
 //! complete canonical [`EvaluatorConfig`], the exact admitted population
@@ -95,7 +99,9 @@
 
 use core::fmt;
 
-use super::tdi24_accounting::ScoreArm;
+use super::tdi24_accounting::{
+    PairScoreAccounting, REFERENCE_ACCOUNTING_CONTRACT, ScoreArm, pair_score_accounting,
+};
 use super::tdi24_attention::{
     MASKING_CONTRACT, MaskPolicy, NORMALIZER_CONTRACT, normalize_with_policy,
 };
@@ -2005,7 +2011,8 @@ pub fn classify_eval_error(error: &EvalError) -> Result<FailureClass, EvalError>
         | EvalError::MultiSeedReplicationInvalid { .. }
         | EvalError::InputNoiseRobustnessInvalid { .. }
         | EvalError::ReflectionAdversarialInvalid { .. }
-        | EvalError::NumericalPrecisionInvalid { .. } => Ok(FailureClass::Invalid),
+        | EvalError::NumericalPrecisionInvalid { .. }
+        | EvalError::ReferenceCostInvalid { .. } => Ok(FailureClass::Invalid),
     }
 }
 
@@ -2055,6 +2062,7 @@ pub const fn eval_error_message_code(error: &EvalError) -> &'static str {
         EvalError::InputNoiseRobustnessInvalid { .. } => "input_noise_robustness_invalid",
         EvalError::ReflectionAdversarialInvalid { .. } => "reflection_adversarial_invalid",
         EvalError::NumericalPrecisionInvalid { .. } => "numerical_precision_invalid",
+        EvalError::ReferenceCostInvalid { .. } => "reference_cost_invalid",
     }
 }
 
@@ -8226,6 +8234,222 @@ pub fn validate_numerical_precision_report(
     Ok(())
 }
 
+/// Phase-E CPU reference cost study contract pin (slice 46).
+pub const REFERENCE_COST_CONTRACT: &str = "tdi24-reference-cost-v1";
+
+/// Timing status of slice 46: no wall-clock measurement is taken, so no
+/// CPU, GPU, production or performance claim can be derived from this study.
+pub const REFERENCE_COST_TIMING_STATUS: &str = "timing_not_measured";
+
+/// Paired arms of the reference cost study, in fixed order.
+pub const REFERENCE_COST_ARMS: [EvalArm; 2] = [EvalArm::V6, EvalArm::C6];
+
+/// Per-arm reference cost over the bounded Stage-C stream.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ReferenceCostCell {
+    pub arm: EvalArm,
+    /// Unchanged slice-09 source-level accounting for one pair score.
+    pub accounting: PairScoreAccounting,
+    /// Cases actually scored on this arm (measured software execution).
+    pub cases_scored: u64,
+    /// Scored cases whose reference score is finite.
+    pub scores_finite: u64,
+    pub total_multiplications: u64,
+    pub total_additions: u64,
+    pub total_validity_predicates: u64,
+    /// Logical carrier bytes read: `cases_scored * accounting.carrier_bytes`.
+    pub total_carrier_bytes: u64,
+}
+
+/// Immutable CPU reference cost report on one non-final split.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReferenceCostReport {
+    pub cost_contract: &'static str,
+    pub accounting_contract: &'static str,
+    pub split: DataSplit,
+    pub budget: StageCPreflightBudget,
+    pub cases_per_arm: u64,
+    pub v6_capacity: TrainableCapacity,
+    pub c6_capacity: TrainableCapacity,
+    /// V6 then C6, both over the identical Stage-C stream.
+    pub cells: Vec<ReferenceCostCell>,
+    /// Must remain false: no wall-clock timing is measured in this slice.
+    pub timing_measured: bool,
+    pub timing_status: &'static str,
+    /// Must remain false.
+    pub performance_claim: bool,
+    /// Must remain false.
+    pub protected_or_final_access: bool,
+    /// Must remain false.
+    pub training_executed: bool,
+    /// Must remain false.
+    pub scientific_claim: bool,
+    /// Must remain true.
+    pub experimental_non_final: bool,
+}
+
+const fn cost_invalid(reason: &'static str) -> EvalError {
+    EvalError::ReferenceCostInvalid { reason }
+}
+
+fn cost_total(cases: u64, per_pair: usize) -> Result<u64, EvalError> {
+    cases
+        .checked_mul(u64::try_from(per_pair).map_err(|_| cost_invalid("accounting_drift"))?)
+        .ok_or_else(|| cost_invalid("accounting_drift"))
+}
+
+fn collect_reference_cost_cells(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<ReferenceCostCell>, EvalError> {
+    let items = collect_sequence_items(split, budget)?;
+    let cases = u64::try_from(items.len()).map_err(|_| cost_invalid("population_size_drift"))?;
+    let mut cells = Vec::new();
+    for arm in REFERENCE_COST_ARMS {
+        let accounting = pair_score_accounting(arm.score_arm());
+        let mut scores_finite = 0u64;
+        for item in &items {
+            let score = match arm {
+                EvalArm::V6 => {
+                    let query = Vector6::new(item.1.as_array()).map_err(EvalError::Numerical)?;
+                    let key = Vector6::new(item.2.as_array()).map_err(EvalError::Numerical)?;
+                    vector6_score(query, key).map_err(EvalError::Numerical)?
+                }
+                EvalArm::C6 => {
+                    let score = chiral_score(item.1, item.2, C6_REFERENCE_WEIGHTS)
+                        .map_err(EvalError::ChiralNumerical)?;
+                    // The C6 cost arm scores the unchanged Stage-C reference.
+                    if score.to_bits() != item.3.to_bits() {
+                        return Err(cost_invalid("case_evidence_drift"));
+                    }
+                    score
+                }
+            };
+            if score.is_finite() {
+                scores_finite += 1;
+            }
+        }
+        cells.push(ReferenceCostCell {
+            arm,
+            accounting,
+            cases_scored: cases,
+            scores_finite,
+            total_multiplications: cost_total(cases, accounting.multiplications)?,
+            total_additions: cost_total(cases, accounting.additions)?,
+            total_validity_predicates: cost_total(cases, accounting.validity_predicates)?,
+            total_carrier_bytes: cost_total(cases, accounting.carrier_bytes)?,
+        });
+    }
+    Ok(cells)
+}
+
+/// Run the CPU reference cost study on one non-final split.
+///
+/// Executes both unchanged reference scorers over the bounded Stage-C stream
+/// and multiplies the slice-09 source-level per-pair accounting by the number
+/// of cases actually scored. No clock is read.
+pub fn run_reference_cost(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<ReferenceCostReport, EvalError> {
+    validate_non_final_split(split)?;
+    let cases_per_arm = budget.cases_per_arm()?;
+    let report = ReferenceCostReport {
+        cost_contract: REFERENCE_COST_CONTRACT,
+        accounting_contract: REFERENCE_ACCOUNTING_CONTRACT,
+        split,
+        budget,
+        cases_per_arm,
+        v6_capacity: TrainableCapacity::reference_v6(),
+        c6_capacity: TrainableCapacity::reference_c6(),
+        cells: collect_reference_cost_cells(split, budget)?,
+        timing_measured: false,
+        timing_status: REFERENCE_COST_TIMING_STATUS,
+        performance_claim: false,
+        protected_or_final_access: false,
+        training_executed: false,
+        scientific_claim: false,
+        experimental_non_final: true,
+    };
+    validate_reference_cost_report(&report)?;
+    Ok(report)
+}
+
+/// Parse a split label first; protected/final labels never generate a case.
+pub fn run_reference_cost_for_label(
+    split_label: &str,
+    budget: StageCPreflightBudget,
+) -> Result<ReferenceCostReport, EvalError> {
+    run_reference_cost(parse_non_final_split(split_label)?, budget)
+}
+
+/// Validate a reference cost report: pins, capacities, arm order, unchanged
+/// per-pair accounting, exact population totals, finite scored evidence,
+/// the unmeasured-timing status, flags and regenerated evidence.
+pub fn validate_reference_cost_report(report: &ReferenceCostReport) -> Result<(), EvalError> {
+    validate_non_final_split(report.split)?;
+    if report.cost_contract != REFERENCE_COST_CONTRACT {
+        return Err(cost_invalid("contract_drift"));
+    }
+    if report.accounting_contract != REFERENCE_ACCOUNTING_CONTRACT {
+        return Err(cost_invalid("accounting_contract_drift"));
+    }
+    if report.v6_capacity != TrainableCapacity::reference_v6()
+        || report.c6_capacity != TrainableCapacity::reference_c6()
+    {
+        return Err(cost_invalid("capacity_mismatch"));
+    }
+    if report.cases_per_arm != report.budget.cases_per_arm()? {
+        return Err(cost_invalid("population_size_drift"));
+    }
+    if report.timing_measured || report.timing_status != REFERENCE_COST_TIMING_STATUS {
+        return Err(cost_invalid("timing_status_drift"));
+    }
+    if report.cells.len() != REFERENCE_COST_ARMS.len() {
+        return Err(cost_invalid("cell_count"));
+    }
+    for (cell, arm) in report.cells.iter().zip(REFERENCE_COST_ARMS) {
+        if cell.arm != arm {
+            return Err(cost_invalid("grid_drift"));
+        }
+        if cell.accounting != pair_score_accounting(arm.score_arm()) {
+            return Err(cost_invalid("accounting_drift"));
+        }
+        if cell.cases_scored != report.cases_per_arm || cell.scores_finite != cell.cases_scored {
+            return Err(cost_invalid("failure_accounting_drift"));
+        }
+        if cell.total_multiplications
+            != cost_total(cell.cases_scored, cell.accounting.multiplications)?
+            || cell.total_additions != cost_total(cell.cases_scored, cell.accounting.additions)?
+            || cell.total_validity_predicates
+                != cost_total(cell.cases_scored, cell.accounting.validity_predicates)?
+            || cell.total_carrier_bytes
+                != cost_total(cell.cases_scored, cell.accounting.carrier_bytes)?
+        {
+            return Err(cost_invalid("totals_drift"));
+        }
+    }
+    if report.performance_claim {
+        return Err(cost_invalid("performance_claim"));
+    }
+    if report.protected_or_final_access {
+        return Err(cost_invalid("protected_or_final_access"));
+    }
+    if report.training_executed {
+        return Err(cost_invalid("training_executed"));
+    }
+    if report.scientific_claim {
+        return Err(cost_invalid("scientific_claim"));
+    }
+    if !report.experimental_non_final {
+        return Err(cost_invalid("experimental_non_final"));
+    }
+    if collect_reference_cost_cells(report.split, report.budget)? != report.cells {
+        return Err(cost_invalid("case_evidence_drift"));
+    }
+    Ok(())
+}
+
 /// Reject any split identity outside Development/Validation.
 pub fn validate_non_final_split(split: DataSplit) -> Result<(), EvalError> {
     match split {
@@ -8337,6 +8561,9 @@ pub enum EvalError {
     /// Numerical precision study rejected a drifted bound, grid, failure
     /// accounting, evidence or claims.
     NumericalPrecisionInvalid { reason: &'static str },
+    /// Reference cost study rejected drifted accounting, totals, timing
+    /// status, evidence or claims.
+    ReferenceCostInvalid { reason: &'static str },
 }
 
 impl fmt::Display for EvalError {
@@ -8458,6 +8685,9 @@ impl fmt::Display for EvalError {
             }
             Self::NumericalPrecisionInvalid { reason } => {
                 write!(formatter, "numerical precision study invalid: {reason}")
+            }
+            Self::ReferenceCostInvalid { reason } => {
+                write!(formatter, "reference cost study invalid: {reason}")
             }
         }
     }
