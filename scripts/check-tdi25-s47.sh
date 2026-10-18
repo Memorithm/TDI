@@ -103,6 +103,11 @@ for n in 3 4; do
   grep -Fq 'PENDING' results/tdi25_s47_timing/attempt-$n/build-provenance.txt
   (cd results/tdi25_s47_timing/attempt-$n && sha256sum -c --quiet SHA256SUMS)
 done
+grep -Fq 'attempt 4' docs/TDI-25-CAMPAIGN-50.md
+grep -Fq 'partially qualified' docs/TDI-25-CAMPAIGN-50.md
+grep -Fq '47/50' README.md
+grep -Fq 'timing partially qualified' README.md
+grep -Fq 'Attempt 3' docs/TDI-25-REFERENCE-COST-V1.md
 grep -Fq 'NON QUALIFIÉS' docs/TDI-25-S47-TIMING-ATTEMPT-1.md
 grep -Fq 'Recorded degeneracies' docs/TDI-25-S47-TIMING-ATTEMPT-1.md
 if grep -Fq '"cell_status":"qualifiee"' results/tdi25_s47_timing/attempt-1/results.jsonl; then exit 1; fi
