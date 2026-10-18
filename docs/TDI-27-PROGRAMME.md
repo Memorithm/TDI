@@ -373,6 +373,30 @@ Measure whether residual directions persist after a declared alignment
 operator, including orthogonal Procrustes-style alignment where justified.
 Raw cosine across incompatible representation bases is not sufficient.
 
+The first Development slice adds the orthogonal Procrustes alignment
+operator itself. Given caller-paired source/target anchor rows of equal
+width (paired by position, with no centring, scaling, pairing or anchor
+selection invented by the code), it forms the cross-covariance
+`M = X^T Y`, computes its SVD by a deterministic one-sided Jacobi method,
+and returns the row-convention operator `Q = U V^T` minimising
+`||X Q - Y||_F` over orthogonal maps, together with the descending singular
+values, the orthogonality defect `max |Q^T Q - I|`, and the absolute and
+relative Frobenius alignment residuals. A singular value at or below the
+caller-declared tolerance (relative to the largest singular value) fails
+closed as degenerate instead of silently completing the basis, and
+non-convergence of the Jacobi sweeps (same relative criterion) fails
+closed as well; a valid anchor rescaling therefore changes neither verdict. `cross_layer_direction_transport` then unit-normalises a
+source and a target direction under the same tolerance, transports the
+source direction through `Q`, and reports the aligned cosine together with
+the unaligned (raw) cosine retained only for contrast. The synthetic
+runner demonstrates the known-truth control: anchors differing by a
++90-degree rotation in one plane are aligned with relative residual below
+`1e-16`, a source direction transported onto its rotated counterpart has
+aligned cosine `1` while its raw cosine is `0`. This slice defines no
+persistence threshold, layer pairing, anchor population, tolerance
+calibration or scientific verdict, and does not advance TDI-27.5 or
+authorize real-model, confirmatory or final execution.
+
 ### TDI-27.5 — sequential latent-rank programme
 
 Build ordered innovation bases across layers, tasks and concept families;
