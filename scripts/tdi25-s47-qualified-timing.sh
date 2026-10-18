@@ -176,6 +176,11 @@ run)
     cell_json+=("$json"); cell_busy+=("$busy"); cell_l0+=("$l0"); cell_l1+=("$l1")
     eff="$(sed -n 's/.*"effective_frequency_khz":\([0-9]*\|null\).*/\1/p' <<<"$json")"
     cell_eff+=("${eff:-null}")
+    # Persist each completed cell durably at once: if a later cell refuses,
+    # the measurements already taken stay on disk in cells-raw.jsonl and the
+    # consumed attempt remains recoverable/recordable (no fishing, no rerun).
+    printf '{"split":"%s","arm":"%s","smt_sibling_busy_fraction":%s,"load1_start":%s,"load1_end":%s,"effective_frequency_khz":%s,"harness":%s}\n' \
+      "$split" "$arm" "$busy" "$l0" "$l1" "${eff:-null}" "$json" >>"$out/cells-raw.jsonl"
   done
   # Median of the present effective frequencies (mean of the two middle
   # values for 4 cells), mirroring cross_cell_frequency_gate in Rust.

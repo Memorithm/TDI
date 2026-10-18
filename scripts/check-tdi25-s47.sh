@@ -60,6 +60,7 @@ done
 grep -Fq 'PROTOCOL="tdi25-qualified-timing-environment-v3"' scripts/tdi25-s47-qualified-timing.sh
 grep -Fq 'median_eff=' scripts/tdi25-s47-qualified-timing.sh
 grep -Fq 'frequency_ratio_to_median' scripts/tdi25-s47-qualified-timing.sh
+grep -Fq 'cells-raw.jsonl' scripts/tdi25-s47-qualified-timing.sh
 grep -Fq 'attempt >= 3' scripts/tdi25-s47-qualified-timing.sh
 grep -Fq 'msr="/dev/cpu/$PINNED_CPU/msr"' scripts/tdi25-s47-qualified-timing.sh
 grep -Fq 'ps -eo pid,user,pcpu,etime,comm --sort=-pcpu' scripts/tdi25-s47-qualified-timing.sh
