@@ -70,7 +70,7 @@ grep -Fq 'trap restore EXIT' scripts/tdi25-s47-qualified-timing.sh
 grep -Fq 'numactl --membind=$NUMA_NODE taskset -c $PINNED_CPU' scripts/tdi25-s47-qualified-timing.sh
 # Note: `! cmd` does not trip `set -e`; the timing-artifact guards use explicit exits.
 timing_files="$(git ls-files | grep -E 'tdi25-s47-timing-|tdi25_s47_timing|results\.jsonl' || true)"
-stray="$(grep -Ev '^results/tdi25_s47_timing/attempt-[0-9]+/(results\.jsonl|build-provenance\.txt|fingerprint\.json|SHA256SUMS)$' <<<"$timing_files" | grep -v '^$' || true)"
+stray="$(grep -Ev '^results/tdi25_s47_timing/attempt-[0-9]+/(results\.jsonl|build-provenance\.txt|fingerprint\.json|SHA256SUMS|transcription-of-operator-output\.txt)$' <<<"$timing_files" | grep -v '^$' || true)"
 if [[ -n "$stray" ]]; then echo "stray timing artifacts: $stray" >&2; exit 1; fi
 (cd results/tdi25_s47_timing/attempt-1 && sha256sum -c --quiet SHA256SUMS)
 grep -Fq 'ab2db3cd203dcc29054616127fff7475ac73967f918deab8d60180f651cf2f40  results.jsonl' results/tdi25_s47_timing/attempt-1/SHA256SUMS
@@ -84,6 +84,25 @@ grep -Fq 'recorded-but-raw-pending' docs/TDI-25-S47-TIMING-ATTEMPT-2.md
 grep -Fq 'attempt record exists' scripts/tdi25-s47-qualified-timing.sh
 # Attempt 2 raw lines are pending: no invented results.jsonl may be present.
 if [[ -e results/tdi25_s47_timing/attempt-2/results.jsonl ]]; then echo "attempt-2 raw is pending; results.jsonl must not be invented" >&2; exit 1; fi
+# Attempts 3-4: operator transcripts only; no invented raw jsonl/fingerprint.
+grep -Fq 'non qualifiée' docs/TDI-25-S47-TIMING-ATTEMPT-3.md
+grep -Fq 'NON QUALIFIÉS' docs/TDI-25-S47-TIMING-ATTEMPT-3.md
+grep -Fq 'Recorded degeneracies' docs/TDI-25-S47-TIMING-ATTEMPT-3.md
+grep -Fq 'transcription-of-operator-output' docs/TDI-25-S47-TIMING-ATTEMPT-3.md
+grep -Fq 'tdi25-s47-timing-7fc1a25bb4b8-attempt-3' docs/TDI-25-S47-TIMING-ATTEMPT-3.md
+grep -Fq 'partiellement qualifiée' docs/TDI-25-S47-TIMING-ATTEMPT-4.md
+grep -Fq 'Recorded degeneracies' docs/TDI-25-S47-TIMING-ATTEMPT-4.md
+grep -Fq 'transcription-of-operator-output' docs/TDI-25-S47-TIMING-ATTEMPT-4.md
+grep -Fq 'tdi25-s47-timing-0a2eb708f85c-attempt-4' docs/TDI-25-S47-TIMING-ATTEMPT-4.md
+grep -Fq '1890544' docs/TDI-25-S47-TIMING-ATTEMPT-4.md
+grep -Fq 'this T430 only' docs/TDI-25-S47-TIMING-ATTEMPT-4.md
+for n in 3 4; do
+  if [[ -e results/tdi25_s47_timing/attempt-$n/results.jsonl ]]; then echo "attempt-$n raw is transcription-only; results.jsonl must not be invented" >&2; exit 1; fi
+  if [[ -e results/tdi25_s47_timing/attempt-$n/fingerprint.json ]]; then echo "attempt-$n fingerprint is pending; fingerprint.json must not be invented" >&2; exit 1; fi
+  grep -Fq 'transcription-of-operator-output, not raw' results/tdi25_s47_timing/attempt-$n/transcription-of-operator-output.txt
+  grep -Fq 'PENDING' results/tdi25_s47_timing/attempt-$n/build-provenance.txt
+  (cd results/tdi25_s47_timing/attempt-$n && sha256sum -c --quiet SHA256SUMS)
+done
 grep -Fq 'NON QUALIFIÉS' docs/TDI-25-S47-TIMING-ATTEMPT-1.md
 grep -Fq 'Recorded degeneracies' docs/TDI-25-S47-TIMING-ATTEMPT-1.md
 if grep -Fq '"cell_status":"qualifiee"' results/tdi25_s47_timing/attempt-1/results.jsonl; then exit 1; fi
