@@ -1,0 +1,55 @@
+# TDI-25 slice 47 qualified timing environment manifest, V3 amendment.
+# Approved by the user (Tarek Zekriti) on 2026-10-18 after attempt 2.
+# Supersedes docs/tdi25-qualified-timing-environment-v2.yaml (V2, kept intact)
+# for attempts >= 3, on this machine only. Mirrors
+# T430_QUALIFIED_TIMING_ENVIRONMENT in tdi-ai/src/tdi25_eval.rs; the
+# harness accepts exactly this manifest.
+environment_contract: tdi25-qualified-timing-environment-v3
+amends: tdi25-qualified-timing-environment-v2
+machine:                   # unchanged from V1/V2
+  machine_id: dell-poweredge-t430-debian
+  system: Dell PowerEdge T430
+  hostname: debian
+  bios_version: "2.19.0"
+  cpu_model: "Intel(R) Xeon(R) CPU E5-2683 v4 @ 2.10GHz"
+  kernel_release: 6.12.88+deb13-amd64
+toolchain:
+  rustc: "1.97.1"
+protocol:                  # unchanged from V2 unless marked CHANGED
+  pinned_cpu: 28
+  numa_membind: 0
+  smt_sibling_cpu: 60
+  governor: performance
+  intel_pstate_no_turbo: 1
+  requires_root: true
+  cells: [development/T6, development/C6, validation/T6, validation/C6]
+  budget: smoke
+  warmup_runs: 5
+  measured_runs: 31
+  statistics: {primary: median, also: [min, iqr], quartiles: "ranks 8, 16, 24 of 31"}
+  frequency:               # CHANGED in V3
+    method: APERF/MPERF MSR deltas on CPU 28 around the 31 measured runs of each cell
+    msr_device: /dev/cpu/28/msr
+    registers: {IA32_MPERF: 0xE7, IA32_APERF: 0xE8, MSR_PLATFORM_INFO: 0xCE}
+    fixed_frequency_khz: 2100000     # TSC/base reference for effective = fixed * dAPERF/dMPERF; attested vs MSR_PLATFORM_INFO ratio 21. NOT a per-cell pass value under V3.
+    effective: fixed_frequency_khz * dAPERF / dMPERF
+    median_tolerance: 0.01           # each cell within +-1% of the median effective across the 4 cells
+    floor_khz: 1785000               # anti-throttling floor: 0.85 * fixed_frequency_khz
+    floor_fraction: 0.85
+    per_cell_ratio_recorded: effective / median_effective
+    scaling_cur_freq: not used
+  load:
+    load_average_1min_max: 2.0
+    start_precondition: refuse without measuring if load1 > 2.0, printing top CPU consumers
+    services: never stopped by the script; user follows the pause checklist
+  rejection:               # cell reported "non_qualifiee"; no rerun
+    iqr_over_median_max: 0.05
+    load_average_1min_max: 2.0
+    swap_in_out_change: reject
+    frequency_median_deviation_tolerance: 0.01
+    frequency_floor_khz: 1785000
+  attempts:
+    numbering: sequential; attempt 1 under V1, attempt 2 under V2 (both non qualifiées, recorded)
+    run_id: tdi25-s47-timing-<commit12>-attempt-<N>
+    all_attempts_recorded: true
+operator: user
