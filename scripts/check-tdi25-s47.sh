@@ -65,6 +65,7 @@ grep -Fq 'NON QUALIFIÉS' docs/TDI-25-S47-TIMING-ATTEMPT-2.md
 grep -Fq 'Recorded degeneracies' docs/TDI-25-S47-TIMING-ATTEMPT-2.md
 grep -Fq 'raw-pending' docs/TDI-25-S47-TIMING-ATTEMPT-2.md
 grep -Fq 'recorded-but-raw-pending' docs/TDI-25-S47-TIMING-ATTEMPT-2.md
+grep -Fq 'attempt record exists' scripts/tdi25-s47-qualified-timing.sh
 # Attempt 2 raw lines are pending: no invented results.jsonl may be present.
 if [[ -e results/tdi25_s47_timing/attempt-2/results.jsonl ]]; then echo "attempt-2 raw is pending; results.jsonl must not be invented" >&2; exit 1; fi
 grep -Fq 'NON QUALIFIÉS' docs/TDI-25-S47-TIMING-ATTEMPT-1.md
