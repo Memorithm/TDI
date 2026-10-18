@@ -73,9 +73,16 @@ governor/turbo set-and-restore, the SMT-sibling and load-average checks.
 **Attempt 1** (run `tdi25-s47-timing-8bd8aea`, user's T430) was rejected
 in all 4 cells (`docs/TDI-25-S47-TIMING-ATTEMPT-1.md`). **Attempt 2** was
 rejected in all 4 cells for frequency only under V2
-(`docs/TDI-25-S47-TIMING-ATTEMPT-2.md`, raw pending). The slice stays
-**timing non qualifié** in its results until a qualified attempt lands in a
-separate, user-approved PR. The cost report (`timing_measured = false`, `timing_status =
+(`docs/TDI-25-S47-TIMING-ATTEMPT-2.md`, raw pending). **Attempt 3** was
+recorded in #767 as **non qualifiée** under the stale V2 binary
+(`docs/TDI-25-S47-TIMING-ATTEMPT-3.md`), and **attempt 4** as the first
+partially qualified V3 run as reported by the operator — 3 cells
+`qualifiee`, development/C6 rejected solely on SMT — in the same PR
+(`docs/TDI-25-S47-TIMING-ATTEMPT-4.md`). The byte-exact raw lines and
+`fingerprint.json` for attempts 3–4 are pending
+(transcription-of-operator-output only), so the slice stays
+**timing non qualifié** in its repository-verified results until the
+raw artifacts land. The cost report (`timing_measured = false`, `timing_status =
 timing_non_qualifie`) is unchanged.
 
 ## Validation
