@@ -3175,15 +3175,22 @@ fn jacobi_svd_square(
                 let t = zeta.signum() / (zeta.abs() + (1.0 + zeta * zeta).sqrt());
                 let c = 1.0 / (1.0 + t * t).sqrt();
                 let s = c * t;
-                for row in 0..width {
-                    let column_p = columns[p][row];
-                    let column_q = columns[q][row];
-                    columns[p][row] = c * column_p - s * column_q;
-                    columns[q][row] = s * column_p + c * column_q;
-                    let v_p = v[row][p];
-                    let v_q = v[row][q];
-                    v[row][p] = c * v_p - s * v_q;
-                    v[row][q] = s * v_p + c * v_q;
+                // Rotate columns p/q in place (p < q, disjoint via split)
+                // and accumulate the same rotation into V.
+                let (left, right) = columns.split_at_mut(q);
+                let column_p = &mut left[p];
+                let column_q = &mut right[0];
+                for ((entry_p, entry_q), v_row) in column_p
+                    .iter_mut()
+                    .zip(column_q.iter_mut())
+                    .zip(v.iter_mut())
+                {
+                    let (value_p, value_q) = (*entry_p, *entry_q);
+                    *entry_p = c * value_p - s * value_q;
+                    *entry_q = s * value_p + c * value_q;
+                    let (v_p, v_q) = (v_row[p], v_row[q]);
+                    v_row[p] = c * v_p - s * v_q;
+                    v_row[q] = s * v_p + c * v_q;
                 }
             }
         }
