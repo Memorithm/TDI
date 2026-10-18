@@ -72,6 +72,7 @@ run)
     || die "usage: sudo bash $0 run <attempt number, >= 2 under V2> [parent-dir]"
   [[ $EUID -eq 0 ]] || die "run mode needs root (governor/turbo/MSR)"
   [[ ! -e "results/tdi25_s47_timing/attempt-$attempt" ]] || die "attempt $attempt is already recorded"
+  [[ ! -e "docs/TDI-25-S47-TIMING-ATTEMPT-$attempt.md" ]] || die "attempt $attempt is already recorded (attempt record exists)"
   for tool in taskset numactl awk sha256sum ps; do
     command -v "$tool" >/dev/null || die "$tool missing"
   done
