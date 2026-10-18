@@ -1,9 +1,10 @@
 # TDI-25 slice 47 — qualified timing, attempt 4 (**partiellement qualifiée**, transcription-of-operator-output)
 
-Status: recorded run, **first partially-qualified V3 run**. Three cells
-are `qualifiee`; one cell is `non_qualifiee` solely on SMT. This is not
-a complete qualified timing result and carries no general performance
-claim. Slice 47 is therefore recorded as timing partially qualified on
+Status: recorded run, **first partially-qualified V3 run as reported
+by the operator** (not repository-verified: the byte-exact raw lines
+are pending, see below). Three cells are reported `qualifiee`; one
+cell is `non_qualifiee` solely on SMT. This is not a complete
+qualified timing result and carries no general performance claim. Slice 47 is therefore recorded as timing partially qualified on
 this machine only (see the bounded conclusion below). Attempts are
 numbered and every attempt is recorded, whatever its outcome (no
 fishing).
@@ -37,9 +38,9 @@ fishing).
   no per-cell effective frequency is asserted here because the raw
   lines are pending.
 
-## Bounded conclusion — qualified cells only
+## Bounded conclusion — operator-reported qualified cells only
 
-On the validation split, both arms are `qualifiee`: T6 3593 ns versus
+On the validation split, both arms are reported `qualifiee`: T6 3593 ns versus
 C6 3826 ns per 64-case pass, i.e. T6 about 3.6 µs and C6 about
 3.83 µs, a difference of about +6 % for C6 relative to T6
 ((3826 − 3593) / 3593 ≈ 6.5 %, reported as about +6 %). T6 is also
