@@ -22,6 +22,10 @@ grep -Fq "synthetic_development_only" tdi-bench/src/bin/tdi27_concept_geometry.r
 grep -Fq "statistical_decision_pinned=false" tdi-bench/src/bin/tdi27_concept_geometry.rs
 grep -Fq "confirmatory_result=false" tdi-bench/src/bin/tdi27_concept_geometry.rs
 grep -Fq "pub fn synthetic_gaussian_groups(" tdi-bench/src/concept_geometry_v27.rs
+grep -Fq "pub fn orthogonal_procrustes_alignment(" tdi-bench/src/concept_geometry_v27.rs
+grep -Fq "pub fn cross_layer_direction_transport(" tdi-bench/src/concept_geometry_v27.rs
+grep -Fq "DegenerateProcrustesAlignment" tdi-bench/src/concept_geometry_v27.rs
+grep -Fq "procrustes_transported_cosine" tdi-bench/src/bin/tdi27_concept_geometry.rs
 grep -Fq "mod synthetic_gaussian_tests" tdi-bench/src/concept_geometry_v27.rs
 
 if git ls-files | grep -E '(^|/)(TDI-27|tdi27).*(FINAL|final).*(RESULT|result)' >/dev/null; then

@@ -4,9 +4,10 @@ use tdi_bench::concept_geometry_v27::{
     ConceptGeometryError, DEFAULT_TOLERANCE, DevelopmentResamplingPlan, DevelopmentSampleSizePoint,
     bootstrap_direction_stability, bootstrap_innovation_energy_summary,
     bootstrap_projection_method_differentials, causal_novelty_gap,
-    compare_innovation_energy_to_shuffled_null, decompose_symmetric_intervention_causal_contrasts,
-    interaction_residual, matched_intervention_causal_contrasts,
-    matched_intervention_dose_response_curve, matched_intervention_dose_states, mean_difference,
+    compare_innovation_energy_to_shuffled_null, cross_layer_direction_transport,
+    decompose_symmetric_intervention_causal_contrasts, interaction_residual,
+    matched_intervention_causal_contrasts, matched_intervention_dose_response_curve,
+    matched_intervention_dose_states, mean_difference, orthogonal_procrustes_alignment,
     projection_method_differential, residualize, sample_size_sensitivity_grid,
     sequential_accepted_rank_summary, sequential_innovations,
 };
@@ -164,7 +165,28 @@ fn run() -> Result<(), ConceptGeometryError> {
         2,
     )?;
 
-    println!("schema=tdi27-concept-geometry-development/v5");
+    // TDI-27.4 first slice: Procrustes alignment between two synthetic
+    // layers whose paired anchors differ by a known +90-degree rotation.
+    let layer_source = vec![
+        vec![1.0, 0.0, 0.0],
+        vec![0.0, 1.0, 0.0],
+        vec![0.0, 0.0, 1.0],
+        vec![1.0, 1.0, 0.5],
+    ];
+    let layer_target: Vec<Vec<f64>> = layer_source
+        .iter()
+        .map(|row| vec![-row[1], row[0], row[2]])
+        .collect();
+    let procrustes =
+        orthogonal_procrustes_alignment(&layer_source, &layer_target, DEFAULT_TOLERANCE)?;
+    let procrustes_transport = cross_layer_direction_transport(
+        &[1.0, 0.0, 0.0],
+        &[0.0, 1.0, 0.0],
+        &procrustes,
+        DEFAULT_TOLERANCE,
+    )?;
+
+    println!("schema=tdi27-concept-geometry-development/v6");
     println!("scope=synthetic_development_only");
     println!(
         "mean_contrast={:.12},{:.12},{:.12}",
@@ -332,6 +354,28 @@ fn run() -> Result<(), ConceptGeometryError> {
         "sequential_rank_order_bounds={},{}",
         rank_summary.lower_value(),
         rank_summary.upper_value()
+    );
+    println!(
+        "procrustes_singular_values={:.12},{:.12},{:.12}",
+        procrustes.singular_values()[0],
+        procrustes.singular_values()[1],
+        procrustes.singular_values()[2]
+    );
+    println!(
+        "procrustes_orthogonality_defect={:.17e}",
+        procrustes.orthogonality_defect()
+    );
+    println!(
+        "procrustes_relative_alignment_residual={:.17e}",
+        procrustes.relative_alignment_residual()
+    );
+    println!(
+        "procrustes_transported_cosine={:.12}",
+        procrustes_transport.aligned_cosine()
+    );
+    println!(
+        "procrustes_raw_cosine={:.12}",
+        procrustes_transport.raw_cosine()
     );
     println!("statistical_decision_pinned=false");
     println!("confirmatory_result=false");

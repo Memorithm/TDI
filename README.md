@@ -221,9 +221,9 @@ TDI-27 tests whether residual geometry is stable and causally specific; a large 
 
 ## Current frontier
 
-The current `main` line is advancing **TDI-27.1 resampling and null calibration**. Independent positive/control bootstrap streams are part of the Development substrate, and a synthetic Gaussian known-truth generator (declared signal plus noise) now checks that the bootstrap and label-permutation primitives separate a known signal from the null, including after residualisation against a known subspace. These are Development calibration checks with no pinned statistical rule; confirmatory and final TDI-27 execution remain disabled.
+The current `main` line is advancing **TDI-27.4 cross-layer transport** (Development). TDI-27.0–27.3 are represented end to end (synthetic geometry, resampling/null calibration including the synthetic Gaussian known-truth generator, projection-method differential, and the causal intervention harness), and the first 27.4 slice adds orthogonal Procrustes layer alignment: paired anchors define `Q = U V^T`, degenerate alignments fail closed, and a residual direction is compared across layers only after transport (raw cosine is retained for contrast only). These are Development calibration checks with no pinned statistical rule; confirmatory and final TDI-27 execution remain disabled.
 
-Parallel active work continues in the matched representation programmes (TDI-24/TDI-25), sparse recurrent topology (TDI-26), and the existing attention, memory, inference, operator and formal-representation lines.
+In the matched representation programmes, TDI-24 is at 45/50 (slice 46 CPU reference cost landed in #761; slice 45 trained arms remains blocked pending human training parameters) and TDI-25 is at 47/50 (slice 48 freeze blocked). Parallel active work continues in sparse recurrent topology (TDI-26) and the existing attention, memory, inference, operator and formal-representation lines.
 
 For exact stage status, use the programme documents linked above and the repository issues/PRs rather than this summary.
 
