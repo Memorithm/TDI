@@ -653,6 +653,8 @@ pub enum ConceptGeometryError {
     InvalidNonTargetOutcomeIndices,
     InconsistentZeroDoseOutcomes,
     InvalidSyntheticNoiseScale,
+    DegenerateProcrustesAlignment,
+    ProcrustesAlignmentNotConverged,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -3069,6 +3071,330 @@ pub fn sequential_innovations(
     Ok(steps)
 }
 
+/// Orthogonal Procrustes alignment between two paired layer bases (TDI-27.4).
+///
+/// The operator maps row vectors of the source layer into the target layer:
+/// aligned row `x * Q`, where `Q` minimises `||X Q - Y||_F` over orthogonal
+/// `Q` for caller-paired anchor rows `X` (source) and `Y` (target) of equal
+/// width. Construction fails closed when the cross-covariance
+/// `M = X^T Y` is rank-deficient at the caller-declared tolerance: a
+/// degenerate alignment must not be silently completed. This is a
+/// descriptive Development operator only; it chooses no layer pairing,
+/// anchor set, tolerance, threshold or verdict.
+#[derive(Clone, Debug, PartialEq)]
+pub struct OrthogonalProcrustesAlignment {
+    operator: Vec<Vec<f64>>,
+    singular_values: Vec<f64>,
+    orthogonality_defect: f64,
+    alignment_residual: f64,
+    relative_alignment_residual: f64,
+    anchor_count: usize,
+}
+
+impl OrthogonalProcrustesAlignment {
+    /// Row-major alignment operator `Q` (aligned row = row * Q).
+    #[must_use]
+    pub fn operator(&self) -> &[Vec<f64>] {
+        &self.operator
+    }
+
+    /// Singular values of `X^T Y`, descending.
+    #[must_use]
+    pub fn singular_values(&self) -> &[f64] {
+        &self.singular_values
+    }
+
+    /// Max absolute entry of `Q^T Q - I`.
+    #[must_use]
+    pub const fn orthogonality_defect(&self) -> f64 {
+        self.orthogonality_defect
+    }
+
+    /// Frobenius norm `||X Q - Y||_F`.
+    #[must_use]
+    pub const fn alignment_residual(&self) -> f64 {
+        self.alignment_residual
+    }
+
+    /// `alignment_residual / ||Y||_F`.
+    #[must_use]
+    pub const fn relative_alignment_residual(&self) -> f64 {
+        self.relative_alignment_residual
+    }
+
+    #[must_use]
+    pub const fn anchor_count(&self) -> usize {
+        self.anchor_count
+    }
+
+    #[must_use]
+    pub fn width(&self) -> usize {
+        self.operator.len()
+    }
+}
+
+struct JacobiSvd {
+    u: Vec<Vec<f64>>,
+    singular_values: Vec<f64>,
+    v: Vec<Vec<f64>>,
+}
+
+/// One-sided Jacobi SVD of a square matrix:
+/// `matrix = U * diag(singular_values) * V^T`, singular values descending.
+/// Deterministic fixed sweep order; fails closed without convergence.
+fn jacobi_svd_square(
+    matrix: &[Vec<f64>],
+    tolerance: f64,
+) -> Result<JacobiSvd, ConceptGeometryError> {
+    let width = matrix.len();
+    // Work on columns of `matrix`; rotations accumulate into V.
+    let mut columns: Vec<Vec<f64>> = (0..width)
+        .map(|column| matrix.iter().map(|row| row[column]).collect())
+        .collect();
+    let mut v: Vec<Vec<f64>> = (0..width)
+        .map(|row| {
+            (0..width)
+                .map(|column| if row == column { 1.0 } else { 0.0 })
+                .collect()
+        })
+        .collect();
+    let mut converged = false;
+    for _sweep in 0..100 {
+        let mut off_diagonal = 0.0_f64;
+        for p in 0..width {
+            for q in (p + 1)..width {
+                let alpha = dot(&columns[p], &columns[p]);
+                let beta = dot(&columns[q], &columns[q]);
+                let gamma = dot(&columns[p], &columns[q]);
+                if !alpha.is_finite() || !beta.is_finite() || !gamma.is_finite() {
+                    return Err(ConceptGeometryError::NonFiniteValue);
+                }
+                off_diagonal = off_diagonal.max(gamma.abs());
+                if alpha <= 0.0 || beta <= 0.0 || gamma.abs() <= tolerance * (alpha * beta).sqrt() {
+                    continue;
+                }
+                let zeta = (beta - alpha) / (2.0 * gamma);
+                let t = zeta.signum() / (zeta.abs() + (1.0 + zeta * zeta).sqrt());
+                let c = 1.0 / (1.0 + t * t).sqrt();
+                let s = c * t;
+                for row in 0..width {
+                    let column_p = columns[p][row];
+                    let column_q = columns[q][row];
+                    columns[p][row] = c * column_p - s * column_q;
+                    columns[q][row] = s * column_p + c * column_q;
+                    let v_p = v[row][p];
+                    let v_q = v[row][q];
+                    v[row][p] = c * v_p - s * v_q;
+                    v[row][q] = s * v_p + c * v_q;
+                }
+            }
+        }
+        if off_diagonal <= tolerance {
+            converged = true;
+            break;
+        }
+    }
+    if !converged {
+        return Err(ConceptGeometryError::ProcrustesAlignmentNotConverged);
+    }
+    let mut order: Vec<usize> = (0..width).collect();
+    let mut singular_values: Vec<f64> = columns.iter().map(|column| norm(column)).collect();
+    if singular_values.iter().any(|value| !value.is_finite()) {
+        return Err(ConceptGeometryError::NonFiniteValue);
+    }
+    order.sort_by(|&left, &right| singular_values[right].total_cmp(&singular_values[left]));
+    let sorted_singular: Vec<f64> = order.iter().map(|&index| singular_values[index]).collect();
+    singular_values = sorted_singular;
+    let mut u = vec![vec![0.0; width]; width];
+    let mut sorted_v = vec![vec![0.0; width]; width];
+    for (sorted_index, &original_index) in order.iter().enumerate() {
+        let sigma = singular_values[sorted_index];
+        if sigma <= tolerance {
+            return Err(ConceptGeometryError::DegenerateProcrustesAlignment);
+        }
+        for row in 0..width {
+            u[row][sorted_index] = columns[original_index][row] / sigma;
+            sorted_v[row][sorted_index] = v[row][original_index];
+        }
+    }
+    Ok(JacobiSvd {
+        u,
+        singular_values,
+        v: sorted_v,
+    })
+}
+
+/// Build the orthogonal Procrustes alignment from paired source/target anchors.
+///
+/// Anchor rows are paired by position: row `i` of `target_anchors` is the
+/// declared counterpart of row `i` of `source_anchors`. No pairing, centring,
+/// scaling or anchor selection is invented by this primitive.
+pub fn orthogonal_procrustes_alignment(
+    source_anchors: &[Vec<f64>],
+    target_anchors: &[Vec<f64>],
+    tolerance: f64,
+) -> Result<OrthogonalProcrustesAlignment, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    let source_width = validate_rows(source_anchors)?;
+    let target_width = validate_rows(target_anchors)?;
+    if source_width != target_width {
+        return Err(ConceptGeometryError::DimensionMismatch);
+    }
+    if source_anchors.len() != target_anchors.len() {
+        return Err(ConceptGeometryError::DimensionMismatch);
+    }
+    let width = source_width;
+    // Cross-covariance M = X^T Y.
+    let mut cross = vec![vec![0.0; width]; width];
+    for (source_row, target_row) in source_anchors.iter().zip(target_anchors) {
+        for (i, source_value) in source_row.iter().enumerate() {
+            for (j, target_value) in target_row.iter().enumerate() {
+                cross[i][j] += source_value * target_value;
+                if !cross[i][j].is_finite() {
+                    return Err(ConceptGeometryError::NonFiniteValue);
+                }
+            }
+        }
+    }
+    let JacobiSvd {
+        u,
+        singular_values,
+        v,
+    } = jacobi_svd_square(&cross, tolerance)?;
+    // Optimal orthogonal map for row vectors: Q = U * V^T.
+    let mut operator = vec![vec![0.0; width]; width];
+    for (i, row) in operator.iter_mut().enumerate() {
+        for (j, value) in row.iter_mut().enumerate() {
+            *value = (0..width).map(|k| u[i][k] * v[j][k]).sum();
+            if !value.is_finite() {
+                return Err(ConceptGeometryError::NonFiniteValue);
+            }
+        }
+    }
+    let mut orthogonality_defect = 0.0_f64;
+    for i in 0..width {
+        for j in 0..width {
+            let entry: f64 = (0..width).map(|k| operator[k][i] * operator[k][j]).sum();
+            let expected = if i == j { 1.0 } else { 0.0 };
+            orthogonality_defect = orthogonality_defect.max((entry - expected).abs());
+        }
+    }
+    if !orthogonality_defect.is_finite() {
+        return Err(ConceptGeometryError::NonFiniteValue);
+    }
+    let mut residual_squared = 0.0_f64;
+    let mut target_squared = 0.0_f64;
+    for (source_row, target_row) in source_anchors.iter().zip(target_anchors) {
+        for j in 0..width {
+            let aligned: f64 = source_row
+                .iter()
+                .zip(operator.iter())
+                .map(|(value, operator_row)| value * operator_row[j])
+                .sum();
+            let difference = aligned - target_row[j];
+            residual_squared += difference * difference;
+            target_squared += target_row[j] * target_row[j];
+        }
+    }
+    if !residual_squared.is_finite() || !target_squared.is_finite() || target_squared <= 0.0 {
+        return Err(ConceptGeometryError::DegenerateProcrustesAlignment);
+    }
+    let alignment_residual = residual_squared.sqrt();
+    Ok(OrthogonalProcrustesAlignment {
+        operator,
+        singular_values,
+        orthogonality_defect,
+        alignment_residual,
+        relative_alignment_residual: alignment_residual / target_squared.sqrt(),
+        anchor_count: source_anchors.len(),
+    })
+}
+
+/// Transport one source-layer direction through a Procrustes alignment
+/// (row-vector convention: `transported_j = sum_i direction_i * Q_ij`).
+pub fn procrustes_transported_direction(
+    alignment: &OrthogonalProcrustesAlignment,
+    direction: &[f64],
+) -> Result<Vec<f64>, ConceptGeometryError> {
+    validate_vector(direction)?;
+    if direction.len() != alignment.width() {
+        return Err(ConceptGeometryError::DimensionMismatch);
+    }
+    let transported: Vec<f64> = (0..alignment.width())
+        .map(|j| {
+            direction
+                .iter()
+                .zip(alignment.operator.iter())
+                .map(|(value, operator_row)| value * operator_row[j])
+                .sum()
+        })
+        .collect();
+    if transported.iter().any(|value| !value.is_finite()) {
+        return Err(ConceptGeometryError::NonFiniteValue);
+    }
+    Ok(transported)
+}
+
+/// Cross-layer direction transport report (TDI-27.4, descriptive only).
+#[derive(Clone, Debug, PartialEq)]
+pub struct CrossLayerDirectionTransport {
+    transported_unit_direction: Vec<f64>,
+    aligned_cosine: f64,
+    raw_cosine: f64,
+}
+
+impl CrossLayerDirectionTransport {
+    #[must_use]
+    pub fn transported_unit_direction(&self) -> &[f64] {
+        &self.transported_unit_direction
+    }
+
+    /// Cosine between the Procrustes-transported source direction and the
+    /// target-layer direction.
+    #[must_use]
+    pub const fn aligned_cosine(&self) -> f64 {
+        self.aligned_cosine
+    }
+
+    /// Cosine without alignment, retained only to show what alignment
+    /// changes; raw cosine across incompatible bases is not sufficient.
+    #[must_use]
+    pub const fn raw_cosine(&self) -> f64 {
+        self.raw_cosine
+    }
+}
+
+/// Measure whether a source residual direction persists in a target layer
+/// after Procrustes alignment, against the caller-declared target direction.
+///
+/// Both directions are unit-normalised under the same tolerance before the
+/// comparison; a direction at or below tolerance fails closed (`ZeroNorm`).
+/// This reports descriptive cosines only: no persistence threshold, layer
+/// pairing or scientific verdict is defined.
+pub fn cross_layer_direction_transport(
+    source_direction: &[f64],
+    target_direction: &[f64],
+    alignment: &OrthogonalProcrustesAlignment,
+    tolerance: f64,
+) -> Result<CrossLayerDirectionTransport, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    let transported = procrustes_transported_direction(alignment, source_direction)?;
+    let aligned_cosine = cosine_similarity(&transported, target_direction, tolerance)?;
+    let raw_cosine = cosine_similarity(source_direction, target_direction, tolerance)?;
+    let transported_norm = norm(&transported);
+    if !transported_norm.is_finite() || transported_norm <= tolerance {
+        return Err(ConceptGeometryError::ZeroNorm);
+    }
+    Ok(CrossLayerDirectionTransport {
+        transported_unit_direction: transported
+            .iter()
+            .map(|value| value / transported_norm)
+            .collect(),
+        aligned_cosine,
+        raw_cosine,
+    })
+}
+
 const SYNTHETIC_POSITIVE_DOMAIN: u64 = 0x5444_4932_3747_5053;
 const SYNTHETIC_CONTROL_DOMAIN: u64 = 0x5444_4932_3747_4354;
 
@@ -4931,6 +5257,122 @@ mod tests {
         assert_eq!(
             cosine_similarity(&[0.0, 0.0], &[1.0, 0.0], DEFAULT_TOLERANCE),
             Err(ConceptGeometryError::ZeroNorm)
+        );
+    }
+
+    fn rotation_anchors() -> (Vec<Vec<f64>>, Vec<Vec<f64>>) {
+        // Target anchors are source rows rotated by +90 degrees in the
+        // (x, y) plane: (x, y, z) -> (-y, x, z) under row * Q.
+        let source = vec![
+            vec![1.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0],
+            vec![0.0, 0.0, 1.0],
+            vec![1.0, 1.0, 0.5],
+        ];
+        let target = source
+            .iter()
+            .map(|row| vec![-row[1], row[0], row[2]])
+            .collect();
+        (source, target)
+    }
+
+    #[test]
+    fn procrustes_recovers_a_known_rotation() {
+        let (source, target) = rotation_anchors();
+        let alignment =
+            orthogonal_procrustes_alignment(&source, &target, DEFAULT_TOLERANCE).unwrap();
+        assert_eq!(alignment.anchor_count(), 4);
+        assert_eq!(alignment.width(), 3);
+        assert!(alignment.orthogonality_defect() < 1.0e-12);
+        assert!(alignment.alignment_residual() < 1.0e-12);
+        assert!(alignment.relative_alignment_residual() < 1.0e-12);
+        assert_eq!(alignment.singular_values().len(), 3);
+        // Transported source x-axis is the target y-axis.
+        let transport = cross_layer_direction_transport(
+            &[1.0, 0.0, 0.0],
+            &[0.0, 1.0, 0.0],
+            &alignment,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+        assert!((transport.aligned_cosine() - 1.0).abs() < 1.0e-12);
+        assert!(transport.raw_cosine().abs() < 1.0e-12);
+        // A direction orthogonal after transport stays orthogonal.
+        let orthogonal = cross_layer_direction_transport(
+            &[0.0, 0.0, 2.0],
+            &[0.0, 1.0, 0.0],
+            &alignment,
+            DEFAULT_TOLERANCE,
+        )
+        .unwrap();
+        assert!(orthogonal.aligned_cosine().abs() < 1.0e-12);
+    }
+
+    #[test]
+    fn procrustes_identity_and_reflection_are_orthogonal() {
+        let (source, _) = rotation_anchors();
+        let identity =
+            orthogonal_procrustes_alignment(&source, &source, DEFAULT_TOLERANCE).unwrap();
+        assert!(identity.alignment_residual() < 1.0e-12);
+        for (row, expected) in
+            identity
+                .operator()
+                .iter()
+                .zip([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+        {
+            for (value, expected) in row.iter().zip(expected) {
+                assert!((value - expected).abs() < 1.0e-12);
+            }
+        }
+        // Reflection (improper rotation, determinant -1) is still orthogonal
+        // and must be recovered exactly, not projected to a rotation.
+        let reflected: Vec<Vec<f64>> = source
+            .iter()
+            .map(|row| vec![-row[0], row[1], row[2]])
+            .collect();
+        let reflection =
+            orthogonal_procrustes_alignment(&source, &reflected, DEFAULT_TOLERANCE).unwrap();
+        assert!(reflection.alignment_residual() < 1.0e-12);
+        assert!(reflection.orthogonality_defect() < 1.0e-12);
+    }
+
+    #[test]
+    fn procrustes_rejects_degenerate_and_malformed_inputs() {
+        let (source, target) = rotation_anchors();
+        // Rank-deficient paired anchors (all rows on one line).
+        let line = vec![
+            vec![1.0, 0.0, 0.0],
+            vec![2.0, 0.0, 0.0],
+            vec![3.0, 0.0, 0.0],
+        ];
+        assert_eq!(
+            orthogonal_procrustes_alignment(&line, &line, DEFAULT_TOLERANCE),
+            Err(ConceptGeometryError::DegenerateProcrustesAlignment)
+        );
+        let mut mismatched = target.clone();
+        mismatched.pop();
+        assert_eq!(
+            orthogonal_procrustes_alignment(&source, &mismatched, DEFAULT_TOLERANCE),
+            Err(ConceptGeometryError::DimensionMismatch)
+        );
+        assert_eq!(
+            orthogonal_procrustes_alignment(&source, &target, 0.0),
+            Err(ConceptGeometryError::InvalidTolerance)
+        );
+        let alignment =
+            orthogonal_procrustes_alignment(&source, &target, DEFAULT_TOLERANCE).unwrap();
+        assert_eq!(
+            cross_layer_direction_transport(
+                &[0.0, 0.0, 0.0],
+                &[0.0, 1.0, 0.0],
+                &alignment,
+                DEFAULT_TOLERANCE
+            ),
+            Err(ConceptGeometryError::ZeroNorm)
+        );
+        assert_eq!(
+            procrustes_transported_direction(&alignment, &[1.0, 0.0]),
+            Err(ConceptGeometryError::DimensionMismatch)
         );
     }
 }
