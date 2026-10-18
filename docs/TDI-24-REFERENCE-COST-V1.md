@@ -17,8 +17,8 @@ parameters, so slices 47+ are not executed by this slice.
 - `run_reference_cost` actually executes both unchanged reference scorers
   over the identical bounded Stage-C stream (measured software execution:
   every scored case and its finite score are counted), then multiplies the
-  per-pair accounting by the cases scored. The C6 diagonal score must
-  reproduce the Stage-C reference bit-for-bit.
+  per-pair accounting by the cases scored. Population construction calls
+  no scorer, so each arm executes exactly one accounted score per case.
 - No wall-clock timing is measured: `timing_measured = false`,
   `timing_status = timing_not_measured`. Counts describe the bounded Rust
   reference algorithms; they are not CPU instructions, latency, allocator

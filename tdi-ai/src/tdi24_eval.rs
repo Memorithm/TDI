@@ -8298,11 +8298,79 @@ fn cost_total(cases: u64, per_pair: usize) -> Result<u64, EvalError> {
         .ok_or_else(|| cost_invalid("accounting_drift"))
 }
 
+type ReferenceCostItem = (TaskFamily, Chiral6, Chiral6);
+
+fn reference_cost_item<T>(
+    case: &LabeledCase<T>,
+    split: DataSplit,
+) -> Result<ReferenceCostItem, EvalError> {
+    let view = case.inference_view();
+    if view.split != split {
+        return Err(EvalError::SplitMismatch {
+            expected: split,
+            actual: view.split,
+        });
+    }
+    // Deliberately no scorer call here: constructing the cost population
+    // must not execute a reference score that the accounting omits.
+    let query = Chiral6::from_array(view.query.as_array()).map_err(EvalError::ChiralNumerical)?;
+    let key = Chiral6::from_array(view.key.as_array()).map_err(EvalError::ChiralNumerical)?;
+    Ok((view.family, query, key))
+}
+
+fn collect_reference_cost_items(
+    split: DataSplit,
+    budget: StageCPreflightBudget,
+) -> Result<Vec<ReferenceCostItem>, EvalError> {
+    validate_non_final_split(split)?;
+    budget.cases_per_arm()?;
+    let mut items = Vec::new();
+    let last_pair_id = budget.first_pair_id + budget.pairs_per_family;
+    for pair_id in budget.first_pair_id..last_pair_id {
+        let discriminative = reflection_discriminative_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [discriminative.right, discriminative.left] {
+            items.push(reference_cost_item(
+                &seal_reflection_discriminative(&member),
+                split,
+            )?);
+        }
+        let nuisance = reflection_nuisance_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [nuisance.canonical, nuisance.reflected] {
+            items.push(reference_cost_item(
+                &seal_reflection_nuisance(&member),
+                split,
+            )?);
+        }
+        let direction = direction_reversal_pair_in_split(pair_id, split)
+            .map_err(|_| preflight_generation_failed())?;
+        for member in [direction.forward, direction.reverse] {
+            items.push(reference_cost_item(
+                &seal_direction_reversal(&member),
+                split,
+            )?);
+        }
+        let base_case_id = pair_id
+            .checked_mul(STAGE_C_PREFLIGHT_MEMBERS_PER_PAIR)
+            .ok_or_else(preflight_generation_failed)?;
+        for case_id in [base_case_id, base_case_id + 1] {
+            let control = non_chiral_control_case_in_split(case_id, split)
+                .map_err(|_| preflight_generation_failed())?;
+            items.push(reference_cost_item(
+                &seal_non_chiral_control(&control),
+                split,
+            )?);
+        }
+    }
+    Ok(items)
+}
+
 fn collect_reference_cost_cells(
     split: DataSplit,
     budget: StageCPreflightBudget,
 ) -> Result<Vec<ReferenceCostCell>, EvalError> {
-    let items = collect_sequence_items(split, budget)?;
+    let items = collect_reference_cost_items(split, budget)?;
     let cases = u64::try_from(items.len()).map_err(|_| cost_invalid("population_size_drift"))?;
     let mut cells = Vec::new();
     for arm in REFERENCE_COST_ARMS {
@@ -8315,15 +8383,10 @@ fn collect_reference_cost_cells(
                     let key = Vector6::new(item.2.as_array()).map_err(EvalError::Numerical)?;
                     vector6_score(query, key).map_err(EvalError::Numerical)?
                 }
-                EvalArm::C6 => {
-                    let score = chiral_score(item.1, item.2, C6_REFERENCE_WEIGHTS)
-                        .map_err(EvalError::ChiralNumerical)?;
-                    // The C6 cost arm scores the unchanged Stage-C reference.
-                    if score.to_bits() != item.3.to_bits() {
-                        return Err(cost_invalid("case_evidence_drift"));
-                    }
-                    score
-                }
+                // The single C6 execution per case in this study: the
+                // unchanged chiral reference scorer.
+                EvalArm::C6 => chiral_score(item.1, item.2, C6_REFERENCE_WEIGHTS)
+                    .map_err(EvalError::ChiralNumerical)?,
             };
             if score.is_finite() {
                 scores_finite += 1;
