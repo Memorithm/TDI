@@ -382,9 +382,10 @@ and returns the row-convention operator `Q = U V^T` minimising
 `||X Q - Y||_F` over orthogonal maps, together with the descending singular
 values, the orthogonality defect `max |Q^T Q - I|`, and the absolute and
 relative Frobenius alignment residuals. A singular value at or below the
-caller-declared tolerance fails closed as degenerate instead of silently
-completing the basis, and non-convergence of the Jacobi sweeps fails
-closed as well. `cross_layer_direction_transport` then unit-normalises a
+caller-declared tolerance (relative to the largest singular value) fails
+closed as degenerate instead of silently completing the basis, and
+non-convergence of the Jacobi sweeps (same relative criterion) fails
+closed as well; a valid anchor rescaling therefore changes neither verdict. `cross_layer_direction_transport` then unit-normalises a
 source and a target direction under the same tolerance, transports the
 source direction through `Q`, and reports the aligned cosine together with
 the unaligned (raw) cosine retained only for contrast. The synthetic

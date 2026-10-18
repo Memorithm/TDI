@@ -3160,7 +3160,6 @@ fn jacobi_svd_square(
         .collect();
     let mut converged = false;
     for _sweep in 0..100 {
-        let mut off_diagonal = 0.0_f64;
         for p in 0..width {
             for q in (p + 1)..width {
                 let alpha = dot(&columns[p], &columns[p]);
@@ -3169,7 +3168,6 @@ fn jacobi_svd_square(
                 if !alpha.is_finite() || !beta.is_finite() || !gamma.is_finite() {
                     return Err(ConceptGeometryError::NonFiniteValue);
                 }
-                off_diagonal = off_diagonal.max(gamma.abs());
                 if alpha <= 0.0 || beta <= 0.0 || gamma.abs() <= tolerance * (alpha * beta).sqrt() {
                     continue;
                 }
@@ -3189,7 +3187,29 @@ fn jacobi_svd_square(
                 }
             }
         }
-        if off_diagonal <= tolerance {
+        // Convergence uses the same scale-consistent relative criterion as
+        // the per-pair skip above: an absolute inner-product threshold
+        // would declare convergence (or non-convergence) purely from the
+        // anchor scale, producing a non-orthogonal operator or a spurious
+        // failure after a valid rescaling.
+        let mut max_relative_off_diagonal = 0.0_f64;
+        for p in 0..width {
+            for q in (p + 1)..width {
+                let alpha = dot(&columns[p], &columns[p]);
+                let beta = dot(&columns[q], &columns[q]);
+                let gamma = dot(&columns[p], &columns[q]);
+                if !alpha.is_finite() || !beta.is_finite() || !gamma.is_finite() {
+                    return Err(ConceptGeometryError::NonFiniteValue);
+                }
+                if alpha > 0.0 && beta > 0.0 {
+                    max_relative_off_diagonal =
+                        max_relative_off_diagonal.max(gamma.abs() / (alpha * beta).sqrt());
+                } else if gamma != 0.0 {
+                    max_relative_off_diagonal = f64::INFINITY;
+                }
+            }
+        }
+        if max_relative_off_diagonal <= tolerance {
             converged = true;
             break;
         }
@@ -3207,9 +3227,12 @@ fn jacobi_svd_square(
     singular_values = sorted_singular;
     let mut u = vec![vec![0.0; width]; width];
     let mut sorted_v = vec![vec![0.0; width]; width];
+    let largest_singular = singular_values.first().copied().unwrap_or(0.0);
     for (sorted_index, &original_index) in order.iter().enumerate() {
         let sigma = singular_values[sorted_index];
-        if sigma <= tolerance {
+        // The tolerance is relative to the largest singular value, so a
+        // valid rescaling of the anchors cannot flip the degeneracy verdict.
+        if sigma <= tolerance * largest_singular {
             return Err(ConceptGeometryError::DegenerateProcrustesAlignment);
         }
         for row in 0..width {
@@ -5334,6 +5357,32 @@ mod tests {
             orthogonal_procrustes_alignment(&source, &reflected, DEFAULT_TOLERANCE).unwrap();
         assert!(reflection.alignment_residual() < 1.0e-12);
         assert!(reflection.orthogonality_defect() < 1.0e-12);
+    }
+
+    #[test]
+    fn procrustes_convergence_is_scale_consistent() {
+        let (source, target) = rotation_anchors();
+        for scale in [1.0e-4, 1.0, 1.0e6] {
+            let scaled_source: Vec<Vec<f64>> = source
+                .iter()
+                .map(|row| row.iter().map(|value| value * scale).collect())
+                .collect();
+            let scaled_target: Vec<Vec<f64>> = target
+                .iter()
+                .map(|row| row.iter().map(|value| value * scale).collect())
+                .collect();
+            // The tolerance is relative (to the largest singular value and
+            // to paired column norms), so the same value applies at any scale.
+            let alignment =
+                orthogonal_procrustes_alignment(&scaled_source, &scaled_target, DEFAULT_TOLERANCE)
+                    .unwrap();
+            assert!(
+                alignment.orthogonality_defect() < 1.0e-9,
+                "scale {scale}: defect {}",
+                alignment.orthogonality_defect()
+            );
+            assert!(alignment.relative_alignment_residual() < 1.0e-9);
+        }
     }
 
     #[test]
