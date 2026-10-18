@@ -1,5 +1,5 @@
 //! TDI-25 slice 47: one qualified timing cell under the frozen T430 protocol
-//! (V2 amendment: APERF/MPERF frequency check; needs root and `/dev/cpu/28/msr`).
+//! (V3 amendment: APERF/MPERF frequency, cross-cell median gate in the script; needs root and `/dev/cpu/28/msr`).
 //!
 //! Usage: `tdi25_s47_qualified_timing <development|validation> <t6|c6>`.
 //! Meant to be launched only by `scripts/tdi25-s47-qualified-timing.sh`, which
@@ -77,7 +77,7 @@ fn main() -> ExitCode {
         "{{\"environment_contract\":{},\"machine_id\":{},\"split\":{},\"arm\":{},\"budget\":\"smoke\",\
 \"cases\":{},\"warmup_iterations\":{},\"measured_iterations\":{},\"nanos\":[{}],\
 \"median_nanos\":{},\"min_nanos\":{},\"q1_nanos\":{},\"q3_nanos\":{},\"iqr_nanos\":{},\
-\"fixed_frequency_khz\":{},\"delta_aperf\":{},\"delta_mperf\":{},\"effective_frequency_khz\":{},\"swap_in\":[{},{}],\"swap_out\":[{},{}],\
+\"fixed_frequency_khz\":{},\"frequency_floor_khz\":{},\"delta_aperf\":{},\"delta_mperf\":{},\"effective_frequency_khz\":{},\"swap_in\":[{},{}],\"swap_out\":[{},{}],\
 \"peak_rss_kib_informational\":{},\"iqr_ok\":{},\"frequency_ok\":{},\"swap_ok\":{},\
 \"qualified_in_process\":{},\"attestation\":{{\"cpu_model\":{},\"kernel_release\":{},\
 \"bios_version\":{},\"cpus_allowed\":{},\"governor\":{},\"sibling_governor\":{},\"no_turbo\":{},\
@@ -96,6 +96,7 @@ fn main() -> ExitCode {
         summary.q3_nanos,
         summary.iqr_nanos,
         samples.environment.fixed_frequency_khz,
+        samples.environment.frequency_floor_khz,
         samples.delta_aperf,
         samples.delta_mperf,
         summary

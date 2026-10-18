@@ -7494,7 +7494,9 @@ pub const T6_REFERENCE_ACCOUNTING_CONTRACT: &str = "tdi25-t6-reference-accountin
 /// amendment (`docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V2.md`): the
 /// frequency rule is measured with APERF/MPERF MSR deltas instead of
 /// `scaling_cur_freq`.
-pub const QUALIFIED_TIMING_ENVIRONMENT_CONTRACT: &str = "tdi25-qualified-timing-environment-v2";
+pub const QUALIFIED_TIMING_ENVIRONMENT_CONTRACT: &str = "tdi25-qualified-timing-environment-v3";
+/// Superseded V2 contract, kept for the record (attempt 2 was judged under it).
+pub const QUALIFIED_TIMING_ENVIRONMENT_V2_CONTRACT: &str = "tdi25-qualified-timing-environment-v2";
 /// Superseded V1 contract, kept for the record (attempt 1 was judged under it).
 pub const QUALIFIED_TIMING_ENVIRONMENT_V1_CONTRACT: &str = "tdi25-qualified-timing-environment-v1";
 /// `IA32_MPERF`: counts at the fixed (TSC/base) frequency while in C0.
@@ -7508,8 +7510,8 @@ pub const MSR_PLATFORM_INFO: u64 = 0xCE;
 pub const REFERENCE_TIMING_STATUS: &str = "timing_non_qualifie";
 
 /// Frozen qualified timing environment and protocol (approved by the user,
-/// see `docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V1.md` and
-/// `docs/tdi25-qualified-timing-environment.yaml`).
+/// see `docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V3.md` and
+/// `docs/tdi25-qualified-timing-environment-v3.yaml`; V1/V2 kept for the record).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct QualifiedTimingEnvironment {
     pub environment_contract: &'static str,
@@ -7537,10 +7539,15 @@ pub struct QualifiedTimingEnvironment {
     /// Fixed (base, non-turbo) frequency in kHz; must equal the
     /// `MSR_PLATFORM_INFO` maximum non-turbo ratio x 100 MHz.
     pub fixed_frequency_khz: u64,
-    /// "CPU frequency deviates from the fixed value": the effective frequency
-    /// `fixed * dAPERF / dMPERF` over the measured passes of a cell must lie
-    /// within this fraction of `fixed_frequency_khz`.
-    pub frequency_tolerance_fraction: f64,
+    /// Anti-throttling floor (V3): a cell's effective frequency
+    /// `fixed * dAPERF / dMPERF` must be at least this value
+    /// (0.85 x `fixed_frequency_khz` = 1_785_000 kHz on this machine).
+    pub frequency_floor_khz: u64,
+    /// Cross-cell consistency (V3): each cell's effective frequency must lie
+    /// within this fraction of the median effective frequency across the
+    /// 4 cells of the run. The absolute deviation from `fixed_frequency_khz`
+    /// is not checked under V3 (see the V3 protocol document for why).
+    pub frequency_median_tolerance_fraction: f64,
     /// Implementation threshold for "SMT sibling idle": busy fraction of the
     /// sibling over a 1 s sample before the run (checked by the script).
     pub smt_sibling_max_busy_fraction: f64,
@@ -7567,7 +7574,8 @@ pub const T430_QUALIFIED_TIMING_ENVIRONMENT: QualifiedTimingEnvironment =
         max_iqr_fraction_of_median: 0.05,
         max_load_average_1min: 2.0,
         fixed_frequency_khz: 2_100_000,
-        frequency_tolerance_fraction: 0.01,
+        frequency_floor_khz: 1_785_000,
+        frequency_median_tolerance_fraction: 0.01,
         smt_sibling_max_busy_fraction: 0.01,
     };
 
@@ -8076,11 +8084,70 @@ pub struct TimingCellSummary {
     /// `fixed * dAPERF / dMPERF` over the measured passes (kHz).
     pub effective_frequency_khz: Option<u64>,
     pub iqr_ok: bool,
+    /// Preliminary V3 frequency rule for a single cell: the effective
+    /// frequency is present and at or above `frequency_floor_khz`.
+    /// Final qualification also requires the cross-cell median consistency
+    /// gate (`cross_cell_frequency_gate`), applied by the measurement
+    /// script once all 4 cells of the run are known.
     pub frequency_ok: bool,
     pub swap_ok: bool,
     /// `iqr_ok && frequency_ok && swap_ok`; otherwise the cell is reported
-    /// as non qualifiee (no rerun).
+    /// as non qualifiee (no rerun). Final qualification additionally
+    /// requires the cross-cell frequency gate (script level).
     pub qualified_in_process: bool,
+}
+
+/// Cross-cell frequency gate for one run (V3): the median effective
+/// frequency across the cells, the per-cell ratio
+/// `effective / median_effective`, and the per-cell verdict. A cell passes
+/// iff its effective frequency is present, at or above the anti-throttling
+/// floor, and within `frequency_median_tolerance_fraction` of the median.
+/// The median of an even number of present values is the mean of the two
+/// middle values; a missing effective frequency fails its cell and is
+/// excluded from the median.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CrossCellFrequencyGate {
+    pub median_effective_khz: Option<f64>,
+    /// `effective / median_effective` per cell (`None` when either is missing).
+    pub frequency_ratio_to_median: Vec<Option<f64>>,
+    pub frequency_ok: Vec<bool>,
+}
+
+/// Evaluate the V3 cross-cell frequency gate over the 4 cells of a run.
+pub fn cross_cell_frequency_gate(
+    effectives: &[Option<u64>],
+    environment: &QualifiedTimingEnvironment,
+) -> CrossCellFrequencyGate {
+    let mut present: Vec<u64> = effectives.iter().flatten().copied().collect();
+    present.sort_unstable();
+    let median_effective_khz = match present.len() {
+        0 => None,
+        n if n % 2 == 1 => Some(present[n / 2] as f64),
+        n => Some((present[n / 2 - 1] as f64 + present[n / 2] as f64) / 2.0),
+    };
+    let mut frequency_ratio_to_median = Vec::with_capacity(effectives.len());
+    let mut frequency_ok = Vec::with_capacity(effectives.len());
+    for effective in effectives {
+        let ratio = match (*effective, median_effective_khz) {
+            (Some(value), Some(median)) if median > 0.0 => Some(value as f64 / median),
+            _ => None,
+        };
+        let ok = match (*effective, median_effective_khz) {
+            (Some(value), Some(median)) => {
+                value >= environment.frequency_floor_khz
+                    && (value as f64 - median).abs()
+                        <= environment.frequency_median_tolerance_fraction * median
+            }
+            _ => false,
+        };
+        frequency_ratio_to_median.push(ratio);
+        frequency_ok.push(ok);
+    }
+    CrossCellFrequencyGate {
+        median_effective_khz,
+        frequency_ratio_to_median,
+        frequency_ok,
+    }
 }
 
 /// Summarise one cell under the frozen protocol.
@@ -8100,10 +8167,10 @@ pub fn summarize_timing_cell(samples: &TimingCellSamples) -> Result<TimingCellSu
     let iqr_ok = (iqr as f64) <= environment.max_iqr_fraction_of_median * median as f64;
     let fixed = environment.fixed_frequency_khz;
     let effective = effective_frequency_khz(fixed, samples.delta_aperf, samples.delta_mperf);
-    let frequency_ok = effective.is_some_and(|value| {
-        (value as f64 - fixed as f64).abs()
-            <= environment.frequency_tolerance_fraction * fixed as f64
-    });
+    // V3 preliminary per-cell rule: anti-throttling floor only. The
+    // cross-cell median consistency is evaluated by
+    // `cross_cell_frequency_gate` once all 4 cells are known.
+    let frequency_ok = effective.is_some_and(|value| value >= environment.frequency_floor_khz);
     let swap_ok = samples.swap_in_start == samples.swap_in_end
         && samples.swap_out_start == samples.swap_out_end;
     Ok(TimingCellSummary {
@@ -8163,7 +8230,15 @@ mod reference_cost_timing_tests {
     fn checked_in_environment_is_exactly_the_t430_manifest() {
         assert_eq!(
             T430_QUALIFIED_TIMING_ENVIRONMENT.environment_contract,
-            "tdi25-qualified-timing-environment-v2"
+            "tdi25-qualified-timing-environment-v3"
+        );
+        assert_eq!(
+            T430_QUALIFIED_TIMING_ENVIRONMENT.frequency_floor_khz,
+            1_785_000
+        );
+        assert_eq!(
+            T430_QUALIFIED_TIMING_ENVIRONMENT.frequency_median_tolerance_fraction,
+            0.01
         );
         assert_eq!(
             T430_QUALIFIED_TIMING_ENVIRONMENT.fixed_frequency_khz,
@@ -8217,16 +8292,24 @@ mod reference_cost_timing_tests {
         assert_eq!((summary.median_nanos, summary.iqr_nanos), (130, 32));
         assert!(!summary.iqr_ok && !summary.qualified_in_process);
 
-        // A frequency excursion or a swap counter change rejects the cell.
+        // Below the V3 anti-throttling floor, or a swap change, rejects.
         let mut drift = fixture_samples(vec![1_000; 31]);
         drift.delta_aperf = 1_567_895;
         let summary = summarize_timing_cell(&drift).unwrap();
         assert_eq!(summary.effective_frequency_khz, Some(1_567_895));
         assert!(!summary.frequency_ok);
+        // Attempt-2-like stable 1.89 GHz passes the per-cell floor (V3);
+        // the absolute 2.1 GHz check of V1/V2 no longer applies.
+        let mut stable = fixture_samples(vec![1_000; 31]);
+        stable.delta_aperf = 1_890_000;
+        stable.delta_mperf = 2_100_000;
+        let summary = summarize_timing_cell(&stable).unwrap();
+        assert_eq!(summary.effective_frequency_khz, Some(1_890_000));
+        assert!(summary.frequency_ok);
         let mut edge = fixture_samples(vec![1_000; 31]);
-        edge.delta_aperf = 2_121_000; // +1.0 % exactly: accepted
+        edge.delta_aperf = 1_785_000; // floor exactly: accepted
         assert!(summarize_timing_cell(&edge).unwrap().frequency_ok);
-        edge.delta_aperf = 2_121_001;
+        edge.delta_aperf = 1_784_999;
         assert!(!summarize_timing_cell(&edge).unwrap().frequency_ok);
         let mut stalled = fixture_samples(vec![1_000; 31]);
         stalled.delta_mperf = 0;
@@ -8242,6 +8325,62 @@ mod reference_cost_timing_tests {
             summarize_timing_cell(&fixture_samples(vec![1_000; 30])),
             Err(cost_invalid("timing_sample_count"))
         );
+    }
+
+    #[test]
+    fn cross_cell_frequency_gate_uses_median_and_floor() {
+        let env = T430_QUALIFIED_TIMING_ENVIRONMENT;
+        // Attempt-2-like: 4 stable cells near 1.89 GHz all pass under V3,
+        // although every one would fail the V2 absolute 2.1 GHz check.
+        let gate = cross_cell_frequency_gate(
+            &[
+                Some(1_890_000),
+                Some(1_895_000),
+                Some(1_885_000),
+                Some(1_890_000),
+            ],
+            &env,
+        );
+        assert_eq!(gate.median_effective_khz, Some(1_890_000.0));
+        assert_eq!(gate.frequency_ok, vec![true, true, true, true]);
+        assert!(
+            gate.frequency_ratio_to_median
+                .iter()
+                .all(|r| r.is_some_and(|v| (v - 1.0).abs() < 0.01))
+        );
+
+        // One deviating cell fails; the consistent cells still pass.
+        let gate = cross_cell_frequency_gate(
+            &[
+                Some(1_890_000),
+                Some(1_890_000),
+                Some(1_890_000),
+                Some(2_100_000),
+            ],
+            &env,
+        );
+        assert_eq!(gate.frequency_ok, vec![true, true, true, false]);
+
+        // Consistent but throttled below the floor: every cell fails.
+        let gate = cross_cell_frequency_gate(
+            &[
+                Some(1_500_000),
+                Some(1_500_000),
+                Some(1_500_000),
+                Some(1_500_000),
+            ],
+            &env,
+        );
+        assert_eq!(gate.median_effective_khz, Some(1_500_000.0));
+        assert_eq!(gate.frequency_ok, vec![false, false, false, false]);
+
+        // A missing effective frequency fails only its cell.
+        let gate = cross_cell_frequency_gate(
+            &[Some(1_890_000), None, Some(1_890_000), Some(1_890_000)],
+            &env,
+        );
+        assert_eq!(gate.frequency_ok, vec![true, false, true, true]);
+        assert_eq!(gate.frequency_ratio_to_median[1], None);
     }
 }
 

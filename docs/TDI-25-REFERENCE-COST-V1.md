@@ -53,7 +53,11 @@ The qualified environment and protocol are frozen in
 `docs/tdi25-qualified-timing-environment.yaml`, amended for attempts ≥ 2 by
 `docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V2.md` and
 `docs/tdi25-qualified-timing-environment-v2.yaml` (APERF/MPERF frequency
-rule, load precondition, numbered attempts).
+rule, load precondition, numbered attempts), and for attempts ≥ 3 by
+`docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V3.md` and
+`docs/tdi25-qualified-timing-environment-v3.yaml` (cross-cell median
+frequency consistency ±1 % plus the 1 785 000 kHz anti-throttling floor,
+replacing the absolute 2.1 GHz check).
 `QUALIFIED_TIMING_ENVIRONMENT` is exactly `T430_QUALIFIED_TIMING_ENVIRONMENT`.
 `run_qualified_reference_timing_cell` (one split × arm cell) refuses
 (`timing_environment_mismatch`, `attestation_*`) unless the running host and
@@ -67,7 +71,9 @@ the in-process rejection rules. The measurement script
 governor/turbo set-and-restore, the SMT-sibling and load-average checks.
 
 **Attempt 1** (run `tdi25-s47-timing-8bd8aea`, user's T430) was rejected
-in all 4 cells (`docs/TDI-25-S47-TIMING-ATTEMPT-1.md`). The slice stays
+in all 4 cells (`docs/TDI-25-S47-TIMING-ATTEMPT-1.md`). **Attempt 2** was
+rejected in all 4 cells for frequency only under V2
+(`docs/TDI-25-S47-TIMING-ATTEMPT-2.md`, raw pending). The slice stays
 **timing non qualifié** in its results until a qualified attempt lands in a
 separate, user-approved PR. The cost report (`timing_measured = false`, `timing_status =
 timing_non_qualifie`) is unchanged.

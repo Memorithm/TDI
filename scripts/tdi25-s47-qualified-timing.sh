@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # TDI-25 slice 47: qualified timing run under the frozen T430 protocol,
-# V2 amendment (docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V2.md,
-#  docs/tdi25-qualified-timing-environment-v2.yaml; V1 kept for the record).
+# V3 amendment (docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V3.md,
+#  docs/tdi25-qualified-timing-environment-v3.yaml; V1/V2 kept for the record).
+# V3 frequency verdict: per-cell APERF/MPERF effective frequency must be
+# within +-1% of the median effective across the 4 cells AND >= the
+# 1785000 kHz anti-throttling floor (cross_cell_frequency_gate in Rust).
 #
 #   bash scripts/tdi25-s47-qualified-timing.sh build                 # normal user
 #   sudo bash scripts/tdi25-s47-qualified-timing.sh run <attempt> [parent-dir]
@@ -39,7 +42,9 @@ SIBLING_CPU=60
 NUMA_NODE=0
 GOVERNOR="performance"
 MAX_LOAD="2.0"
-PROTOCOL="tdi25-qualified-timing-environment-v2"
+PROTOCOL="tdi25-qualified-timing-environment-v3"
+FLOOR_KHZ="1785000"
+MEDIAN_TOL="0.01"
 SIBLING_MAX_BUSY="0.01"
 CELLS=("development t6" "development c6" "validation t6" "validation c6")
 
@@ -68,8 +73,8 @@ build)
   ;;
 run)
   attempt="${2:-}"
-  [[ "$attempt" =~ ^[0-9]+$ ]] && ((attempt >= 2)) \
-    || die "usage: sudo bash $0 run <attempt number, >= 2 under V2> [parent-dir]"
+  [[ "$attempt" =~ ^[0-9]+$ ]] && ((attempt >= 3)) \
+    || die "usage: sudo bash $0 run <attempt number, >= 3 under V3> [parent-dir]"
   [[ $EUID -eq 0 ]] || die "run mode needs root (governor/turbo/MSR)"
   [[ ! -e "results/tdi25_s47_timing/attempt-$attempt" ]] || die "attempt $attempt is already recorded"
   [[ ! -e "docs/TDI-25-S47-TIMING-ATTEMPT-$attempt.md" ]] || die "attempt $attempt is already recorded (attempt record exists)"
@@ -93,7 +98,7 @@ run)
   if ! awk -v x="$load_now" -v y="$MAX_LOAD" 'BEGIN{exit !(x<=y)}'; then
     echo "load1=$load_now > $MAX_LOAD. Top CPU consumers:" >&2
     ps -eo pid,user,pcpu,etime,comm --sort=-pcpu | head -n 16 >&2
-    die "load1 $load_now > $MAX_LOAD at start: pause the heavy services (see docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V2.md checklist), wait for load1 <= $MAX_LOAD, retry; no measurement was taken"
+    die "load1 $load_now > $MAX_LOAD at start: pause the heavy services (see docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V3.md checklist), wait for load1 <= $MAX_LOAD, retry; no measurement was taken"
   fi
   msr="/dev/cpu/$PINNED_CPU/msr"
   [[ -r "$msr" ]] || die "$msr unreadable: run 'modprobe msr' as root, then retry; no measurement was taken"
@@ -158,6 +163,9 @@ run)
   } | tr -d '\n' >"$out/fingerprint.json"
   echo >>"$out/fingerprint.json"
 
+  # Collect all 4 cells first: the V3 frequency verdict needs the median
+  # effective frequency across the cells of the run.
+  cell_json=(); cell_busy=(); cell_l0=(); cell_l1=(); cell_eff=()
   for cell in "${CELLS[@]}"; do
     read -r split arm <<<"$cell"
     busy="$(sibling_busy)"
@@ -165,22 +173,41 @@ run)
     json="$(numactl --membind=$NUMA_NODE taskset -c $PINNED_CPU "$bin" "$split" "$arm")" \
       || die "harness refused cell $split/$arm (see stderr)"
     l1="$(load1)"
+    cell_json+=("$json"); cell_busy+=("$busy"); cell_l0+=("$l0"); cell_l1+=("$l1")
+    eff="$(sed -n 's/.*"effective_frequency_khz":\([0-9]*\|null\).*/\1/p' <<<"$json")"
+    cell_eff+=("${eff:-null}")
+  done
+  # Median of the present effective frequencies (mean of the two middle
+  # values for 4 cells), mirroring cross_cell_frequency_gate in Rust.
+  median_eff="$(printf '%s\n' "${cell_eff[@]}" | awk '$1!="null"{print $1}' | sort -n | awk '{v[NR]=$1} END{if(NR==0)print "null"; else if(NR%2==1)print v[(NR+1)/2]; else print (v[NR/2]+v[NR/2+1])/2}')"
+  for idx in "${!CELLS[@]}"; do
+    read -r split arm <<<"${CELLS[$idx]}"
+    json="${cell_json[$idx]}"; busy="${cell_busy[$idx]}"; l0="${cell_l0[$idx]}"; l1="${cell_l1[$idx]}"; eff="${cell_eff[$idx]}"
     status=qualifiee
     reasons=()
     le "$busy" "$SIBLING_MAX_BUSY" || reasons+=("smt_sibling_busy")
     le "$l0" "$MAX_LOAD" || reasons+=("load_start")
     le "$l1" "$MAX_LOAD" || reasons+=("load_end")
     grep -q '"iqr_ok":true' <<<"$json" || reasons+=("iqr")
-    grep -q '"frequency_ok":true' <<<"$json" || reasons+=("frequency")
+    grep -q '"frequency_ok":true' <<<"$json" || reasons+=("frequency_floor")
     grep -q '"swap_ok":true' <<<"$json" || reasons+=("swap")
+    # V3 cross-cell consistency: |eff - median| <= 1% of median and eff >= floor.
+    ratio="null"
+    if [[ "$eff" == "null" || "$median_eff" == "null" ]]; then
+      reasons+=("frequency")
+    else
+      ratio="$(awk -v e="$eff" -v m="$median_eff" 'BEGIN{printf "%.6f", (m>0? e/m : 0)}')"
+      awk -v e="$eff" -v m="$median_eff" -v tol="$MEDIAN_TOL" -v floor="$FLOOR_KHZ" 'BEGIN{d=e-m; if(d<0)d=-d; exit !(e>=floor && d<=tol*m)}' \
+        || reasons+=("frequency")
+    fi
     joined=""
     if ((${#reasons[@]} > 0)); then
       status=non_qualifiee
       joined="$(printf '"%s",' "${reasons[@]}")"
       joined="${joined%,}"
     fi
-    printf '{"run_id":"%s","attempt":%s,"split":"%s","arm":"%s","cell_status":"%s","rejection_reasons":[%s],"smt_sibling_busy_fraction":%s,"load1_start":%s,"load1_end":%s,"harness":%s}\n' \
-      "$run_id" "$attempt" "$split" "$arm" "$status" "$joined" "$busy" "$l0" "$l1" "$json" \
+    printf '{"run_id":"%s","attempt":%s,"split":"%s","arm":"%s","cell_status":"%s","rejection_reasons":[%s],"smt_sibling_busy_fraction":%s,"load1_start":%s,"load1_end":%s,"frequency_median_effective_khz":%s,"frequency_ratio_to_median":%s,"harness":%s}\n' \
+      "$run_id" "$attempt" "$split" "$arm" "$status" "$joined" "$busy" "$l0" "$l1" "$median_eff" "$ratio" "$json" \
       | tee -a "$out/results.jsonl"
   done
   echo "done: $out/fingerprint.json $out/results.jsonl (timing results valid for this machine only)"

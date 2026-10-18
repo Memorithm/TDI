@@ -33,7 +33,10 @@ for value in 'environment_contract: tdi25-qualified-timing-environment-v1' 'bios
   grep -Fq "$value" docs/tdi25-qualified-timing-environment.yaml
 done
 bash -n scripts/tdi25-s47-qualified-timing.sh
-grep -Fq 'pub const QUALIFIED_TIMING_ENVIRONMENT_CONTRACT: &str = "tdi25-qualified-timing-environment-v2";' tdi-ai/src/tdi25_eval.rs
+grep -Fq 'pub const QUALIFIED_TIMING_ENVIRONMENT_CONTRACT: &str = "tdi25-qualified-timing-environment-v3";' tdi-ai/src/tdi25_eval.rs
+grep -Fq 'pub const QUALIFIED_TIMING_ENVIRONMENT_V2_CONTRACT: &str = "tdi25-qualified-timing-environment-v2";' tdi-ai/src/tdi25_eval.rs
+grep -Fq 'pub fn cross_cell_frequency_gate(' tdi-ai/src/tdi25_eval.rs
+grep -Fq 'fn cross_cell_frequency_gate_uses_median_and_floor' tdi-ai/src/tdi25_eval.rs
 grep -Fq 'pub const QUALIFIED_TIMING_ENVIRONMENT_V1_CONTRACT: &str = "tdi25-qualified-timing-environment-v1";' tdi-ai/src/tdi25_eval.rs
 grep -Fq 'pub fn effective_frequency_khz(' tdi-ai/src/tdi25_eval.rs
 grep -Fq 'cost_invalid("attestation_msr_unreadable")' tdi-ai/src/tdi25_eval.rs
@@ -46,6 +49,18 @@ for value in 'environment_contract: tdi25-qualified-timing-environment-v2' 'fixe
   'tolerance: 0.01' 'load_average_1min_max: 2.0' 'measured_runs: 31' 'warmup_runs: 5' 'pinned_cpu: 28'; do
   grep -Fq "$value" docs/tdi25-qualified-timing-environment-v2.yaml
 done
+grep -Fq 'tdi25-qualified-timing-environment-v3' docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V3.md
+grep -Fq 'Recorded degeneracies' docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V3.md
+grep -Fq 'No fishing' docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V3.md
+grep -Fq 'APERF/MPERF' docs/TDI-25-QUALIFIED-TIMING-ENVIRONMENT-V3.md
+for value in 'environment_contract: tdi25-qualified-timing-environment-v3' 'fixed_frequency_khz: 2100000' \
+  'floor_khz: 1785000' 'median_tolerance: 0.01' 'load_average_1min_max: 2.0' 'measured_runs: 31' 'warmup_runs: 5' 'pinned_cpu: 28'; do
+  grep -Fq "$value" docs/tdi25-qualified-timing-environment-v3.yaml
+done
+grep -Fq 'PROTOCOL="tdi25-qualified-timing-environment-v3"' scripts/tdi25-s47-qualified-timing.sh
+grep -Fq 'median_eff=' scripts/tdi25-s47-qualified-timing.sh
+grep -Fq 'frequency_ratio_to_median' scripts/tdi25-s47-qualified-timing.sh
+grep -Fq 'attempt >= 3' scripts/tdi25-s47-qualified-timing.sh
 grep -Fq 'msr="/dev/cpu/$PINNED_CPU/msr"' scripts/tdi25-s47-qualified-timing.sh
 grep -Fq 'ps -eo pid,user,pcpu,etime,comm --sort=-pcpu' scripts/tdi25-s47-qualified-timing.sh
 grep -Fq 'run_id="tdi25-s47-timing-${commit:0:12}-attempt-$attempt"' scripts/tdi25-s47-qualified-timing.sh
