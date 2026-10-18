@@ -1,0 +1,14 @@
+status=transcription-of-operator-output, not raw (byte-exact results.jsonl not available on the integration box; do not cite as raw)
+run_id=tdi25-s47-timing-7fc1a25bb4b8-attempt-3
+attempt=3
+operator=user (Tarek Zekriti) on the Dell PowerEdge T430
+protocol=tdi25-qualified-timing-environment-v2 (stale binary before V3 checkout; judged under V2, not re-judged under V3)
+commit=7fc1a25bb4b86b6880e521ef270bce6b0b77ebff
+tree=96a1e5ad8817925481754a05c2a56ed6b2794731
+binary_sha256=PENDING (not provided in the supplied transcript)
+fingerprint_json=PENDING (not yet provided by the user)
+load1=1.44
+governor_no_turbo=attested (operator-reported: governor=performance, no_turbo=1)
+cells=all 4 non_qualifiee on frequency, plus 1 additional smt_sibling_busy (cell not identified in supplied transcript)
+median_ns_per_64_case_pass development/T6=3985 validation/T6=3692 development/C6=3827 validation/C6=3826
+results_jsonl=NOT CREATED (would require byte-exact operator lines; not invented)

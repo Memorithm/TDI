@@ -1,0 +1,9 @@
+status=transcription-of-operator-output, not raw
+run_id=tdi25-s47-timing-0a2eb708f85c-attempt-4
+attempt=4
+operator=user (Tarek Zekriti) on the Dell PowerEdge T430
+commit=0a2eb708f85cf0569c9e59d6e7a34520c8e0ccfe
+tree=e435f31fb92cc3967399a090a0368770dc765d15
+binary_sha256=e9e7b04c... (prefix only; full value PENDING)
+protocol=tdi25-qualified-timing-environment-v3
+fingerprint_json=PENDING (not yet provided by the user; to be added later without altering the transcription)

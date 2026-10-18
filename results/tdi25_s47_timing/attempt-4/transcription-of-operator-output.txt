@@ -1,0 +1,13 @@
+status=transcription-of-operator-output, not raw (byte-exact results.jsonl not available on the integration box; do not cite as raw)
+run_id=tdi25-s47-timing-0a2eb708f85c-attempt-4
+attempt=4
+operator=user (Tarek Zekriti) on the Dell PowerEdge T430
+protocol=tdi25-qualified-timing-environment-v3
+commit=0a2eb708f85cf0569c9e59d6e7a34520c8e0ccfe
+tree=e435f31fb92cc3967399a090a0368770dc765d15
+binary_sha256=e9e7b04c... (operator-provided prefix only; full value PENDING)
+fingerprint_json=PENDING (not yet provided by the user)
+frequency_median_effective_khz=1890544
+cells=development/T6 qualifiee median_ns=3618; validation/T6 qualifiee median_ns=3593; validation/C6 qualifiee median_ns=3826; development/C6 non_qualifiee smt_sibling_busy=5% median_ns=3826 (indicative only)
+scope=this T430 only, smoke 64 cases
+results_jsonl=NOT CREATED (would require byte-exact operator lines; not invented)
