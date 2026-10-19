@@ -27,6 +27,9 @@ grep -Fq "pub fn cross_layer_direction_transport(" tdi-bench/src/concept_geometr
 grep -Fq "DegenerateProcrustesAlignment" tdi-bench/src/concept_geometry_v27.rs
 grep -Fq "procrustes_transported_cosine" tdi-bench/src/bin/tdi27_concept_geometry.rs
 grep -Fq "mod synthetic_gaussian_tests" tdi-bench/src/concept_geometry_v27.rs
+grep -Fq "pub fn procrustes_anchor_permutation_control(" tdi-bench/src/concept_geometry_v27.rs
+grep -Fq "mod procrustes_anchor_permutation_tests" tdi-bench/src/concept_geometry_v27.rs
+grep -Fq "procrustes_permutation_draw=" tdi-bench/src/bin/tdi27_concept_geometry.rs
 
 if git ls-files | grep -E '(^|/)(TDI-27|tdi27).*(FINAL|final).*(RESULT|result)' >/dev/null; then
   echo "TDI-27 Stage 0 must not contain a final result surface" >&2

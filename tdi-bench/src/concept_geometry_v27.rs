@@ -3555,6 +3555,172 @@ pub fn synthetic_gaussian_groups(
     })
 }
 
+const PROCRUSTES_ANCHOR_PERMUTATION_DOMAIN: u64 = 0x5444_4932_3734_5045;
+
+/// Descriptive outcome of one Procrustes alignment (true or permuted pairing).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ProcrustesPairingOutcome {
+    pub relative_alignment_residual: f64,
+    pub transported_cosine: f64,
+}
+
+/// One deterministic anchor-permutation draw of the negative control.
+///
+/// `permutation[i]` is the target-anchor row paired with source row `i` in
+/// this draw. Identity (or partially fixed) draws are retained and reported,
+/// never rejected or redrawn. A draw whose permuted alignment fails closed
+/// (for example a degenerate cross-covariance) is retained with its error.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProcrustesAnchorPermutationDraw {
+    draw_index: usize,
+    permutation: Vec<usize>,
+    fixed_point_count: usize,
+    outcome: Result<ProcrustesPairingOutcome, ConceptGeometryError>,
+}
+
+impl ProcrustesAnchorPermutationDraw {
+    #[must_use]
+    pub const fn draw_index(&self) -> usize {
+        self.draw_index
+    }
+
+    #[must_use]
+    pub fn permutation(&self) -> &[usize] {
+        &self.permutation
+    }
+
+    /// Number of source rows still paired with their declared target row.
+    #[must_use]
+    pub const fn fixed_point_count(&self) -> usize {
+        self.fixed_point_count
+    }
+
+    #[must_use]
+    pub fn is_identity(&self) -> bool {
+        self.fixed_point_count == self.permutation.len()
+    }
+
+    pub const fn outcome(&self) -> Result<ProcrustesPairingOutcome, ConceptGeometryError> {
+        self.outcome
+    }
+}
+
+/// TDI-27.4 slice 2: true-pairing Procrustes alignment next to every
+/// deterministic shuffled-pairing draw. Descriptive only: no threshold,
+/// rank statistic, p-value or verdict is computed.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProcrustesAnchorPermutationControl {
+    true_pairing: ProcrustesPairingOutcome,
+    seed: u64,
+    draws: Vec<ProcrustesAnchorPermutationDraw>,
+}
+
+impl ProcrustesAnchorPermutationControl {
+    #[must_use]
+    pub const fn true_pairing(&self) -> ProcrustesPairingOutcome {
+        self.true_pairing
+    }
+
+    #[must_use]
+    pub const fn seed(&self) -> u64 {
+        self.seed
+    }
+
+    /// Every draw, in draw order; none is dropped or selected.
+    #[must_use]
+    pub fn draws(&self) -> &[ProcrustesAnchorPermutationDraw] {
+        &self.draws
+    }
+}
+
+fn procrustes_pairing_outcome(
+    source_anchors: &[Vec<f64>],
+    target_anchors: &[Vec<f64>],
+    source_direction: &[f64],
+    target_direction: &[f64],
+    tolerance: f64,
+) -> Result<ProcrustesPairingOutcome, ConceptGeometryError> {
+    let alignment = orthogonal_procrustes_alignment(source_anchors, target_anchors, tolerance)?;
+    let transport =
+        cross_layer_direction_transport(source_direction, target_direction, &alignment, tolerance)?;
+    Ok(ProcrustesPairingOutcome {
+        relative_alignment_residual: alignment.relative_alignment_residual(),
+        transported_cosine: transport.aligned_cosine(),
+    })
+}
+
+/// Shuffled-anchor negative control for the Procrustes layer alignment.
+///
+/// The true pairing must align (it fails closed otherwise). Each of the
+/// `draw_count` draws applies a uniform Fisher-Yates permutation, drawn from
+/// a domain-separated `SplitMix64` stream of the caller seed, to the target
+/// anchor rows, re-fits `Q` and reports the relative alignment residual and
+/// the transported cosine of the declared direction pair. All draws are
+/// reported; nothing is filtered, ranked or turned into a verdict.
+pub fn procrustes_anchor_permutation_control(
+    source_anchors: &[Vec<f64>],
+    target_anchors: &[Vec<f64>],
+    source_direction: &[f64],
+    target_direction: &[f64],
+    tolerance: f64,
+    seed: u64,
+    draw_count: usize,
+) -> Result<ProcrustesAnchorPermutationControl, ConceptGeometryError> {
+    if draw_count == 0 {
+        return Err(ConceptGeometryError::InvalidReplicateCount);
+    }
+    let true_pairing = procrustes_pairing_outcome(
+        source_anchors,
+        target_anchors,
+        source_direction,
+        target_direction,
+        tolerance,
+    )?;
+    let anchor_count = target_anchors.len();
+    let mut rng = SplitMix64::new(domain_separated_seed(
+        seed,
+        PROCRUSTES_ANCHOR_PERMUTATION_DOMAIN,
+    ));
+    let mut draws = Vec::new();
+    draws
+        .try_reserve_exact(draw_count)
+        .map_err(|_| ConceptGeometryError::SampleCountTooLarge)?;
+    for draw_index in 0..draw_count {
+        let mut permutation: Vec<usize> = (0..anchor_count).collect();
+        for position in (1..anchor_count).rev() {
+            let swap = rng.bounded(position + 1)?;
+            permutation.swap(position, swap);
+        }
+        let fixed_point_count = permutation
+            .iter()
+            .enumerate()
+            .filter(|(index, value)| index == *value)
+            .count();
+        let permuted: Vec<Vec<f64>> = permutation
+            .iter()
+            .map(|&index| target_anchors[index].clone())
+            .collect();
+        let outcome = procrustes_pairing_outcome(
+            source_anchors,
+            &permuted,
+            source_direction,
+            target_direction,
+            tolerance,
+        );
+        draws.push(ProcrustesAnchorPermutationDraw {
+            draw_index,
+            permutation,
+            fixed_point_count,
+            outcome,
+        });
+    }
+    Ok(ProcrustesAnchorPermutationControl {
+        true_pairing,
+        seed,
+        draws,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5669,5 +5835,129 @@ mod synthetic_gaussian_tests {
             extreme += usize::from(exceed == 0);
         }
         assert!(extreme <= 2, "extreme={extreme}");
+    }
+}
+
+#[cfg(test)]
+mod procrustes_anchor_permutation_tests {
+    use super::*;
+
+    fn rotated_layers() -> (Vec<Vec<f64>>, Vec<Vec<f64>>) {
+        let source = vec![
+            vec![1.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0],
+            vec![0.0, 0.0, 1.0],
+            vec![1.0, 1.0, 0.5],
+            vec![-0.5, 2.0, 1.0],
+            vec![0.25, -1.0, 2.0],
+        ];
+        let target = source
+            .iter()
+            .map(|row| vec![-row[1], row[0], row[2]])
+            .collect();
+        (source, target)
+    }
+
+    #[test]
+    fn true_pairing_aligns_and_every_draw_is_reported() {
+        let (source, target) = rotated_layers();
+        let control = procrustes_anchor_permutation_control(
+            &source,
+            &target,
+            &[1.0, 0.0, 0.0],
+            &[0.0, 1.0, 0.0],
+            DEFAULT_TOLERANCE,
+            27_402,
+            16,
+        )
+        .unwrap();
+        assert!(control.true_pairing().relative_alignment_residual < 1e-12);
+        assert!((control.true_pairing().transported_cosine - 1.0).abs() < 1e-12);
+        assert_eq!(control.draws().len(), 16);
+        for (index, draw) in control.draws().iter().enumerate() {
+            assert_eq!(draw.draw_index(), index);
+            let mut sorted = draw.permutation().to_vec();
+            sorted.sort_unstable();
+            assert_eq!(sorted, (0..source.len()).collect::<Vec<_>>());
+            if let Ok(outcome) = draw.outcome() {
+                assert!(outcome.relative_alignment_residual.is_finite());
+                assert!(outcome.transported_cosine.abs() <= 1.0 + 1e-12);
+                if draw.is_identity() {
+                    assert!(outcome.relative_alignment_residual < 1e-12);
+                }
+            }
+        }
+        // Non-identity shuffles misalign at least one draw on this fixture.
+        assert!(control.draws().iter().any(|draw| {
+            draw.outcome()
+                .is_ok_and(|outcome| outcome.relative_alignment_residual > 1e-3)
+        }));
+    }
+
+    #[test]
+    fn control_is_deterministic_and_seed_sensitive() {
+        let (source, target) = rotated_layers();
+        let run = |seed| {
+            procrustes_anchor_permutation_control(
+                &source,
+                &target,
+                &[1.0, 0.0, 0.0],
+                &[0.0, 1.0, 0.0],
+                DEFAULT_TOLERANCE,
+                seed,
+                8,
+            )
+            .unwrap()
+        };
+        assert_eq!(run(5), run(5));
+        let permutations = |control: &ProcrustesAnchorPermutationControl| {
+            control
+                .draws()
+                .iter()
+                .map(|draw| draw.permutation().to_vec())
+                .collect::<Vec<_>>()
+        };
+        assert_ne!(permutations(&run(5)), permutations(&run(6)));
+    }
+
+    #[test]
+    fn control_fails_closed_on_invalid_inputs() {
+        let (source, target) = rotated_layers();
+        assert_eq!(
+            procrustes_anchor_permutation_control(
+                &source,
+                &target,
+                &[1.0, 0.0, 0.0],
+                &[0.0, 1.0, 0.0],
+                DEFAULT_TOLERANCE,
+                1,
+                0,
+            ),
+            Err(ConceptGeometryError::InvalidReplicateCount)
+        );
+        assert_eq!(
+            procrustes_anchor_permutation_control(
+                &source,
+                &target[..5],
+                &[1.0, 0.0, 0.0],
+                &[0.0, 1.0, 0.0],
+                DEFAULT_TOLERANCE,
+                1,
+                4,
+            ),
+            Err(ConceptGeometryError::DimensionMismatch)
+        );
+        assert_eq!(
+            procrustes_anchor_permutation_control(
+                &source,
+                &target,
+                &[0.0, 0.0, 0.0],
+                &[0.0, 1.0, 0.0],
+                DEFAULT_TOLERANCE,
+                1,
+                4,
+            ),
+            Err(ConceptGeometryError::ZeroNorm)
+        );
     }
 }
