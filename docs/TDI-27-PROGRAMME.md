@@ -415,6 +415,36 @@ with 4 fixed points still transports the declared axis exactly). This is
 descriptive only: it computes no rank statistic, p-value, threshold or
 verdict and does not calibrate a persistence rule.
 
+The third Development slice (`procrustes_stability_grid`) describes the
+spread of `Q` across independent synthetic anchor sets with a known
+rotation `R_true`. For each replicate the zero-signal positive rows of
+the synthetic Gaussian known-signal generator (#751) are the
+standard-normal source anchors `x`, its control rows are an independent
+standard-normal perturbation `z`, and the targets are
+`x R_true + noise_scale * z`. Each cell reports every replicate (a
+replicate whose alignment fails closed, e.g. too few anchors for the
+width, is retained with its error) and the min/mean/max of
+`||Q_r - R_true||_F`, of the pairwise `||Q_r - Q_s||_F` over all
+successful replicate pairs, and of the per-replicate maximum axis angle
+between `e_i Q_r` and `e_i R_true`.
+
+Preregistered descriptive grid — **declared for this descriptive slice,
+not frozen scientific thresholds**: width `3`, `R_true` the +90-degree
+rotation about the third axis, anchor counts `[8, 32]`, noise scales
+`[0.01, 0.1]`, `8` replicates per cell, seed `27403`. All 4 cells are
+reported, none selected. Recorded spreads (no replicate failed):
+
+| anchors | noise | `‖Q−R‖_F` min / mean / max | pairwise `‖Q_r−Q_s‖_F` min / mean / max | max axis angle (rad) min / mean / max |
+| ---: | ---: | --- | --- | --- |
+| 8 | 0.01 | 1.41e-3 / 7.01e-3 / 1.31e-2 | 3.72e-3 / 1.07e-2 / 2.18e-2 | 9.91e-4 / 4.75e-3 / 8.98e-3 |
+| 8 | 0.1 | 1.14e-2 / 5.78e-2 / 1.07e-1 | 1.34e-2 / 9.00e-2 / 1.65e-1 | 7.84e-3 / 3.98e-2 / 7.13e-2 |
+| 32 | 0.01 | 9.70e-4 / 3.39e-3 / 4.85e-3 | 1.96e-3 / 5.17e-3 / 8.98e-3 | 6.77e-4 / 2.26e-3 / 3.42e-3 |
+| 32 | 0.1 | 1.45e-2 / 2.56e-2 / 4.72e-2 | 1.22e-2 / 3.55e-2 / 7.58e-2 | 8.82e-3 / 1.77e-2 / 3.33e-2 |
+
+There is no pass/fail threshold, stability criterion or verdict; the
+grid does not calibrate a tolerance or anchor population for real
+layers, and authorizes no real-model, confirmatory or final execution.
+
 ### TDI-27.5 — sequential latent-rank programme
 
 Build ordered innovation bases across layers, tasks and concept families;

@@ -2,14 +2,15 @@
 
 use tdi_bench::concept_geometry_v27::{
     ConceptGeometryError, DEFAULT_TOLERANCE, DevelopmentResamplingPlan, DevelopmentSampleSizePoint,
-    bootstrap_direction_stability, bootstrap_innovation_energy_summary,
+    ProcrustesStabilityGrid, bootstrap_direction_stability, bootstrap_innovation_energy_summary,
     bootstrap_projection_method_differentials, causal_novelty_gap,
     compare_innovation_energy_to_shuffled_null, cross_layer_direction_transport,
     decompose_symmetric_intervention_causal_contrasts, interaction_residual,
     matched_intervention_causal_contrasts, matched_intervention_dose_response_curve,
     matched_intervention_dose_states, mean_difference, orthogonal_procrustes_alignment,
-    procrustes_anchor_permutation_control, projection_method_differential, residualize,
-    sample_size_sensitivity_grid, sequential_accepted_rank_summary, sequential_innovations,
+    procrustes_anchor_permutation_control, procrustes_stability_grid,
+    projection_method_differential, residualize, sample_size_sensitivity_grid,
+    sequential_accepted_rank_summary, sequential_innovations,
 };
 
 fn response(state: &[f64]) -> f64 {
@@ -209,7 +210,24 @@ fn run() -> Result<(), ConceptGeometryError> {
         8,
     )?;
 
-    println!("schema=tdi27-concept-geometry-development/v7");
+    // TDI-27.4 slice 3: Q stability across synthetic anchor sets. The grid
+    // is declared for this descriptive slice, not a frozen threshold.
+    let stability_cells = procrustes_stability_grid(
+        &[
+            vec![0.0, 1.0, 0.0],
+            vec![-1.0, 0.0, 0.0],
+            vec![0.0, 0.0, 1.0],
+        ],
+        &ProcrustesStabilityGrid {
+            anchor_counts: vec![8, 32],
+            noise_scales: vec![0.01, 0.1],
+            replicates: 8,
+            seed: 27_403,
+        },
+        DEFAULT_TOLERANCE,
+    )?;
+
+    println!("schema=tdi27-concept-geometry-development/v8");
     println!("scope=synthetic_development_only");
     println!(
         "mean_contrast={:.12},{:.12},{:.12}",
@@ -426,6 +444,38 @@ fn run() -> Result<(), ConceptGeometryError> {
                 draw.draw_index(),
                 draw.permutation(),
                 draw.fixed_point_count()
+            ),
+        }
+    }
+    for cell in &stability_cells {
+        let failed = cell.replicates().iter().filter(|r| r.is_err()).count();
+        match (
+            cell.distance_to_truth(),
+            cell.pairwise_frobenius_distance(),
+            cell.max_axis_angle_to_truth(),
+        ) {
+            (Some(distance), Some(pairwise), Some(angle)) => println!(
+                "procrustes_stability_cell=anchors:{},noise:{},replicates:{},failed:{},dist_truth_min_mean_max={:.6e},{:.6e},{:.6e},pairwise_min_mean_max={:.6e},{:.6e},{:.6e},max_axis_angle_rad_min_mean_max={:.6e},{:.6e},{:.6e}",
+                cell.anchor_count(),
+                cell.noise_scale(),
+                cell.replicates().len(),
+                failed,
+                distance.min,
+                distance.mean,
+                distance.max,
+                pairwise.min,
+                pairwise.mean,
+                pairwise.max,
+                angle.min,
+                angle.mean,
+                angle.max
+            ),
+            _ => println!(
+                "procrustes_stability_cell=anchors:{},noise:{},replicates:{},failed:{},spread=undefined",
+                cell.anchor_count(),
+                cell.noise_scale(),
+                cell.replicates().len(),
+                failed
             ),
         }
     }

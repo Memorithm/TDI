@@ -30,6 +30,10 @@ grep -Fq "mod synthetic_gaussian_tests" tdi-bench/src/concept_geometry_v27.rs
 grep -Fq "pub fn procrustes_anchor_permutation_control(" tdi-bench/src/concept_geometry_v27.rs
 grep -Fq "mod procrustes_anchor_permutation_tests" tdi-bench/src/concept_geometry_v27.rs
 grep -Fq "procrustes_permutation_draw=" tdi-bench/src/bin/tdi27_concept_geometry.rs
+grep -Fq "pub fn procrustes_stability_grid(" tdi-bench/src/concept_geometry_v27.rs
+grep -Fq "mod procrustes_stability_tests" tdi-bench/src/concept_geometry_v27.rs
+grep -Fq "procrustes_stability_cell=" tdi-bench/src/bin/tdi27_concept_geometry.rs
+grep -Fq "not frozen scientific thresholds" docs/TDI-27-PROGRAMME.md
 
 if git ls-files | grep -E '(^|/)(TDI-27|tdi27).*(FINAL|final).*(RESULT|result)' >/dev/null; then
   echo "TDI-27 Stage 0 must not contain a final result surface" >&2
