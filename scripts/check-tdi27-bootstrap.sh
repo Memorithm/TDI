@@ -33,6 +33,10 @@ grep -Fq "procrustes_permutation_draw=" tdi-bench/src/bin/tdi27_concept_geometry
 grep -Fq "pub fn procrustes_stability_grid(" tdi-bench/src/concept_geometry_v27.rs
 grep -Fq "mod procrustes_stability_tests" tdi-bench/src/concept_geometry_v27.rs
 grep -Fq "procrustes_stability_cell=" tdi-bench/src/bin/tdi27_concept_geometry.rs
+grep -Fq "pub fn principal_angles(" tdi-bench/src/concept_geometry_v27.rs
+grep -Fq "pub fn subspace_persistence_controls(" tdi-bench/src/concept_geometry_v27.rs
+grep -Fq "mod subspace_persistence_tests" tdi-bench/src/concept_geometry_v27.rs
+grep -Fq "subspace_persistence_random=" tdi-bench/src/bin/tdi27_concept_geometry.rs
 grep -Fq "not frozen scientific thresholds" docs/TDI-27-PROGRAMME.md
 
 if git ls-files | grep -E '(^|/)(TDI-27|tdi27).*(FINAL|final).*(RESULT|result)' >/dev/null; then
