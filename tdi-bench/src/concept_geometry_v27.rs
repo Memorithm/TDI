@@ -3721,6 +3721,250 @@ pub fn procrustes_anchor_permutation_control(
     })
 }
 
+const PROCRUSTES_STABILITY_DOMAIN: u64 = 0x5444_4932_3734_5153;
+
+/// Declared descriptive grid for the TDI-27.4 slice-3 `Q` stability study.
+///
+/// Every value is caller-declared for a descriptive Development slice; none
+/// is a frozen scientific threshold. All cells and replicates are reported.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProcrustesStabilityGrid {
+    pub anchor_counts: Vec<usize>,
+    pub noise_scales: Vec<f64>,
+    pub replicates: usize,
+    pub seed: u64,
+}
+
+/// Count, minimum, arithmetic mean and maximum of a finite descriptive sample.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DescriptiveSpread {
+    pub count: usize,
+    pub min: f64,
+    pub mean: f64,
+    pub max: f64,
+}
+
+fn descriptive_spread(values: &[f64]) -> Option<DescriptiveSpread> {
+    if values.is_empty() {
+        return None;
+    }
+    let mut min = f64::INFINITY;
+    let mut max = f64::NEG_INFINITY;
+    let mut sum = 0.0;
+    for &value in values {
+        min = min.min(value);
+        max = max.max(value);
+        sum += value;
+    }
+    Some(DescriptiveSpread {
+        count: values.len(),
+        min,
+        mean: sum / values.len() as f64,
+        max,
+    })
+}
+
+/// One replicate alignment of a stability cell.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProcrustesStabilityReplicate {
+    pub operator: Vec<Vec<f64>>,
+    pub relative_alignment_residual: f64,
+    /// `||Q - R_true||_F`.
+    pub frobenius_distance_to_truth: f64,
+    /// Largest angle (radians) between `e_i Q` and `e_i R_true` over axes `i`.
+    pub max_axis_angle_to_truth: f64,
+}
+
+/// One `(anchor_count, noise_scale)` cell, with every replicate retained.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProcrustesStabilityCell {
+    anchor_count: usize,
+    noise_scale: f64,
+    replicates: Vec<Result<ProcrustesStabilityReplicate, ConceptGeometryError>>,
+    distance_to_truth: Option<DescriptiveSpread>,
+    pairwise_frobenius_distance: Option<DescriptiveSpread>,
+    max_axis_angle_to_truth: Option<DescriptiveSpread>,
+}
+
+impl ProcrustesStabilityCell {
+    #[must_use]
+    pub const fn anchor_count(&self) -> usize {
+        self.anchor_count
+    }
+
+    #[must_use]
+    pub const fn noise_scale(&self) -> f64 {
+        self.noise_scale
+    }
+
+    pub fn replicates(&self) -> &[Result<ProcrustesStabilityReplicate, ConceptGeometryError>] {
+        &self.replicates
+    }
+
+    /// Spread of `||Q_r - R_true||_F` over successful replicates.
+    #[must_use]
+    pub const fn distance_to_truth(&self) -> Option<DescriptiveSpread> {
+        self.distance_to_truth
+    }
+
+    /// Spread of `||Q_r - Q_s||_F` over all successful replicate pairs.
+    #[must_use]
+    pub const fn pairwise_frobenius_distance(&self) -> Option<DescriptiveSpread> {
+        self.pairwise_frobenius_distance
+    }
+
+    /// Spread of the per-replicate maximum axis angle to the truth (radians).
+    #[must_use]
+    pub const fn max_axis_angle_to_truth(&self) -> Option<DescriptiveSpread> {
+        self.max_axis_angle_to_truth
+    }
+}
+
+fn frobenius_distance(left: &[Vec<f64>], right: &[Vec<f64>]) -> f64 {
+    left.iter()
+        .zip(right)
+        .flat_map(|(left_row, right_row)| left_row.iter().zip(right_row))
+        .map(|(a, b)| (a - b) * (a - b))
+        .sum::<f64>()
+        .sqrt()
+}
+
+fn stability_replicate(
+    true_rotation: &[Vec<f64>],
+    anchor_count: usize,
+    noise_scale: f64,
+    seed: u64,
+    tolerance: f64,
+) -> Result<ProcrustesStabilityReplicate, ConceptGeometryError> {
+    let width = true_rotation.len();
+    // Reuse the synthetic Gaussian known-signal generator (#751): zero-signal
+    // positive rows are the standard-normal source anchors and the control
+    // rows are the independent standard-normal target perturbation.
+    let groups = synthetic_gaussian_groups(&SyntheticGaussianSpec {
+        positive_count: anchor_count,
+        control_count: anchor_count,
+        signal: vec![0.0; width],
+        noise_scale: 1.0,
+        seed,
+    })?;
+    let source = groups.positive();
+    let mut target = Vec::new();
+    target
+        .try_reserve_exact(anchor_count)
+        .map_err(|_| ConceptGeometryError::SampleCountTooLarge)?;
+    for (source_row, noise_row) in source.iter().zip(groups.control()) {
+        let mut row = Vec::with_capacity(width);
+        for (j, noise) in noise_row.iter().enumerate() {
+            let rotated: f64 = source_row
+                .iter()
+                .zip(true_rotation)
+                .map(|(value, rotation_row)| value * rotation_row[j])
+                .sum();
+            let value = rotated + noise_scale * noise;
+            if !value.is_finite() {
+                return Err(ConceptGeometryError::NonFiniteValue);
+            }
+            row.push(value);
+        }
+        target.push(row);
+    }
+    let alignment = orthogonal_procrustes_alignment(source, &target, tolerance)?;
+    let operator = alignment.operator().to_vec();
+    let mut max_axis_angle_to_truth = 0.0_f64;
+    for (operator_row, truth_row) in operator.iter().zip(true_rotation) {
+        let cosine = cosine_similarity(operator_row, truth_row, tolerance)?;
+        max_axis_angle_to_truth = max_axis_angle_to_truth.max(cosine.clamp(-1.0, 1.0).acos());
+    }
+    Ok(ProcrustesStabilityReplicate {
+        frobenius_distance_to_truth: frobenius_distance(&operator, true_rotation),
+        relative_alignment_residual: alignment.relative_alignment_residual(),
+        operator,
+        max_axis_angle_to_truth,
+    })
+}
+
+/// TDI-27.4 slice 3: spread of the Procrustes operator `Q` across
+/// independent synthetic anchor sets with a known rotation `R_true`.
+///
+/// For every declared `(anchor_count, noise_scale)` cell and replicate, the
+/// source anchors are standard-normal rows from the synthetic Gaussian
+/// generator and the targets are `x R_true + noise_scale * z`. Each cell
+/// reports every replicate plus the descriptive spread of the distance to
+/// the truth, the pairwise Frobenius distance between replicate operators
+/// and the maximum axis angle. No pass/fail threshold or verdict exists.
+pub fn procrustes_stability_grid(
+    true_rotation: &[Vec<f64>],
+    grid: &ProcrustesStabilityGrid,
+    tolerance: f64,
+) -> Result<Vec<ProcrustesStabilityCell>, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    let width = validate_rows(true_rotation)?;
+    if true_rotation.len() != width {
+        return Err(ConceptGeometryError::DimensionMismatch);
+    }
+    if grid.anchor_counts.is_empty() || grid.noise_scales.is_empty() {
+        return Err(ConceptGeometryError::EmptySampleSizeGrid);
+    }
+    if grid.replicates < 2 {
+        return Err(ConceptGeometryError::InvalidReplicateCount);
+    }
+    if grid
+        .noise_scales
+        .iter()
+        .any(|scale| !scale.is_finite() || *scale <= 0.0)
+    {
+        return Err(ConceptGeometryError::InvalidSyntheticNoiseScale);
+    }
+    if grid.anchor_counts.contains(&0) {
+        return Err(ConceptGeometryError::EmptyGroup);
+    }
+    let mut cells = Vec::new();
+    let mut stream = SplitMix64::new(domain_separated_seed(
+        grid.seed,
+        PROCRUSTES_STABILITY_DOMAIN,
+    ));
+    for &anchor_count in &grid.anchor_counts {
+        for &noise_scale in &grid.noise_scales {
+            let mut replicates = Vec::with_capacity(grid.replicates);
+            for _ in 0..grid.replicates {
+                let replicate_seed = stream.next_u64();
+                replicates.push(stability_replicate(
+                    true_rotation,
+                    anchor_count,
+                    noise_scale,
+                    replicate_seed,
+                    tolerance,
+                ));
+            }
+            let successes: Vec<&ProcrustesStabilityReplicate> =
+                replicates.iter().filter_map(|r| r.as_ref().ok()).collect();
+            let distances: Vec<f64> = successes
+                .iter()
+                .map(|r| r.frobenius_distance_to_truth)
+                .collect();
+            let angles: Vec<f64> = successes
+                .iter()
+                .map(|r| r.max_axis_angle_to_truth)
+                .collect();
+            let mut pairwise = Vec::new();
+            for (index, left) in successes.iter().enumerate() {
+                for right in &successes[index + 1..] {
+                    pairwise.push(frobenius_distance(&left.operator, &right.operator));
+                }
+            }
+            cells.push(ProcrustesStabilityCell {
+                anchor_count,
+                noise_scale,
+                distance_to_truth: descriptive_spread(&distances),
+                pairwise_frobenius_distance: descriptive_spread(&pairwise),
+                max_axis_angle_to_truth: descriptive_spread(&angles),
+                replicates,
+            });
+        }
+    }
+    Ok(cells)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5959,5 +6203,104 @@ mod procrustes_anchor_permutation_tests {
             ),
             Err(ConceptGeometryError::ZeroNorm)
         );
+    }
+}
+
+#[cfg(test)]
+mod procrustes_stability_tests {
+    use super::*;
+
+    fn rotation() -> Vec<Vec<f64>> {
+        vec![
+            vec![0.0, 1.0, 0.0],
+            vec![-1.0, 0.0, 0.0],
+            vec![0.0, 0.0, 1.0],
+        ]
+    }
+
+    fn grid() -> ProcrustesStabilityGrid {
+        ProcrustesStabilityGrid {
+            anchor_counts: vec![8, 32],
+            noise_scales: vec![0.01, 0.1],
+            replicates: 8,
+            seed: 27_403,
+        }
+    }
+
+    #[test]
+    fn every_cell_and_replicate_is_reported_and_deterministic() {
+        let cells = procrustes_stability_grid(&rotation(), &grid(), DEFAULT_TOLERANCE).unwrap();
+        assert_eq!(cells.len(), 4);
+        assert_eq!(
+            cells,
+            procrustes_stability_grid(&rotation(), &grid(), DEFAULT_TOLERANCE).unwrap()
+        );
+        for cell in &cells {
+            assert_eq!(cell.replicates().len(), 8);
+            let distance = cell.distance_to_truth().unwrap();
+            let pairwise = cell.pairwise_frobenius_distance().unwrap();
+            assert_eq!(distance.count, 8);
+            assert_eq!(pairwise.count, 28);
+            assert!(distance.min <= distance.mean && distance.mean <= distance.max);
+            assert!(cell.max_axis_angle_to_truth().unwrap().max < 0.5);
+        }
+    }
+
+    #[test]
+    fn spread_shrinks_with_lower_noise_on_the_known_rotation() {
+        let cells = procrustes_stability_grid(&rotation(), &grid(), DEFAULT_TOLERANCE).unwrap();
+        // Same anchor count, noise 0.01 vs 0.1: descriptive monotonicity on
+        // this fixture (a software sanity check, not a scientific rule).
+        for pair in cells.chunks(2) {
+            assert!(
+                pair[0].distance_to_truth().unwrap().mean
+                    < pair[1].distance_to_truth().unwrap().mean
+            );
+        }
+    }
+
+    #[test]
+    fn grid_fails_closed_on_invalid_declarations() {
+        let mut invalid = grid();
+        invalid.anchor_counts.clear();
+        assert_eq!(
+            procrustes_stability_grid(&rotation(), &invalid, DEFAULT_TOLERANCE),
+            Err(ConceptGeometryError::EmptySampleSizeGrid)
+        );
+        let mut invalid = grid();
+        invalid.replicates = 1;
+        assert_eq!(
+            procrustes_stability_grid(&rotation(), &invalid, DEFAULT_TOLERANCE),
+            Err(ConceptGeometryError::InvalidReplicateCount)
+        );
+        let mut invalid = grid();
+        invalid.noise_scales = vec![0.0];
+        assert_eq!(
+            procrustes_stability_grid(&rotation(), &invalid, DEFAULT_TOLERANCE),
+            Err(ConceptGeometryError::InvalidSyntheticNoiseScale)
+        );
+        let mut invalid = grid();
+        invalid.anchor_counts = vec![0];
+        assert_eq!(
+            procrustes_stability_grid(&rotation(), &invalid, DEFAULT_TOLERANCE),
+            Err(ConceptGeometryError::EmptyGroup)
+        );
+        assert_eq!(
+            procrustes_stability_grid(&rotation()[..2], &grid(), DEFAULT_TOLERANCE),
+            Err(ConceptGeometryError::DimensionMismatch)
+        );
+    }
+
+    #[test]
+    fn too_few_anchors_are_retained_as_failed_replicates() {
+        let declared = ProcrustesStabilityGrid {
+            anchor_counts: vec![2],
+            noise_scales: vec![0.01],
+            replicates: 2,
+            seed: 1,
+        };
+        let cells = procrustes_stability_grid(&rotation(), &declared, DEFAULT_TOLERANCE).unwrap();
+        assert!(cells[0].replicates().iter().all(Result::is_err));
+        assert_eq!(cells[0].distance_to_truth(), None);
     }
 }
