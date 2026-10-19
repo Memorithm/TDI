@@ -8,8 +8,8 @@ use tdi_bench::concept_geometry_v27::{
     decompose_symmetric_intervention_causal_contrasts, interaction_residual,
     matched_intervention_causal_contrasts, matched_intervention_dose_response_curve,
     matched_intervention_dose_states, mean_difference, orthogonal_procrustes_alignment,
-    projection_method_differential, residualize, sample_size_sensitivity_grid,
-    sequential_accepted_rank_summary, sequential_innovations,
+    procrustes_anchor_permutation_control, projection_method_differential, residualize,
+    sample_size_sensitivity_grid, sequential_accepted_rank_summary, sequential_innovations,
 };
 
 fn response(state: &[f64]) -> f64 {
@@ -186,7 +186,30 @@ fn run() -> Result<(), ConceptGeometryError> {
         DEFAULT_TOLERANCE,
     )?;
 
-    println!("schema=tdi27-concept-geometry-development/v6");
+    // TDI-27.4 slice 2: shuffled-anchor negative control (descriptive only).
+    let permutation_source = vec![
+        vec![1.0, 0.0, 0.0],
+        vec![0.0, 1.0, 0.0],
+        vec![0.0, 0.0, 1.0],
+        vec![1.0, 1.0, 0.5],
+        vec![-0.5, 2.0, 1.0],
+        vec![0.25, -1.0, 2.0],
+    ];
+    let permutation_target: Vec<Vec<f64>> = permutation_source
+        .iter()
+        .map(|row| vec![-row[1], row[0], row[2]])
+        .collect();
+    let permutation_control = procrustes_anchor_permutation_control(
+        &permutation_source,
+        &permutation_target,
+        &[1.0, 0.0, 0.0],
+        &[0.0, 1.0, 0.0],
+        DEFAULT_TOLERANCE,
+        27_402,
+        8,
+    )?;
+
+    println!("schema=tdi27-concept-geometry-development/v7");
     println!("scope=synthetic_development_only");
     println!(
         "mean_contrast={:.12},{:.12},{:.12}",
@@ -377,6 +400,35 @@ fn run() -> Result<(), ConceptGeometryError> {
         "procrustes_raw_cosine={:.12}",
         procrustes_transport.raw_cosine()
     );
+    println!(
+        "procrustes_permutation_true_residual={:.17e}",
+        permutation_control
+            .true_pairing()
+            .relative_alignment_residual
+    );
+    println!(
+        "procrustes_permutation_true_cosine={:.12}",
+        permutation_control.true_pairing().transported_cosine
+    );
+    println!("procrustes_permutation_seed={}", permutation_control.seed());
+    for draw in permutation_control.draws() {
+        match draw.outcome() {
+            Ok(outcome) => println!(
+                "procrustes_permutation_draw={},perm={:?},fixed={},residual={:.12},cosine={:.12}",
+                draw.draw_index(),
+                draw.permutation(),
+                draw.fixed_point_count(),
+                outcome.relative_alignment_residual,
+                outcome.transported_cosine
+            ),
+            Err(error) => println!(
+                "procrustes_permutation_draw={},perm={:?},fixed={},failed={error:?}",
+                draw.draw_index(),
+                draw.permutation(),
+                draw.fixed_point_count()
+            ),
+        }
+    }
     println!("statistical_decision_pinned=false");
     println!("confirmatory_result=false");
     Ok(())

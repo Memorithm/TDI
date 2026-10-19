@@ -397,6 +397,24 @@ persistence threshold, layer pairing, anchor population, tolerance
 calibration or scientific verdict, and does not advance TDI-27.5 or
 authorize real-model, confirmatory or final execution.
 
+The second Development slice adds a shuffled-anchor negative control
+(`procrustes_anchor_permutation_control`). The true caller pairing is
+aligned first (failing closed if it does not align); then each of a
+caller-declared number of draws applies a uniform Fisher-Yates
+permutation of the target anchor rows, drawn from a domain-separated
+`SplitMix64` stream of the caller seed, re-fits `Q`, and reports the
+relative alignment residual and the transported cosine of the declared
+direction pair. Every draw is reported in order with its permutation and
+fixed-point count; identity or partially fixed draws are retained, and a
+draw whose re-fit fails closed is retained with its error rather than
+redrawn. On the synthetic +90-degree rotation fixture (6 anchors, seed
+`27402`, 8 draws) the true pairing has relative residual `5.8e-15` and
+transported cosine `1`, while the 8 shuffled draws have relative
+residuals `0.54`–`0.96` and transported cosines `-0.63`–`1.00` (the draw
+with 4 fixed points still transports the declared axis exactly). This is
+descriptive only: it computes no rank statistic, p-value, threshold or
+verdict and does not calibrate a persistence rule.
+
 ### TDI-27.5 — sequential latent-rank programme
 
 Build ordered innovation bases across layers, tasks and concept families;
