@@ -2,15 +2,16 @@
 
 use tdi_bench::concept_geometry_v27::{
     ConceptGeometryError, DEFAULT_TOLERANCE, DevelopmentResamplingPlan, DevelopmentSampleSizePoint,
-    ProcrustesStabilityGrid, bootstrap_direction_stability, bootstrap_innovation_energy_summary,
-    bootstrap_projection_method_differentials, causal_novelty_gap,
-    compare_innovation_energy_to_shuffled_null, cross_layer_direction_transport,
-    decompose_symmetric_intervention_causal_contrasts, interaction_residual,
-    matched_intervention_causal_contrasts, matched_intervention_dose_response_curve,
-    matched_intervention_dose_states, mean_difference, orthogonal_procrustes_alignment,
-    procrustes_anchor_permutation_control, procrustes_stability_grid,
-    projection_method_differential, residualize, sample_size_sensitivity_grid,
-    sequential_accepted_rank_summary, sequential_innovations,
+    ProcrustesStabilityGrid, SubspacePersistenceGrid, bootstrap_direction_stability,
+    bootstrap_innovation_energy_summary, bootstrap_projection_method_differentials,
+    causal_novelty_gap, compare_innovation_energy_to_shuffled_null,
+    cross_layer_direction_transport, decompose_symmetric_intervention_causal_contrasts,
+    interaction_residual, matched_intervention_causal_contrasts,
+    matched_intervention_dose_response_curve, matched_intervention_dose_states, mean_difference,
+    orthogonal_procrustes_alignment, procrustes_anchor_permutation_control,
+    procrustes_stability_grid, projection_method_differential, residualize,
+    sample_size_sensitivity_grid, sequential_accepted_rank_summary, sequential_innovations,
+    subspace_persistence_controls,
 };
 
 fn response(state: &[f64]) -> f64 {
@@ -227,7 +228,20 @@ fn run() -> Result<(), ConceptGeometryError> {
         DEFAULT_TOLERANCE,
     )?;
 
-    println!("schema=tdi27-concept-geometry-development/v8");
+    // TDI-27.4 slice 4: subspace persistence via principal angles with
+    // known-truth controls. Grid declared for this descriptive slice only.
+    let subspace_cells = subspace_persistence_controls(
+        &SubspacePersistenceGrid {
+            width: 6,
+            subspace_dims: vec![1, 2, 4],
+            anchor_count: 12,
+            random_draws: 8,
+            seed: 27_404,
+        },
+        DEFAULT_TOLERANCE,
+    )?;
+
+    println!("schema=tdi27-concept-geometry-development/v9");
     println!("scope=synthetic_development_only");
     println!(
         "mean_contrast={:.12},{:.12},{:.12}",
@@ -477,6 +491,20 @@ fn run() -> Result<(), ConceptGeometryError> {
                 cell.replicates().len(),
                 failed
             ),
+        }
+    }
+    for cell in &subspace_cells {
+        println!(
+            "subspace_persistence_dim={},rotation_aligned_angles_rad={:?},rotation_raw_angles_rad={:?}",
+            cell.subspace_dim(),
+            cell.rotation_aligned_angles(),
+            cell.rotation_raw_angles()
+        );
+        for (draw, angles) in cell.random_aligned_angles().iter().enumerate() {
+            println!(
+                "subspace_persistence_random=dim:{},draw:{draw},angles_rad={angles:?}",
+                cell.subspace_dim()
+            );
         }
     }
     println!("statistical_decision_pinned=false");

@@ -445,6 +445,34 @@ There is no pass/fail threshold, stability criterion or verdict; the
 grid does not calibrate a tolerance or anchor population for real
 layers, and authorizes no real-model, confirmatory or final execution.
 
+The fourth Development slice extends transport from one direction to
+subspaces. `principal_angles` orthonormalises two equally sized row sets
+(two-pass modified Gram-Schmidt, failing closed on rank deficiency) and
+returns the ascending principal angles from the singular values of
+`A B^T` (square roots of the eigenvalues of its Gram matrix, cyclic
+Jacobi, clamped to `[0, 1]`). `subspace_persistence_controls` then, per
+declared dimension `k`, draws a random orthogonal `R_true`
+(orthonormalised Gaussian matrix), fits `Q` on standard-normal anchors
+and their exact images `x R_true`, transports a random `k`-dim source
+subspace through `Q`, and reports principal angles against (a) its true
+image (rotation control) and (b) every one of the declared independent
+random `k`-dim subspaces (random control), with raw untransported angles
+retained for contrast.
+
+Preregistered descriptive grid — **declared for this descriptive slice,
+not frozen scientific thresholds**: width `6`, subspace dims `[1, 2, 4]`,
+`12` anchors, `8` random draws per dim, seed `27404`. Recorded (radians):
+rotation-control aligned angles are all `<= 2.6e-8` for every dim
+(raw untransported largest angles `1.30`, `1.40`, `1.57`); random-control
+largest angles span `1.02`–`1.53` (dim 1), `1.10`–`1.55` (dim 2) and
+`0.88`–`1.56` (dim 4). Recorded degeneracies: angles recovered through
+`acos(sqrt(.))` have a numerical floor near `1.5e-8` (`sqrt` of machine
+epsilon), so "near zero" means at that floor, not exactly zero; and two
+4-dim subspaces of a 6-dim space always share at least a 2-dim
+intersection, so the two smallest dim-4 random-control angles are zero by
+geometry, not by persistence. There is no persistence threshold, layer
+pairing or verdict, and no real-model, confirmatory or final execution.
+
 ### TDI-27.5 — sequential latent-rank programme
 
 Build ordered innovation bases across layers, tasks and concept families;

@@ -655,6 +655,8 @@ pub enum ConceptGeometryError {
     InvalidSyntheticNoiseScale,
     DegenerateProcrustesAlignment,
     ProcrustesAlignmentNotConverged,
+    RankDeficientSubspace,
+    PrincipalAnglesNotConverged,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -3965,6 +3967,287 @@ pub fn procrustes_stability_grid(
     Ok(cells)
 }
 
+const SUBSPACE_PERSISTENCE_DOMAIN: u64 = 0x5444_4932_3734_5350;
+
+/// Two-pass modified Gram-Schmidt orthonormalisation of the rows.
+/// Fails closed (`RankDeficientSubspace`) when a row is numerically
+/// dependent on its predecessors at the caller-declared relative tolerance.
+fn orthonormal_rows(
+    rows: &[Vec<f64>],
+    tolerance: f64,
+) -> Result<Vec<Vec<f64>>, ConceptGeometryError> {
+    validate_rows(rows)?;
+    let mut basis: Vec<Vec<f64>> = Vec::with_capacity(rows.len());
+    for row in rows {
+        let original = norm(row);
+        let mut residual = row.clone();
+        for _pass in 0..2 {
+            for unit in &basis {
+                let projection = dot(&residual, unit);
+                for (value, unit_value) in residual.iter_mut().zip(unit) {
+                    *value -= projection * unit_value;
+                }
+            }
+        }
+        let remaining = norm(&residual);
+        if !remaining.is_finite() {
+            return Err(ConceptGeometryError::NonFiniteValue);
+        }
+        if remaining <= tolerance * original {
+            return Err(ConceptGeometryError::RankDeficientSubspace);
+        }
+        basis.push(residual.iter().map(|value| value / remaining).collect());
+    }
+    Ok(basis)
+}
+
+/// Eigenvalues of a symmetric matrix by deterministic cyclic Jacobi sweeps.
+fn symmetric_jacobi_eigenvalues(
+    matrix: &[Vec<f64>],
+    tolerance: f64,
+) -> Result<Vec<f64>, ConceptGeometryError> {
+    let size = matrix.len();
+    let mut a = matrix.to_vec();
+    for _sweep in 0..100 {
+        let mut off = 0.0_f64;
+        let mut total = 0.0_f64;
+        for (i, row) in a.iter().enumerate() {
+            for (j, value) in row.iter().enumerate() {
+                total += value * value;
+                if i != j {
+                    off += value * value;
+                }
+            }
+        }
+        if !total.is_finite() {
+            return Err(ConceptGeometryError::NonFiniteValue);
+        }
+        if off <= tolerance * tolerance * total {
+            return Ok((0..size).map(|i| a[i][i]).collect());
+        }
+        for p in 0..size {
+            for q in (p + 1)..size {
+                if a[p][q] == 0.0 {
+                    continue;
+                }
+                let theta = (a[q][q] - a[p][p]) / (2.0 * a[p][q]);
+                let t = theta.signum() / (theta.abs() + (1.0 + theta * theta).sqrt());
+                let t = if theta == 0.0 { 1.0 } else { t };
+                let c = 1.0 / (1.0 + t * t).sqrt();
+                let s = t * c;
+                for row in &mut a {
+                    let (value_p, value_q) = (row[p], row[q]);
+                    row[p] = c * value_p - s * value_q;
+                    row[q] = s * value_p + c * value_q;
+                }
+                let (upper, lower) = a.split_at_mut(q);
+                let row_p = &mut upper[p];
+                let row_q = &mut lower[0];
+                for (value_p, value_q) in row_p.iter_mut().zip(row_q.iter_mut()) {
+                    let (old_p, old_q) = (*value_p, *value_q);
+                    *value_p = c * old_p - s * old_q;
+                    *value_q = s * old_p + c * old_q;
+                }
+            }
+        }
+    }
+    Err(ConceptGeometryError::PrincipalAnglesNotConverged)
+}
+
+/// Principal angles (radians, ascending) between the row spaces of two
+/// equally sized sets of `k` rows of equal width.
+///
+/// Both row sets are orthonormalised (fail closed when rank-deficient);
+/// the cosines are the singular values of `A B^T`, obtained as square roots
+/// of the eigenvalues of `(A B^T)^T (A B^T)` clamped to `[0, 1]`.
+pub fn principal_angles(
+    left_rows: &[Vec<f64>],
+    right_rows: &[Vec<f64>],
+    tolerance: f64,
+) -> Result<Vec<f64>, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    let left_width = validate_rows(left_rows)?;
+    let right_width = validate_rows(right_rows)?;
+    if left_width != right_width || left_rows.len() != right_rows.len() {
+        return Err(ConceptGeometryError::DimensionMismatch);
+    }
+    if left_rows.len() > left_width {
+        return Err(ConceptGeometryError::RankDeficientSubspace);
+    }
+    let left = orthonormal_rows(left_rows, tolerance)?;
+    let right = orthonormal_rows(right_rows, tolerance)?;
+    let cross: Vec<Vec<f64>> = left
+        .iter()
+        .map(|left_row| {
+            right
+                .iter()
+                .map(|right_row| dot(left_row, right_row))
+                .collect()
+        })
+        .collect();
+    let size = cross.len();
+    let gram: Vec<Vec<f64>> = (0..size)
+        .map(|i| {
+            (0..size)
+                .map(|j| cross.iter().map(|row| row[i] * row[j]).sum())
+                .collect()
+        })
+        .collect();
+    let mut cosines: Vec<f64> = symmetric_jacobi_eigenvalues(&gram, tolerance)?
+        .into_iter()
+        .map(|value| value.clamp(0.0, 1.0).sqrt())
+        .collect();
+    cosines.sort_by(|left, right| right.total_cmp(left));
+    Ok(cosines.into_iter().map(f64::acos).collect())
+}
+
+/// Declared descriptive grid for the TDI-27.4 slice-4 subspace study. Every
+/// value is declared for this descriptive slice; none is a frozen threshold.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SubspacePersistenceGrid {
+    pub width: usize,
+    pub subspace_dims: Vec<usize>,
+    pub anchor_count: usize,
+    pub random_draws: usize,
+    pub seed: u64,
+}
+
+/// One declared subspace dimension with its known-truth controls.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SubspacePersistenceCell {
+    subspace_dim: usize,
+    rotation_aligned_angles: Vec<f64>,
+    rotation_raw_angles: Vec<f64>,
+    random_aligned_angles: Vec<Vec<f64>>,
+}
+
+impl SubspacePersistenceCell {
+    #[must_use]
+    pub const fn subspace_dim(&self) -> usize {
+        self.subspace_dim
+    }
+
+    /// Known-rotation control: angles between the `Q`-transported source
+    /// subspace and the truly rotated target subspace (expected near 0).
+    #[must_use]
+    pub fn rotation_aligned_angles(&self) -> &[f64] {
+        &self.rotation_aligned_angles
+    }
+
+    /// Same subspaces compared without transport, retained for contrast.
+    #[must_use]
+    pub fn rotation_raw_angles(&self) -> &[f64] {
+        &self.rotation_raw_angles
+    }
+
+    /// Random control: angles between the transported source subspace and
+    /// each independent random target subspace, every draw in order.
+    #[must_use]
+    pub fn random_aligned_angles(&self) -> &[Vec<f64>] {
+        &self.random_aligned_angles
+    }
+}
+
+fn gaussian_rows(
+    count: usize,
+    width: usize,
+    seed: u64,
+) -> Result<Vec<Vec<f64>>, ConceptGeometryError> {
+    Ok(synthetic_gaussian_groups(&SyntheticGaussianSpec {
+        positive_count: count,
+        control_count: 1,
+        signal: vec![0.0; width],
+        noise_scale: 1.0,
+        seed,
+    })?
+    .positive
+    .clone())
+}
+
+fn rows_times(rows: &[Vec<f64>], matrix: &[Vec<f64>]) -> Vec<Vec<f64>> {
+    rows.iter()
+        .map(|row| {
+            (0..matrix.len())
+                .map(|j| {
+                    row.iter()
+                        .zip(matrix)
+                        .map(|(value, matrix_row)| value * matrix_row[j])
+                        .sum()
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// TDI-27.4 slice 4: multi-direction / subspace persistence across two
+/// synthetic layers through principal angles, with known-truth controls.
+///
+/// Per declared dimension `k`: a random orthogonal `R_true` (orthonormalised
+/// Gaussian matrix) relates standard-normal source anchors to their exact
+/// targets `x R_true`; `Q` is fitted on those anchors. A random `k`-dim
+/// source subspace is transported through `Q` and compared with (a) its true
+/// image under `R_true` (rotation control) and (b) `random_draws`
+/// independent random `k`-dim subspaces (random control). Raw untransported
+/// angles are kept for contrast. Descriptive only: no persistence threshold
+/// or verdict.
+pub fn subspace_persistence_controls(
+    grid: &SubspacePersistenceGrid,
+    tolerance: f64,
+) -> Result<Vec<SubspacePersistenceCell>, ConceptGeometryError> {
+    valid_tolerance(tolerance)?;
+    if grid.width == 0 {
+        return Err(ConceptGeometryError::EmptyVector);
+    }
+    if grid.subspace_dims.is_empty() {
+        return Err(ConceptGeometryError::EmptySampleSizeGrid);
+    }
+    if grid
+        .subspace_dims
+        .iter()
+        .any(|&dim| dim == 0 || dim > grid.width)
+    {
+        return Err(ConceptGeometryError::RankDeficientSubspace);
+    }
+    if grid.random_draws == 0 {
+        return Err(ConceptGeometryError::InvalidReplicateCount);
+    }
+    if grid.anchor_count < grid.width {
+        return Err(ConceptGeometryError::DegenerateProcrustesAlignment);
+    }
+    let mut stream = SplitMix64::new(domain_separated_seed(
+        grid.seed,
+        SUBSPACE_PERSISTENCE_DOMAIN,
+    ));
+    let mut cells = Vec::with_capacity(grid.subspace_dims.len());
+    for &dim in &grid.subspace_dims {
+        let rotation = orthonormal_rows(
+            &gaussian_rows(grid.width, grid.width, stream.next_u64())?,
+            tolerance,
+        )?;
+        let source_anchors = gaussian_rows(grid.anchor_count, grid.width, stream.next_u64())?;
+        let target_anchors = rows_times(&source_anchors, &rotation);
+        let alignment =
+            orthogonal_procrustes_alignment(&source_anchors, &target_anchors, tolerance)?;
+        let source_subspace = gaussian_rows(dim, grid.width, stream.next_u64())?;
+        let transported = rows_times(&source_subspace, alignment.operator());
+        let true_image = rows_times(&source_subspace, &rotation);
+        let rotation_aligned_angles = principal_angles(&transported, &true_image, tolerance)?;
+        let rotation_raw_angles = principal_angles(&source_subspace, &true_image, tolerance)?;
+        let mut random_aligned_angles = Vec::with_capacity(grid.random_draws);
+        for _ in 0..grid.random_draws {
+            let random = gaussian_rows(dim, grid.width, stream.next_u64())?;
+            random_aligned_angles.push(principal_angles(&transported, &random, tolerance)?);
+        }
+        cells.push(SubspacePersistenceCell {
+            subspace_dim: dim,
+            rotation_aligned_angles,
+            rotation_raw_angles,
+            random_aligned_angles,
+        });
+    }
+    Ok(cells)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -6302,5 +6585,95 @@ mod procrustes_stability_tests {
         let cells = procrustes_stability_grid(&rotation(), &declared, DEFAULT_TOLERANCE).unwrap();
         assert!(cells[0].replicates().iter().all(Result::is_err));
         assert_eq!(cells[0].distance_to_truth(), None);
+    }
+}
+
+#[cfg(test)]
+mod subspace_persistence_tests {
+    use super::*;
+
+    fn grid() -> SubspacePersistenceGrid {
+        SubspacePersistenceGrid {
+            width: 6,
+            subspace_dims: vec![1, 2, 4],
+            anchor_count: 12,
+            random_draws: 8,
+            seed: 27_404,
+        }
+    }
+
+    #[test]
+    fn principal_angles_match_closed_forms() {
+        let x = vec![vec![1.0, 0.0, 0.0]];
+        assert!(principal_angles(&x, &x, DEFAULT_TOLERANCE).unwrap()[0].abs() < 1e-7);
+        let y = vec![vec![0.0, 1.0, 0.0]];
+        let angle = principal_angles(&x, &y, DEFAULT_TOLERANCE).unwrap()[0];
+        assert!((angle - core::f64::consts::FRAC_PI_2).abs() < 1e-12);
+        let tilted = vec![vec![1.0, 1.0, 0.0]];
+        let angle = principal_angles(&x, &tilted, DEFAULT_TOLERANCE).unwrap()[0];
+        assert!((angle - core::f64::consts::FRAC_PI_4).abs() < 1e-12);
+        // Planes sharing one axis, the other axes orthogonal: angles 0, pi/2.
+        let plane_a = vec![vec![1.0, 0.0, 0.0, 0.0], vec![0.0, 1.0, 0.0, 0.0]];
+        let plane_b = vec![vec![2.0, 0.0, 0.0, 0.0], vec![0.0, 0.0, 3.0, 0.0]];
+        let angles = principal_angles(&plane_a, &plane_b, DEFAULT_TOLERANCE).unwrap();
+        assert!(angles[0].abs() < 1e-7);
+        assert!((angles[1] - core::f64::consts::FRAC_PI_2).abs() < 1e-12);
+    }
+
+    #[test]
+    fn principal_angles_fail_closed() {
+        let dependent = vec![vec![1.0, 0.0], vec![2.0, 0.0]];
+        assert_eq!(
+            principal_angles(&dependent, &dependent, DEFAULT_TOLERANCE),
+            Err(ConceptGeometryError::RankDeficientSubspace)
+        );
+        assert_eq!(
+            principal_angles(&[vec![1.0, 0.0]], &[vec![1.0, 0.0, 0.0]], DEFAULT_TOLERANCE),
+            Err(ConceptGeometryError::DimensionMismatch)
+        );
+    }
+
+    #[test]
+    fn rotation_control_is_near_zero_and_random_control_spreads() {
+        let cells = subspace_persistence_controls(&grid(), DEFAULT_TOLERANCE).unwrap();
+        assert_eq!(
+            cells,
+            subspace_persistence_controls(&grid(), DEFAULT_TOLERANCE).unwrap()
+        );
+        assert_eq!(cells.len(), 3);
+        for (cell, dim) in cells.iter().zip([1, 2, 4]) {
+            assert_eq!(cell.subspace_dim(), dim);
+            assert_eq!(cell.rotation_aligned_angles().len(), dim);
+            assert!(cell.rotation_aligned_angles().iter().all(|a| *a < 1e-6));
+            assert_eq!(cell.random_aligned_angles().len(), 8);
+            let largest = cell
+                .random_aligned_angles()
+                .iter()
+                .map(|angles| angles[dim - 1])
+                .fold(0.0_f64, f64::max);
+            assert!(largest > 0.1);
+        }
+    }
+
+    #[test]
+    fn grid_fails_closed_on_invalid_declarations() {
+        let mut invalid = grid();
+        invalid.subspace_dims = vec![7];
+        assert_eq!(
+            subspace_persistence_controls(&invalid, DEFAULT_TOLERANCE),
+            Err(ConceptGeometryError::RankDeficientSubspace)
+        );
+        let mut invalid = grid();
+        invalid.random_draws = 0;
+        assert_eq!(
+            subspace_persistence_controls(&invalid, DEFAULT_TOLERANCE),
+            Err(ConceptGeometryError::InvalidReplicateCount)
+        );
+        let mut invalid = grid();
+        invalid.subspace_dims.clear();
+        assert_eq!(
+            subspace_persistence_controls(&invalid, DEFAULT_TOLERANCE),
+            Err(ConceptGeometryError::EmptySampleSizeGrid)
+        );
     }
 }
