@@ -42,7 +42,7 @@ jobs:
           ref: ccdcb99a4573dbefb944af0df713101b100b5f78
           persist-credentials: false
           path: integration-hub
-      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
         with:
           toolchain: 1.89.0
       - name: Build the pinned controller in its own Cargo context
@@ -82,7 +82,7 @@ jobs:
             --hub-source ccdcb99a4573dbefb944af0df713101b100b5f78 \
             --elastic-source f5af4f3129100f4bb52d47d1adfc202347d0b098 \
             --widths 1 2 --trials 2 --repeats 2 --output elastic-admission-benchmark
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
           name: elastic-admission-benchmark
