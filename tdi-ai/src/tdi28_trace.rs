@@ -426,15 +426,14 @@ mod tests {
         ];
         let report = replay_pair(&events, 1).unwrap();
         let heavy_cache = Work {
-            cache_probes: 100,
+            cache_validation_comparisons: 100,
             gate_evaluations: 1,
             ..Work::default()
         };
         let scores = report.settled_proxy_scores(heavy_cache).unwrap().unwrap();
-        // Both arms probe the cache under the Stage-0 reference oracle,
-        // hence this cost vector cannot establish a universal advantage.
-        assert!(scores.0 >= scores.1);
-        assert_ne!(scores.0, 0);
+        // The governed arm checks cache validity. The always-evaluate arm
+        // does not; an expensive check can outweigh one skipped gate.
+        assert_eq!(scores, (2, 101));
     }
 
     #[test]
