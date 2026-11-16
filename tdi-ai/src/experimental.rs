@@ -102,6 +102,8 @@ pub mod tdi25_tasks;
 pub mod tdi25_torsor_chiral;
 #[path = "tdi26_v888.rs"]
 pub mod tdi26_v888;
+#[path = "tdi28_c3_policy.rs"]
+pub mod tdi28_c3_policy;
 #[path = "tdi28_energy_algebra.rs"]
 pub mod tdi28_energy_algebra;
 #[path = "tdi28_trace.rs"]

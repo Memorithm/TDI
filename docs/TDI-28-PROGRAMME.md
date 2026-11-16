@@ -193,3 +193,60 @@ instrumentation, explicit optional output deadlines and utility, a
 preregistered Development/Validation split, then independently controlled
 RemoteOps physical measurements. This slice reports no watts, joules,
 real-model quality gains, or evidence of consciousness.
+
+## Stage-0 C3 budgeted control (experimental-only extension)
+
+`tdi-ai/src/tdi28_c3_policy.rs` introduces a third, **prospective**
+reference policy beside the always-evaluate and unconditional-reuse arms.
+This is not a scientific C3 superiority result or a calibrated hardware
+energy optimizer.
+
+A caller supplies a versioned `ProxyBudget` with a nonzero cost-model
+revision, explicit nonnegative integer weights for all reference-work classes,
+and a per-event upper bound. The planner receives only the current tick,
+gate identity, input revision stamps, optional cached output, and obligation
+status; actual input values are read lazily **only** after an EVALUATE decision.
+
+- **EVALUATE** is chosen if no reusable state exists, or when the *declared*
+  cost of validating a cache is not lower than recomputation. A conservative
+  allowance for a possible output transition is included in its budget.
+- **REUSE** is chosen only if cache validity is worth testing *and* both gate
+  and dependency revision stamps match. Validation overhead is counted.
+- **DEFER** is possible only for optional work before its declared absolute
+  logical deadline when the preferred action exceeds the immediate budget.
+  Deferral itself is priced, not free. Required/due work that cannot fit its
+  declared resource budget is **rejected**, not silently omitted.
+
+The `DeadlineLedger` holds bounded pending obligations (at most 4096).
+Its caller must deliver explicit wakeups; it does not promise an autonomous
+operating-system timer. A wakeup later than the pending deadline fails closed.
+A deferred obligation may be registered only using a sealed C3 execution
+record proving a matching DEFER decision; it is resolved only by supplying
+another actual C3 execution with a produced output, matching
+gate/revision identity, and a logical tick equal to the ledger's current
+wakeup. A previously completed output cannot be replayed as new evidence.
+The ledger rejects mismatches, missed deadlines and counter overflow rather
+than fabricating success.
+An explicit cancellation is recorded separately from success.
+Outstanding obligations block any settled-episode interpretation.
+
+### Limits of this slice
+
+- The weights are synthetic scenarios: `proxy_cost` is **not** a joule,
+  physical power or hardware instruction count.
+- The reference policy only constrains per-event work, **not** aggregate
+  memory traffic, wall time, process scheduling or global power.
+- C3 does not yet choose a learned policy; any later adaptive calibration
+  requires a separate preregistered Development/Validation protocol.
+- The ledger must be wired to a scheduler with real deadlines before any
+  production claim. Its interface is deliberately independent of TDI-26's
+  unfrozen topology/stream protocol.
+- All protected/confirmatory surfaces remain unavailable.
+
+Qualification:
+
+```bash
+cargo fmt --all -- --check
+cargo test -p tdi-ai --features experimental --lib tdi28_ --locked
+cargo clippy -p tdi-ai --features experimental --all-targets --locked -- -D warnings
+```
