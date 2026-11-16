@@ -144,8 +144,8 @@ pub fn plan_c3(
     let mut reuse_work = bookkeeping(has_cache, true);
     // Only consider checking a cache when its *prospective* total is cheaper.
     let inspect = has_cache && reuse_work.proxy_score(budget.weights)? < eval_upper;
-    let fresh = inspect
-        && cache.is_some_and(|saved| saved.gate == gate && saved.revisions == revisions);
+    let fresh =
+        inspect && cache.is_some_and(|saved| saved.gate == gate && saved.revisions == revisions);
 
     let selected = if fresh {
         reuse_work
@@ -315,7 +315,11 @@ impl DeadlineLedger {
 
     /// Record only a genuinely deferred request, at a predeclared deadline.
     pub fn defer(&mut self, pending: PendingDeadline) -> Result<(), DeadlineError> {
-        if self.pending.iter().any(|old| old.request_id == pending.request_id) {
+        if self
+            .pending
+            .iter()
+            .any(|old| old.request_id == pending.request_id)
+        {
             return Err(DeadlineError::DuplicateRequest(pending.request_id));
         }
         if self.pending.len() >= Self::MAX_PENDING {
@@ -598,14 +602,16 @@ mod tests {
     fn wrong_identity_and_missed_deadline_fail_closed() {
         let mut ledger = DeadlineLedger::default();
         ledger.advance(1).unwrap();
-        ledger.defer(PendingDeadline {
-            request_id: 7,
-            identity: PendingIdentity {
-                gate: Gate::Or,
-                revisions: revisions(1),
-            },
-            deadline_tick: 3,
-        }).unwrap();
+        ledger
+            .defer(PendingDeadline {
+                request_id: 7,
+                identity: PendingIdentity {
+                    gate: Gate::Or,
+                    revisions: revisions(1),
+                },
+                deadline_tick: 3,
+            })
+            .unwrap();
         let wrong = execute_c3(
             plan_c3(
                 Gate::And,
@@ -640,14 +646,28 @@ mod tests {
         let mut no_model = costs();
         no_model.model_revision = 0;
         assert_eq!(
-            plan_c3(Gate::Xor, revisions(1), None, 1, Obligation::RequiredNow, no_model),
+            plan_c3(
+                Gate::Xor,
+                revisions(1),
+                None,
+                1,
+                Obligation::RequiredNow,
+                no_model
+            ),
             Err(C3Error::UnknownCostModel)
         );
         let mut no_price = costs();
         no_price.weights.gate_evaluations = 0;
         no_price.weights.input_value_reads = 0;
         assert_eq!(
-            plan_c3(Gate::Xor, revisions(1), None, 1, Obligation::RequiredNow, no_price),
+            plan_c3(
+                Gate::Xor,
+                revisions(1),
+                None,
+                1,
+                Obligation::RequiredNow,
+                no_price
+            ),
             Err(C3Error::UnpricedCompute)
         );
         assert_eq!(
@@ -659,7 +679,10 @@ mod tests {
                 Obligation::Optional { deadline_tick: 8 },
                 costs()
             ),
-            Err(C3Error::AlreadyPastDeadline { now: 9, deadline: 8 })
+            Err(C3Error::AlreadyPastDeadline {
+                now: 9,
+                deadline: 8
+            })
         );
     }
 
