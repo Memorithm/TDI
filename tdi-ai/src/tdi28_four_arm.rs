@@ -96,6 +96,9 @@ pub struct FourProxyScores {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FourArmReport {
+    /// Fixed once for the entire matched replay; the report's scoring method
+    /// never accepts replacement coefficients after outcomes are observed.
+    cost_model: MatchedCostModel,
     pub events: Vec<FourEventRecord>,
     pub c0_work: Work,
     pub c1_work: Work,
@@ -113,6 +116,11 @@ pub struct FourArmReport {
 }
 
 impl FourArmReport {
+    #[must_use]
+    pub const fn cost_model(&self) -> MatchedCostModel {
+        self.cost_model
+    }
+
     /// Strict equal-coverage, equal-output, no-debt evidence.
     #[must_use]
     pub fn strict_quality_parity(&self) -> bool {
@@ -127,13 +135,11 @@ impl FourArmReport {
 
     /// Returns `None` rather than mislabeling deferred, cancelled or
     /// uncovered optional work as equal-utility cost savings.
-    pub fn strict_proxy_scores(
-        &self,
-        weights: Work,
-    ) -> Result<Option<FourProxyScores>, AccountingError> {
+    pub fn strict_proxy_scores(&self) -> Result<Option<FourProxyScores>, AccountingError> {
         if !self.strict_quality_parity() {
             return Ok(None);
         }
+        let weights = self.cost_model.weights;
         Ok(Some(FourProxyScores {
             c0: self.c0_work.proxy_score(weights)?,
             c1: self.c1_work.proxy_score(weights)?,
@@ -295,6 +301,7 @@ pub fn replay_four(
         ..Work::default()
     })?;
     Ok(FourArmReport {
+        cost_model: model,
         events: records,
         c0_work: pair.baseline_work,
         c1_work: pair.baseline_work,
@@ -364,7 +371,7 @@ mod tests {
         let report = replay_four(&events, 10, model(2)).unwrap();
         assert!(report.strict_quality_parity());
         let scores = report
-            .strict_proxy_scores(model(2).weights)
+            .strict_proxy_scores()
             .unwrap()
             .unwrap();
         assert_eq!(scores.c0, scores.c1);
@@ -386,7 +393,7 @@ mod tests {
         assert_eq!(report.events[1].c2_decision, Decision::Reuse);
         assert_eq!(report.events[1].c3_decision, Decision::Evaluate);
         let scores = report
-            .strict_proxy_scores(model(100).weights)
+            .strict_proxy_scores()
             .unwrap()
             .unwrap();
         assert!(scores.c3 < scores.c2);
@@ -404,7 +411,7 @@ mod tests {
         assert_eq!(report.c3_deadlines.resolved(), 1);
         assert!(report.c3_deadlines.settled());
         assert!(!report.strict_quality_parity());
-        assert_eq!(report.strict_proxy_scores(model(2).weights).unwrap(), None);
+        assert_eq!(report.strict_proxy_scores().unwrap(), None);
     }
 
     #[test]
@@ -421,7 +428,7 @@ mod tests {
         let unsettled = replay_four(&events, 3, model(2)).unwrap();
         assert!(!unsettled.c3_deadlines.settled());
         assert_eq!(
-            unsettled.strict_proxy_scores(model(2).weights).unwrap(),
+            unsettled.strict_proxy_scores().unwrap(),
             None
         );
     }
