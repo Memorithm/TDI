@@ -370,10 +370,7 @@ mod tests {
         ];
         let report = replay_four(&events, 10, model(2)).unwrap();
         assert!(report.strict_quality_parity());
-        let scores = report
-            .strict_proxy_scores()
-            .unwrap()
-            .unwrap();
+        let scores = report.strict_proxy_scores().unwrap().unwrap();
         assert_eq!(scores.c0, scores.c1);
         assert!(scores.c2 < scores.c0);
         assert!(scores.c3 < scores.c0);
@@ -392,10 +389,7 @@ mod tests {
         assert!(report.strict_quality_parity());
         assert_eq!(report.events[1].c2_decision, Decision::Reuse);
         assert_eq!(report.events[1].c3_decision, Decision::Evaluate);
-        let scores = report
-            .strict_proxy_scores()
-            .unwrap()
-            .unwrap();
+        let scores = report.strict_proxy_scores().unwrap().unwrap();
         assert!(scores.c3 < scores.c2);
     }
 
@@ -427,10 +421,7 @@ mod tests {
         );
         let unsettled = replay_four(&events, 3, model(2)).unwrap();
         assert!(!unsettled.c3_deadlines.settled());
-        assert_eq!(
-            unsettled.strict_proxy_scores().unwrap(),
-            None
-        );
+        assert_eq!(unsettled.strict_proxy_scores().unwrap(), None);
     }
 
     #[test]
