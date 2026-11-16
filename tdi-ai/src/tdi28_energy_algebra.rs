@@ -73,6 +73,8 @@ pub struct Work {
     pub input_value_reads: u64,
     pub revision_reads: u64,
     pub cache_probes: u64,
+    /// One composite dependency/gate validity check in the governed arm.
+    pub cache_validation_comparisons: u64,
     pub output_transitions: u64,
     pub event_decisions: u64,
     pub deferred_events: u64,
@@ -104,6 +106,10 @@ impl Work {
                 .cache_probes
                 .checked_add(other.cache_probes)
                 .ok_or(AccountingError::Overflow)?,
+            cache_validation_comparisons: self
+                .cache_validation_comparisons
+                .checked_add(other.cache_validation_comparisons)
+                .ok_or(AccountingError::Overflow)?,
             output_transitions: self
                 .output_transitions
                 .checked_add(other.output_transitions)
@@ -131,6 +137,10 @@ impl Work {
             (self.input_value_reads, weights.input_value_reads),
             (self.revision_reads, weights.revision_reads),
             (self.cache_probes, weights.cache_probes),
+            (
+                self.cache_validation_comparisons,
+                weights.cache_validation_comparisons,
+            ),
             (self.output_transitions, weights.output_transitions),
             (self.event_decisions, weights.event_decisions),
             (self.deferred_events, weights.deferred_events),
@@ -177,11 +187,19 @@ where
     let mut work = Work {
         revision_reads: 2,
         cache_probes: u64::from(cache.is_some()),
+        cache_validation_comparisons: u64::from(
+            cache.is_some() && arm == Arm::EnergyGoverned,
+        ),
         event_decisions: 1,
         ..Work::default()
     };
 
-    let fresh = cache.filter(|saved| saved.revisions == revisions && saved.gate == gate);
+    let fresh = match arm {
+        Arm::EnergyGoverned => {
+            cache.filter(|saved| saved.revisions == revisions && saved.gate == gate)
+        }
+        Arm::AttributedAlwaysEvaluate => None,
+    };
     let decision = match arm {
         Arm::AttributedAlwaysEvaluate => Decision::Evaluate,
         Arm::EnergyGoverned if fresh.is_some() => Decision::Reuse,
