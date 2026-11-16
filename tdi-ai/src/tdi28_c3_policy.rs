@@ -340,14 +340,19 @@ impl DeadlineLedger {
     pub fn resolve(
         &mut self,
         request_id: u64,
-        identity: PendingIdentity,
+        executed: &C3Execution,
     ) -> Result<bool, DeadlineError> {
         let index = self
             .pending
             .iter()
             .position(|item| item.request_id == request_id)
             .ok_or(DeadlineError::MissingRequest(request_id))?;
-        if self.pending[index].identity != identity {
+        let matching_output = executed.step.output.is_some()
+            && executed.step.cache.is_some_and(|cache| {
+                cache.gate == self.pending[index].identity.gate
+                    && cache.revisions == self.pending[index].identity.revisions
+            });
+        if !matching_output {
             return Ok(false);
         }
         self.pending.remove(index);
@@ -581,8 +586,9 @@ mod tests {
             budget,
         )
         .unwrap();
-        assert_eq!(execute_c3(executed, || (true, false)).unwrap().step.output, Some(true));
-        assert!(ledger.resolve(1, id).unwrap());
+        let outcome = execute_c3(executed, || (true, false)).unwrap();
+        assert_eq!(outcome.step.output, Some(true));
+        assert!(ledger.resolve(1, &outcome).unwrap());
         assert!(ledger.settled());
         assert_eq!(ledger.resolved(), 1);
         ledger.advance(7).unwrap();
@@ -600,10 +606,20 @@ mod tests {
             },
             deadline_tick: 3,
         }).unwrap();
-        assert!(!ledger.resolve(7, PendingIdentity {
-            gate: Gate::And,
-            revisions: revisions(1),
-        }).unwrap());
+        let wrong = execute_c3(
+            plan_c3(
+                Gate::And,
+                revisions(1),
+                None,
+                1,
+                Obligation::RequiredNow,
+                costs(),
+            )
+            .unwrap(),
+            || (true, false),
+        )
+        .unwrap();
+        assert!(!ledger.resolve(7, &wrong).unwrap());
         assert!(!ledger.settled());
         assert_eq!(
             ledger.advance(4),
