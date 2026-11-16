@@ -160,32 +160,17 @@ pub fn declared_traffic(work: Work, profile: TransferProfile) -> Result<Traffic,
         ])?,
         memory_write_bytes: logical_bytes(&[
             (work.gate_evaluations, profile.bytes_per_cache_write),
-            (
-                work.output_transitions,
-                profile.bytes_per_output_transition,
-            ),
-            (
-                work.deferred_events,
-                profile.bytes_per_deferred_queue_write,
-            ),
+            (work.output_transitions, profile.bytes_per_output_transition),
+            (work.deferred_events, profile.bytes_per_deferred_queue_write),
         ])?,
         communication_bytes: logical_bytes(&[
-            (
-                work.gate_evaluations,
-                profile.bytes_per_evaluation_message,
-            ),
+            (work.gate_evaluations, profile.bytes_per_evaluation_message),
             (
                 work.cache_validation_comparisons,
                 profile.bytes_per_validation_message,
             ),
-            (
-                work.deferred_events,
-                profile.bytes_per_deferral_message,
-            ),
-            (
-                work.event_decisions,
-                profile.bytes_per_dispatch_message,
-            ),
+            (work.deferred_events, profile.bytes_per_deferral_message),
+            (work.event_decisions, profile.bytes_per_dispatch_message),
         ])?,
         messages: logical_bytes(&[
             (work.gate_evaluations, profile.messages_per_evaluation),
@@ -407,10 +392,7 @@ mod tests {
 
     #[test]
     fn communication_pricing_can_reverse_logic_only_rankings() {
-        let inputs = [
-            event(0, 1, false, false),
-            event(1, 1, false, false),
-        ];
+        let inputs = [event(0, 1, false, false), event(1, 1, false, false)];
         let mut transfer = contract();
         transfer.profile.bytes_per_validation_message = 5000;
         transfer.profile.messages_per_validation = 1;
@@ -450,10 +432,7 @@ mod tests {
 
     #[test]
     fn uncovered_optional_observation_blocks_aggregate_cost_claim() {
-        let inputs = [
-            event(0, 1, false, true),
-            event(2, 1, false, false),
-        ];
+        let inputs = [event(0, 1, false, true), event(2, 1, false, false)];
         // Work ceiling low enough to defer first, high enough for second;
         // event-level budgets are encoded by the shared matched events.
         let mut inputs = inputs;
