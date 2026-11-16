@@ -222,9 +222,11 @@ Its caller must deliver explicit wakeups; it does not promise an autonomous
 operating-system timer. A wakeup later than the pending deadline fails closed.
 A deferred obligation may be registered only using a sealed C3 execution
 record proving a matching DEFER decision; it is resolved only by supplying
-another actual C3 execution with a produced output and matching
-gate/revision identity. The event ledger rejects mismatches and counter
-overflow rather than fabricating success.
+another actual C3 execution with a produced output, matching
+gate/revision identity, and a logical tick equal to the ledger's current
+wakeup. A previously completed output cannot be replayed as new evidence.
+The ledger rejects mismatches, missed deadlines and counter overflow rather
+than fabricating success.
 An explicit cancellation is recorded separately from success.
 Outstanding obligations block any settled-episode interpretation.
 
