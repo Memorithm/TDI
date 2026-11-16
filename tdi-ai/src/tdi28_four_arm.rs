@@ -12,9 +12,7 @@ use super::tdi28_c3_policy::{
     C3Error, DeadlineError, DeadlineLedger, Obligation, PendingDeadline, PendingIdentity,
     ProxyBudget, execute_c3, plan_c3,
 };
-use super::tdi28_energy_algebra::{
-    AccountingError, CachedOutput, Decision, Demand, Work,
-};
+use super::tdi28_energy_algebra::{AccountingError, CachedOutput, Decision, Demand, Work};
 use super::tdi28_trace::{DebtLedger, TraceError, TraceEvent, replay_pair};
 
 /// A single matched event with a predeclared, arm-independent cost ceiling.
@@ -123,8 +121,7 @@ impl FourArmReport {
             && self.c3_deadlines.settled()
             && self.c3_deadlines.cancelled() == 0
             && self.events.iter().all(|item| {
-                item.c2_output == Some(item.c0_output)
-                    && item.c3_output == Some(item.c0_output)
+                item.c2_output == Some(item.c0_output) && item.c3_output == Some(item.c0_output)
             })
     }
 
@@ -254,9 +251,10 @@ pub fn replay_four(
         }
 
         let baseline = pair.records[index];
-        if step.output.is_some_and(|value| value != baseline.baseline_output)
-            || (event.demand == Demand::Required
-                && step.output != Some(baseline.baseline_output))
+        if step
+            .output
+            .is_some_and(|value| value != baseline.baseline_output)
+            || (event.demand == Demand::Required && step.output != Some(baseline.baseline_output))
         {
             return Err(FourError::WrongC3Output { tick: event.tick });
         }
@@ -310,8 +308,8 @@ pub fn replay_four(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::tdi28_energy_algebra::{Gate, InputRevisions};
+    use super::*;
 
     fn model(cache_validation: u64) -> MatchedCostModel {
         MatchedCostModel {
@@ -365,7 +363,10 @@ mod tests {
         ];
         let report = replay_four(&events, 10, model(2)).unwrap();
         assert!(report.strict_quality_parity());
-        let scores = report.strict_proxy_scores(model(2).weights).unwrap().unwrap();
+        let scores = report
+            .strict_proxy_scores(model(2).weights)
+            .unwrap()
+            .unwrap();
         assert_eq!(scores.c0, scores.c1);
         assert!(scores.c2 < scores.c0);
         assert!(scores.c3 < scores.c0);
@@ -384,7 +385,10 @@ mod tests {
         assert!(report.strict_quality_parity());
         assert_eq!(report.events[1].c2_decision, Decision::Reuse);
         assert_eq!(report.events[1].c3_decision, Decision::Evaluate);
-        let scores = report.strict_proxy_scores(model(100).weights).unwrap().unwrap();
+        let scores = report
+            .strict_proxy_scores(model(100).weights)
+            .unwrap()
+            .unwrap();
         assert!(scores.c3 < scores.c2);
     }
 
@@ -416,7 +420,10 @@ mod tests {
         );
         let unsettled = replay_four(&events, 3, model(2)).unwrap();
         assert!(!unsettled.c3_deadlines.settled());
-        assert_eq!(unsettled.strict_proxy_scores(model(2).weights).unwrap(), None);
+        assert_eq!(
+            unsettled.strict_proxy_scores(model(2).weights).unwrap(),
+            None
+        );
     }
 
     #[test]
