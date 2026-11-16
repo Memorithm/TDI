@@ -610,6 +610,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(deferred.decision(), Decision::Defer);
+        let deferred_evidence = execute_c3(deferred, || panic!("deferred input read")).unwrap();
         let id = PendingIdentity {
             gate: Gate::Xor,
             revisions: revisions(4),
@@ -621,7 +622,7 @@ mod tests {
                 request_id: 1,
                 identity: id,
                 deadline_tick: 6,
-            })
+            }, &deferred_evidence)
             .unwrap();
         ledger.advance(4).unwrap();
         budget.per_event_ceiling = 50;
@@ -646,15 +647,33 @@ mod tests {
     fn wrong_identity_and_missed_deadline_fail_closed() {
         let mut ledger = DeadlineLedger::default();
         ledger.advance(1).unwrap();
+        let mut deferral_budget = costs();
+        deferral_budget.per_event_ceiling = 8;
+        let deferred = execute_c3(
+            plan_c3(
+                Gate::Or,
+                revisions(1),
+                None,
+                1,
+                Obligation::Optional { deadline_tick: 3 },
+                deferral_budget,
+            )
+            .unwrap(),
+            || panic!("deferred input read"),
+        )
+        .unwrap();
         ledger
-            .defer(PendingDeadline {
-                request_id: 7,
-                identity: PendingIdentity {
-                    gate: Gate::Or,
-                    revisions: revisions(1),
+            .defer(
+                PendingDeadline {
+                    request_id: 7,
+                    identity: PendingIdentity {
+                        gate: Gate::Or,
+                        revisions: revisions(1),
+                    },
+                    deadline_tick: 3,
                 },
-                deadline_tick: 3,
-            })
+                &deferred,
+            )
             .unwrap();
         let wrong = execute_c3(
             plan_c3(
@@ -731,6 +750,60 @@ mod tests {
     }
 
     #[test]
+    fn ledger_rejects_deferral_without_actual_matching_execution() {
+        let mut ledger = DeadlineLedger::default();
+        ledger.advance(1).unwrap();
+        let identity = PendingIdentity {
+            gate: Gate::Xor,
+            revisions: revisions(1),
+        };
+        let entry = PendingDeadline {
+            request_id: 99,
+            identity,
+            deadline_tick: 5,
+        };
+        let executed = execute_c3(
+            plan_c3(
+                Gate::Xor,
+                revisions(1),
+                None,
+                1,
+                Obligation::RequiredNow,
+                costs(),
+            )
+            .unwrap(),
+            || (true, false),
+        )
+        .unwrap();
+        assert_eq!(
+            ledger.defer(entry, &executed),
+            Err(DeadlineError::InvalidDeferralEvidence(99))
+        );
+        assert!(ledger.settled());
+
+        let mut low_budget = costs();
+        low_budget.per_event_ceiling = 8;
+        let other = execute_c3(
+            plan_c3(
+                Gate::And,
+                revisions(1),
+                None,
+                1,
+                Obligation::Optional { deadline_tick: 5 },
+                low_budget,
+            )
+            .unwrap(),
+            || panic!("deferred input read"),
+        )
+        .unwrap();
+        assert_eq!(
+            ledger.defer(entry, &other),
+            Err(DeadlineError::InvalidDeferralEvidence(99))
+        );
+        assert!(ledger.settled());
+    }
+
+    #[test]
     fn deadline_ledger_rejects_duplicate_and_time_reversal() {
         let mut ledger = DeadlineLedger::default();
         ledger.advance(2).unwrap();
@@ -742,8 +815,26 @@ mod tests {
             },
             deadline_tick: 4,
         };
-        ledger.defer(entry).unwrap();
-        assert_eq!(ledger.defer(entry), Err(DeadlineError::DuplicateRequest(1)));
+        let mut deferral_budget = costs();
+        deferral_budget.per_event_ceiling = 8;
+        let deferred = execute_c3(
+            plan_c3(
+                Gate::And,
+                revisions(3),
+                None,
+                2,
+                Obligation::Optional { deadline_tick: 4 },
+                deferral_budget,
+            )
+            .unwrap(),
+            || panic!("deferred input read"),
+        )
+        .unwrap();
+        ledger.defer(entry, &deferred).unwrap();
+        assert_eq!(
+            ledger.defer(entry, &deferred),
+            Err(DeadlineError::DuplicateRequest(1))
+        );
         assert_eq!(ledger.advance(1), Err(DeadlineError::NonIncreasingTime));
         assert!(!ledger.settled());
     }
