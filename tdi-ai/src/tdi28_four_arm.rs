@@ -78,6 +78,9 @@ pub struct FourEventRecord {
     pub c3_output: Option<bool>,
     pub c2_decision: Decision,
     pub c3_decision: Decision,
+    /// Per-arm event-level reference work. This excludes offline preflight,
+    /// event queue bookkeeping and idle ticks; those are separate.
+    pub event_work: [Work; 4],
     /// Costs here exclude idle ticks, which are reported in aggregate.
     pub event_proxy_costs: [u128; 4],
     pub event_ceiling: u128,
@@ -289,6 +292,12 @@ pub fn replay_four(
             c3_output: step.output,
             c2_decision: baseline.decision,
             c3_decision: step.decision,
+            event_work: [
+                baseline.baseline_work,
+                baseline.baseline_work,
+                baseline.governed_work,
+                step.work,
+            ],
             event_proxy_costs: costs,
             event_ceiling: item.event_ceiling,
         });
