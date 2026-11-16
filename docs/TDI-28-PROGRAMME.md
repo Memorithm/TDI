@@ -131,3 +131,65 @@ stale cache handling, mandatory-vs-optional output semantics, compositional
 overflow, idle cost and a counterexample where expensive cache reads reverse
 the expected preference. They are qualification tests, **not an energy
 experiment or scientific verdict**.
+
+
+## Stage-0 extension: bounded event streams and deferred-work debt
+
+The next implementable primitive is `tdi-ai/src/tdi28_trace.rs` (experimental
+facade only). It replays an **identical, caller-supplied, bounded** stream
+through the always-evaluate and energy-governed references. This is
+Development-only oracle scaffolding, not a frozen experimental campaign.
+
+Each event declares logical tick, gate, both input revision stamps, input
+values known only to the offline evaluator / lazy evaluation callback, and
+mandatory-versus-optional demand. The offline preflight rejects a revision
+stamp that yields conflicting values, non-increasing event ticks, an invalid
+terminal horizon, and unbounded event populations (maximum 4096 events).
+The policy never receives expected answers, future events, or alternative-arm
+outcomes. Values in preflight are evaluator-owned and **not** counted as online
+policy reads; physical benchmark protocols must separately measure their real
+provenance and overhead.
+
+Every returned trace includes independent per-arm work vectors, output
+observations, decisions, an explicit deadline-free optional work ledger, and
+idle ticks (initial gaps, inter-event gaps, trailing idle time). The ledger
+distinguishes:
+- **deferred requests**: optional outputs absent at their original event;
+- **resolved requests**: deferred work later satisfied for the same gate and
+  dependency identity;
+- **superseded requests**: optional outputs were never produced because a
+  newer gate/dependency identity replaced them;
+- **outstanding requests**: still awaiting resolution or supersession.
+
+An unsettled trace **cannot** return a scalar proxy-cost verdict. A settled
+trace retains the superseded count for joint quality/coverage review; this
+does not silently equate lost optional output to preserved utility.
+This first slice has no mandatory deadlines for optional work. A later,
+separately frozen experiment must declare bounded deferral horizons and
+evaluate deadline misses before interpreting energy savings.
+
+### Overhead accounting correction
+
+The Stage-0 `Work` vector now separately records
+`cache_validation_comparisons` (one composite cache-validity predicate
+for an event with an existing cache in the governed arm). The
+always-evaluate arm does not need to execute this predicate; it still
+counts a cache probe if previous output is consulted to track transitions.
+This explicitly admits negative controls in which the validation overhead
+outweighs skipped gate evaluations. The new counter is a logical work unit,
+not a calibrated memory access or an instruction count.
+
+### Qualification and remaining gaps
+
+```bash
+cargo fmt --all -- --check
+cargo test -p tdi-ai --features experimental --lib tdi28_ --locked
+cargo clippy -p tdi-ai --features experimental --all-targets --locked -- -D warnings
+```
+
+Future work still needed: an online cost-based C3 policy with preobservable
+calibrated coefficients, memory-write and inter-node communication
+instrumentation, explicit optional output deadlines and utility, a
+preregistered Development/Validation split, then independently controlled
+RemoteOps physical measurements. This slice reports no watts, joules,
+real-model quality gains, or evidence of consciousness.

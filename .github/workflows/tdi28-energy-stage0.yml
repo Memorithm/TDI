@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'tdi-ai/src/tdi28_energy_algebra.rs'
+      - 'tdi-ai/src/tdi28_trace.rs'
       - 'tdi-ai/src/experimental.rs'
       - 'docs/TDI-28-PROGRAMME.md'
       - '.github/workflows/tdi28-energy-stage0.yml'
@@ -12,6 +13,7 @@ on:
       - main
     paths:
       - 'tdi-ai/src/tdi28_energy_algebra.rs'
+      - 'tdi-ai/src/tdi28_trace.rs'
       - 'tdi-ai/src/experimental.rs'
       - 'docs/TDI-28-PROGRAMME.md'
       - '.github/workflows/tdi28-energy-stage0.yml'
@@ -41,5 +43,5 @@ jobs:
       - name: Stage-0 correctness and static checks
         run: |
           cargo fmt --all -- --check
-          cargo test -p tdi-ai --features experimental --lib tdi28_energy_algebra --locked
+          cargo test -p tdi-ai --features experimental --lib tdi28_ --locked
           cargo clippy -p tdi-ai --features experimental --all-targets --locked -- -D warnings
