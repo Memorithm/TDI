@@ -106,6 +106,8 @@ pub mod tdi26_v888;
 pub mod tdi28_energy_algebra;
 #[path = "tdi28_trace.rs"]
 pub mod tdi28_trace;
+#[path = "tdi28_c3_policy.rs"]
+pub mod tdi28_c3_policy;
 #[path = "tdi2_anti_unification.rs"]
 pub mod tdi2_anti_unification;
 #[path = "tdi2_baseline_contract.rs"]
