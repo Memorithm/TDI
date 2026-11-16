@@ -82,10 +82,38 @@ impl C3Plan {
 /// Executed event result with traceable proxy cost, not energy.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct C3Execution {
-    pub step: Step,
-    pub proxy_cost: u128,
-    pub proxy_upper_bound: u128,
-    pub model_revision: u64,
+    step: Step,
+    proxy_cost: u128,
+    proxy_upper_bound: u128,
+    model_revision: u64,
+    identity: PendingIdentity,
+}
+
+impl C3Execution {
+    #[must_use]
+    pub const fn step(self) -> Step {
+        self.step
+    }
+
+    #[must_use]
+    pub const fn proxy_cost(self) -> u128 {
+        self.proxy_cost
+    }
+
+    #[must_use]
+    pub const fn proxy_upper_bound(self) -> u128 {
+        self.proxy_upper_bound
+    }
+
+    #[must_use]
+    pub const fn model_revision(self) -> u64 {
+        self.model_revision
+    }
+
+    #[must_use]
+    pub const fn identity(self) -> PendingIdentity {
+        self.identity
+    }
 }
 
 fn bookkeeping(has_cache: bool, validation: bool) -> Work {
@@ -250,6 +278,10 @@ where
         proxy_cost,
         proxy_upper_bound: plan.upper_bound,
         model_revision: plan.budget.model_revision,
+        identity: PendingIdentity {
+            gate: plan.gate,
+            revisions: plan.revisions,
+        },
     })
 }
 
@@ -286,6 +318,8 @@ pub enum DeadlineError {
     DuplicateRequest(u64),
     MissingRequest(u64),
     CapacityExceeded,
+    InvalidDeferralEvidence(u64),
+    CounterOverflow,
     Missed { request_id: u64, due: u64, now: u64 },
 }
 
@@ -314,7 +348,17 @@ impl DeadlineLedger {
     }
 
     /// Record only a genuinely deferred request, at a predeclared deadline.
-    pub fn defer(&mut self, pending: PendingDeadline) -> Result<(), DeadlineError> {
+    pub fn defer(
+        &mut self,
+        pending: PendingDeadline,
+        execution: &C3Execution,
+    ) -> Result<(), DeadlineError> {
+        if execution.step.decision != Decision::Defer
+            || execution.step.output.is_some()
+            || execution.identity != pending.identity
+        {
+            return Err(DeadlineError::InvalidDeferralEvidence(pending.request_id));
+        }
         if self
             .pending
             .iter()
@@ -352,15 +396,14 @@ impl DeadlineLedger {
             .position(|item| item.request_id == request_id)
             .ok_or(DeadlineError::MissingRequest(request_id))?;
         let matching_output = executed.step.output.is_some()
-            && executed.step.cache.is_some_and(|cache| {
-                cache.gate == self.pending[index].identity.gate
-                    && cache.revisions == self.pending[index].identity.revisions
-            });
+            && executed.step.decision != Decision::Defer
+            && executed.identity == self.pending[index].identity;
         if !matching_output {
             return Ok(false);
         }
+        let next = self.resolved.checked_add(1).ok_or(DeadlineError::CounterOverflow)?;
         self.pending.remove(index);
-        self.resolved += 1;
+        self.resolved = next;
         Ok(true)
     }
 
@@ -371,8 +414,9 @@ impl DeadlineLedger {
             .iter()
             .position(|item| item.request_id == request_id)
             .ok_or(DeadlineError::MissingRequest(request_id))?;
+        let next = self.cancelled.checked_add(1).ok_or(DeadlineError::CounterOverflow)?;
         self.pending.remove(index);
-        self.cancelled += 1;
+        self.cancelled = next;
         Ok(())
     }
 
