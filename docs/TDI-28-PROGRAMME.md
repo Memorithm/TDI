@@ -250,3 +250,73 @@ cargo fmt --all -- --check
 cargo test -p tdi-ai --features experimental --lib tdi28_ --locked
 cargo clippy -p tdi-ai --features experimental --all-targets --locked -- -D warnings
 ```
+
+
+## Stage-0 four-arm matched event comparator
+
+`tdi-ai/src/tdi28_four_arm.rs` implements deterministic, bounded
+Development-only matched replay through **C0, C1, C2 and C3**. This closes
+the reference-comparison gap between the existing paired oracle (C0/C2)
+and the separate C3 policy. It does **not** constitute frozen validation,
+measured electricity savings or a trained cognitive mechanism.
+
+- **C0**: unconditional Boolean evaluation, reference outputs.
+- **C1**: the **same execution and reference work** as C0 with explicit
+  attribution. There is deliberately no fabricated runtime difference.
+- **C2**: fixed prospective reuse/defer policy from `tdi28_energy_algebra`
+  with optional debt ledger from `tdi28_trace`.
+- **C3**: cost-guided prospective selection using one declared cost model,
+  a per-event ceiling and absolute optional deadlines. Its ledger requires
+  matching execution proof and rejects missed logical deadlines.
+
+All four arms see identical gate inputs, current revisions, demand,
+identities, logical ticks, declared cost weights, and per-event ceilings.
+The reference preflight rejects inconsistent revision aliases before any
+candidate replay. Offline evaluation callbacks are *not* passed as
+online-policy knowledge; no future inputs, target values, alternative-arm
+outputs, or score improvements enter C3 selection.
+
+### Strict quality parity gate
+
+The comparator verifies each required C3 output and any delivered optional
+C3 output against C0. Its `strict_quality_parity` additionally requires:
+
+1. every optional result was present **at its original event**, in both C2
+   and C3; a deferred output subsequently resolved is not retroactively
+   counted as present;
+2. all C2 and C3 pending obligations are empty and none was cancelled;
+3. every event's delivered value exactly equals the C0 value.
+
+`strict_proxy_scores` returns **None** rather than present a cost
+comparison as equal-utility evidence if any of these conditions fail.
+The raw diagnostic work vectors and per-event records remain available,
+including negative results. A later task-utility/coverage metric may
+permit non-strict evaluation, but must be specified and frozen separately.
+
+### Shared budgets, explicit violations and incomplete accounting
+
+Every event declares one common ceiling. **C0/C1/C2 are diagnostic
+unconstrained baselines**: any individual event exceeding this ceiling is
+reported as a violation rather than being hidden or retroactively modified.
+C3 rejects an operation it cannot admit, including overdue mandatory work.
+If C3 cannot complete a mandatory event, no positive four-arm report exists.
+
+Logical idle ticks are charged symmetrically including the initial interval,
+inter-event gaps, and the declared tail to the horizon. All vector
+components and weighted proxy scores use checked arithmetic. Important
+limitations: validation/preflight, scheduler, ledger bookkeeping, actual
+memory bytes/communication traffic, host runtime and power-supply losses
+are not yet physically metered. C1 is an accounting contrast, not a
+distinct executable optimization. Results must not be labelled watts
+or joules.
+
+### Stage-0 deterministic controls
+
+The new Rust tests cover strict equal-output comparison on unchanged and
+changed inputs, high cache-validation overhead (C3 chooses recomputation
+where C2 reuses), optional debt resolved later **without** retroactive
+equal-quality claims, pending and missed deadlines, required budget rejection,
+invalid deadline shape, revision consistency and per-event ceiling
+exceedances. Future campaigns must freeze split assignments,
+task-equivalence criteria, deadline/utility requirements, hardware
+resource observations and provenance **before** confirmation.
