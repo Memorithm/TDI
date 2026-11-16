@@ -220,8 +220,11 @@ status; actual input values are read lazily **only** after an EVALUATE decision.
 The `DeadlineLedger` holds bounded pending obligations (at most 4096).
 Its caller must deliver explicit wakeups; it does not promise an autonomous
 operating-system timer. A wakeup later than the pending deadline fails closed.
-A deferred obligation is resolved only by supplying *actual C3 execution
-evidence* with a produced output and matching gate/revision identity.
+A deferred obligation may be registered only using a sealed C3 execution
+record proving a matching DEFER decision; it is resolved only by supplying
+another actual C3 execution with a produced output and matching
+gate/revision identity. The event ledger rejects mismatches and counter
+overflow rather than fabricating success.
 An explicit cancellation is recorded separately from success.
 Outstanding obligations block any settled-episode interpretation.
 
