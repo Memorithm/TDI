@@ -829,6 +829,75 @@ mod tests {
     }
 
     #[test]
+    fn completed_output_from_an_old_tick_cannot_resolve_current_deadline() {
+        let mut low = costs();
+        low.per_event_ceiling = 8;
+        let deferred = execute_c3(
+            plan_c3(
+                Gate::Xor,
+                revisions(5),
+                None,
+                1,
+                Obligation::Optional { deadline_tick: 3 },
+                low,
+            )
+            .unwrap(),
+            || panic!("deferred input read"),
+        )
+        .unwrap();
+        let identity = PendingIdentity {
+            gate: Gate::Xor,
+            revisions: revisions(5),
+        };
+        let mut ledger = DeadlineLedger::default();
+        ledger.advance(1).unwrap();
+        ledger
+            .defer(
+                PendingDeadline {
+                    request_id: 55,
+                    identity,
+                    deadline_tick: 3,
+                },
+                &deferred,
+            )
+            .unwrap();
+        ledger.advance(2).unwrap();
+        let stale_timestamp = execute_c3(
+            plan_c3(
+                Gate::Xor,
+                revisions(5),
+                None,
+                1,
+                Obligation::RequiredNow,
+                costs(),
+            )
+            .unwrap(),
+            || (true, false),
+        )
+        .unwrap();
+        assert_eq!(
+            ledger.resolve(55, &stale_timestamp),
+            Err(DeadlineError::InvalidResolutionEvidence(55))
+        );
+        assert!(!ledger.settled());
+        let current = execute_c3(
+            plan_c3(
+                Gate::Xor,
+                revisions(5),
+                None,
+                2,
+                Obligation::RequiredNow,
+                costs(),
+            )
+            .unwrap(),
+            || (true, false),
+        )
+        .unwrap();
+        assert!(ledger.resolve(55, &current).unwrap());
+        assert_eq!(ledger.resolved(), 1);
+    }
+
+    #[test]
     fn deadline_ledger_rejects_duplicate_and_time_reversal() {
         let mut ledger = DeadlineLedger::default();
         ledger.advance(2).unwrap();
