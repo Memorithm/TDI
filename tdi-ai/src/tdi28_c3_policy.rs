@@ -401,7 +401,10 @@ impl DeadlineLedger {
         if !matching_output {
             return Ok(false);
         }
-        let next = self.resolved.checked_add(1).ok_or(DeadlineError::CounterOverflow)?;
+        let next = self
+            .resolved
+            .checked_add(1)
+            .ok_or(DeadlineError::CounterOverflow)?;
         self.pending.remove(index);
         self.resolved = next;
         Ok(true)
@@ -414,7 +417,10 @@ impl DeadlineLedger {
             .iter()
             .position(|item| item.request_id == request_id)
             .ok_or(DeadlineError::MissingRequest(request_id))?;
-        let next = self.cancelled.checked_add(1).ok_or(DeadlineError::CounterOverflow)?;
+        let next = self
+            .cancelled
+            .checked_add(1)
+            .ok_or(DeadlineError::CounterOverflow)?;
         self.pending.remove(index);
         self.cancelled = next;
         Ok(())
@@ -618,11 +624,14 @@ mod tests {
         let mut ledger = DeadlineLedger::default();
         ledger.advance(2).unwrap();
         ledger
-            .defer(PendingDeadline {
-                request_id: 1,
-                identity: id,
-                deadline_tick: 6,
-            }, &deferred_evidence)
+            .defer(
+                PendingDeadline {
+                    request_id: 1,
+                    identity: id,
+                    deadline_tick: 6,
+                },
+                &deferred_evidence,
+            )
             .unwrap();
         ledger.advance(4).unwrap();
         budget.per_event_ceiling = 50;
