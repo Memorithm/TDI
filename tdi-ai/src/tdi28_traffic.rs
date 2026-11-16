@@ -317,7 +317,7 @@ mod tests {
     fn profile() -> TransferProfile {
         TransferProfile {
             revision: 1,
-            bytes_per_value_read: 8,
+            bytes_per_value_read: 32,
             bytes_per_revision_read: 8,
             bytes_per_cache_probe: 8,
             bytes_per_cache_validation: 8,
