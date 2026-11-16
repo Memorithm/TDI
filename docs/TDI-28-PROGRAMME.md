@@ -287,7 +287,9 @@ C3 output against C0. Its `strict_quality_parity` additionally requires:
 2. all C2 and C3 pending obligations are empty and none was cancelled;
 3. every event's delivered value exactly equals the C0 value.
 
-`strict_proxy_scores` returns **None** rather than present a cost
+`strict_proxy_scores` evaluates only with the original coefficient vector
+stored inside the report: it does not accept post-hoc outcome-dependent
+reweighting. It returns **None** rather than present a cost
 comparison as equal-utility evidence if any of these conditions fail.
 The raw diagnostic work vectors and per-event records remain available,
 including negative results. A later task-utility/coverage metric may
