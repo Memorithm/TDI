@@ -55,6 +55,7 @@ pub struct C3Plan {
     revisions: InputRevisions,
     cache: Option<CachedOutput>,
     decision: Decision,
+    tick: u64,
     validated_cache: bool,
     upper_bound: u128,
     budget: ProxyBudget,
@@ -86,6 +87,7 @@ pub struct C3Execution {
     proxy_cost: u128,
     proxy_upper_bound: u128,
     model_revision: u64,
+    tick: u64,
     identity: PendingIdentity,
 }
 
@@ -113,6 +115,11 @@ impl C3Execution {
     #[must_use]
     pub const fn identity(self) -> PendingIdentity {
         self.identity
+    }
+
+    #[must_use]
+    pub const fn tick(self) -> u64 {
+        self.tick
     }
 }
 
@@ -215,6 +222,7 @@ pub fn plan_c3(
         revisions,
         cache,
         decision,
+        tick: now,
         validated_cache: inspect,
         upper_bound,
         budget,
@@ -278,6 +286,7 @@ where
         proxy_cost,
         proxy_upper_bound: plan.upper_bound,
         model_revision: plan.budget.model_revision,
+        tick: plan.tick,
         identity: PendingIdentity {
             gate: plan.gate,
             revisions: plan.revisions,
@@ -319,6 +328,7 @@ pub enum DeadlineError {
     MissingRequest(u64),
     CapacityExceeded,
     InvalidDeferralEvidence(u64),
+    InvalidResolutionEvidence(u64),
     CounterOverflow,
     Missed { request_id: u64, due: u64, now: u64 },
 }
@@ -356,6 +366,7 @@ impl DeadlineLedger {
         if execution.step.decision != Decision::Defer
             || execution.step.output.is_some()
             || execution.identity != pending.identity
+            || self.last_tick != Some(execution.tick)
         {
             return Err(DeadlineError::InvalidDeferralEvidence(pending.request_id));
         }
@@ -395,6 +406,11 @@ impl DeadlineLedger {
             .iter()
             .position(|item| item.request_id == request_id)
             .ok_or(DeadlineError::MissingRequest(request_id))?;
+        if self.last_tick != Some(executed.tick)
+            || executed.tick > self.pending[index].deadline_tick
+        {
+            return Err(DeadlineError::InvalidResolutionEvidence(request_id));
+        }
         let matching_output = executed.step.output.is_some()
             && executed.step.decision != Decision::Defer
             && executed.identity == self.pending[index].identity;
