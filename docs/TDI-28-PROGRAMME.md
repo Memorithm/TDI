@@ -322,3 +322,75 @@ invalid deadline shape, revision consistency and per-event ceiling
 exceedances. Future campaigns must freeze split assignments,
 task-equivalence criteria, deadline/utility requirements, hardware
 resource observations and provenance **before** confirmation.
+
+## Stage-0 memory and communication transfer algebra (synthetic contract)
+
+`tdi-ai/src/tdi28_traffic.rs` adds a declared transfer accounting vector
+with independent components:
+
+```text
+Traffic = (logical_memory_read_bytes,
+           logical_memory_write_bytes,
+           logical_communication_bytes,
+           logical_message_count)
+```
+
+These are **declared logical API-level quantities** derived from the
+work vector, not CPU cache-line counts, DRAM controller statistics,
+socket traffic, packet captures, actual power, or physical joules.
+
+An explicit nonzero-versioned `TransferProfile` declares assumed byte
+volumes per value/revision/cache read, cache validation, output write,
+state transition, deferral queue write, and dispatch event, plus assumed
+message sizes and counts for evaluation, cache validation, dispatch, and
+deferral. All transfer dimensions are separate from Boolean gate counts.
+Intra-core/local communication can be represented by explicit zeros;
+this is a *scenario*, not a measurement.
+
+`Traffic::checked_add` defines checked vector composition. A separate
+`TransferPrices` assigns integer **proxy** costs to memory read bytes,
+write bytes, communication bytes and messages. A nonzero profile version
+is not proof of calibration. The proxy scalar is additive by definition;
+real hardware energy can be non-additive due to memory hierarchies,
+clocking, voltage scaling, batching and interconnect contention.
+
+`replay_four_with_traffic` binds the synthetic scenario **before**
+replaying the same four arms. `TrafficReport` retains its original
+matched replay and frozen transfer contract, per-event transfer vectors,
+per-arm aggregate vectors, and score derivation. To prevent silent
+post-result optimization, the public strict score accessor accepts no
+replacement weights. It checks equal per-event output coverage and
+unsettled optional debts exactly as the four-arm comparator does. Raw
+memory/communication dimensions remain visible for failed/negative/
+inconclusive comparisons, without claiming equal task utility.
+
+### Counterexamples and limits
+
+The Development test suite includes a case where C2 avoids Boolean
+operations but its declared **remote cache-validation communication**
+cost dominates. Thus an apparent Work-only advantage reverses when
+the same predeclared transfer scenario is considered. C3 currently
+selects based on its original logical Work proxy and **does not**
+claim to optimize this newly declared traffic cost. A future
+traffic-aware policy must price all preobservable transfers *inside*
+its decision and re-run matched correctness, debt, and budget gates.
+
+The transfer profile excludes runtime allocations, scheduler wakeups,
+ledger traversal, offline revision consistency validation, memory
+hierarchy effects, communication retries, and unobserved background
+power. Additional empirical counters/physical metering via RemoteOps
+are required before discussing actual energy consumed. Do not label
+these values "energy saved", "measured bytes", "DRAM reads" or "watts".
+
+### Qualification gate
+
+```bash
+cargo fmt --all -- --check
+cargo test -p tdi-ai --features experimental --lib tdi28_ --locked
+cargo clippy -p tdi-ai --features experimental --all-targets --locked -- -D warnings
+```
+
+The test set covers C0/C1 exact parity, matched C0/C2/C3 outputs,
+communication-vs-compute ranking reversal, local communication control,
+optional result coverage, vector associativity and arithmetic overflow.
+No TDI-26 topology/confirmatory integration is authorized by this slice.
