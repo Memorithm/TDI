@@ -187,9 +187,7 @@ where
     let mut work = Work {
         revision_reads: 2,
         cache_probes: u64::from(cache.is_some()),
-        cache_validation_comparisons: u64::from(
-            cache.is_some() && arm == Arm::EnergyGoverned,
-        ),
+        cache_validation_comparisons: u64::from(cache.is_some() && arm == Arm::EnergyGoverned),
         event_decisions: 1,
         ..Work::default()
     };
