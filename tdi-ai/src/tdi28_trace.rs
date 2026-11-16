@@ -161,12 +161,7 @@ fn preflight(events: &[TraceEvent], horizon: u64) -> Result<(), TraceError> {
             }
         }
         previous = Some(event.tick);
-        checked_revision(
-            &mut left,
-            event.revisions.left,
-            event.left,
-            InputSide::Left,
-        )?;
+        checked_revision(&mut left, event.revisions.left, event.left, InputSide::Left)?;
         checked_revision(
             &mut right,
             event.revisions.right,
@@ -357,7 +352,12 @@ mod tests {
         assert_eq!(report.records[0].governed_output, None);
         assert_eq!(report.records[2].governed_output, Some(false));
         assert_eq!(report.governed_work.gate_evaluations, 1);
-        assert!(report.settled_proxy_scores(Work::default()).unwrap().is_some());
+        assert!(
+            report
+                .settled_proxy_scores(Work::default())
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[test]
@@ -439,9 +439,6 @@ mod tests {
     #[test]
     fn too_large_trace_rejects_before_reference_execution() {
         let too_many = vec![event(0, 1, false, Demand::Required); MAX_TRACE_EVENTS + 1];
-        assert_eq!(
-            replay_pair(&too_many, 0),
-            Err(TraceError::TooManyEvents)
-        );
+        assert_eq!(replay_pair(&too_many, 0), Err(TraceError::TooManyEvents));
     }
 }
