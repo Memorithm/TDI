@@ -88,14 +88,38 @@ impl Work {
     /// Checked composition of independent event-work records.
     pub fn checked_add(self, other: Self) -> Result<Self, AccountingError> {
         Ok(Self {
-            gate_evaluations: self.gate_evaluations.checked_add(other.gate_evaluations).ok_or(AccountingError::Overflow)?,
-            input_value_reads: self.input_value_reads.checked_add(other.input_value_reads).ok_or(AccountingError::Overflow)?,
-            revision_reads: self.revision_reads.checked_add(other.revision_reads).ok_or(AccountingError::Overflow)?,
-            cache_probes: self.cache_probes.checked_add(other.cache_probes).ok_or(AccountingError::Overflow)?,
-            output_transitions: self.output_transitions.checked_add(other.output_transitions).ok_or(AccountingError::Overflow)?,
-            event_decisions: self.event_decisions.checked_add(other.event_decisions).ok_or(AccountingError::Overflow)?,
-            deferred_events: self.deferred_events.checked_add(other.deferred_events).ok_or(AccountingError::Overflow)?,
-            idle_ticks: self.idle_ticks.checked_add(other.idle_ticks).ok_or(AccountingError::Overflow)?,
+            gate_evaluations: self
+                .gate_evaluations
+                .checked_add(other.gate_evaluations)
+                .ok_or(AccountingError::Overflow)?,
+            input_value_reads: self
+                .input_value_reads
+                .checked_add(other.input_value_reads)
+                .ok_or(AccountingError::Overflow)?,
+            revision_reads: self
+                .revision_reads
+                .checked_add(other.revision_reads)
+                .ok_or(AccountingError::Overflow)?,
+            cache_probes: self
+                .cache_probes
+                .checked_add(other.cache_probes)
+                .ok_or(AccountingError::Overflow)?,
+            output_transitions: self
+                .output_transitions
+                .checked_add(other.output_transitions)
+                .ok_or(AccountingError::Overflow)?,
+            event_decisions: self
+                .event_decisions
+                .checked_add(other.event_decisions)
+                .ok_or(AccountingError::Overflow)?,
+            deferred_events: self
+                .deferred_events
+                .checked_add(other.deferred_events)
+                .ok_or(AccountingError::Overflow)?,
+            idle_ticks: self
+                .idle_ticks
+                .checked_add(other.idle_ticks)
+                .ok_or(AccountingError::Overflow)?,
         })
     }
 
@@ -387,8 +411,14 @@ mod tests {
             cache_probes: 100,
             ..Work::default()
         };
-        assert!(reused.proxy_score(expensive_compute).unwrap() < evaluated.proxy_score(expensive_compute).unwrap());
-        assert!(evaluated.proxy_score(expensive_cache).unwrap() < reused.proxy_score(expensive_cache).unwrap());
+        assert!(
+            reused.proxy_score(expensive_compute).unwrap()
+                < evaluated.proxy_score(expensive_compute).unwrap()
+        );
+        assert!(
+            evaluated.proxy_score(expensive_cache).unwrap()
+                < reused.proxy_score(expensive_cache).unwrap()
+        );
     }
 
     #[test]
