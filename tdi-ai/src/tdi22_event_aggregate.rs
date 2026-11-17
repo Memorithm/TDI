@@ -7,15 +7,19 @@
 
 use std::collections::BTreeMap;
 
-use super::tdi22_torsor::{
-    FactorizedTorsorKey, Torsor3, TorsorError, Twist3, Vec3,
-};
+use super::tdi22_torsor::{FactorizedTorsorKey, Torsor3, TorsorError, Twist3, Vec3};
 
 /// A caller-identified contribution. Each identifier has at most one live value.
 #[derive(Clone, Copy, Debug)]
 pub enum TorsorEvent {
-    Upsert { id: u64, torsor: Torsor3, weight: f64 },
-    Remove { id: u64 },
+    Upsert {
+        id: u64,
+        torsor: Torsor3,
+        weight: f64,
+    },
+    Remove {
+        id: u64,
+    },
 }
 
 /// Rejections never partially modify the accumulated state.
@@ -147,8 +151,8 @@ impl EventTorsorAggregate {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::tdi22_torsor::direct_pairing;
+    use super::*;
 
     fn v(x: f64, y: f64, z: f64) -> Vec3 {
         Vec3::new(x, y, z).unwrap()
@@ -179,9 +183,21 @@ mod tests {
         let mut state = EventTorsorAggregate::new();
         let mut reference: BTreeMap<u64, (Torsor3, f64)> = BTreeMap::new();
         let stream = [
-            TorsorEvent::Upsert { id: 9, torsor: a, weight: 2.0 },
-            TorsorEvent::Upsert { id: 3, torsor: b, weight: -0.5 },
-            TorsorEvent::Upsert { id: 9, torsor: c, weight: 1.25 },
+            TorsorEvent::Upsert {
+                id: 9,
+                torsor: a,
+                weight: 2.0,
+            },
+            TorsorEvent::Upsert {
+                id: 3,
+                torsor: b,
+                weight: -0.5,
+            },
+            TorsorEvent::Upsert {
+                id: 9,
+                torsor: c,
+                weight: 1.25,
+            },
             TorsorEvent::Remove { id: 3 },
             TorsorEvent::Remove { id: 9 },
         ];
@@ -191,9 +207,12 @@ mod tests {
                 TorsorEvent::Upsert { id, torsor, weight } => {
                     reference.insert(id, (torsor, weight));
                 }
-                TorsorEvent::Remove { id } => { reference.remove(&id); }
+                TorsorEvent::Remove { id } => {
+                    reference.remove(&id);
+                }
             }
-            let expected: f64 = reference.values()
+            let expected: f64 = reference
+                .values()
                 .map(|(item, weight)| weight * direct_pairing(twist, *item, q).unwrap())
                 .sum();
             close(state.score(twist, q).unwrap(), expected);
@@ -209,14 +228,29 @@ mod tests {
         let a = torsor(v(2.0, 3.0, 1.0), v(1.0, -2.0, 4.0), v(1.0, 0.0, 2.0));
         let b = torsor(v(-1.0, 2.0, 3.0), v(3.0, 2.0, -1.0), v(-2.0, 1.0, 0.0));
         let mut state = EventTorsorAggregate::new();
-        state.apply(TorsorEvent::Upsert { id: 0, torsor: a, weight: 1.0 }).unwrap();
-        state.apply(TorsorEvent::Upsert { id: 1, torsor: b, weight: 2.0 }).unwrap();
+        state
+            .apply(TorsorEvent::Upsert {
+                id: 0,
+                torsor: a,
+                weight: 1.0,
+            })
+            .unwrap();
+        state
+            .apply(TorsorEvent::Upsert {
+                id: 1,
+                torsor: b,
+                weight: 2.0,
+            })
+            .unwrap();
         let p = state.reduced_at(v(4.0, -3.0, 2.0)).unwrap();
         let q = state.reduced_at(v(-1.0, 3.0, -2.0)).unwrap();
         close_vec(p.resultant(), q.resultant());
         close_vec(p.transport(q.reference()).unwrap().moment(), q.moment());
         close(p.scalar_invariant().unwrap(), q.scalar_invariant().unwrap());
-        close_vec(p.origin_moment().unwrap(), state.factorized_key().origin_moment);
+        close_vec(
+            p.origin_moment().unwrap(),
+            state.factorized_key().origin_moment,
+        );
     }
 
     #[test]
@@ -229,32 +263,82 @@ mod tests {
         let twist = Twist3::new(v(1.0, 2.0, 3.0), v(2.0, -1.0, 4.0)).unwrap();
         let mut original = EventTorsorAggregate::new();
         let mut translated = EventTorsorAggregate::new();
-        original.apply(TorsorEvent::Upsert { id: 0, torsor: torsor(r, m, p), weight: 1.5 }).unwrap();
-        translated.apply(TorsorEvent::Upsert { id: 0, torsor: torsor(r, m, p.plus(d)), weight: 1.5 }).unwrap();
-        close(original.score(twist, q).unwrap(), translated.score(twist, q.plus(d)).unwrap());
+        original
+            .apply(TorsorEvent::Upsert {
+                id: 0,
+                torsor: torsor(r, m, p),
+                weight: 1.5,
+            })
+            .unwrap();
+        translated
+            .apply(TorsorEvent::Upsert {
+                id: 0,
+                torsor: torsor(r, m, p.plus(d)),
+                weight: 1.5,
+            })
+            .unwrap();
+        close(
+            original.score(twist, q).unwrap(),
+            translated.score(twist, q.plus(d)).unwrap(),
+        );
     }
 
     #[test]
     fn rejected_inputs_and_overflow_leave_state_unchanged() {
         let t = torsor(v(1.0, 0.0, 0.0), v(0.0, 1.0, 0.0), Vec3::zero());
         let mut state = EventTorsorAggregate::new();
-        state.apply(TorsorEvent::Upsert { id: 2, torsor: t, weight: 1.0 }).unwrap();
+        state
+            .apply(TorsorEvent::Upsert {
+                id: 2,
+                torsor: t,
+                weight: 1.0,
+            })
+            .unwrap();
         let before = state.clone();
-        assert_eq!(state.apply(TorsorEvent::Upsert { id: 2, torsor: t, weight: f64::NAN }), Err(EventError::InvalidWeight));
+        assert_eq!(
+            state.apply(TorsorEvent::Upsert {
+                id: 2,
+                torsor: t,
+                weight: f64::NAN
+            }),
+            Err(EventError::InvalidWeight)
+        );
         assert_eq!(state, before);
-        assert_eq!(state.apply(TorsorEvent::Remove { id: 999 }), Err(EventError::MissingSource(999)));
+        assert_eq!(
+            state.apply(TorsorEvent::Remove { id: 999 }),
+            Err(EventError::MissingSource(999))
+        );
         assert_eq!(state, before);
         let huge = torsor(v(f64::MAX, 0.0, 0.0), Vec3::zero(), Vec3::zero());
-        assert!(state.apply(TorsorEvent::Upsert { id: 3, torsor: huge, weight: 2.0 }).is_err());
+        assert!(
+            state
+                .apply(TorsorEvent::Upsert {
+                    id: 3,
+                    torsor: huge,
+                    weight: 2.0
+                })
+                .is_err()
+        );
         assert_eq!(state, before);
-        assert!(state.score(Twist3::new(v(1.0, 0.0, 0.0), v(0.0, f64::MAX, 0.0)).unwrap(), v(f64::MAX, 0.0, 0.0)).is_err());
+        assert!(
+            state
+                .score(
+                    Twist3::new(v(1.0, 0.0, 0.0), v(0.0, f64::MAX, 0.0)).unwrap(),
+                    v(f64::MAX, 0.0, 0.0)
+                )
+                .is_err()
+        );
         assert_eq!(state, before);
     }
 
     #[test]
     fn identical_upsert_is_numerically_idempotent() {
         let t = torsor(v(1.0, 2.0, 3.0), v(2.0, 3.0, 4.0), v(2.0, -1.0, 0.0));
-        let event = TorsorEvent::Upsert { id: 5, torsor: t, weight: 1.0 };
+        let event = TorsorEvent::Upsert {
+            id: 5,
+            torsor: t,
+            weight: 1.0,
+        };
         let mut state = EventTorsorAggregate::new();
         state.apply(event).unwrap();
         let before = state.clone();
