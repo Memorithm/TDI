@@ -124,6 +124,7 @@ pub enum EvidenceError {
     ZeroOrReversedInterval,
     MeterCounterResetOrWrap,
     NonBracketingIdleWindows,
+    InvalidRunChronology,
     IncorrectObservedQuality,
     ArithmeticOverflow,
 }
@@ -262,6 +263,22 @@ fn validate_trial(
     idle_corrected_energy(trial)
 }
 
+fn check_pair_order(pair: &EnergyPair) -> Result<(), EvidenceError> {
+    let (first, second) = match pair.order {
+        RunOrder::BaselineFirst => (&pair.baseline_c0, &pair.candidate_c3),
+        RunOrder::CandidateFirst => (&pair.candidate_c3, &pair.baseline_c0),
+    };
+    // Same declared meter/source: an ordered pair must use disjoint
+    // monotonic time windows and a non-reset cumulative counter epoch.
+    if first.idle_after.end.monotonic_ns > second.idle_before.begin.monotonic_ns
+        || first.idle_after.end.cumulative_microjoules
+            > second.idle_before.begin.cumulative_microjoules
+    {
+        return Err(EvidenceError::InvalidRunChronology);
+    }
+    Ok(())
+}
+
 /// Analyze matched C0/C3 trial pairs from **one** declared Development or
 /// Validation split; no split pooling, coefficient fitting, or validation
 /// feedback is permitted by this API. Requires an independent Stage-0
@@ -319,6 +336,7 @@ pub fn qualify_paired_observations(
 
         let baseline = validate_trial(&pair.baseline_c0, quality)?;
         let candidate = validate_trial(&pair.candidate_c3, quality)?;
+        check_pair_order(pair)?;
         let delta = MicrojouleInterval {
             lower: baseline
                 .lower
@@ -451,7 +469,7 @@ mod tests {
         }
     }
 
-    fn trial(run_id: u64, active_delta: u64) -> EnergyTrial {
+    fn trial(run_id: u64, active_delta: u64, timebase: u64, energybase: u64) -> EnergyTrial {
         EnergyTrial {
             run_id,
             context: context(),
@@ -463,24 +481,45 @@ mod tests {
                 deadline_misses: 0,
                 outstanding: 0,
             },
-            idle_before: window(0, 10, 0, 10),
-            active: window(10, 30, 10, active_delta),
-            idle_after: window(30, 40, 10 + active_delta, 10),
+            idle_before: window(timebase, timebase + 10, energybase, 10),
+            active: window(timebase + 10, timebase + 30, energybase + 10, active_delta),
+            idle_after: window(
+                timebase + 30,
+                timebase + 40,
+                energybase + 10 + active_delta,
+                10,
+            ),
         }
     }
 
     fn pairs() -> Vec<EnergyPair> {
         (0..4)
-            .map(|idx| EnergyPair {
-                pair_id: idx + 1,
-                split: EvidenceSplit::Development,
-                order: if idx % 2 == 0 {
+            .map(|idx| {
+                let order = if idx % 2 == 0 {
                     RunOrder::BaselineFirst
                 } else {
                     RunOrder::CandidateFirst
-                },
-                baseline_c0: trial(10 + 2 * idx, 120),
-                candidate_c3: trial(11 + 2 * idx, 90),
+                };
+                let timebase = 200 * idx;
+                let energybase = 10_000 * idx;
+                let baseline_first = order == RunOrder::BaselineFirst;
+                EnergyPair {
+                    pair_id: idx + 1,
+                    split: EvidenceSplit::Development,
+                    order,
+                    baseline_c0: trial(
+                        10 + 2 * idx,
+                        120,
+                        timebase + if baseline_first { 0 } else { 60 },
+                        energybase + if baseline_first { 0 } else { 1_000 },
+                    ),
+                    candidate_c3: trial(
+                        11 + 2 * idx,
+                        90,
+                        timebase + if baseline_first { 60 } else { 0 },
+                        energybase + if baseline_first { 1_000 } else { 0 },
+                    ),
+                }
             })
             .collect()
     }
@@ -497,7 +536,7 @@ mod tests {
 
     #[test]
     fn bracketed_idle_drift_remains_an_uncertainty_interval() {
-        let mut candidate = trial(8, 70);
+        let mut candidate = trial(8, 70, 0, 0);
         candidate.idle_after = window(30, 40, 80, 30);
         // Non-wrapping cumulative reading can be later/higher across
         // the hand-off; this test changes the idle rate deliberately.
@@ -507,7 +546,7 @@ mod tests {
 
     #[test]
     fn negative_idle_corrected_values_are_not_clamped() {
-        let mut sample = trial(9, 10);
+        let mut sample = trial(9, 10, 0, 0);
         sample.idle_after = window(30, 40, 20, 20);
         let interval = idle_corrected_energy(&sample).unwrap();
         assert_eq!(interval, MicrojouleInterval { lower: -30, upper: -10 });
@@ -515,10 +554,10 @@ mod tests {
 
     #[test]
     fn wrap_or_counter_reset_is_rejected() {
-        let mut sample = trial(9, 100);
+        let mut sample = trial(9, 100, 0, 0);
         sample.active.end.cumulative_microjoules = 9;
         assert_eq!(idle_corrected_energy(&sample), Err(EvidenceError::MeterCounterResetOrWrap));
-        let mut between_windows = trial(9, 100);
+        let mut between_windows = trial(9, 100, 0, 0);
         between_windows.idle_after.begin.cumulative_microjoules = 100;
         assert_eq!(idle_corrected_energy(&between_windows), Err(EvidenceError::MeterCounterResetOrWrap));
     }
@@ -566,6 +605,22 @@ mod tests {
         assert_eq!(
             qualify_paired_observations(&reference(), &observations),
             Err(EvidenceError::UnbalancedOrder)
+        );
+    }
+
+    #[test]
+    fn reported_arm_order_must_match_actual_meter_timestamps() {
+        let mut observations = pairs();
+        observations[0].order = RunOrder::CandidateFirst;
+        assert_eq!(
+            qualify_paired_observations(&reference(), &observations),
+            Err(EvidenceError::InvalidRunChronology)
+        );
+        let mut observations = pairs();
+        observations[0].candidate_c3.idle_before.begin.cumulative_microjoules = 0;
+        assert_eq!(
+            qualify_paired_observations(&reference(), &observations),
+            Err(EvidenceError::InvalidRunChronology)
         );
     }
 
