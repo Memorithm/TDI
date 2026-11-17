@@ -648,11 +648,7 @@ mod tests {
     #[test]
     fn failed_channel_replay_does_not_partially_rebase() {
         let mut state = CrossSourceReciprocity::new();
-        let values = [
-            (1, f64::MAX),
-            (3, -f64::MAX),
-            (2, f64::MAX),
-        ];
+        let values = [(1, f64::MAX), (3, -f64::MAX), (2, f64::MAX)];
         for (id, amplitude) in values {
             state
                 .apply(TorsorEvent::Upsert {
