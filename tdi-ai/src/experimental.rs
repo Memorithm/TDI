@@ -68,6 +68,8 @@ pub mod tdi22_eval;
 pub mod tdi22_event_aggregate;
 #[path = "tdi22_event_gate.rs"]
 pub mod tdi22_event_gate;
+#[path = "tdi22_event_impulse.rs"]
+pub mod tdi22_event_impulse;
 #[path = "tdi22_generator.rs"]
 pub mod tdi22_generator;
 #[path = "tdi22_torsor.rs"]
