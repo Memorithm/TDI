@@ -162,9 +162,9 @@ impl EventImpulseMemory {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::tdi22_event_aggregate::TorsorEvent;
     use super::super::tdi22_torsor::{Torsor3, direct_pairing};
+    use super::*;
 
     fn v(x: f64, y: f64, z: f64) -> Vec3 {
         Vec3::new(x, y, z).unwrap()
@@ -176,7 +176,10 @@ mod tests {
 
     fn close(a: f64, b: f64) {
         let scale = 1.0_f64.max(a.abs()).max(b.abs());
-        assert!((a - b).abs() <= 256.0 * f64::EPSILON * scale, "{a:?} != {b:?}");
+        assert!(
+            (a - b).abs() <= 256.0 * f64::EPSILON * scale,
+            "{a:?} != {b:?}"
+        );
     }
 
     #[test]
@@ -185,11 +188,25 @@ mod tests {
         let twist = Twist3::new(v(1.0, 0.0, 0.0), v(0.0, 0.0, 1.0)).unwrap();
         let point = v(0.0, 1.0, 0.0);
         let mut t3 = EventImpulseMemory::new(
-            InteractionArm::TransportedT3, twist, point, 0.5, 0.25, 1.5, &aggregate,
-        ).unwrap();
+            InteractionArm::TransportedT3,
+            twist,
+            point,
+            0.5,
+            0.25,
+            1.5,
+            &aggregate,
+        )
+        .unwrap();
         let mut t4 = EventImpulseMemory::new(
-            InteractionArm::SixChannelT4, twist, point, 0.5, 0.25, 1.5, &aggregate,
-        ).unwrap();
+            InteractionArm::SixChannelT4,
+            twist,
+            point,
+            0.5,
+            0.25,
+            1.5,
+            &aggregate,
+        )
+        .unwrap();
 
         let stream = [
             (Some(1.0), Edge::Rising),
@@ -227,25 +244,43 @@ mod tests {
         let mut first = EventTorsorAggregate::new();
         let mut second = EventTorsorAggregate::new();
         let mut first_mem = EventImpulseMemory::new(
-            InteractionArm::SixChannelT4, twist, Vec3::zero(), 0.5, -10.0, 10.0, &first,
-        ).unwrap();
+            InteractionArm::SixChannelT4,
+            twist,
+            Vec3::zero(),
+            0.5,
+            -10.0,
+            10.0,
+            &first,
+        )
+        .unwrap();
         let mut second_mem = EventImpulseMemory::new(
-            InteractionArm::SixChannelT4, twist, Vec3::zero(), 0.5, -10.0, 10.0, &second,
-        ).unwrap();
+            InteractionArm::SixChannelT4,
+            twist,
+            Vec3::zero(),
+            0.5,
+            -10.0,
+            10.0,
+            &second,
+        )
+        .unwrap();
         for (index, value) in [1.0, 2.0, 1.0].into_iter().enumerate() {
-            first.apply(TorsorEvent::Upsert {
-                id: 1,
-                torsor: source(v(value, 0.0, 0.0), Vec3::zero(), Vec3::zero()),
-                weight: 1.0,
-            }).unwrap();
+            first
+                .apply(TorsorEvent::Upsert {
+                    id: 1,
+                    torsor: source(v(value, 0.0, 0.0), Vec3::zero(), Vec3::zero()),
+                    weight: 1.0,
+                })
+                .unwrap();
             first_mem.observe_event(index as u64, &first).unwrap();
         }
         for (index, value) in [2.0, 1.0].into_iter().enumerate() {
-            second.apply(TorsorEvent::Upsert {
-                id: 1,
-                torsor: source(v(value, 0.0, 0.0), Vec3::zero(), Vec3::zero()),
-                weight: 1.0,
-            }).unwrap();
+            second
+                .apply(TorsorEvent::Upsert {
+                    id: 1,
+                    torsor: source(v(value, 0.0, 0.0), Vec3::zero(), Vec3::zero()),
+                    weight: 1.0,
+                })
+                .unwrap();
             second_mem.observe_event(index as u64, &second).unwrap();
         }
         assert_eq!(first.factorized_key(), second.factorized_key());
@@ -262,21 +297,45 @@ mod tests {
         let mut original = EventTorsorAggregate::new();
         let mut translated = EventTorsorAggregate::new();
         let mut a = EventImpulseMemory::new(
-            InteractionArm::TransportedT3, twist, q, 0.75, -0.5, 0.5, &original,
-        ).unwrap();
+            InteractionArm::TransportedT3,
+            twist,
+            q,
+            0.75,
+            -0.5,
+            0.5,
+            &original,
+        )
+        .unwrap();
         let mut b = EventImpulseMemory::new(
-            InteractionArm::TransportedT3, twist, q.plus(shift), 0.75, -0.5, 0.5, &translated,
-        ).unwrap();
+            InteractionArm::TransportedT3,
+            twist,
+            q.plus(shift),
+            0.75,
+            -0.5,
+            0.5,
+            &translated,
+        )
+        .unwrap();
         for (id, r) in [
             (10, v(1.0, 2.0, 0.0)),
             (11, v(-0.5, 1.0, 0.0)),
             (12, v(0.75, -2.0, 0.0)),
         ] {
             let t = source(r, v(0.0, 0.0, 2.0), p);
-            original.apply(TorsorEvent::Upsert { id, torsor: t, weight: 1.0 }).unwrap();
-            translated.apply(TorsorEvent::Upsert {
-                id, torsor: source(r, t.moment(), p.plus(shift)), weight: 1.0,
-            }).unwrap();
+            original
+                .apply(TorsorEvent::Upsert {
+                    id,
+                    torsor: t,
+                    weight: 1.0,
+                })
+                .unwrap();
+            translated
+                .apply(TorsorEvent::Upsert {
+                    id,
+                    torsor: source(r, t.moment(), p.plus(shift)),
+                    weight: 1.0,
+                })
+                .unwrap();
             let x = a.observe_event(id, &original).unwrap();
             let y = b.observe_event(id, &translated).unwrap();
             close(x.score, y.score);
@@ -293,12 +352,23 @@ mod tests {
     fn baseline_binds_to_preloaded_aggregate_without_initial_artificial_pulse() {
         let mut aggregate = EventTorsorAggregate::new();
         let twist = Twist3::new(v(1.0, 0.0, 0.0), Vec3::zero()).unwrap();
-        aggregate.apply(TorsorEvent::Upsert {
-            id: 1, torsor: source(v(3.0, 0.0, 0.0), Vec3::zero(), Vec3::zero()), weight: 1.0,
-        }).unwrap();
+        aggregate
+            .apply(TorsorEvent::Upsert {
+                id: 1,
+                torsor: source(v(3.0, 0.0, 0.0), Vec3::zero(), Vec3::zero()),
+                weight: 1.0,
+            })
+            .unwrap();
         let mut memory = EventImpulseMemory::new(
-            InteractionArm::SixChannelT4, twist, Vec3::zero(), 0.0, -0.5, 0.5, &aggregate,
-        ).unwrap();
+            InteractionArm::SixChannelT4,
+            twist,
+            Vec3::zero(),
+            0.0,
+            -0.5,
+            0.5,
+            &aggregate,
+        )
+        .unwrap();
         let observed = memory.observe_event(1, &aggregate).unwrap();
         close(observed.score, 3.0);
         close(observed.score_delta, 0.0);
@@ -313,25 +383,42 @@ mod tests {
         for retention in [f64::NAN, f64::INFINITY, -0.1, 1.1] {
             assert_eq!(
                 EventImpulseMemory::new(
-                    InteractionArm::SixChannelT4, twist, Vec3::zero(),
-                    retention, -1.0, 1.0, &aggregate,
+                    InteractionArm::SixChannelT4,
+                    twist,
+                    Vec3::zero(),
+                    retention,
+                    -1.0,
+                    1.0,
+                    &aggregate,
                 ),
                 Err(ImpulseError::InvalidRetention)
             );
         }
         let mut memory = EventImpulseMemory::new(
-            InteractionArm::SixChannelT4, twist, Vec3::zero(),
-            0.5, -1.0, 1.0, &aggregate,
-        ).unwrap();
+            InteractionArm::SixChannelT4,
+            twist,
+            Vec3::zero(),
+            0.5,
+            -1.0,
+            1.0,
+            &aggregate,
+        )
+        .unwrap();
         memory.observe_event(100, &aggregate).unwrap();
         let before = memory;
         assert_eq!(
             memory.observe_event(100, &aggregate),
-            Err(ImpulseError::StaleSequence { last: 100, received: 100 })
+            Err(ImpulseError::StaleSequence {
+                last: 100,
+                received: 100
+            })
         );
         assert_eq!(
             memory.observe_event(99, &aggregate),
-            Err(ImpulseError::StaleSequence { last: 100, received: 99 })
+            Err(ImpulseError::StaleSequence {
+                last: 100,
+                received: 99
+            })
         );
         assert_eq!(memory, before);
     }
@@ -341,24 +428,38 @@ mod tests {
         let mut aggregate = EventTorsorAggregate::new();
         let twist = Twist3::new(v(1.0, 0.0, 0.0), Vec3::zero()).unwrap();
         let mut memory = EventImpulseMemory::new(
-            InteractionArm::SixChannelT4, twist, Vec3::zero(), 1.0, -1.0, 1.0, &aggregate,
-        ).unwrap();
-        aggregate.apply(TorsorEvent::Upsert {
-            id: 1,
-            torsor: source(v(f64::MAX, 0.0, 0.0), Vec3::zero(), Vec3::zero()),
-            weight: 1.0,
-        }).unwrap();
+            InteractionArm::SixChannelT4,
+            twist,
+            Vec3::zero(),
+            1.0,
+            -1.0,
+            1.0,
+            &aggregate,
+        )
+        .unwrap();
+        aggregate
+            .apply(TorsorEvent::Upsert {
+                id: 1,
+                torsor: source(v(f64::MAX, 0.0, 0.0), Vec3::zero(), Vec3::zero()),
+                weight: 1.0,
+            })
+            .unwrap();
         memory.observe_event(0, &aggregate).unwrap();
         let before = memory;
         // Two source mutations without an intervening observer event:
         // each aggregate mutation succeeds, but the net score jump is -INF.
         aggregate.apply(TorsorEvent::Remove { id: 1 }).unwrap();
-        aggregate.apply(TorsorEvent::Upsert {
-            id: 1,
-            torsor: source(v(-f64::MAX, 0.0, 0.0), Vec3::zero(), Vec3::zero()),
-            weight: 1.0,
-        }).unwrap();
-        assert_eq!(memory.observe_event(1, &aggregate), Err(ImpulseError::NonFiniteDelta));
+        aggregate
+            .apply(TorsorEvent::Upsert {
+                id: 1,
+                torsor: source(v(-f64::MAX, 0.0, 0.0), Vec3::zero(), Vec3::zero()),
+                weight: 1.0,
+            })
+            .unwrap();
+        assert_eq!(
+            memory.observe_event(1, &aggregate),
+            Err(ImpulseError::NonFiniteDelta)
+        );
         assert_eq!(memory, before);
     }
 }
