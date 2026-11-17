@@ -62,10 +62,10 @@ pub mod tdi21_sequence_materializer;
 pub mod tdi21_stream;
 #[path = "tdi21_boolean_tasks.rs"]
 pub mod tdi21_tasks;
-#[path = "tdi22_event_aggregate.rs"]
-pub mod tdi22_event_aggregate;
 #[path = "tdi22_eval.rs"]
 pub mod tdi22_eval;
+#[path = "tdi22_event_aggregate.rs"]
+pub mod tdi22_event_aggregate;
 #[path = "tdi22_generator.rs"]
 pub mod tdi22_generator;
 #[path = "tdi22_torsor.rs"]
