@@ -538,6 +538,24 @@ mod tests {
     }
 
     #[test]
+    fn harmful_and_null_energy_outcomes_are_preserved() {
+        let mut observations = pairs();
+        // C3 requires *more* submitted energy in the first matched pair.
+        observations[0].candidate_c3 = trial(11, 170, 60, 1_000);
+        // One matched pair is exactly tied after idle correction.
+        observations[1].candidate_c3 = trial(13, 120, 200, 10_000);
+        let report = qualify_paired_observations(&reference(), &observations).unwrap();
+        assert_eq!(report.strictly_positive_pairs, 2);
+        assert_eq!(report.strictly_negative_pairs, 1);
+        assert_eq!(report.sign_ambiguous_pairs, 1);
+        assert!(report.pairs[0].baseline_minus_candidate.upper < 0);
+        assert_eq!(
+            report.pairs[1].baseline_minus_candidate,
+            MicrojouleInterval { lower: 0, upper: 0 }
+        );
+    }
+
+    #[test]
     fn bracketed_idle_drift_remains_an_uncertainty_interval() {
         let mut candidate = trial(8, 70, 0, 0);
         candidate.idle_after = window(30, 40, 80, 30);
