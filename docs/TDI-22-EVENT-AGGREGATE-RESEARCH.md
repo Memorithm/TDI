@@ -38,6 +38,36 @@ NaN, infinite weights, and derived overflow fail closed.
   six cached scalar components. This is *reference algorithm* accounting,
   not measured energy, bandwidth, throughput, or an end-to-end model claim.
 
+## Numerical drift audit and explicit compensated rebase
+
+The default `apply` path remains an O(log K) source update with constant-size
+floating-point arithmetic. After many inserts, replacements and deletions,
+non-associative binary64 cancellation can cause incremental totals to diverge
+from a fresh sum of the active contributions. This is not a torsor-specific
+identity failure; it is a numerical consequence of summation order.
+
+`audit_rebase()` deterministically traverses the live source-id map, uses
+six separate Neumaier-compensated accumulators, and reports the observed
+maximum absolute disagreement in the resultant and origin-moment channels.
+It does **not** modify state and is an O(K) operation.
+
+`rebase()` performs that audit and atomically replaces both cached channels
+only if the complete recomputation and diagnostic checks succeed. It preserves
+all contributor identities. Neither the reported differences nor the
+compensated results are rigorously certified numerical error bounds.
+
+A deterministic cancellation control adds `1e16`, `1`, and `-1e16`
+in that event order. Simple binary64 incremental accumulation loses the
+unit residual, while ordered Neumaier replay recovers it. Additional tests
+cover no-mutation audits, repeated rebases, reduction-point consistency,
+pairing parity and empty-state behavior. These are software fixtures, not
+energy/performance findings.
+
+**Research cost:** an audit or rebase explicitly scans O(K) stored entries
+and uses more arithmetic than the normal update path. Before integrating
+any automatic cadence, compare numerical drift, task quality, memory traffic
+and physical cost under preregistered workloads and preserve negative results.
+
 ## Limits and follow-ups
 
 Floating-point event order changes rounding. Comparisons use declared binary64

@@ -68,6 +68,77 @@ fn checked_replace(total: Vec3, old: Vec3, new: Vec3) -> Result<Vec3, EventError
     .map_err(Into::into)
 }
 
+/// Observed binary64 disagreement between an incremental state and a
+/// deterministic compensated full replay of its live contributions.
+///
+/// These are numerical diagnostics, NOT certified upper error bounds.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RebaseAudit {
+    pub before: FactorizedTorsorKey,
+    pub recomputed: FactorizedTorsorKey,
+    pub resultant_max_abs: f64,
+    pub origin_moment_max_abs: f64,
+}
+
+/// Neumaier-compensated scalar summation, with explicit finite checks.
+///
+/// Reference-only O(K) full replay. This is not used on the normal event path.
+#[derive(Clone, Copy, Debug, Default)]
+struct Compensated {
+    sum: f64,
+    correction: f64,
+}
+
+impl Compensated {
+    fn add(&mut self, value: f64) -> Result<(), EventError> {
+        let next = self.sum + value;
+        if !next.is_finite() {
+            return Err(EventError::Algebra(TorsorError::NonFiniteScalar {
+                field: "rebase_sum",
+            }));
+        }
+        let lost = if self.sum.abs() >= value.abs() {
+            (self.sum - next) + value
+        } else {
+            (value - next) + self.sum
+        };
+        let correction = self.correction + lost;
+        if !lost.is_finite() || !correction.is_finite() {
+            return Err(EventError::Algebra(TorsorError::NonFiniteScalar {
+                field: "rebase_correction",
+            }));
+        }
+        self.sum = next;
+        self.correction = correction;
+        Ok(())
+    }
+
+    fn finish(self) -> Result<f64, EventError> {
+        let result = self.sum + self.correction;
+        if !result.is_finite() {
+            return Err(EventError::Algebra(TorsorError::NonFiniteScalar {
+                field: "rebase_result",
+            }));
+        }
+        Ok(result)
+    }
+}
+
+fn max_component_disagreement(a: Vec3, b: Vec3) -> Result<f64, EventError> {
+    let values = [(a.x, b.x), (a.y, b.y), (a.z, b.z)];
+    let mut maximum = 0.0_f64;
+    for (old, new) in values {
+        let delta = (old - new).abs();
+        if !delta.is_finite() {
+            return Err(EventError::Algebra(TorsorError::NonFiniteScalar {
+                field: "rebase_disagreement",
+            }));
+        }
+        maximum = maximum.max(delta);
+    }
+    Ok(maximum)
+}
+
 /// An event-driven cache of the global resultant and origin-reduced moment.
 ///
 /// Each accepted event performs constant-size vector arithmetic and one
@@ -135,6 +206,62 @@ impl EventTorsorAggregate {
             resultant: self.resultant,
             origin_moment: self.origin_moment,
         }
+    }
+
+    /// Deterministic full replay in ascending source-id order, using six
+    /// independent Neumaier accumulators. No state is changed.
+    ///
+    /// This O(K) operation can be compared against the O(log K) event path,
+    /// but is not itself evidence of reduced physical cost or model utility.
+    fn compensated_key(&self) -> Result<FactorizedTorsorKey, EventError> {
+        let mut accumulators = [Compensated::default(); 6];
+        for contribution in self.entries.values() {
+            let channels = [
+                contribution.resultant.x,
+                contribution.resultant.y,
+                contribution.resultant.z,
+                contribution.origin_moment.x,
+                contribution.origin_moment.y,
+                contribution.origin_moment.z,
+            ];
+            for (accumulator, value) in accumulators.iter_mut().zip(channels) {
+                accumulator.add(value)?;
+            }
+        }
+        let mut channel = [0.0_f64; 6];
+        for (value, accumulator) in channel.iter_mut().zip(accumulators) {
+            *value = accumulator.finish()?;
+        }
+        Ok(FactorizedTorsorKey {
+            resultant: Vec3::new(channel[0], channel[1], channel[2])?,
+            origin_moment: Vec3::new(channel[3], channel[4], channel[5])?,
+        })
+    }
+
+    /// Diagnose accumulated rounding drift without mutating stored totals.
+    /// Disagreement is an observation, not a bound on true mathematical error.
+    pub fn audit_rebase(&self) -> Result<RebaseAudit, EventError> {
+        let before = self.factorized_key();
+        let recomputed = self.compensated_key()?;
+        Ok(RebaseAudit {
+            resultant_max_abs: max_component_disagreement(before.resultant, recomputed.resultant)?,
+            origin_moment_max_abs: max_component_disagreement(
+                before.origin_moment,
+                recomputed.origin_moment,
+            )?,
+            before,
+            recomputed,
+        })
+    }
+
+    /// Explicitly replace incremental totals by a compensated replay.
+    /// All numerical checks finish before either cached channel changes.
+    /// Source identities and contributions are preserved.
+    pub fn rebase(&mut self) -> Result<RebaseAudit, EventError> {
+        let report = self.audit_rebase()?;
+        self.resultant = report.recomputed.resultant;
+        self.origin_moment = report.recomputed.origin_moment;
+        Ok(report)
     }
 
     /// Recover the aggregate moment at any reduction point Q: M(Q) = C-Q×R.
@@ -344,5 +471,71 @@ mod tests {
         let before = state.clone();
         state.apply(event).unwrap();
         assert_eq!(state, before);
+    }
+
+    #[test]
+    fn compensated_rebase_recovers_small_residual_after_large_cancellation() {
+        let mut aggregate = EventTorsorAggregate::new();
+        for (id, value) in [(0, 1.0e16), (1, 1.0), (2, -1.0e16)] {
+            aggregate
+                .apply(TorsorEvent::Upsert {
+                    id,
+                    torsor: torsor(v(value, 0.0, 0.0), Vec3::zero(), Vec3::zero()),
+                    weight: 1.0,
+                })
+                .unwrap();
+        }
+        assert_eq!(aggregate.factorized_key().resultant.x, 0.0);
+        let frozen_state = aggregate.clone();
+        let report = aggregate.audit_rebase().unwrap();
+        assert_eq!(aggregate, frozen_state, "audit must not mutate state");
+        assert_eq!(report.resultant_max_abs, 1.0);
+        assert_eq!(report.recomputed.resultant.x, 1.0);
+        assert_eq!(report.origin_moment_max_abs, 0.0);
+        let executed = aggregate.rebase().unwrap();
+        assert_eq!(executed, report);
+        assert_eq!(aggregate.factorized_key().resultant.x, 1.0);
+        let again = aggregate.rebase().unwrap();
+        assert_eq!(again.resultant_max_abs, 0.0);
+        assert_eq!(aggregate.len(), 3);
+    }
+
+    #[test]
+    fn rebase_preserves_reduction_point_and_dual_pairing() {
+        let mut aggregate = EventTorsorAggregate::new();
+        let a = torsor(v(1.0e16, 2.0, -3.0), v(4.0, 5.0, -6.0), v(1.0, -2.0, 3.0));
+        let b = torsor(v(1.0, -4.0, 2.0), v(-2.0, 3.0, 1.0), v(0.0, 2.0, -1.0));
+        let c = torsor(v(-1.0e16, 5.0, 1.0), v(6.0, -2.0, 0.0), v(-1.0, 0.0, 2.0));
+        for (id, torsor) in [(0, a), (1, b), (2, c)] {
+            aggregate
+                .apply(TorsorEvent::Upsert {
+                    id,
+                    torsor,
+                    weight: 1.0,
+                })
+                .unwrap();
+        }
+        let q = v(0.5, 1.0, -2.0);
+        let twist = Twist3::new(v(2.0, -1.0, 3.0), v(0.0, 1.0, 0.5)).unwrap();
+        let audit = aggregate.rebase().unwrap();
+        let reduced = aggregate.reduced_at(q).unwrap();
+        close_vec(
+            reduced.origin_moment().unwrap(),
+            audit.recomputed.origin_moment,
+        );
+        close(
+            aggregate.score(twist, q).unwrap(),
+            direct_pairing(twist, reduced, q).unwrap(),
+        );
+        assert_eq!(aggregate.audit_rebase().unwrap().resultant_max_abs, 0.0);
+    }
+
+    #[test]
+    fn empty_rebase_is_noop() {
+        let mut aggregate = EventTorsorAggregate::new();
+        let audit = aggregate.rebase().unwrap();
+        assert_eq!(audit.resultant_max_abs, 0.0);
+        assert_eq!(audit.origin_moment_max_abs, 0.0);
+        assert!(aggregate.is_empty());
     }
 }
