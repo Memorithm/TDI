@@ -110,6 +110,8 @@ pub mod tdi28_c3_policy;
 pub mod tdi28_energy_algebra;
 #[path = "tdi28_four_arm.rs"]
 pub mod tdi28_four_arm;
+#[path = "tdi28_meter_evidence.rs"]
+pub mod tdi28_meter_evidence;
 #[path = "tdi28_trace.rs"]
 pub mod tdi28_trace;
 #[path = "tdi28_traffic.rs"]
