@@ -72,6 +72,8 @@ pub mod tdi22_event_gate;
 pub mod tdi22_event_impulse;
 #[path = "tdi22_event_protocol.rs"]
 pub mod tdi22_event_protocol;
+#[path = "tdi22_event_tasks.rs"]
+pub mod tdi22_event_tasks;
 #[path = "tdi22_generator.rs"]
 pub mod tdi22_generator;
 #[path = "tdi22_torsor.rs"]
