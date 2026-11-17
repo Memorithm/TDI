@@ -149,9 +149,9 @@ impl SparseReciprocalEdgeGraph {
         self.edges.get(&ordered_pair(a, b)).copied()
     }
 
-    /// Compute only the changed source's declared neighbors, O(degree
-    /// * (log N + log E)) indexed work. The returned list includes
-    /// "Edge::None" observations for touched but non-transitioning pairs.
+    /// Compute only the changed source's declared neighbors, with
+    /// O(degree times (log N + log E)) indexed work. The returned list
+    /// includes "Edge::None" for touched but non-transitioning pairs.
     ///
     /// Event input and the selected graph wiring are untrusted. This is
     /// an experimental reference interface, not production admission.
