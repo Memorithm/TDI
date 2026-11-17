@@ -620,8 +620,13 @@ mod tests {
             Err(EvidenceError::DuplicateRunId)
         );
         let mut observations = pairs();
-        for obs in &mut observations {
+        for (idx, obs) in observations.iter_mut().enumerate() {
+            // Make all physical runs genuinely C0-first. The test then
+            // isolates AB/BA allocation imbalance from chronology errors.
+            let i = idx as u64;
             obs.order = RunOrder::BaselineFirst;
+            obs.baseline_c0 = trial(10 + 2 * i, 120, 200 * i, 10_000 * i);
+            obs.candidate_c3 = trial(11 + 2 * i, 90, 200 * i + 60, 10_000 * i + 1_000);
         }
         assert_eq!(
             qualify_paired_observations(&reference(), &observations),
