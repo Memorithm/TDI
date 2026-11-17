@@ -5,6 +5,7 @@ on:
     paths:
       - 'tdi-ai/src/tdi28_energy_algebra.rs'
       - 'tdi-ai/src/tdi28_four_arm.rs'
+      - 'tdi-ai/src/tdi28_meter_evidence.rs'
       - 'tdi-ai/src/tdi28_trace.rs'
       - 'tdi-ai/src/tdi28_traffic.rs'
       - 'tdi-ai/src/tdi28_c3_policy.rs'
@@ -17,6 +18,7 @@ on:
     paths:
       - 'tdi-ai/src/tdi28_energy_algebra.rs'
       - 'tdi-ai/src/tdi28_four_arm.rs'
+      - 'tdi-ai/src/tdi28_meter_evidence.rs'
       - 'tdi-ai/src/tdi28_trace.rs'
       - 'tdi-ai/src/tdi28_traffic.rs'
       - 'tdi-ai/src/tdi28_c3_policy.rs'

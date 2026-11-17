@@ -443,3 +443,79 @@ effects, batching, queueing, scheduling, physical energy and communication
 contention may not be additive. A subsequent study must freeze target
 hardware, instrumented traffic, power-meter provenance and workload
 partitioning under RemoteOps prior to any real-energy claim.
+
+## Stage-0 physical-meter evidence intake (qualification scaffold)
+
+The opt-in `tdi-ai/src/tdi28_meter_evidence.rs` module is a
+**measurement-evidence validator**, not a device reader, physical
+calibration, or confirmatory analysis. It accepts caller-supplied,
+non-wrapping cumulative microjoule readings with strictly increasing
+monotonic timestamps. A provenance record includes declared sensor ID,
+domain (CPU package or whole system), source type, resolution, and
+nonzero SHA-256 digests of host configuration, binary, workload and
+isolation manifest. These are **unverified assertions by the submitter**;
+the Rust API does not authenticate them, prove sensor installation, or
+control any machine. Real collection must occur via RemoteOps only.
+
+Each individual C0 or C3 trial includes a meter window for work,
+**two idle windows bracketing that work**, and an observed quality record.
+Counter reset, wraparound, zero-duration windows, non-bracketing idle
+windows, and context mismatch are rejected rather than silently
+estimated. Each idle window provides a distinct estimated baseline
+contribution to the work interval. The *range* of the two
+idle-corrected values is retained, including negative endpoints caused
+by idle overcorrection. This is a sensitivity interval for drift, **not**
+a statistical confidence interval or a precisely measured dynamic
+energy component.
+
+The matched C0/C3 comparison requires at least four pairs, no more
+than 128, unique pair/run IDs, balanced AB/BA ordering, and actual
+chronological consistency with the declared order of the samples and
+the uninterrupted cumulative meter epoch. This ordering check spans
+**both the trials within a pair and the boundaries between successive
+pairs**; overlapping intervals or a counter reset between pairs fail
+closed, even if each individual pair looks valid. The supplied pair
+sequence is chronological; pair IDs are uniqueness labels, not sortable
+timestamps. All pairs use one declared
+source, domain, configuration, workload, binary and isolation manifest
+and a single explicitly identified Development **or** Validation split.
+Data from those splits cannot be pooled by this API.
+
+Qualification additionally requires exact Stage-0 reference parity,
+and self-reported *per-run* required/optional correctness, deadline and
+outstanding-work counters matching the reference expectations. The API
+cannot independently prove the actual program produced those outputs:
+that requires authenticated run artifacts and separate physical audit.
+Unqualified trials must not be presented as equal-quality experiments.
+
+Results report every paired C0-minus-C3 idle-adjusted microjoule
+interval, sign-ambiguous pairs, positive/negative pairs and a
+descriptive central-rank interval. A positive interval means only that
+the **submitted** energy counters show C3 below C0 under both idle
+brackets. It is not proof of a statistically significant or causal
+energy saving; no confidence interval, model selection, attribution
+to particular Boolean operations, automatic tuning, or calibration
+coefficient is inferred from this scaffold.
+
+### Remaining work before hardware qualification
+
+1. Establish a versioned measurement manifest, sensor-domain
+   availability and resolution for a named RemoteOps runner; ensure
+   dedicated quiet time without altering productive host services.
+2. Implement a RemoteOps-only, **read-only** meter collector that
+   preserves raw readings and provenance, detects wrap/reset, and
+   records idle-before/active/idle-after intervals and actual output
+   quality on each arm. Do not invent sensor values.
+3. Freeze matched workloads, AB/BA allocation, measurement environment,
+   development/validation split and acceptance thresholds *before*
+   any physical observations are used for parameter tuning.
+4. Review idle drift, shared-host interference, power supply boundary
+   and measurement uncertainty; retain null/harmful/inconclusive runs.
+5. Only then consider calibrated coefficients or conditional
+   downstream adapters to V888/SML-GENIUS.
+
+The new unit tests use fabricated counter fixtures solely to prove
+input-rejection, arithmetic, ordering and coverage semantics. They do
+not imply that RemoteOps collected joules or that any model is more
+energy efficient. Protected TDI-26 and historical final-holdout
+surfaces remain unaffected.
