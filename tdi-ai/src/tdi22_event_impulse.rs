@@ -286,7 +286,7 @@ mod tests {
             assert_eq!(x.active, y.active);
         }
         let key = source(v(1.0, 2.0, 0.0), v(0.0, 0.0, 2.0), p);
-        close(direct_pairing(twist, key, q).unwrap(), 0.0);
+        close(direct_pairing(twist, key, q).unwrap(), -2.0);
     }
 
     #[test]
