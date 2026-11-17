@@ -103,10 +103,7 @@ impl ArmMetrics {
 
     #[must_use]
     pub const fn total(self) -> u64 {
-        self.true_positive
-            + self.false_positive
-            + self.true_negative
-            + self.false_negative
+        self.true_positive + self.false_positive + self.true_negative + self.false_negative
     }
 }
 
@@ -234,8 +231,12 @@ impl PairedEventProtocol {
 
         let instant_t3 = staged.instant_t3.observe(&staged.aggregate)?;
         let instant_t4 = staged.instant_t4.observe(&staged.aggregate)?;
-        let impulse_t3 = staged.impulse_t3.observe_event(sequence, &staged.aggregate)?;
-        let impulse_t4 = staged.impulse_t4.observe_event(sequence, &staged.aggregate)?;
+        let impulse_t3 = staged
+            .impulse_t3
+            .observe_event(sequence, &staged.aggregate)?;
+        let impulse_t4 = staged
+            .impulse_t4
+            .observe_event(sequence, &staged.aggregate)?;
 
         for (metric, (prediction, edge)) in staged.metrics.iter_mut().zip([
             (instant_t3.active, instant_t3.edge),
@@ -266,8 +267,8 @@ impl PairedEventProtocol {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::tdi22_torsor::Torsor3;
+    use super::*;
 
     fn v(x: f64, y: f64, z: f64) -> Vec3 {
         Vec3::new(x, y, z).unwrap()
@@ -429,17 +430,19 @@ mod tests {
         assert_eq!(protocol, snapshot);
         // A mathematically valid source mutation can produce a non-finite
         // derived score. The entire *coupled protocol* must still roll back.
-        assert!(protocol
-            .push(
-                8,
-                TorsorEvent::Upsert {
-                    id: 5,
-                    torsor: torsor(f64::MAX, Vec3::zero()),
-                    weight: 1.0,
-                },
-                false,
-            )
-            .is_err());
+        assert!(
+            protocol
+                .push(
+                    8,
+                    TorsorEvent::Upsert {
+                        id: 5,
+                        torsor: torsor(f64::MAX, Vec3::zero()),
+                        weight: 1.0,
+                    },
+                    false,
+                )
+                .is_err()
+        );
         assert_eq!(protocol, snapshot);
     }
 
@@ -448,8 +451,7 @@ mod tests {
         let shift = v(3.0, -2.0, 5.0);
         let point = v(0.0, 1.0, 0.0);
         let mut a = PairedEventProtocol::new(query(), point, 0.25, 1.5, 0.5).unwrap();
-        let mut b =
-            PairedEventProtocol::new(query(), point.plus(shift), 0.25, 1.5, 0.5).unwrap();
+        let mut b = PairedEventProtocol::new(query(), point.plus(shift), 0.25, 1.5, 0.5).unwrap();
         for (sequence, (value, target)) in [(1.0, false), (1.25, true), (1.0, false)]
             .into_iter()
             .enumerate()
