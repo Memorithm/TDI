@@ -471,7 +471,12 @@ energy component.
 The matched C0/C3 comparison requires at least four pairs, no more
 than 128, unique pair/run IDs, balanced AB/BA ordering, and actual
 chronological consistency with the declared order of the samples and
-the uninterrupted cumulative meter epoch. All pairs use one declared
+the uninterrupted cumulative meter epoch. This ordering check spans
+**both the trials within a pair and the boundaries between successive
+pairs**; overlapping intervals or a counter reset between pairs fail
+closed, even if each individual pair looks valid. The supplied pair
+sequence is chronological; pair IDs are uniqueness labels, not sortable
+timestamps. All pairs use one declared
 source, domain, configuration, workload, binary and isolation manifest
 and a single explicitly identified Development **or** Validation split.
 Data from those splits cannot be pooled by this API.
