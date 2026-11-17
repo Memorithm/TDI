@@ -97,6 +97,48 @@ pub struct ReciprocityAudit {
     pub independently_replayed: f64,
     /// Observed binary64 discrepancy, not a certified numerical error bound.
     pub absolute_difference: f64,
+    pub cached_key: FactorizedTorsorKey,
+    pub recomputed_key: FactorizedTorsorKey,
+    pub resultant_max_abs: f64,
+    pub origin_moment_max_abs: f64,
+}
+
+/// Separate compensated scalar accumulator for the O(K) source replay.
+///
+/// Intermediate nonfinite sums are rejected, even if their mathematical
+/// cancellation could later be finite. This is a conservative binary64
+/// diagnostic and not an exact-arithmetic certificate.
+#[derive(Clone, Copy, Debug, Default)]
+struct Compensated {
+    sum: f64,
+    correction: f64,
+}
+
+impl Compensated {
+    fn add(&mut self, term: f64) -> Result<(), ReciprocityError> {
+        let next = finite(self.sum + term, "rebase_sum")?;
+        let lost = if self.sum.abs() >= term.abs() {
+            (self.sum - next) + term
+        } else {
+            (term - next) + self.sum
+        };
+        let correction = finite(self.correction + lost, "rebase_correction")?;
+        self.sum = next;
+        self.correction = correction;
+        Ok(())
+    }
+
+    fn finish(self) -> Result<f64, ReciprocityError> {
+        finite(self.sum + self.correction, "rebase_result")
+    }
+}
+
+fn max_component_difference(a: Vec3, b: Vec3) -> Result<f64, ReciprocityError> {
+    let mut maximum = 0.0_f64;
+    for (old, new) in [(a.x, b.x), (a.y, b.y), (a.z, b.z)] {
+        maximum = maximum.max(finite((old - new).abs(), "rebase_difference")?);
+    }
+    Ok(maximum)
 }
 
 /// A keyed set of signed contributions with a cross-source scalar interaction.
@@ -213,8 +255,32 @@ impl CrossSourceReciprocity {
         Ok(replayed)
     }
 
+    /// Deterministic O(K) full replay of all six weighted source channels,
+    /// independent of cached incremental totals or event insertion order.
+    fn replay_key(&self) -> Result<FactorizedTorsorKey, ReciprocityError> {
+        let mut accumulators = [Compensated::default(); 6];
+        for item in self.entries.values() {
+            let values = [item.r.x, item.r.y, item.r.z, item.c.x, item.c.y, item.c.z];
+            for (accumulator, value) in accumulators.iter_mut().zip(values) {
+                accumulator.add(value)?;
+            }
+        }
+        let mut out = [0.0_f64; 6];
+        for (value, accumulator) in out.iter_mut().zip(accumulators) {
+            *value = accumulator.finish()?;
+        }
+        Ok(FactorizedTorsorKey {
+            resultant: Vec3::new(out[0], out[1], out[2])?,
+            origin_moment: Vec3::new(out[3], out[4], out[5])?,
+        })
+    }
+
+    /// Audit both the pair score and the complete cached six-channel state.
+    /// Neither audit nor its independent O(K²) pair replay changes state.
     pub fn audit(&self) -> Result<ReciprocityAudit, ReciprocityError> {
         let independently_replayed = self.direct_replay()?;
+        let cached_key = self.factorized_key();
+        let recomputed_key = self.replay_key()?;
         Ok(ReciprocityAudit {
             cached: self.score,
             independently_replayed,
@@ -222,14 +288,29 @@ impl CrossSourceReciprocity {
                 (self.score - independently_replayed).abs(),
                 "audit_difference",
             )?,
+            resultant_max_abs: max_component_difference(
+                cached_key.resultant,
+                recomputed_key.resultant,
+            )?,
+            origin_moment_max_abs: max_component_difference(
+                cached_key.origin_moment,
+                recomputed_key.origin_moment,
+            )?,
+            cached_key,
+            recomputed_key,
         })
     }
 
-    /// Explicit numerical rebase from the independent oracle. This does not
-    /// change any source identities or their stored six-channel totals.
+    /// Atomically repair score and all six cached channels from independent
+    /// deterministic replays. Never change contributor identities.
+    ///
+    /// If any score or channel replay fails, every field stays unchanged.
+    /// O(K²) pair replay dominates this explicit maintenance operation.
     pub fn rebase(&mut self) -> Result<ReciprocityAudit, ReciprocityError> {
         let audit = self.audit()?;
         self.score = audit.independently_replayed;
+        self.total_r = audit.recomputed_key.resultant;
+        self.total_c = audit.recomputed_key.origin_moment;
         Ok(audit)
     }
 }
@@ -487,6 +568,106 @@ mod tests {
             Err(ReciprocityError::InvalidWeight)
         );
         assert_eq!(state, before);
+    }
+
+    #[test]
+    fn rebase_recovers_lost_resultant_and_prevents_false_negative_gate() {
+        let mut state = CrossSourceReciprocity::new();
+        let zero = Vec3::zero();
+        state
+            .apply(TorsorEvent::Upsert {
+                id: 1,
+                torsor: at_origin(v(1e16, 0.0, 0.0), zero),
+                weight: 1.0,
+            })
+            .unwrap();
+        state
+            .apply(TorsorEvent::Upsert {
+                id: 2,
+                torsor: at_origin(v(1.0, 0.0, 0.0), zero),
+                weight: 1.0,
+            })
+            .unwrap();
+        state.apply(TorsorEvent::Remove { id: 1 }).unwrap();
+
+        close(state.factorized_key().resultant.x, 0.0);
+        let before = state.clone();
+        let audit = state.audit().unwrap();
+        assert_eq!(state, before); // Audits cannot mutate source or caches.
+        close(audit.absolute_difference, 0.0);
+        close(audit.resultant_max_abs, 1.0);
+        close(audit.recomputed_key.resultant.x, 1.0);
+
+        let repaired = state.rebase().unwrap();
+        assert_eq!(state.factorized_key(), repaired.recomputed_key);
+        assert_eq!(state.len(), 1);
+        close(state.factorized_key().resultant.x, 1.0);
+        close(state.audit().unwrap().resultant_max_abs, 0.0);
+
+        state
+            .apply(TorsorEvent::Upsert {
+                id: 3,
+                torsor: at_origin(zero, v(1.0, 0.0, 0.0)),
+                weight: 1.0,
+            })
+            .unwrap();
+        close(state.interaction_score(), 1.0);
+        close(state.direct_replay().unwrap(), 1.0);
+        let mut gate = ReciprocalGate::new(0.0, 0.5).unwrap();
+        assert_eq!(gate.observe(&state).unwrap().edge, Edge::Rising);
+    }
+
+    #[test]
+    fn rebase_repairs_origin_moment_as_well_as_resultant() {
+        let mut state = CrossSourceReciprocity::new();
+        for (id, c) in [(2, 1e16), (4, 1.0)] {
+            state
+                .apply(TorsorEvent::Upsert {
+                    id,
+                    torsor: at_origin(Vec3::zero(), v(c, 0.0, 0.0)),
+                    weight: 1.0,
+                })
+                .unwrap();
+        }
+        state.apply(TorsorEvent::Remove { id: 2 }).unwrap();
+        close(state.factorized_key().origin_moment.x, 0.0);
+        let audit = state.rebase().unwrap();
+        close(audit.origin_moment_max_abs, 1.0);
+        close(state.factorized_key().origin_moment.x, 1.0);
+        state
+            .apply(TorsorEvent::Upsert {
+                id: 9,
+                torsor: at_origin(v(1.0, 0.0, 0.0), Vec3::zero()),
+                weight: 1.0,
+            })
+            .unwrap();
+        close(state.interaction_score(), state.direct_replay().unwrap());
+        close(state.interaction_score(), 1.0);
+    }
+
+    #[test]
+    fn failed_channel_replay_does_not_partially_rebase() {
+        let mut state = CrossSourceReciprocity::new();
+        let values = [
+            (1, f64::MAX),
+            (3, -f64::MAX),
+            (2, f64::MAX),
+        ];
+        for (id, amplitude) in values {
+            state
+                .apply(TorsorEvent::Upsert {
+                    id,
+                    torsor: at_origin(v(amplitude, 0.0, 0.0), Vec3::zero()),
+                    weight: 1.0,
+                })
+                .unwrap();
+        }
+        let snapshot = state.clone();
+        assert_eq!(
+            state.rebase(),
+            Err(ReciprocityError::NonFiniteScore("rebase_sum"))
+        );
+        assert_eq!(state, snapshot);
     }
 
     #[test]
