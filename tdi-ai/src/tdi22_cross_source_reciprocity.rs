@@ -207,10 +207,7 @@ impl CrossSourceReciprocity {
         let mut replayed = 0.0_f64;
         for (index, left) in sources.iter().enumerate() {
             for right in &sources[index + 1..] {
-                replayed = finite(
-                    replayed + reciprocal(*left, *right)?,
-                    "direct_replay",
-                )?;
+                replayed = finite(replayed + reciprocal(*left, *right)?, "direct_replay")?;
             }
         }
         Ok(replayed)
@@ -309,7 +306,10 @@ mod tests {
 
     fn close(a: f64, b: f64) {
         let scale = a.abs().max(b.abs()).max(1.0);
-        assert!((a - b).abs() <= 512.0 * f64::EPSILON * scale, "{a:?} != {b:?}");
+        assert!(
+            (a - b).abs() <= 512.0 * f64::EPSILON * scale,
+            "{a:?} != {b:?}"
+        );
     }
 
     #[test]
@@ -323,16 +323,20 @@ mod tests {
         .into_iter()
         .enumerate()
         {
-            negative.apply(TorsorEvent::Upsert {
-                id: index as u64,
-                torsor: at_origin(r, c_neg),
-                weight: 1.0,
-            }).unwrap();
-            positive.apply(TorsorEvent::Upsert {
-                id: index as u64,
-                torsor: at_origin(r, c_pos),
-                weight: 1.0,
-            }).unwrap();
+            negative
+                .apply(TorsorEvent::Upsert {
+                    id: index as u64,
+                    torsor: at_origin(r, c_neg),
+                    weight: 1.0,
+                })
+                .unwrap();
+            positive
+                .apply(TorsorEvent::Upsert {
+                    id: index as u64,
+                    torsor: at_origin(r, c_pos),
+                    weight: 1.0,
+                })
+                .unwrap();
         }
         assert_eq!(negative.factorized_key(), positive.factorized_key());
         assert_eq!(negative.factorized_key().resultant, Vec3::zero());
@@ -359,20 +363,30 @@ mod tests {
         let mut original = CrossSourceReciprocity::new();
         let mut shifted = CrossSourceReciprocity::new();
         for (id, resultant, moment, point) in [(3, r1, m1, p1), (7, r2, m2, p2)] {
-            original.apply(TorsorEvent::Upsert {
-                id,
-                torsor: Torsor3::new(resultant, moment, point).unwrap(),
-                weight: 1.0,
-            }).unwrap();
-            shifted.apply(TorsorEvent::Upsert {
-                id,
-                torsor: Torsor3::new(resultant, moment, point.plus(shift)).unwrap(),
-                weight: 1.0,
-            }).unwrap();
+            original
+                .apply(TorsorEvent::Upsert {
+                    id,
+                    torsor: Torsor3::new(resultant, moment, point).unwrap(),
+                    weight: 1.0,
+                })
+                .unwrap();
+            shifted
+                .apply(TorsorEvent::Upsert {
+                    id,
+                    torsor: Torsor3::new(resultant, moment, point.plus(shift)).unwrap(),
+                    weight: 1.0,
+                })
+                .unwrap();
         }
         close(original.interaction_score(), shifted.interaction_score());
-        close(original.direct_replay().unwrap(), shifted.direct_replay().unwrap());
-        close(original.interaction_score(), original.direct_replay().unwrap());
+        close(
+            original.direct_replay().unwrap(),
+            shifted.direct_replay().unwrap(),
+        );
+        close(
+            original.interaction_score(),
+            original.direct_replay().unwrap(),
+        );
     }
 
     #[test]
@@ -382,16 +396,20 @@ mod tests {
         let mut original = CrossSourceReciprocity::new();
         let mut reduced = CrossSourceReciprocity::new();
         for (id, first) in [(1, a), (2, b)] {
-            original.apply(TorsorEvent::Upsert {
-                id,
-                torsor: first,
-                weight: 0.5,
-            }).unwrap();
-            reduced.apply(TorsorEvent::Upsert {
-                id,
-                torsor: first.transport(v(4.0, -2.0, 1.0)).unwrap(),
-                weight: 0.5,
-            }).unwrap();
+            original
+                .apply(TorsorEvent::Upsert {
+                    id,
+                    torsor: first,
+                    weight: 0.5,
+                })
+                .unwrap();
+            reduced
+                .apply(TorsorEvent::Upsert {
+                    id,
+                    torsor: first.transport(v(4.0, -2.0, 1.0)).unwrap(),
+                    weight: 0.5,
+                })
+                .unwrap();
         }
         close(original.interaction_score(), reduced.interaction_score());
     }
@@ -403,10 +421,26 @@ mod tests {
         let c = at_origin(v(1.0, -2.0, 0.0), v(2.0, 1.0, 0.0));
         let mut state = CrossSourceReciprocity::new();
         for event in [
-            TorsorEvent::Upsert { id: 3, torsor: a, weight: 1.0 },
-            TorsorEvent::Upsert { id: 9, torsor: b, weight: -2.0 },
-            TorsorEvent::Upsert { id: 4, torsor: c, weight: 0.5 },
-            TorsorEvent::Upsert { id: 9, torsor: a, weight: 2.0 },
+            TorsorEvent::Upsert {
+                id: 3,
+                torsor: a,
+                weight: 1.0,
+            },
+            TorsorEvent::Upsert {
+                id: 9,
+                torsor: b,
+                weight: -2.0,
+            },
+            TorsorEvent::Upsert {
+                id: 4,
+                torsor: c,
+                weight: 0.5,
+            },
+            TorsorEvent::Upsert {
+                id: 9,
+                torsor: a,
+                weight: 2.0,
+            },
             TorsorEvent::Remove { id: 3 },
             TorsorEvent::Remove { id: 4 },
             TorsorEvent::Remove { id: 9 },
@@ -422,11 +456,13 @@ mod tests {
     #[test]
     fn invalid_inputs_and_overflows_are_transactional() {
         let mut state = CrossSourceReciprocity::new();
-        state.apply(TorsorEvent::Upsert {
-            id: 1,
-            torsor: at_origin(v(f64::MAX, 0.0, 0.0), Vec3::zero()),
-            weight: 1.0,
-        }).unwrap();
+        state
+            .apply(TorsorEvent::Upsert {
+                id: 1,
+                torsor: at_origin(v(f64::MAX, 0.0, 0.0), Vec3::zero()),
+                weight: 1.0,
+            })
+            .unwrap();
         let before = state.clone();
         assert_eq!(
             state.apply(TorsorEvent::Upsert {
