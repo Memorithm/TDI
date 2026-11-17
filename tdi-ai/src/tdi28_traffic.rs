@@ -71,6 +71,7 @@ pub enum TrafficError {
     InvalidProfileRevision,
     Overflow,
     SummaryMismatch,
+    UnrepresentableUnitWeight,
     Accounting(AccountingError),
     Four(FourError),
 }
@@ -184,11 +185,70 @@ pub fn declared_traffic(work: Work, profile: TransferProfile) -> Result<Traffic,
     })
 }
 
+/// Whether the prospective C3 budget prices transfers before deciding.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrafficBudgetMode {
+    /// Legacy Stage-0 reference: price traffic only after policy execution.
+    WorkOnly,
+    /// Include the declared memory/communication cost in C3 admission.
+    WorkPlusTraffic,
+}
+
+/// Convert a frozen linear transfer model into per-operation Work coefficients.
+/// Each reference counter is evaluated as a unit impulse, so their weighted
+/// sum is algebraically identical to Work+Traffic scoring for any nonnegative
+/// counter vector, provided all checked arithmetic succeeds. No outcomes
+/// or future events enter this compilation.
+fn traffic_aware_cost_model(
+    base: MatchedCostModel,
+    contract: TrafficContract,
+) -> Result<MatchedCostModel, TrafficError> {
+    let units = [
+        Work { gate_evaluations: 1, ..Work::default() },
+        Work { input_value_reads: 1, ..Work::default() },
+        Work { revision_reads: 1, ..Work::default() },
+        Work { cache_probes: 1, ..Work::default() },
+        Work { cache_validation_comparisons: 1, ..Work::default() },
+        Work { output_transitions: 1, ..Work::default() },
+        Work { event_decisions: 1, ..Work::default() },
+        Work { deferred_events: 1, ..Work::default() },
+        Work { idle_ticks: 1, ..Work::default() },
+    ];
+    let mut merged = [0u64; 9];
+    for (i, unit) in units.into_iter().enumerate() {
+        let transfer_cost = declared_traffic(unit, contract.profile)?.price(contract.prices)?;
+        let logical_cost = unit.proxy_score(base.weights)?;
+        let total = logical_cost
+            .checked_add(transfer_cost)
+            .ok_or(TrafficError::Overflow)?;
+        merged[i] =
+            u64::try_from(total).map_err(|_| TrafficError::UnrepresentableUnitWeight)?;
+    }
+    Ok(MatchedCostModel {
+        model_revision: base.model_revision,
+        weights: Work {
+            gate_evaluations: merged[0],
+            input_value_reads: merged[1],
+            revision_reads: merged[2],
+            cache_probes: merged[3],
+            cache_validation_comparisons: merged[4],
+            output_transitions: merged[5],
+            event_decisions: merged[6],
+            deferred_events: merged[7],
+            idle_ticks: merged[8],
+        },
+    })
+}
+
 /// Sealed replay result. Neither the transfer shape nor the price table can
 /// be changed after the event replay through this API.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TrafficReport {
     reference: FourArmReport,
+    /// Original work-only coefficients, held separately to prevent
+    /// charging transfer costs twice when C3 uses compiled weights.
+    base_work_model: MatchedCostModel,
+    budget_mode: TrafficBudgetMode,
     contract: TrafficContract,
     totals: [Traffic; 4],
     event_traffic: Vec<[Traffic; 4]>,
@@ -198,6 +258,16 @@ impl TrafficReport {
     #[must_use]
     pub fn reference(&self) -> &FourArmReport {
         &self.reference
+    }
+
+    #[must_use]
+    pub const fn budget_mode(&self) -> TrafficBudgetMode {
+        self.budget_mode
+    }
+
+    #[must_use]
+    pub const fn base_work_model(&self) -> MatchedCostModel {
+        self.base_work_model
     }
 
     #[must_use]
@@ -219,16 +289,22 @@ impl TrafficReport {
     /// delivered exactly matched per-event outputs with no missing optional
     /// results or pending obligations. Report raw transfers otherwise.
     pub fn strict_total_proxy_scores(&self) -> Result<Option<FourProxyScores>, TrafficError> {
-        let Some(work_scores) = self.reference.strict_proxy_scores()? else {
+        if !self.reference.strict_quality_parity() {
             return Ok(None);
-        };
+        }
+        // The reference model may already contain compiled traffic costs;
+        // always use the original Work weights to avoid double charging.
         let prices = self.contract.prices;
-        let costs = [
-            work_scores.c0,
-            work_scores.c1,
-            work_scores.c2,
-            work_scores.c3,
+        let work = [
+            self.reference.c0_work,
+            self.reference.c1_work,
+            self.reference.c2_work,
+            self.reference.c3_work,
         ];
+        let mut costs = [0u128; 4];
+        for index in 0..4 {
+            costs[index] = work[index].proxy_score(self.base_work_model.weights)?;
+        }
         let mut results = [0u128; 4];
         for index in 0..4 {
             results[index] = costs[index]
@@ -246,19 +322,53 @@ impl TrafficReport {
 
 /// Bind synthetic memory and communication assumptions *before* replaying
 /// all four arms. No policy sees future events or completed reference values.
-/// These additions provide diagnostic comparison only; C3 currently chooses
-/// using its original Work-only proxy and MUST NOT be marketed as
-/// traffic-aware energy optimization.
+/// This legacy entry point retains the original Work-only C3 selection.
+/// The explicit traffic-governed variant below compiles transfer costs
+/// *before* invoking the C3 planner, without retraining or future leakage.
 pub fn replay_four_with_traffic(
     events: &[MatchedEvent],
     horizon: u64,
     work_model: MatchedCostModel,
     contract: TrafficContract,
 ) -> Result<TrafficReport, TrafficError> {
+    replay_traffic_mode(events, horizon, work_model, contract, TrafficBudgetMode::WorkOnly)
+}
+
+/// Compare all arms under identical *combined* per-event budgets. C3
+/// prospectively uses the declared memory/communication costs to select
+/// EVALUATE, REUSE or DEFER; C0/C1/C2 retain their original fixed policies.
+/// A C3 mandatory task that exceeds its combined ceiling is rejected, not
+/// converted to an apparent saving. No hardware energy is measured.
+pub fn replay_four_traffic_governed(
+    events: &[MatchedEvent],
+    horizon: u64,
+    work_model: MatchedCostModel,
+    contract: TrafficContract,
+) -> Result<TrafficReport, TrafficError> {
+    replay_traffic_mode(
+        events,
+        horizon,
+        work_model,
+        contract,
+        TrafficBudgetMode::WorkPlusTraffic,
+    )
+}
+
+fn replay_traffic_mode(
+    events: &[MatchedEvent],
+    horizon: u64,
+    work_model: MatchedCostModel,
+    contract: TrafficContract,
+    budget_mode: TrafficBudgetMode,
+) -> Result<TrafficReport, TrafficError> {
     if contract.profile.revision == 0 {
         return Err(TrafficError::InvalidProfileRevision);
     }
-    let reference = replay_four(events, horizon, work_model)?;
+    let selection_model = match budget_mode {
+        TrafficBudgetMode::WorkOnly => work_model,
+        TrafficBudgetMode::WorkPlusTraffic => traffic_aware_cost_model(work_model, contract)?,
+    };
+    let reference = replay_four(events, horizon, selection_model)?;
     let works = [
         reference.c0_work,
         reference.c1_work,
@@ -288,6 +398,8 @@ pub fn replay_four_with_traffic(
     }
     Ok(TrafficReport {
         reference,
+        base_work_model: work_model,
+        budget_mode,
         contract,
         totals,
         event_traffic,
