@@ -288,8 +288,7 @@ fn check_consecutive_pairs(previous: &EnergyPair, next: &EnergyPair) -> Result<(
     // NOT permission to reuse an earlier meter epoch or time interval.
     // This protects the same shared meter between separate C0/C3 pairs;
     // equal boundaries are permitted when windows just touch.
-    if last_trial.idle_after.end.monotonic_ns
-        > first_trial.idle_before.begin.monotonic_ns
+    if last_trial.idle_after.end.monotonic_ns > first_trial.idle_before.begin.monotonic_ns
         || last_trial.idle_after.end.cumulative_microjoules
             > first_trial.idle_before.begin.cumulative_microjoules
     {
