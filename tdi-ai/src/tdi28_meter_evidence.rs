@@ -261,16 +261,37 @@ fn validate_trial(
     idle_corrected_energy(trial)
 }
 
-fn check_pair_order(pair: &EnergyPair) -> Result<(), EvidenceError> {
-    let (first, second) = match pair.order {
+fn chronological_trials(pair: &EnergyPair) -> (&EnergyTrial, &EnergyTrial) {
+    match pair.order {
         RunOrder::BaselineFirst => (&pair.baseline_c0, &pair.candidate_c3),
         RunOrder::CandidateFirst => (&pair.candidate_c3, &pair.baseline_c0),
-    };
+    }
+}
+
+fn check_pair_order(pair: &EnergyPair) -> Result<(), EvidenceError> {
+    let (first, second) = chronological_trials(pair);
     // Same declared meter/source: an ordered pair must use disjoint
     // monotonic time windows and a non-reset cumulative counter epoch.
     if first.idle_after.end.monotonic_ns > second.idle_before.begin.monotonic_ns
         || first.idle_after.end.cumulative_microjoules
             > second.idle_before.begin.cumulative_microjoules
+    {
+        return Err(EvidenceError::InvalidRunChronology);
+    }
+    Ok(())
+}
+
+fn check_consecutive_pairs(previous: &EnergyPair, next: &EnergyPair) -> Result<(), EvidenceError> {
+    let (_, last_trial) = chronological_trials(previous);
+    let (first_trial, _) = chronological_trials(next);
+    // Input pairs are in observation chronology. Pair IDs are identifiers,
+    // NOT permission to reuse an earlier meter epoch or time interval.
+    // This protects the same shared meter between separate C0/C3 pairs;
+    // equal boundaries are permitted when windows just touch.
+    if last_trial.idle_after.end.monotonic_ns
+        > first_trial.idle_before.begin.monotonic_ns
+        || last_trial.idle_after.end.cumulative_microjoules
+            > first_trial.idle_before.begin.cumulative_microjoules
     {
         return Err(EvidenceError::InvalidRunChronology);
     }
@@ -284,7 +305,10 @@ fn check_pair_order(pair: &EnergyPair) -> Result<(), EvidenceError> {
 ///
 /// At least four pairs, alternating run order with balance <= 1, identical
 /// sensor/hardware/configuration/workload context and unique run IDs are
-/// mandatory. Observations and context are supplied by the caller; neither
+/// mandatory. Input pairs must follow uninterrupted chronological meter
+/// order, including at the boundaries between pairs. Pair IDs need not be
+/// monotonic; they are only uniqueness identifiers.
+/// Observations and context are supplied by the caller; neither
 /// runtime nor sensor authenticity is verified. This report is descriptive
 /// and does not establish a causal energy benefit or calibrated costs.
 pub fn qualify_paired_observations(
@@ -311,6 +335,7 @@ pub fn qualify_paired_observations(
     let mut strictly_positive_pairs = 0;
     let mut strictly_negative_pairs = 0;
     let mut sign_ambiguous_pairs = 0;
+    let mut previous_pair: Option<&EnergyPair> = None;
 
     for pair in pairs {
         if pair.split != split {
@@ -334,6 +359,10 @@ pub fn qualify_paired_observations(
         let baseline = validate_trial(&pair.baseline_c0, quality)?;
         let candidate = validate_trial(&pair.candidate_c3, quality)?;
         check_pair_order(pair)?;
+        if let Some(previous) = previous_pair {
+            check_consecutive_pairs(previous, pair)?;
+        }
+        previous_pair = Some(pair);
         let delta = MicrojouleInterval {
             lower: baseline
                 .lower
@@ -649,6 +678,38 @@ mod tests {
         assert_eq!(
             qualify_paired_observations(&reference(), &observations),
             Err(EvidenceError::UnbalancedOrder)
+        );
+    }
+
+    #[test]
+    fn cross_pair_overlaps_and_counter_epochs_are_rejected() {
+        let mut observations = pairs();
+        // Each of these trials is individually well formed and correctly
+        // ordered inside pair #2, but occupies pair #1's meter interval.
+        observations[1].candidate_c3 = trial(13, 90, 0, 0);
+        observations[1].baseline_c0 = trial(12, 120, 60, 1_000);
+        assert_eq!(
+            qualify_paired_observations(&reference(), &observations),
+            Err(EvidenceError::InvalidRunChronology)
+        );
+
+        let mut observations = pairs();
+        // Timestamps are disjoint and increasing, but the cumulative
+        // meter starts a new epoch between consecutive pairs.
+        observations[1].candidate_c3 = trial(13, 90, 200, 0);
+        observations[1].baseline_c0 = trial(12, 120, 260, 1_000);
+        assert_eq!(
+            qualify_paired_observations(&reference(), &observations),
+            Err(EvidenceError::InvalidRunChronology)
+        );
+
+        let mut observations = pairs();
+        observations.swap(0, 1);
+        // Pair identity and balancing remain valid; source row order is
+        // not a license to reuse earlier physical measurement windows.
+        assert_eq!(
+            qualify_paired_observations(&reference(), &observations),
+            Err(EvidenceError::InvalidRunChronology)
         );
     }
 
