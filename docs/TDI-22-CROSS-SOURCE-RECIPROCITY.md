@@ -55,7 +55,8 @@ consequences distinct from ordinary scalar-score attention.
 `tdi-ai/src/tdi22_cross_source_reciprocity.rs` provides a keyed map
 of signed weighted sources, cached total R/C, a cross-source score,
 atomic insert/replace/remove, an independent direct O(K²) pair oracle,
-an explicit numerical drift audit/rebase, and a one-bit hysteresis
+a six-channel Neumaier-compensated O(K) source replay, an explicit
+transactional numerical drift audit/rebase, and a one-bit hysteresis
 observer. The incremental candidate recurrence is
 
 ```text
@@ -64,8 +65,24 @@ S_after = S_before − K(old_source, all_other_sources)
 ```
 
 All derived calculations are checked for nonfinite arithmetic before
-mutating state. This software treatment is **not** a certified
-numerical error bound: incremental binary64 drift remains possible.
+mutating state. The audit compares **both** the independently replayed
+cross-source score and the six separately compensated cached R/C channels.
+The explicit `rebase()` transactionally replaces all seven values, not
+just the scalar score, or preserves the entire original state if a replay
+fails. This prevents stale channel totals from corrupting subsequent
+source events after a numerical rebase.
+
+A documented cancellation regression inserts R.x=10^16, then R.x=1,
+then removes the first contributor. An ordinary incremental accumulator
+loses the unit residual. The channel audit detects that drift, and rebase
+restores it before the next cross-source interaction is evaluated.
+Additional fixtures exercise the C channel and reject overflowing
+replays atomically.
+
+The audit/rebase costs O(K²) for independent pair replay plus O(K)
+for compensated channel replay. Neither is a normal incremental fast path.
+This software treatment is **not** a certified numerical error bound:
+incremental binary64 drift remains possible.
 
 ## Required falsification
 
