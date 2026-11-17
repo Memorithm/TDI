@@ -518,6 +518,88 @@ mod tests {
     }
 
     #[test]
+    fn traffic_priced_c3_recomputes_instead_of_excessive_remote_cache_check() {
+        let mut inputs = [event(0, 1, false, false), event(1, 1, false, false)];
+        for item in &mut inputs {
+            item.event_ceiling = 100_000;
+        }
+        let mut remote = contract();
+        remote.profile.bytes_per_validation_message = 5_000;
+        remote.profile.messages_per_validation = 1;
+        remote.prices.per_communication_byte = 10;
+        let legacy = replay_four_with_traffic(&inputs, 1, model(), remote).unwrap();
+        let governed = replay_four_traffic_governed(&inputs, 1, model(), remote).unwrap();
+        assert_eq!(legacy.budget_mode(), TrafficBudgetMode::WorkOnly);
+        assert_eq!(governed.budget_mode(), TrafficBudgetMode::WorkPlusTraffic);
+        assert!(legacy.reference().strict_quality_parity());
+        assert!(governed.reference().strict_quality_parity());
+        assert_eq!(legacy.reference().events[1].c3_decision, super::super::tdi28_energy_algebra::Decision::Reuse);
+        assert_eq!(governed.reference().events[1].c3_decision, super::super::tdi28_energy_algebra::Decision::Evaluate);
+        let before = legacy.strict_total_proxy_scores().unwrap().unwrap();
+        let after = governed.strict_total_proxy_scores().unwrap().unwrap();
+        assert_eq!(after.c0, before.c0);
+        assert_eq!(after.c1, before.c1);
+        assert_eq!(after.c2, before.c2);
+        assert!(after.c3 < before.c3);
+        assert!(after.c3 < after.c2);
+    }
+
+    #[test]
+    fn compiled_traffic_coefficients_equal_explicit_addition() {
+        let frozen = contract();
+        let compiled = traffic_aware_cost_model(model(), frozen).unwrap();
+        let observed = Work {
+            gate_evaluations: 3,
+            input_value_reads: 5,
+            revision_reads: 9,
+            cache_probes: 2,
+            cache_validation_comparisons: 2,
+            output_transitions: 1,
+            event_decisions: 7,
+            deferred_events: 4,
+            idle_ticks: 15,
+        };
+        let explicit = observed
+            .proxy_score(model().weights)
+            .unwrap()
+            .checked_add(declared_traffic(observed, frozen.profile).unwrap().price(frozen.prices).unwrap())
+            .unwrap();
+        assert_eq!(observed.proxy_score(compiled.weights).unwrap(), explicit);
+        assert_eq!(compiled.model_revision, model().model_revision);
+    }
+
+    #[test]
+    fn required_work_fails_when_combined_memory_cost_exceeds_ceiling() {
+        let mut input = event(0, 1, false, false);
+        input.event_ceiling = 20;
+        // Work-only C3 fits (17 units), combined memory/communication
+        // overhead does not. There is no silent required-output deferral.
+        assert!(replay_four_with_traffic(&[input], 0, model(), contract()).is_ok());
+        assert!(matches!(
+            replay_four_traffic_governed(&[input], 0, model(), contract()),
+            Err(TrafficError::Four(FourError::C3(
+                super::super::tdi28_c3_policy::C3Error::BudgetInsufficient { .. }
+            )))
+        ));
+    }
+
+    #[test]
+    fn invalid_traffic_price_fails_closed_before_any_replay() {
+        let mut bad = contract();
+        bad.profile.bytes_per_evaluation_message = u64::MAX;
+        bad.prices.per_communication_byte = u64::MAX;
+        assert_eq!(
+            replay_four_traffic_governed(&[], 0, model(), bad),
+            Err(TrafficError::UnrepresentableUnitWeight)
+        );
+        bad.profile.revision = 0;
+        assert_eq!(
+            replay_four_traffic_governed(&[], 0, model(), bad),
+            Err(TrafficError::InvalidProfileRevision)
+        );
+    }
+
+    #[test]
     fn local_no_network_scenario_has_zero_declared_communication() {
         let mut local = profile();
         local.bytes_per_evaluation_message = 0;
