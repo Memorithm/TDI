@@ -64,6 +64,8 @@ pub mod tdi21_stream;
 pub mod tdi21_tasks;
 #[path = "tdi22_cross_source_reciprocity.rs"]
 pub mod tdi22_cross_source_reciprocity;
+#[path = "tdi22_sparse_reciprocal_graph.rs"]
+pub mod tdi22_sparse_reciprocal_graph;
 #[path = "tdi22_eval.rs"]
 pub mod tdi22_eval;
 #[path = "tdi22_event_aggregate.rs"]
