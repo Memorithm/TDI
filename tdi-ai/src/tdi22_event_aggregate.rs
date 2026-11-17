@@ -247,7 +247,7 @@ mod tests {
         let huge = torsor(v(f64::MAX, 0.0, 0.0), Vec3::zero(), Vec3::zero());
         assert!(state.apply(TorsorEvent::Upsert { id: 3, torsor: huge, weight: 2.0 }).is_err());
         assert_eq!(state, before);
-        assert!(state.score(Twist3::new(v(1.0, 0.0, 0.0), Vec3::zero()).unwrap(), v(f64::MAX, f64::MAX, 0.0)).is_err());
+        assert!(state.score(Twist3::new(v(1.0, 0.0, 0.0), v(0.0, f64::MAX, 0.0)).unwrap(), v(f64::MAX, 0.0, 0.0)).is_err());
         assert_eq!(state, before);
     }
 
