@@ -244,10 +244,7 @@ impl EventTorsorAggregate {
         let before = self.factorized_key();
         let recomputed = self.compensated_key()?;
         Ok(RebaseAudit {
-            resultant_max_abs: max_component_disagreement(
-                before.resultant,
-                recomputed.resultant,
-            )?,
+            resultant_max_abs: max_component_disagreement(before.resultant, recomputed.resultant)?,
             origin_moment_max_abs: max_component_disagreement(
                 before.origin_moment,
                 recomputed.origin_moment,
@@ -480,11 +477,13 @@ mod tests {
     fn compensated_rebase_recovers_small_residual_after_large_cancellation() {
         let mut aggregate = EventTorsorAggregate::new();
         for (id, value) in [(0, 1.0e16), (1, 1.0), (2, -1.0e16)] {
-            aggregate.apply(TorsorEvent::Upsert {
-                id,
-                torsor: torsor(v(value, 0.0, 0.0), Vec3::zero(), Vec3::zero()),
-                weight: 1.0,
-            }).unwrap();
+            aggregate
+                .apply(TorsorEvent::Upsert {
+                    id,
+                    torsor: torsor(v(value, 0.0, 0.0), Vec3::zero(), Vec3::zero()),
+                    weight: 1.0,
+                })
+                .unwrap();
         }
         assert_eq!(aggregate.factorized_key().resultant.x, 0.0);
         let frozen_state = aggregate.clone();
@@ -508,14 +507,26 @@ mod tests {
         let b = torsor(v(1.0, -4.0, 2.0), v(-2.0, 3.0, 1.0), v(0.0, 2.0, -1.0));
         let c = torsor(v(-1.0e16, 5.0, 1.0), v(6.0, -2.0, 0.0), v(-1.0, 0.0, 2.0));
         for (id, torsor) in [(0, a), (1, b), (2, c)] {
-            aggregate.apply(TorsorEvent::Upsert { id, torsor, weight: 1.0 }).unwrap();
+            aggregate
+                .apply(TorsorEvent::Upsert {
+                    id,
+                    torsor,
+                    weight: 1.0,
+                })
+                .unwrap();
         }
         let q = v(0.5, 1.0, -2.0);
         let twist = Twist3::new(v(2.0, -1.0, 3.0), v(0.0, 1.0, 0.5)).unwrap();
         let audit = aggregate.rebase().unwrap();
         let reduced = aggregate.reduced_at(q).unwrap();
-        close_vec(reduced.origin_moment().unwrap(), audit.recomputed.origin_moment);
-        close(aggregate.score(twist, q).unwrap(), direct_pairing(twist, reduced, q).unwrap());
+        close_vec(
+            reduced.origin_moment().unwrap(),
+            audit.recomputed.origin_moment,
+        );
+        close(
+            aggregate.score(twist, q).unwrap(),
+            direct_pairing(twist, reduced, q).unwrap(),
+        );
         assert_eq!(aggregate.audit_rebase().unwrap().resultant_max_abs, 0.0);
     }
 
