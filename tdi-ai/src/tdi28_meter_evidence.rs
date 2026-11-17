@@ -206,18 +206,16 @@ pub fn idle_corrected_energy(trial: &EnergyTrial) -> Result<MicrojouleInterval, 
     }
     // All three windows must belong to one uninterrupted cumulative
     // counter epoch. A counter reset between windows is not corrected.
-    if trial.idle_before.end.cumulative_microjoules
-        > trial.active.begin.cumulative_microjoules
-        || trial.active.end.cumulative_microjoules
-            > trial.idle_after.begin.cumulative_microjoules
+    if trial.idle_before.end.cumulative_microjoules > trial.active.begin.cumulative_microjoules
+        || trial.active.end.cumulative_microjoules > trial.idle_after.begin.cumulative_microjoules
     {
         return Err(EvidenceError::MeterCounterResetOrWrap);
     }
 
-    let expected_before = (u128::from(before_energy) * u128::from(active_time))
-        / u128::from(before_time);
-    let expected_after = (u128::from(after_energy) * u128::from(active_time))
-        / u128::from(after_time);
+    let expected_before =
+        (u128::from(before_energy) * u128::from(active_time)) / u128::from(before_time);
+    let expected_after =
+        (u128::from(after_energy) * u128::from(active_time)) / u128::from(after_time);
     let active = i128::from(active_energy);
     let lowest_idle = i128::try_from(expected_before.min(expected_after))
         .map_err(|_| EvidenceError::ArithmeticOverflow)?;
@@ -324,8 +322,7 @@ pub fn qualify_paired_observations(
         if pair.pair_id == 0 || !seen_pairs.insert(pair.pair_id) {
             return Err(EvidenceError::DuplicatePairId);
         }
-        if !seen_runs.insert(pair.baseline_c0.run_id)
-            || !seen_runs.insert(pair.candidate_c3.run_id)
+        if !seen_runs.insert(pair.baseline_c0.run_id) || !seen_runs.insert(pair.candidate_c3.run_id)
         {
             return Err(EvidenceError::DuplicateRunId);
         }
@@ -395,10 +392,10 @@ pub fn qualify_paired_observations(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::tdi28_energy_algebra::{Gate, InputRevisions, Work};
     use super::super::tdi28_four_arm::{MatchedCostModel, MatchedEvent, replay_four};
     use super::super::tdi28_trace::TraceEvent;
+    use super::*;
 
     fn reference() -> FourArmReport {
         let events = [
@@ -531,7 +528,13 @@ mod tests {
         assert_eq!(result.strictly_positive_pairs, 4);
         assert_eq!(result.strictly_negative_pairs, 0);
         assert_eq!(result.sign_ambiguous_pairs, 0);
-        assert_eq!(result.central_pair_bounds, MicrojouleInterval { lower: 30, upper: 30 });
+        assert_eq!(
+            result.central_pair_bounds,
+            MicrojouleInterval {
+                lower: 30,
+                upper: 30
+            }
+        );
     }
 
     #[test]
@@ -541,7 +544,13 @@ mod tests {
         // Non-wrapping cumulative reading can be later/higher across
         // the hand-off; this test changes the idle rate deliberately.
         let interval = idle_corrected_energy(&candidate).unwrap();
-        assert_eq!(interval, MicrojouleInterval { lower: 10, upper: 50 });
+        assert_eq!(
+            interval,
+            MicrojouleInterval {
+                lower: 10,
+                upper: 50
+            }
+        );
     }
 
     #[test]
@@ -549,17 +558,29 @@ mod tests {
         let mut sample = trial(9, 10, 0, 0);
         sample.idle_after = window(30, 40, 20, 20);
         let interval = idle_corrected_energy(&sample).unwrap();
-        assert_eq!(interval, MicrojouleInterval { lower: -30, upper: -10 });
+        assert_eq!(
+            interval,
+            MicrojouleInterval {
+                lower: -30,
+                upper: -10
+            }
+        );
     }
 
     #[test]
     fn wrap_or_counter_reset_is_rejected() {
         let mut sample = trial(9, 100, 0, 0);
         sample.active.end.cumulative_microjoules = 9;
-        assert_eq!(idle_corrected_energy(&sample), Err(EvidenceError::MeterCounterResetOrWrap));
+        assert_eq!(
+            idle_corrected_energy(&sample),
+            Err(EvidenceError::MeterCounterResetOrWrap)
+        );
         let mut between_windows = trial(9, 100, 0, 0);
         between_windows.idle_after.begin.cumulative_microjoules = 100;
-        assert_eq!(idle_corrected_energy(&between_windows), Err(EvidenceError::MeterCounterResetOrWrap));
+        assert_eq!(
+            idle_corrected_energy(&between_windows),
+            Err(EvidenceError::MeterCounterResetOrWrap)
+        );
     }
 
     #[test]
@@ -617,7 +638,11 @@ mod tests {
             Err(EvidenceError::InvalidRunChronology)
         );
         let mut observations = pairs();
-        observations[0].candidate_c3.idle_before.begin.cumulative_microjoules = 0;
+        observations[0]
+            .candidate_c3
+            .idle_before
+            .begin
+            .cumulative_microjoules = 0;
         assert_eq!(
             qualify_paired_observations(&reference(), &observations),
             Err(EvidenceError::InvalidRunChronology)
