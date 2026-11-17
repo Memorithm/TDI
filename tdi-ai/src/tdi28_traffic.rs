@@ -204,15 +204,42 @@ fn traffic_aware_cost_model(
     contract: TrafficContract,
 ) -> Result<MatchedCostModel, TrafficError> {
     let units = [
-        Work { gate_evaluations: 1, ..Work::default() },
-        Work { input_value_reads: 1, ..Work::default() },
-        Work { revision_reads: 1, ..Work::default() },
-        Work { cache_probes: 1, ..Work::default() },
-        Work { cache_validation_comparisons: 1, ..Work::default() },
-        Work { output_transitions: 1, ..Work::default() },
-        Work { event_decisions: 1, ..Work::default() },
-        Work { deferred_events: 1, ..Work::default() },
-        Work { idle_ticks: 1, ..Work::default() },
+        Work {
+            gate_evaluations: 1,
+            ..Work::default()
+        },
+        Work {
+            input_value_reads: 1,
+            ..Work::default()
+        },
+        Work {
+            revision_reads: 1,
+            ..Work::default()
+        },
+        Work {
+            cache_probes: 1,
+            ..Work::default()
+        },
+        Work {
+            cache_validation_comparisons: 1,
+            ..Work::default()
+        },
+        Work {
+            output_transitions: 1,
+            ..Work::default()
+        },
+        Work {
+            event_decisions: 1,
+            ..Work::default()
+        },
+        Work {
+            deferred_events: 1,
+            ..Work::default()
+        },
+        Work {
+            idle_ticks: 1,
+            ..Work::default()
+        },
     ];
     let mut merged = [0u64; 9];
     for (i, unit) in units.into_iter().enumerate() {
@@ -221,8 +248,7 @@ fn traffic_aware_cost_model(
         let total = logical_cost
             .checked_add(transfer_cost)
             .ok_or(TrafficError::Overflow)?;
-        merged[i] =
-            u64::try_from(total).map_err(|_| TrafficError::UnrepresentableUnitWeight)?;
+        merged[i] = u64::try_from(total).map_err(|_| TrafficError::UnrepresentableUnitWeight)?;
     }
     Ok(MatchedCostModel {
         model_revision: base.model_revision,
@@ -331,7 +357,13 @@ pub fn replay_four_with_traffic(
     work_model: MatchedCostModel,
     contract: TrafficContract,
 ) -> Result<TrafficReport, TrafficError> {
-    replay_traffic_mode(events, horizon, work_model, contract, TrafficBudgetMode::WorkOnly)
+    replay_traffic_mode(
+        events,
+        horizon,
+        work_model,
+        contract,
+        TrafficBudgetMode::WorkOnly,
+    )
 }
 
 /// Compare all arms under identical *combined* per-event budgets. C3
@@ -533,8 +565,14 @@ mod tests {
         assert_eq!(governed.budget_mode(), TrafficBudgetMode::WorkPlusTraffic);
         assert!(legacy.reference().strict_quality_parity());
         assert!(governed.reference().strict_quality_parity());
-        assert_eq!(legacy.reference().events[1].c3_decision, super::super::tdi28_energy_algebra::Decision::Reuse);
-        assert_eq!(governed.reference().events[1].c3_decision, super::super::tdi28_energy_algebra::Decision::Evaluate);
+        assert_eq!(
+            legacy.reference().events[1].c3_decision,
+            super::super::tdi28_energy_algebra::Decision::Reuse
+        );
+        assert_eq!(
+            governed.reference().events[1].c3_decision,
+            super::super::tdi28_energy_algebra::Decision::Evaluate
+        );
         let before = legacy.strict_total_proxy_scores().unwrap().unwrap();
         let after = governed.strict_total_proxy_scores().unwrap().unwrap();
         assert_eq!(after.c0, before.c0);
@@ -562,7 +600,12 @@ mod tests {
         let explicit = observed
             .proxy_score(model().weights)
             .unwrap()
-            .checked_add(declared_traffic(observed, frozen.profile).unwrap().price(frozen.prices).unwrap())
+            .checked_add(
+                declared_traffic(observed, frozen.profile)
+                    .unwrap()
+                    .price(frozen.prices)
+                    .unwrap(),
+            )
             .unwrap();
         assert_eq!(observed.proxy_score(compiled.weights).unwrap(), explicit);
         assert_eq!(compiled.model_revision, model().model_revision);
