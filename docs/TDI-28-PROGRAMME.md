@@ -394,3 +394,52 @@ The test set covers C0/C1 exact parity, matched C0/C2/C3 outputs,
 communication-vs-compute ranking reversal, local communication control,
 optional result coverage, vector associativity and arithmetic overflow.
 No TDI-26 topology/confirmatory integration is authorized by this slice.
+
+## Stage-0 traffic-governed C3: prospective memory/communication pricing
+
+The new opt-in Rust entry point `replay_four_traffic_governed` now binds
+a single versioned `TrafficContract` and its immutable work model
+**before** replaying event data, then compiles the linear transfer
+accounting into a synthetic per-operation budget:
+
+```text
+effective_weight(operation)
+  = logical_weight(operation)
+  + transfer_price(declared_traffic(one operation))
+```
+
+Its C3 selector uses the combined weights to choose EVALUATE, REUSE or
+DEFER, including memory read/write assumptions, declared communication
+bytes and message counts. Cache-validation traffic is included in the
+prospective cost of reuse; mandatory work over budget fails closed.
+The compilation uses checked u128 math and rejects per-operation prices
+that cannot be represented in the C3 evaluator's u64 coefficient model.
+A unit-work conservation test checks that this compilation agrees exactly
+with independently composed Work+Traffic accounting.
+
+`replay_four_with_traffic` remains the **legacy Work-only decision**
+control: it prices the same traffic only after all actions. The report's
+`TrafficBudgetMode` distinguishes the two treatments explicitly. The
+four-arm comparison retains C0/C1/C2 policies unchanged under an identical
+declared combined ceiling and emits budget exceedance diagnostics for
+unconstrained baselines. For a traffic-governed C3, the underlying
+`FourArmReport::cost_model` represents the combined selection budget;
+`TrafficReport::strict_total_proxy_scores` deliberately recomputes using
+the **original** Work coefficients plus the declared traffic once, avoiding
+double-charging. Equal-output, full-coverage and no-debt requirements remain
+necessary before a comparable scalar score is returned.
+
+The tests include a remote cache-validation counterexample:
+a Work-only C3 may reuse an apparently cheap cache entry, whereas a
+traffic-priced C3 instead recomputes because a declared remote validation
+message is too expensive. They also reject invalid contract revisions,
+unrepresentable coefficients and required work that cannot satisfy
+the **total** budget. These are transparent scenario counterexamples,
+not measured performance, calibrated joules, real memory traffic, or
+evidence of industrial deployment.
+
+The transfer algebra is *linear by contract*; measured memory hierarchy
+effects, batching, queueing, scheduling, physical energy and communication
+contention may not be additive. A subsequent study must freeze target
+hardware, instrumented traffic, power-meter provenance and workload
+partitioning under RemoteOps prior to any real-energy claim.
