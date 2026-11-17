@@ -87,8 +87,7 @@ impl HystereticInteraction {
                 .map_err(GateError::Torsor)?,
             InteractionArm::SixChannelT4 => {
                 let key = aggregate.factorized_key();
-                self.twist.linear().dot(key.resultant)
-                    + self.twist.angular().dot(key.origin_moment)
+                self.twist.linear().dot(key.resultant) + self.twist.angular().dot(key.origin_moment)
             }
         };
         if !score.is_finite() {
@@ -99,10 +98,7 @@ impl HystereticInteraction {
 
     /// Scores are recomputed on every explicit observation. The gate
     /// stores only one bit and cannot claim an execution-cost saving.
-    pub fn observe(
-        &mut self,
-        aggregate: &EventTorsorAggregate,
-    ) -> Result<Observation, GateError> {
+    pub fn observe(&mut self, aggregate: &EventTorsorAggregate) -> Result<Observation, GateError> {
         let score = self.score(aggregate)?;
         let edge = if !self.active && score >= self.upper {
             Edge::Rising
@@ -126,9 +122,9 @@ impl HystereticInteraction {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::tdi22_event_aggregate::TorsorEvent;
     use super::super::tdi22_torsor::{Torsor3, direct_pairing};
+    use super::*;
 
     fn v(x: f64, y: f64, z: f64) -> Vec3 {
         Vec3::new(x, y, z).unwrap()
@@ -190,17 +186,25 @@ mod tests {
         let mut original = EventTorsorAggregate::new();
         let mut translated = EventTorsorAggregate::new();
         let t = source(r, Vec3::zero(), p);
-        original.apply(TorsorEvent::Upsert { id: 1, torsor: t, weight: 1.0 }).unwrap();
-        translated.apply(TorsorEvent::Upsert {
-            id: 1,
-            torsor: source(r, Vec3::zero(), p.plus(d)),
-            weight: 1.0,
-        }).unwrap();
+        original
+            .apply(TorsorEvent::Upsert {
+                id: 1,
+                torsor: t,
+                weight: 1.0,
+            })
+            .unwrap();
+        translated
+            .apply(TorsorEvent::Upsert {
+                id: 1,
+                torsor: source(r, Vec3::zero(), p.plus(d)),
+                weight: 1.0,
+            })
+            .unwrap();
         let mut t3a =
             HystereticInteraction::new(InteractionArm::TransportedT3, twist, q, 0.5, 1.5).unwrap();
-        let mut t3b = HystereticInteraction::new(
-            InteractionArm::TransportedT3, twist, q.plus(d), 0.5, 1.5,
-        ).unwrap();
+        let mut t3b =
+            HystereticInteraction::new(InteractionArm::TransportedT3, twist, q.plus(d), 0.5, 1.5)
+                .unwrap();
         let left = t3a.observe(&original).unwrap();
         let right = t3b.observe(&translated).unwrap();
         close(left.score, right.score);
@@ -209,9 +213,9 @@ mod tests {
         assert_eq!(left.edge, Edge::None);
         let mut t4a =
             HystereticInteraction::new(InteractionArm::SixChannelT4, twist, q, 0.5, 1.5).unwrap();
-        let mut t4b = HystereticInteraction::new(
-            InteractionArm::SixChannelT4, twist, q.plus(d), 0.5, 1.5,
-        ).unwrap();
+        let mut t4b =
+            HystereticInteraction::new(InteractionArm::SixChannelT4, twist, q.plus(d), 0.5, 1.5)
+                .unwrap();
         assert_eq!(t4a.observe(&original).unwrap().edge, Edge::None);
         assert_eq!(t4b.observe(&translated).unwrap().edge, Edge::Rising);
     }
@@ -224,8 +228,18 @@ mod tests {
         let q = v(2.0, 3.0, -5.0);
         let mut a = EventTorsorAggregate::new();
         let mut b = EventTorsorAggregate::new();
-        a.apply(TorsorEvent::Upsert { id: 0, torsor: t, weight: 1.0 }).unwrap();
-        b.apply(TorsorEvent::Upsert { id: 0, torsor: moved, weight: 1.0 }).unwrap();
+        a.apply(TorsorEvent::Upsert {
+            id: 0,
+            torsor: t,
+            weight: 1.0,
+        })
+        .unwrap();
+        b.apply(TorsorEvent::Upsert {
+            id: 0,
+            torsor: moved,
+            weight: 1.0,
+        })
+        .unwrap();
         for arm in [InteractionArm::TransportedT3, InteractionArm::SixChannelT4] {
             let gate = HystereticInteraction::new(arm, twist, q, -1.0, 1.0).unwrap();
             close(gate.score(&a).unwrap(), gate.score(&b).unwrap());
@@ -235,29 +249,48 @@ mod tests {
     #[test]
     fn errors_leave_state_unchanged() {
         let twist = Twist3::new(v(2.0, 0.0, 0.0), Vec3::zero()).unwrap();
-        let invalid = HystereticInteraction::new(
-            InteractionArm::SixChannelT4, twist, Vec3::zero(), 1.0, 1.0,
-        );
+        let invalid =
+            HystereticInteraction::new(InteractionArm::SixChannelT4, twist, Vec3::zero(), 1.0, 1.0);
         assert_eq!(invalid, Err(GateError::InvalidThresholds));
-        assert!(HystereticInteraction::new(
-            InteractionArm::SixChannelT4, twist, Vec3 { x: f64::NAN, y: 0.0, z: 0.0 }, 0.0, 1.0
-        ).is_err());
+        assert!(
+            HystereticInteraction::new(
+                InteractionArm::SixChannelT4,
+                twist,
+                Vec3 {
+                    x: f64::NAN,
+                    y: 0.0,
+                    z: 0.0
+                },
+                0.0,
+                1.0
+            )
+            .is_err()
+        );
 
-        let mut gate =
-            HystereticInteraction::new(InteractionArm::SixChannelT4, twist, Vec3::zero(), 0.25, 0.75)
-                .unwrap();
+        let mut gate = HystereticInteraction::new(
+            InteractionArm::SixChannelT4,
+            twist,
+            Vec3::zero(),
+            0.25,
+            0.75,
+        )
+        .unwrap();
         let mut state = EventTorsorAggregate::new();
-        state.apply(TorsorEvent::Upsert {
-            id: 0,
-            torsor: source(v(1.0, 0.0, 0.0), Vec3::zero(), Vec3::zero()),
-            weight: 1.0,
-        }).unwrap();
+        state
+            .apply(TorsorEvent::Upsert {
+                id: 0,
+                torsor: source(v(1.0, 0.0, 0.0), Vec3::zero(), Vec3::zero()),
+                weight: 1.0,
+            })
+            .unwrap();
         assert_eq!(gate.observe(&state).unwrap().edge, Edge::Rising);
-        state.apply(TorsorEvent::Upsert {
-            id: 0,
-            torsor: source(v(f64::MAX, 0.0, 0.0), Vec3::zero(), Vec3::zero()),
-            weight: 1.0,
-        }).unwrap();
+        state
+            .apply(TorsorEvent::Upsert {
+                id: 0,
+                torsor: source(v(f64::MAX, 0.0, 0.0), Vec3::zero(), Vec3::zero()),
+                weight: 1.0,
+            })
+            .unwrap();
         assert_eq!(gate.observe(&state), Err(GateError::NonFiniteScore));
         assert!(gate.active());
     }
