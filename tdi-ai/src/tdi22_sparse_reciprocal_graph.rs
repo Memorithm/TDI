@@ -64,9 +64,8 @@ fn scaled_key(torsor: Torsor3, weight: f64) -> Result<FactorizedTorsorKey, Graph
         return Err(GraphError::InvalidWeight);
     }
     let key = torsor.factorized_key()?;
-    let scale = |v: Vec3| {
-        Vec3::new(v.x * weight, v.y * weight, v.z * weight).map_err(GraphError::Algebra)
-    };
+    let scale =
+        |v: Vec3| Vec3::new(v.x * weight, v.y * weight, v.z * weight).map_err(GraphError::Algebra);
     Ok(FactorizedTorsorKey {
         resultant: scale(key.resultant)?,
         origin_moment: scale(key.origin_moment)?,
@@ -99,11 +98,7 @@ impl SparseReciprocalEdgeGraph {
     ///
     /// Nonnegative lower threshold guarantees a removed source deactivates
     /// an active incident edge (score becomes zero).
-    pub fn new(
-        wiring: &[(u64, u64)],
-        lower: f64,
-        upper: f64,
-    ) -> Result<Self, GraphError> {
+    pub fn new(wiring: &[(u64, u64)], lower: f64, upper: f64) -> Result<Self, GraphError> {
         if !lower.is_finite() || !upper.is_finite() || lower < 0.0 || lower >= upper {
             return Err(GraphError::InvalidThresholds);
         }
@@ -162,9 +157,7 @@ impl SparseReciprocalEdgeGraph {
     /// an experimental reference interface, not production admission.
     pub fn apply(&mut self, event: TorsorEvent) -> Result<Vec<PairUpdate>, GraphError> {
         let (id, replacement) = match event {
-            TorsorEvent::Upsert { id, torsor, weight } => {
-                (id, Some(scaled_key(torsor, weight)?))
-            }
+            TorsorEvent::Upsert { id, torsor, weight } => (id, Some(scaled_key(torsor, weight)?)),
             TorsorEvent::Remove { id } => (id, None),
         };
         if replacement.is_none() && !self.nodes.contains_key(&id) {
@@ -179,7 +172,10 @@ impl SparseReciprocalEdgeGraph {
             staged.reserve(connected.len());
             for &neighbor in connected {
                 let pair = ordered_pair(id, neighbor);
-                let prior = *self.edges.get(&pair).expect("declared topology is internally complete");
+                let prior = *self
+                    .edges
+                    .get(&pair)
+                    .expect("declared topology is internally complete");
                 let next_score = match (replacement, self.nodes.get(&neighbor).copied()) {
                     (Some(source), Some(other)) => pair_score(source, other)?,
                     _ => 0.0,
@@ -198,7 +194,10 @@ impl SparseReciprocalEdgeGraph {
                 };
                 staged.push((
                     pair,
-                    PairState { score: next_score, active },
+                    PairState {
+                        score: next_score,
+                        active,
+                    },
                     PairUpdate {
                         source_a: pair.0,
                         source_b: pair.1,
@@ -251,8 +250,8 @@ impl SparseReciprocalEdgeGraph {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::tdi22_cross_source_reciprocity::CrossSourceReciprocity;
+    use super::*;
 
     fn v(x: f64, y: f64, z: f64) -> Vec3 {
         Vec3::new(x, y, z).unwrap()
@@ -299,15 +298,23 @@ mod tests {
     #[test]
     fn only_adjacent_edges_are_touched_by_source_mutation() {
         let mut graph = SparseReciprocalEdgeGraph::new(&[(1, 2), (2, 3)], 0.25, 1.0).unwrap();
-        graph.apply(insert(1, v(1.0, 0.0, 0.0), Vec3::zero())).unwrap();
-        let changes = graph.apply(insert(2, Vec3::zero(), v(2.0, 0.0, 0.0))).unwrap();
+        graph
+            .apply(insert(1, v(1.0, 0.0, 0.0), Vec3::zero()))
+            .unwrap();
+        let changes = graph
+            .apply(insert(2, Vec3::zero(), v(2.0, 0.0, 0.0)))
+            .unwrap();
         assert_eq!(changes.len(), 2);
         assert_eq!(changes[0].edge, Edge::Rising);
         assert_eq!(changes[1].edge, Edge::None);
-        graph.apply(insert(3, v(1.0, 0.0, 0.0), Vec3::zero())).unwrap();
+        graph
+            .apply(insert(3, v(1.0, 0.0, 0.0), Vec3::zero()))
+            .unwrap();
         assert_eq!(graph.active_edges(), vec![(1, 2), (2, 3)]);
         let old_second_edge = graph.edge_state(2, 3).unwrap();
-        let changed = graph.apply(insert(1, v(-1.0, 0.0, 0.0), Vec3::zero())).unwrap();
+        let changed = graph
+            .apply(insert(1, v(-1.0, 0.0, 0.0), Vec3::zero()))
+            .unwrap();
         assert_eq!(changed.len(), 1);
         assert_eq!(changed[0].edge, Edge::Falling);
         assert_eq!(graph.edge_state(2, 3).unwrap(), old_second_edge);
@@ -323,11 +330,17 @@ mod tests {
         let second = insert(2, Vec3::zero(), v(1.0, 0.0, 0.0));
         assert_eq!(graph.apply(second).unwrap()[0].edge, Edge::Rising);
         assert_eq!(
-            graph.apply(insert(2, Vec3::zero(), v(-1.0, 0.0, 0.0))).unwrap()[0].edge,
+            graph
+                .apply(insert(2, Vec3::zero(), v(-1.0, 0.0, 0.0)))
+                .unwrap()[0]
+                .edge,
             Edge::Falling
         );
         assert_eq!(graph.apply(second).unwrap()[0].edge, Edge::Rising);
-        assert_eq!(graph.apply(TorsorEvent::Remove { id: 2 }).unwrap()[0].edge, Edge::Falling);
+        assert_eq!(
+            graph.apply(TorsorEvent::Remove { id: 2 }).unwrap()[0].edge,
+            Edge::Falling
+        );
         assert!(graph.active_edges().is_empty());
         assert!(graph.verify_all_edges().unwrap());
     }
@@ -341,10 +354,20 @@ mod tests {
             (1, v(1.0, 0.0, 0.0), v(0.0, 1.0, 0.0), v(1.0, 2.0, 0.0)),
             (2, v(0.0, 1.0, 0.0), v(2.0, 0.0, 0.0), v(-1.0, 0.0, 2.0)),
         ] {
-            let left = a.apply(TorsorEvent::Upsert { id, torsor: t(r, m, p), weight: 1.0 }).unwrap();
-            let right = b.apply(TorsorEvent::Upsert {
-                id, torsor: t(r, m, p.plus(delta)), weight: 1.0
-            }).unwrap();
+            let left = a
+                .apply(TorsorEvent::Upsert {
+                    id,
+                    torsor: t(r, m, p),
+                    weight: 1.0,
+                })
+                .unwrap();
+            let right = b
+                .apply(TorsorEvent::Upsert {
+                    id,
+                    torsor: t(r, m, p.plus(delta)),
+                    weight: 1.0,
+                })
+                .unwrap();
             assert_eq!(left.len(), right.len());
             for (x, y) in left.iter().zip(&right) {
                 close(x.score, y.score);
@@ -359,14 +382,19 @@ mod tests {
     #[test]
     fn rejected_nonfinite_pair_and_invalid_input_preserve_all_state() {
         let mut graph = SparseReciprocalEdgeGraph::new(&[(1, 2)], 0.1, 1.0).unwrap();
-        graph.apply(insert(1, v(f64::MAX, 0.0, 0.0), Vec3::zero())).unwrap();
+        graph
+            .apply(insert(1, v(f64::MAX, 0.0, 0.0), Vec3::zero()))
+            .unwrap();
         let prior = graph.clone();
         assert_eq!(
             graph.apply(insert(2, Vec3::zero(), v(f64::MAX, 0.0, 0.0))),
             Err(GraphError::NonFinitePair)
         );
         assert_eq!(graph, prior);
-        assert_eq!(graph.apply(TorsorEvent::Remove { id: 7 }), Err(GraphError::MissingSource(7)));
+        assert_eq!(
+            graph.apply(TorsorEvent::Remove { id: 7 }),
+            Err(GraphError::MissingSource(7))
+        );
         assert_eq!(graph, prior);
         assert_eq!(
             graph.apply(TorsorEvent::Upsert {
@@ -405,7 +433,12 @@ mod tests {
     #[test]
     fn disconnected_node_does_not_trigger_dense_global_scoring() {
         let mut graph = SparseReciprocalEdgeGraph::new(&[(1, 2)], 0.0, 1.0).unwrap();
-        assert!(graph.apply(insert(3, v(1.0, 0.0, 0.0), Vec3::zero())).unwrap().is_empty());
+        assert!(
+            graph
+                .apply(insert(3, v(1.0, 0.0, 0.0), Vec3::zero()))
+                .unwrap()
+                .is_empty()
+        );
         assert_eq!(graph.source_count(), 1);
         assert_eq!(graph.declared_edge_count(), 1);
         assert!(graph.active_edges().is_empty());
