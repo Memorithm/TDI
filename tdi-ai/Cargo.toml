@@ -154,3 +154,7 @@ required-features = ["experimental"]
 [[example]]
 name = "tdi25_s47_qualified_timing"
 required-features = ["experimental"]
+
+[[example]]
+name = "tdi22_event_tasks"
+required-features = ["experimental"]
