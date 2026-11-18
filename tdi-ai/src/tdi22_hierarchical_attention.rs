@@ -34,6 +34,8 @@ pub enum HierarchyError {
     InvalidTolerance,
     Torsor(TorsorError),
     NonFiniteDerived,
+    /// A caller-imposed node-visit cap was reached before a complete row.
+    VisitBudgetExceeded,
 }
 
 impl From<TorsorError> for HierarchyError {
@@ -274,6 +276,55 @@ impl HierarchicalTorsorBank {
         score_scale: f64,
         max_score_deviation: f64,
     ) -> Result<HierarchicalTorsorRow, HierarchyError> {
+        self.row_impl(
+            query,
+            query_position,
+            query_index,
+            policy,
+            score_scale,
+            max_score_deviation,
+            None,
+        )
+    }
+
+    /// Bound hierarchy traversal before attempting another node. On reaching
+    /// the cap return VisitBudgetExceeded with NO partial attention output.
+    /// This is an opt-in Development control; callers seeking an uninterrupted
+    /// output must use a separately validated exact streaming fallback.
+    ///
+    /// A zero budget permits no hierarchy visits. The budget counts even
+    /// nodes whose ranges are causally masked. No relative speed claim.
+    pub fn row_with_visit_budget(
+        &self,
+        query: Twist3,
+        query_position: Vec3,
+        query_index: usize,
+        policy: MaskPolicy,
+        score_scale: f64,
+        max_score_deviation: f64,
+        max_visited_nodes: usize,
+    ) -> Result<HierarchicalTorsorRow, HierarchyError> {
+        self.row_impl(
+            query,
+            query_position,
+            query_index,
+            policy,
+            score_scale,
+            max_score_deviation,
+            Some(max_visited_nodes),
+        )
+    }
+
+    fn row_impl(
+        &self,
+        query: Twist3,
+        query_position: Vec3,
+        query_index: usize,
+        policy: MaskPolicy,
+        score_scale: f64,
+        max_score_deviation: f64,
+        visit_limit: Option<usize>,
+    ) -> Result<HierarchicalTorsorRow, HierarchyError> {
         if !score_scale.is_finite() || score_scale <= 0.0 {
             return Err(HierarchyError::InvalidScale);
         }
@@ -297,6 +348,9 @@ impl HierarchicalTorsorBank {
         let mut work = HierarchyWork::default();
 
         while let Some(index) = stack.pop() {
+            if visit_limit.is_some_and(|limit| work.visited_nodes >= limit) {
+                return Err(HierarchyError::VisitBudgetExceeded);
+            }
             let node = self.nodes[index];
             work.visited_nodes += 1;
             if node.start >= prefix {
