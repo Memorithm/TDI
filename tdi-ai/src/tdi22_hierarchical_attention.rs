@@ -293,6 +293,7 @@ impl HierarchicalTorsorBank {
         let mut weighted_c = Vec3::zero();
         let mut visible = 0_usize;
         let mut max_actual_deviation = 0.0_f64;
+        let mut eligible_extrema: Option<Extrema> = None;
         let mut work = HierarchyWork::default();
 
         while let Some(index) = stack.pop() {
@@ -345,6 +346,11 @@ impl HierarchicalTorsorBank {
                 checked_linear_update(weighted_c, old_factor, node.mean.origin_moment, new_factor)?;
             max_score = next_max;
             visible += node.count();
+            // Only visible accepted blocks may influence a causal error bound.
+            eligible_extrema = Some(match eligible_extrema {
+                Some(previous) => Extrema::union(previous, node.extrema),
+                None => node.extrema,
+            });
             work.scored_nodes += 1;
             if node.leaf() {
                 work.exact_leaves += 1;
@@ -367,10 +373,19 @@ impl HierarchicalTorsorBank {
             return Err(HierarchyError::NonFiniteDerived);
         }
 
-        let extrema = self.nodes[self.root].extrema;
         let tv = max_actual_deviation.tanh();
-        let resultant_error = component_bound(extrema.min_r, extrema.max_r, tv)?;
-        let moment_c_error = component_bound(extrema.min_c, extrema.max_c, tv)?;
+        // An exact row has zero approximation error even if the range of
+        // finite key values would overflow f64 when subtracted. In particular,
+        // masked future keys must not invalidate an otherwise finite prefix.
+        let (resultant_error, moment_c_error) = if max_actual_deviation == 0.0 {
+            (Vec3::zero(), Vec3::zero())
+        } else {
+            let extrema = eligible_extrema.ok_or(HierarchyError::NonFiniteDerived)?;
+            (
+                component_bound(extrema.min_r, extrema.max_r, tv)?,
+                component_bound(extrema.min_c, extrema.max_c, tv)?,
+            )
+        };
         let absolute_q = Vec3 {
             x: query_position.x.abs(),
             y: query_position.y.abs(),
@@ -635,6 +650,46 @@ mod tests {
         assert!(
             approximate.bounds.log_sum_exp
                 >= (approximate.row.log_sum_exp - exact.row.log_sum_exp).abs()
+        );
+    }
+
+    #[test]
+    fn masked_extreme_future_values_do_not_break_exact_or_approximate_prefixes() {
+        let zero = Vec3::zero();
+        let q = Twist3::new(v(1.0, 0.0, 0.0), zero).unwrap();
+        let keys = vec![
+            Torsor3::new(v(1.0, 0.0, 0.0), zero, zero).unwrap(),
+            Torsor3::new(v(2.0, 0.0, 0.0), zero, zero).unwrap(),
+            Torsor3::new(v(1.0e308, 0.0, 0.0), zero, zero).unwrap(),
+            Torsor3::new(v(-1.0e308, 0.0, 0.0), zero, zero).unwrap(),
+        ];
+        let bank = HierarchicalTorsorBank::build(&keys).unwrap();
+        let prepared = prepare_keys(&keys).unwrap();
+
+        // The full-bank x-range is infinite in binary64. It is irrelevant
+        // to the exact one-key causal row and its zero error envelope.
+        let exact = bank
+            .row(q, zero, 0, MaskPolicy::Causal, 1.0, 0.0)
+            .unwrap();
+        let oracle = stream_torsor_row(q, zero, &prepared, 0, MaskPolicy::Causal, 1.0)
+            .unwrap();
+        assert_eq!(exact.row, oracle);
+        assert_eq!(exact.bounds.resultant, zero);
+        assert_eq!(exact.bounds.moment_at_query, zero);
+
+        // The first two visible keys may be summarized with nonzero error.
+        // Future extreme values still must not enter the error-range bound.
+        let grouped = bank
+            .row(q, zero, 1, MaskPolicy::Causal, 1.0, 1.0)
+            .unwrap();
+        let dense = stream_torsor_row(q, zero, &prepared, 1, MaskPolicy::Causal, 1.0)
+            .unwrap();
+        assert_eq!(grouped.row.visible_keys, 2);
+        assert_eq!(grouped.work.collapsed_blocks, 1);
+        assert!(grouped.bounds.resultant.x.is_finite());
+        assert!(
+            (grouped.row.resultant.x - dense.resultant.x).abs()
+                <= grouped.bounds.resultant.x + 1e-12
         );
     }
 
