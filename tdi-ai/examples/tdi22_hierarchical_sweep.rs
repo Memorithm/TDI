@@ -2,7 +2,7 @@
 //! Outputs logical operation counts and numerical deviations, never speed claims.
 
 use tdi_ai::experimental::tdi22_hierarchical_attention::HierarchicalTorsorBank;
-use tdi_ai::experimental::tdi22_torsor::{direct_pairing, Torsor3, Twist3, Vec3};
+use tdi_ai::experimental::tdi22_torsor::{Torsor3, Twist3, Vec3, direct_pairing};
 use tdi_ai::experimental::tdi24_attention::MaskPolicy;
 
 fn v(x: f64, y: f64, z: f64) -> Vec3 {
@@ -46,11 +46,7 @@ fn independent_dense(
             key.resultant().y * weight,
             key.resultant().z * weight,
         ));
-        moments = moments.plus(v(
-            moment.x * weight,
-            moment.y * weight,
-            moment.z * weight,
-        ));
+        moments = moments.plus(v(moment.x * weight, moment.y * weight, moment.z * weight));
     }
     (
         v(resulting.x / sum, resulting.y / sum, resulting.z / sum),
@@ -73,7 +69,11 @@ fn main() {
     let scale = 0.5;
     let positions = [0, 1, 7, 15, 31, 63, 127, 255];
 
-    println!("tdi22-hierarchy-dev-v1: n={} nodes={}", keys.len(), bank.node_count());
+    println!(
+        "tdi22-hierarchy-dev-v1: n={} nodes={}",
+        keys.len(),
+        bank.node_count()
+    );
     println!(
         "policy,score_tolerance,rows,eligible_keys,score_evaluations,collapsed_blocks,max_resultant_abs_error,max_moment_abs_error,max_lse_abs_error"
     );

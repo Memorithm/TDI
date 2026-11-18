@@ -13,7 +13,7 @@
 //! These bounds are analytical; they do NOT include IEEE-754 rounding error.
 //! No production, hardware, model-quality, or O(N log N) claim is implied.
 
-use super::tdi22_streaming_attention::{StreamedTorsorRow, StreamError};
+use super::tdi22_streaming_attention::{StreamError, StreamedTorsorRow};
 use super::tdi22_torsor::{
     FactorizedTorsorKey, FactorizedTwistQuery, Torsor3, TorsorError, Twist3, Vec3,
 };
@@ -308,8 +308,7 @@ impl HierarchicalTorsorBank {
             } else {
                 f64::INFINITY
             };
-            let accepted = fully_visible
-                && (node.leaf() || deviation <= max_score_deviation);
+            let accepted = fully_visible && (node.leaf() || deviation <= max_score_deviation);
 
             if !accepted {
                 if let Some((left, right)) = node.children {
@@ -340,12 +339,10 @@ impl HierarchicalTorsorBank {
             if !weight_sum.is_finite() || weight_sum <= 0.0 {
                 return Err(HierarchyError::NonFiniteDerived);
             }
-            weighted_r = checked_linear_update(
-                weighted_r, old_factor, node.mean.resultant, new_factor,
-            )?;
-            weighted_c = checked_linear_update(
-                weighted_c, old_factor, node.mean.origin_moment, new_factor,
-            )?;
+            weighted_r =
+                checked_linear_update(weighted_r, old_factor, node.mean.resultant, new_factor)?;
+            weighted_c =
+                checked_linear_update(weighted_c, old_factor, node.mean.origin_moment, new_factor)?;
             max_score = next_max;
             visible += node.count();
             work.scored_nodes += 1;
@@ -380,12 +377,9 @@ impl HierarchicalTorsorBank {
             z: query_position.z.abs(),
         };
         let moment_error = checked_vec(
-            moment_c_error.x + absolute_q.y * resultant_error.z
-                + absolute_q.z * resultant_error.y,
-            moment_c_error.y + absolute_q.z * resultant_error.x
-                + absolute_q.x * resultant_error.z,
-            moment_c_error.z + absolute_q.x * resultant_error.y
-                + absolute_q.y * resultant_error.x,
+            moment_c_error.x + absolute_q.y * resultant_error.z + absolute_q.z * resultant_error.y,
+            moment_c_error.y + absolute_q.z * resultant_error.x + absolute_q.x * resultant_error.z,
+            moment_c_error.z + absolute_q.x * resultant_error.y + absolute_q.y * resultant_error.x,
         )?;
         Ok(HierarchicalTorsorRow {
             row: StreamedTorsorRow {
@@ -478,7 +472,10 @@ mod tests {
     }
 
     fn close(a: f64, b: f64, tolerance: f64) {
-        assert!((a - b).abs() <= tolerance, "{a} != {b} with tolerance {tolerance}");
+        assert!(
+            (a - b).abs() <= tolerance,
+            "{a} != {b} with tolerance {tolerance}"
+        );
     }
 
     #[test]
@@ -520,13 +517,23 @@ mod tests {
         let (q, p) = query();
         let result = bank.row(q, p, 0, MaskPolicy::Full, 1.0, 0.0).unwrap();
         let direct = stream_torsor_row(
-            q, p, &prepare_keys(&keys).unwrap(), 0, MaskPolicy::Full, 1.0,
-        ).unwrap();
+            q,
+            p,
+            &prepare_keys(&keys).unwrap(),
+            0,
+            MaskPolicy::Full,
+            1.0,
+        )
+        .unwrap();
         assert_eq!(result.work.scored_nodes, 1);
         assert_eq!(result.work.collapsed_blocks, 1);
         assert_eq!(result.row.visible_keys, 32);
         close(result.row.resultant.x, direct.resultant.x, 1e-12);
-        close(result.row.moment_at_query.z, direct.moment_at_query.z, 1e-12);
+        close(
+            result.row.moment_at_query.z,
+            direct.moment_at_query.z,
+            1e-12,
+        );
         close(result.row.log_sum_exp, direct.log_sum_exp, 1e-12);
         assert_eq!(result.bounds.total_variation, 0.0);
     }
@@ -539,11 +546,7 @@ mod tests {
         let a = HierarchicalTorsorBank::build(&keys).unwrap();
         let x = a.row(q, p, 3, MaskPolicy::Causal, 1.0, 100.0).unwrap();
         for future in changed.iter_mut().skip(4) {
-            *future = Torsor3::new(
-                v(10_000.0, -1.0, 1.0),
-                v(-300.0, 200.0, 500.0),
-                p,
-            ).unwrap();
+            *future = Torsor3::new(v(10_000.0, -1.0, 1.0), v(-300.0, 200.0, 500.0), p).unwrap();
         }
         let b = HierarchicalTorsorBank::build(&changed).unwrap();
         let y = b.row(q, p, 3, MaskPolicy::Causal, 1.0, 100.0).unwrap();
@@ -560,16 +563,34 @@ mod tests {
         let bank = HierarchicalTorsorBank::build(&keys).unwrap();
         let (q, p) = query();
         let direct = stream_torsor_row(
-            q, p, &prepare_keys(&keys).unwrap(), 0, MaskPolicy::Full, 0.25,
-        ).unwrap();
+            q,
+            p,
+            &prepare_keys(&keys).unwrap(),
+            0,
+            MaskPolicy::Full,
+            0.25,
+        )
+        .unwrap();
         let approximate = bank.row(q, p, 0, MaskPolicy::Full, 0.25, 3.0).unwrap();
         assert!(approximate.work.collapsed_blocks > 0);
         assert!(approximate.work.scored_nodes < keys.len());
         let b = approximate.bounds;
         assert!(b.score_deviation <= 3.0);
-        close(approximate.row.resultant.x, direct.resultant.x, b.resultant.x + 1e-10);
-        close(approximate.row.resultant.y, direct.resultant.y, b.resultant.y + 1e-10);
-        close(approximate.row.resultant.z, direct.resultant.z, b.resultant.z + 1e-10);
+        close(
+            approximate.row.resultant.x,
+            direct.resultant.x,
+            b.resultant.x + 1e-10,
+        );
+        close(
+            approximate.row.resultant.y,
+            direct.resultant.y,
+            b.resultant.y + 1e-10,
+        );
+        close(
+            approximate.row.resultant.z,
+            direct.resultant.z,
+            b.resultant.z + 1e-10,
+        );
         close(
             approximate.row.moment_at_query.x,
             direct.moment_at_query.x,
@@ -600,20 +621,29 @@ mod tests {
         ];
         let bank = HierarchicalTorsorBank::build(&k).unwrap();
         let q = Twist3::new(v(100.0, 0.0, 0.0), Vec3::zero()).unwrap();
-        let exact = bank.row(q, Vec3::zero(), 0, MaskPolicy::Full, 1.0, 0.0).unwrap();
+        let exact = bank
+            .row(q, Vec3::zero(), 0, MaskPolicy::Full, 1.0, 0.0)
+            .unwrap();
         assert_eq!(exact.work.exact_leaves, 2);
         assert!(exact.row.resultant.x > 0.99);
-        let approximate = bank.row(q, Vec3::zero(), 0, MaskPolicy::Full, 1.0, 100.0).unwrap();
+        let approximate = bank
+            .row(q, Vec3::zero(), 0, MaskPolicy::Full, 1.0, 100.0)
+            .unwrap();
         assert_eq!(approximate.work.scored_nodes, 1);
         assert_eq!(approximate.row.resultant.x, 0.0);
         assert!(approximate.bounds.resultant.x >= 1.0);
-        assert!(approximate.bounds.log_sum_exp >=
-            (approximate.row.log_sum_exp - exact.row.log_sum_exp).abs());
+        assert!(
+            approximate.bounds.log_sum_exp
+                >= (approximate.row.log_sum_exp - exact.row.log_sum_exp).abs()
+        );
     }
 
     #[test]
     fn malformed_configuration_is_rejected() {
-        assert_eq!(HierarchicalTorsorBank::build(&[]).unwrap_err(), HierarchyError::EmptyKeys);
+        assert_eq!(
+            HierarchicalTorsorBank::build(&[]).unwrap_err(),
+            HierarchyError::EmptyKeys
+        );
         let keys = fixture(2);
         let bank = HierarchicalTorsorBank::build(&keys).unwrap();
         let (q, p) = query();
@@ -627,11 +657,8 @@ mod tests {
             bank.row(q, p, 0, MaskPolicy::Full, 0.0, 1.0).unwrap_err(),
             HierarchyError::InvalidScale,
         );
-        let unstable = Torsor3::new(
-            v(f64::MAX, 0.0, 0.0),
-            v(0.0, 1.0, 0.0),
-            v(0.0, 0.0, 2.0),
-        ).unwrap();
+        let unstable =
+            Torsor3::new(v(f64::MAX, 0.0, 0.0), v(0.0, 1.0, 0.0), v(0.0, 0.0, 2.0)).unwrap();
         assert!(HierarchicalTorsorBank::build(&[unstable]).is_err());
     }
 }
