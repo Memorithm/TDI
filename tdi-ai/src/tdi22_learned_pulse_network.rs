@@ -14,9 +14,7 @@
 
 use super::tdi22_bilinear_control::BinaryMetrics;
 use super::tdi22_event_aggregate::TorsorEvent;
-use super::tdi22_event_routing_memory::{
-    EventRoutingMemory, RewiredRoutingStep, RoutingError,
-};
+use super::tdi22_event_routing_memory::{EventRoutingMemory, RewiredRoutingStep, RoutingError};
 use super::tdi22_online_associative_links::{
     LearningConfig, LearningError, LearningStep, MatchedAssociativeLearner,
 };
@@ -48,7 +46,9 @@ fn record(metric: &mut BinaryMetrics, prediction: bool, target: bool) -> Result<
         (false, false) => &mut metric.true_negative,
         (false, true) => &mut metric.false_negative,
     };
-    *counter = counter.checked_add(1).ok_or(NetworkError::CounterOverflow)?;
+    *counter = counter
+        .checked_add(1)
+        .ok_or(NetworkError::CounterOverflow)?;
     Ok(())
 }
 
@@ -178,8 +178,8 @@ impl MatchedLearnedPulseNetwork {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::tdi22_torsor::{Torsor3, Vec3};
+    use super::*;
 
     fn v(x: f64) -> Vec3 {
         Vec3::new(x, 0.0, 0.0).unwrap()
@@ -277,11 +277,7 @@ mod tests {
             .unwrap();
         assert_eq!(first.rising, vec![(1, 2), (2, 3)]);
         let second = routed
-            .observe_rewired(
-                1,
-                &[(1, 2), (2, 3), (3, 4)],
-                &[(1, 2), (2, 3), (3, 4)],
-            )
+            .observe_rewired(1, &[(1, 2), (2, 3), (3, 4)], &[(1, 2), (2, 3), (3, 4)])
             .unwrap();
         assert_eq!(second.admitted, vec![(3, 4)]);
         assert_eq!(second.rising, vec![(3, 4)]);
@@ -359,7 +355,10 @@ mod tests {
         assert_eq!(r, before);
         assert_eq!(
             r.observe_rewired(0, &[(1, 2)], &[(1, 2)]),
-            Err(RoutingError::StaleSequence { previous: 0, received: 0 })
+            Err(RoutingError::StaleSequence {
+                previous: 0,
+                received: 0
+            })
         );
         assert_eq!(r, before);
     }
@@ -377,7 +376,8 @@ mod tests {
         assert_eq!(
             n.push(0, event(2, 0.5), 2, true),
             Err(NetworkError::Learning(LearningError::StaleSequence {
-                previous: 0, received: 0
+                previous: 0,
+                received: 0
             }))
         );
         assert_eq!(n, before);
