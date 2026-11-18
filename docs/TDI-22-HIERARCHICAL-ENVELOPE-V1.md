@@ -70,8 +70,11 @@ For any coordinate of a torsor value lying in [min,max]:
 
 The implementation returns per-coordinate bounds on R and C, and propagates
 them to the transported moment M(Q) using the triangle inequality.
-Global extrema are used even for causal prefixes, so the envelope may be
-intentionally loose. Floats are checked for nonfinite intermediates.
+Only extrema from fully eligible accepted blocks contribute to the error
+envelope; masked future values never participate in its range calculation.
+When the actual accepted score deviation is zero, both component-error
+bounds are returned as zero without subtracting potentially overflowing
+but finite extrema. Floats are checked for nonfinite intermediates.
 
 These analytical envelopes are not IEEE-754 directed-rounding interval
 certificates. They must never be reported as formal machine-verified
