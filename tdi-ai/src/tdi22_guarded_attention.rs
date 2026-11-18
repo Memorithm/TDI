@@ -206,7 +206,9 @@ mod tests {
         let (q, point) = query();
         for policy in [MaskPolicy::Full, MaskPolicy::Causal] {
             let expected = original.row(q, point, 12, policy, 0.5, 0.4).unwrap();
-            let observed = guarded.row(request(q, point, 12, policy, 0.5, 0.4), 64).unwrap();
+            let observed = guarded
+                .row(request(q, point, 12, policy, 0.5, 0.4), 64)
+                .unwrap();
             assert_eq!(observed.path, GuardedPath::Hierarchical);
             assert_eq!(observed.row, expected.row);
             assert_eq!(observed.hierarchy_work, Some(expected.work));
@@ -260,8 +262,11 @@ mod tests {
         let (q, point) = query();
         for invalid_scale in [0.0, f64::NAN, f64::INFINITY] {
             assert_eq!(
-                bank.row(request(q, point, 0, MaskPolicy::Full, invalid_scale, 0.5), 0)
-                    .unwrap_err(),
+                bank.row(
+                    request(q, point, 0, MaskPolicy::Full, invalid_scale, 0.5),
+                    0
+                )
+                .unwrap_err(),
                 HierarchyError::InvalidScale,
             );
         }
