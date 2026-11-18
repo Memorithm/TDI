@@ -22,7 +22,7 @@ use super::tdi22_bilinear_control::{
 };
 use super::tdi22_event_aggregate::TorsorEvent;
 use super::tdi22_event_gate::Edge;
-use super::tdi22_sparse_reciprocal_graph::{GraphError, PairUpdate};
+use super::tdi22_sparse_reciprocal_graph::{GraphError, PairUpdate, SparseReciprocalEdgeGraph};
 
 pub const MAX_ROUTING_EVENTS: u64 = 4_096;
 pub const MAX_ROUTING_HOPS: u8 = 16;
@@ -104,6 +104,17 @@ pub struct EventRoutingMemory {
     observations: u64,
 }
 
+/// Atomic result of replacing the declared routing topology on an event.
+/// An evicted active link counts as a fall but never seeds a new pulse.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RewiredRoutingStep {
+    pub routing: RoutingStep,
+    pub admitted: Vec<(u64, u64)>,
+    pub evicted: Vec<(u64, u64)>,
+    pub rising: Vec<(u64, u64)>,
+    pub falling: Vec<(u64, u64)>,
+}
+
 impl EventRoutingMemory {
     /// Caller is responsible for prior wiring validation by
     /// MatchedBilinearProtocol::new. No duplicate/self-link is admitted.
@@ -124,6 +135,112 @@ impl EventRoutingMemory {
             last_sequence: None,
             observations: 0,
         }
+    }
+
+    /// Start with no declared links; learning events may rewire the graph.
+    pub fn for_learned_wiring(max_hops: u8) -> Result<Self, RoutingError> {
+        if max_hops > MAX_ROUTING_HOPS {
+            return Err(RoutingError::InvalidHopBudget(max_hops));
+        }
+        Ok(Self::from_validated_wiring(&[], max_hops))
+    }
+
+    #[must_use]
+    pub fn declared_links(&self) -> Vec<(u64, u64)> {
+        self.wired.iter().copied().collect()
+    }
+
+    /// Atomically replace the topology and deliver rising-edge pulses.
+    ///
+    /// Input pairs must be canonical a<b, distinct, and budget-constrained.
+    /// Active links must belong to the selected topology. Removed active
+    /// edges produce falling events without generating new pulses.
+    /// Already delivered per-node timestamps survive topology changes.
+    ///
+    /// The synthetic scores below (0 inactive, 1 active) are exclusively
+    /// for reusing the routing state machine; not physical torsor scores.
+    /// Whole-state staging makes this a bounded reference, not fast path.
+    pub fn observe_rewired(
+        &mut self,
+        sequence: u64,
+        selected_links: &[(u64, u64)],
+        active_links: &[(u64, u64)],
+    ) -> Result<RewiredRoutingStep, RoutingError> {
+        for &(a, b) in selected_links {
+            if a >= b {
+                return Err(RoutingError::UnknownLink(a, b));
+            }
+        }
+        SparseReciprocalEdgeGraph::new(selected_links, 0.0, 1.0)?;
+        let selected: BTreeSet<_> = selected_links.iter().copied().collect();
+        let mut desired = BTreeSet::new();
+        for &(a, b) in active_links {
+            if a >= b || !selected.contains(&(a, b)) {
+                return Err(RoutingError::UnknownLink(a, b));
+            }
+            if !desired.insert((a, b)) {
+                return Err(RoutingError::DuplicateLink(a, b));
+            }
+        }
+
+        let mut staged = self.clone();
+        let old_wired = staged.wired.clone();
+        let old_active = staged.active.clone();
+        let admitted: Vec<_> = selected.difference(&old_wired).copied().collect();
+        let evicted: Vec<_> = old_wired.difference(&selected).copied().collect();
+        let topology = Self::from_validated_wiring(selected_links, self.max_hops);
+        staged.adjacency = topology.adjacency;
+        staged.wired = topology.wired;
+        staged.active = old_active.intersection(&selected).copied().collect();
+
+        let mut updates = Vec::new();
+        for &pair in &selected {
+            let was_active = staged.active.contains(&pair);
+            let now_active = desired.contains(&pair);
+            if was_active != now_active {
+                updates.push(PairUpdate {
+                    source_a: pair.0,
+                    source_b: pair.1,
+                    score: if now_active { 1.0 } else { 0.0 },
+                    active: now_active,
+                    edge: if now_active { Edge::Rising } else { Edge::Falling },
+                });
+            }
+        }
+        let mut routed = staged.observe(sequence, &updates)?;
+        let mut rising = Vec::new();
+        let mut falling = Vec::new();
+        for update in &updates {
+            let pair = (update.source_a, update.source_b);
+            match update.edge {
+                Edge::Rising => rising.push(pair),
+                Edge::Falling => falling.push(pair),
+                Edge::None => {}
+            }
+        }
+        for &pair in &evicted {
+            if old_active.contains(&pair) {
+                falling.push(pair);
+                routed.falling_links = routed
+                    .falling_links
+                    .checked_add(1)
+                    .ok_or(RoutingError::CounterOverflow)?;
+            }
+        }
+        rising.sort_unstable();
+        falling.sort_unstable();
+        if staged.active != desired {
+            return Err(RoutingError::ControlMismatch);
+        }
+        let result = RewiredRoutingStep {
+            routing: routed,
+            admitted,
+            evicted,
+            rising,
+            falling,
+        };
+        *self = staged;
+        Ok(result)
     }
 
     #[must_use]
