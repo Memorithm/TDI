@@ -172,9 +172,7 @@ impl EventRoutingMemory {
         let mut falling_links = 0_usize;
         for update in updates {
             let pair = link(update.source_a, update.source_b);
-            if update.source_a >= update.source_b
-                || !staged.wired.contains(&pair)
-            {
+            if update.source_a >= update.source_b || !staged.wired.contains(&pair) {
                 return Err(RoutingError::UnknownLink(update.source_a, update.source_b));
             }
             if !seen.insert(pair) {
@@ -255,11 +253,7 @@ impl EventRoutingMemory {
     }
 }
 
-fn record(
-    metric: &mut BinaryMetrics,
-    prediction: bool,
-    target: bool,
-) -> Result<(), RoutingError> {
+fn record(metric: &mut BinaryMetrics, prediction: bool, target: bool) -> Result<(), RoutingError> {
     let slot = match (prediction, target) {
         (true, true) => &mut metric.true_positive,
         (true, false) => &mut metric.false_positive,
@@ -335,11 +329,15 @@ impl MatchedEventRoutingProtocol {
         // Full protocol cloning preserves atomicity across the two edge
         // scorers, two routing memories and all task-confusion counters.
         let mut staged = self.clone();
-        let source_edges = staged.paired_edges.push(sequence, event, independent_target)?;
-        let candidate_route =
-            staged.candidate.observe(sequence, &source_edges.candidate_updates)?;
-        let ordinary_bilinear_route =
-            staged.ordinary_bilinear.observe(sequence, &source_edges.bilinear_updates)?;
+        let source_edges = staged
+            .paired_edges
+            .push(sequence, event, independent_target)?;
+        let candidate_route = staged
+            .candidate
+            .observe(sequence, &source_edges.candidate_updates)?;
+        let ordinary_bilinear_route = staged
+            .ordinary_bilinear
+            .observe(sequence, &source_edges.bilinear_updates)?;
         if candidate_route != ordinary_bilinear_route {
             return Err(RoutingError::ControlMismatch);
         }
@@ -367,8 +365,8 @@ impl MatchedEventRoutingProtocol {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::tdi22_torsor::{Torsor3, Vec3};
+    use super::*;
 
     fn v(x: f64) -> Vec3 {
         Vec3::new(x, 0.0, 0.0).unwrap()
@@ -383,13 +381,7 @@ mod tests {
     }
 
     fn chain(hops: u8) -> MatchedEventRoutingProtocol {
-        MatchedEventRoutingProtocol::new(
-            &[(1, 2), (2, 3), (3, 4)],
-            0.25,
-            0.75,
-            hops,
-        )
-        .unwrap()
+        MatchedEventRoutingProtocol::new(&[(1, 2), (2, 3), (3, 4)], 0.25, 0.75, hops).unwrap()
     }
 
     #[test]
@@ -436,7 +428,9 @@ mod tests {
         assert_eq!(same.candidate_route.rising_links, 0);
         assert!(same.candidate_route.reached.is_empty());
         assert_eq!(graph.last_reached_at(1), before);
-        let fallen = graph.push(5, TorsorEvent::Remove { id: 4 }, 1, false).unwrap();
+        let fallen = graph
+            .push(5, TorsorEvent::Remove { id: 4 }, 1, false)
+            .unwrap();
         assert_eq!(fallen.candidate_route.falling_links, 1);
         assert!(fallen.candidate_route.reached.is_empty());
         assert_eq!(graph.active_link_count(), 2);
@@ -460,13 +454,7 @@ mod tests {
 
     #[test]
     fn disconnected_node_remains_unreached() {
-        let mut graph = MatchedEventRoutingProtocol::new(
-            &[(1, 2), (3, 4)],
-            0.25,
-            0.75,
-            4,
-        )
-        .unwrap();
+        let mut graph = MatchedEventRoutingProtocol::new(&[(1, 2), (3, 4)], 0.25, 0.75, 4).unwrap();
         graph.push(0, source(1, 1.0), 3, false).unwrap();
         let step = graph.push(1, source(2, 1.0), 3, false).unwrap();
         assert!(!step.predicted_reached);
