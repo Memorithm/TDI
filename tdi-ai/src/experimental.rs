@@ -62,6 +62,8 @@ pub mod tdi21_sequence_materializer;
 pub mod tdi21_stream;
 #[path = "tdi21_boolean_tasks.rs"]
 pub mod tdi21_tasks;
+#[path = "tdi22_bilinear_control.rs"]
+pub mod tdi22_bilinear_control;
 #[path = "tdi22_cross_source_reciprocity.rs"]
 pub mod tdi22_cross_source_reciprocity;
 #[path = "tdi22_eval.rs"]
