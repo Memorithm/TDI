@@ -78,12 +78,12 @@ pub mod tdi22_event_impulse;
 pub mod tdi22_event_protocol;
 #[path = "tdi22_event_routing_memory.rs"]
 pub mod tdi22_event_routing_memory;
-#[path = "tdi22_online_associative_links.rs"]
-pub mod tdi22_online_associative_links;
 #[path = "tdi22_event_tasks.rs"]
 pub mod tdi22_event_tasks;
 #[path = "tdi22_generator.rs"]
 pub mod tdi22_generator;
+#[path = "tdi22_online_associative_links.rs"]
+pub mod tdi22_online_associative_links;
 #[path = "tdi22_sparse_reciprocal_graph.rs"]
 pub mod tdi22_sparse_reciprocal_graph;
 #[path = "tdi22_torsor.rs"]
