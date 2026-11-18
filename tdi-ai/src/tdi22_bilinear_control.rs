@@ -187,7 +187,9 @@ impl BinaryMetrics {
             (false, false) => &mut self.true_negative,
             (false, true) => &mut self.false_negative,
         };
-        *counter = counter.checked_add(1).ok_or(ControlError::CounterOverflow)?;
+        *counter = counter
+            .checked_add(1)
+            .ok_or(ControlError::CounterOverflow)?;
         Ok(())
     }
 
@@ -277,8 +279,12 @@ impl MatchedBilinearProtocol {
         }
 
         let predicted = !candidates.is_empty();
-        staged.candidate_metrics.record(predicted, independent_target)?;
-        staged.control_metrics.record(!controls.is_empty(), independent_target)?;
+        staged
+            .candidate_metrics
+            .record(predicted, independent_target)?;
+        staged
+            .control_metrics
+            .record(!controls.is_empty(), independent_target)?;
         staged.observations = staged
             .observations
             .checked_add(1)
@@ -315,8 +321,8 @@ impl MatchedBilinearProtocol {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::tdi22_torsor::Vec3;
+    use super::*;
 
     fn v(x: f64, y: f64, z: f64) -> Vec3 {
         Vec3::new(x, y, z).unwrap()
@@ -331,7 +337,8 @@ mod tests {
     }
 
     fn fixture(labels: &[bool]) -> (MatchedBilinearProtocol, Vec<MatchedEdgeStep>) {
-        let mut paired = MatchedBilinearProtocol::new(&[(1, 2), (1, 3), (3, 4)], 0.25, 1.0).unwrap();
+        let mut paired =
+            MatchedBilinearProtocol::new(&[(1, 2), (1, 3), (3, 4)], 0.25, 1.0).unwrap();
         let events = [
             upsert(1, v(1.0, 0.0, 0.0), Vec3::zero()),
             upsert(2, Vec3::zero(), v(2.0, 0.0, 0.0)),
@@ -396,11 +403,7 @@ mod tests {
             .unwrap();
         let before = paired.clone();
         assert_eq!(
-            paired.push(
-                1,
-                upsert(2, Vec3::zero(), v(f64::MAX, 0.0, 0.0)),
-                true
-            ),
+            paired.push(1, upsert(2, Vec3::zero(), v(f64::MAX, 0.0, 0.0)), true),
             Err(ControlError::Graph(GraphError::NonFinitePair))
         );
         assert_eq!(paired, before);
@@ -423,11 +426,7 @@ mod tests {
     fn zero_signal_alternating_labels_cannot_create_a_positive_prediction() {
         let mut paired = MatchedBilinearProtocol::new(&[(1, 2)], 0.0, 1.0).unwrap();
         for i in 0..32 {
-            let event = upsert(
-                if i % 2 == 0 { 1 } else { 2 },
-                Vec3::zero(),
-                Vec3::zero(),
-            );
+            let event = upsert(if i % 2 == 0 { 1 } else { 2 }, Vec3::zero(), Vec3::zero());
             let outcome = paired.push(i, event, i % 2 == 0).unwrap();
             assert!(!outcome.any_active);
             assert!(outcome.active_edges.is_empty());
@@ -444,8 +443,7 @@ mod tests {
     fn known_bilinear_identity_is_not_a_candidate_only_result() {
         let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
         let b = [-2.0, 1.0, 3.0, 5.0, -1.0, 2.0];
-        let expected =
-            v(a[0], a[1], a[2]).dot(v(b[3], b[4], b[5]))
+        let expected = v(a[0], a[1], a[2]).dot(v(b[3], b[4], b[5]))
             + v(b[0], b[1], b[2]).dot(v(a[3], a[4], a[5]));
         assert_eq!(OrdinaryBilinearGraph::bilinear(a, b).unwrap(), expected);
     }
