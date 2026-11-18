@@ -11,9 +11,7 @@
 //! For N queries over N keys the time remains O(N^2), excluding preparation.
 //! Nothing here changes the frozen TDI-22 evaluator or FLAT routing.
 
-use super::tdi22_torsor::{
-    FactorizedTorsorKey, Torsor3, TorsorError, Twist3, Vec3,
-};
+use super::tdi22_torsor::{FactorizedTorsorKey, Torsor3, TorsorError, Twist3, Vec3};
 use super::tdi24_attention::MaskPolicy;
 
 /// Versioned, non-final reference algorithm (not a production kernel).
@@ -39,7 +37,10 @@ pub fn prepare_keys(keys: &[Torsor3]) -> Result<Vec<PreparedTorsorKey>, StreamEr
     if keys.is_empty() {
         return Err(StreamError::EmptyKeys);
     }
-    keys.iter().copied().map(PreparedTorsorKey::prepare).collect()
+    keys.iter()
+        .copied()
+        .map(PreparedTorsorKey::prepare)
+        .collect()
 }
 
 /// One normalized attention row, expressed at the query position Q.
@@ -174,8 +175,8 @@ pub fn stream_torsor_row(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::tdi22_torsor::direct_pairing;
+    use super::*;
 
     fn v(x: f64, y: f64, z: f64) -> Vec3 {
         Vec3::new(x, y, z).unwrap()
@@ -266,22 +267,35 @@ mod tests {
     fn source_reduction_and_common_translation_preserve_output() {
         let (query, p, keys) = fixtures();
         let original = stream_torsor_row(
-            query, p, &prepare_keys(&keys).unwrap(), 0, MaskPolicy::Full, 1.0,
-        ).unwrap();
+            query,
+            p,
+            &prepare_keys(&keys).unwrap(),
+            0,
+            MaskPolicy::Full,
+            1.0,
+        )
+        .unwrap();
         let t = v(11.0, -17.0, 23.0);
         let transformed: Vec<_> = keys
             .iter()
             .map(|key| {
                 // Transport first to a different reduction point, then
                 // translate all coordinate origins without changing M there.
-                let moved = key.transport(key.reference().plus(v(0.75, 2.0, -1.0))).unwrap();
+                let moved = key
+                    .transport(key.reference().plus(v(0.75, 2.0, -1.0)))
+                    .unwrap();
                 Torsor3::new(moved.resultant(), moved.moment(), moved.reference().plus(t)).unwrap()
             })
             .collect();
         let relocated = stream_torsor_row(
-            query, p.plus(t), &prepare_keys(&transformed).unwrap(),
-            0, MaskPolicy::Full, 1.0,
-        ).unwrap();
+            query,
+            p.plus(t),
+            &prepare_keys(&transformed).unwrap(),
+            0,
+            MaskPolicy::Full,
+            1.0,
+        )
+        .unwrap();
         close_vec(original.resultant, relocated.resultant);
         close_vec(original.moment_at_query, relocated.moment_at_query);
         close(original.log_sum_exp, relocated.log_sum_exp);
@@ -303,8 +317,14 @@ mod tests {
         // Changing a masked future key cannot alter the causal result.
         keys[3] = Torsor3::new(v(1e12, 0.0, 0.0), v(0.0, 0.0, 0.0), p).unwrap();
         let altered = stream_torsor_row(
-            q, p, &prepare_keys(&keys).unwrap(), 0, MaskPolicy::Causal, 1.0,
-        ).unwrap();
+            q,
+            p,
+            &prepare_keys(&keys).unwrap(),
+            0,
+            MaskPolicy::Causal,
+            1.0,
+        )
+        .unwrap();
         assert_eq!(causal, altered);
     }
 
@@ -323,8 +343,6 @@ mod tests {
         );
         let huge = Torsor3::new(v(f64::MAX, 0.0, 0.0), v(0.0, 1.0, 0.0), v(0.0, 0.0, 2.0)).unwrap();
         assert!(prepare_keys(&[huge]).is_err());
-        assert!(stream_torsor_row(
-            query, p, &prepared, 0, MaskPolicy::Full, f64::MAX
-        ).is_err());
+        assert!(stream_torsor_row(query, p, &prepared, 0, MaskPolicy::Full, f64::MAX).is_err());
     }
 }
