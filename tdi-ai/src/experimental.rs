@@ -88,6 +88,8 @@ pub mod tdi22_learned_pulse_network;
 pub mod tdi22_online_associative_links;
 #[path = "tdi22_sparse_reciprocal_graph.rs"]
 pub mod tdi22_sparse_reciprocal_graph;
+#[path = "tdi22_streaming_attention.rs"]
+pub mod tdi22_streaming_attention;
 #[path = "tdi22_torsor.rs"]
 pub mod tdi22_torsor;
 #[path = "tdi23_categorical.rs"]
