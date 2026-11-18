@@ -18,8 +18,7 @@ use super::tdi22_hierarchical_attention::{
 use super::tdi22_streaming_attention::{
     PreparedTorsorKey, StreamedTorsorRow, prepare_keys, stream_torsor_row,
 };
-use super::tdi22_torsor::{Torsor3, Twist3, Vec3};
-use super::tdi24_attention::MaskPolicy;
+use super::tdi22_torsor::Torsor3;
 
 /// Explicit opt-in non-final routing identity.
 pub const GUARDED_CONTRACT: &str = "tdi22-visit-limited-exact-fallback-v1";
@@ -127,6 +126,8 @@ impl GuardedTorsorBank {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::tdi22_torsor::{Twist3, Vec3};
+    use super::super::tdi24_attention::MaskPolicy;
 
     fn v(x: f64, y: f64, z: f64) -> Vec3 {
         Vec3::new(x, y, z).unwrap()
