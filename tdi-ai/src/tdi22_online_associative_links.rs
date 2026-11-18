@@ -176,7 +176,9 @@ fn record(metric: &mut BinaryMetrics, predicted: bool, target: bool) -> Result<(
         (false, false) => &mut metric.true_negative,
         (false, true) => &mut metric.false_negative,
     };
-    *counter = counter.checked_add(1).ok_or(LearningError::CounterOverflow)?;
+    *counter = counter
+        .checked_add(1)
+        .ok_or(LearningError::CounterOverflow)?;
     Ok(())
 }
 
@@ -292,12 +294,14 @@ impl MatchedAssociativeLearner {
                 // source yields precisely one support increment per event.
                 for (&other, &prior) in &staged.last_seen {
                     if other != id && sequence - prior <= staged.config.recency_window {
-                        let evidence = staged.evidence.entry(ordered(id, other)).or_insert(
-                            PairEvidence {
-                                count: 0,
-                                last_observed: sequence,
-                            },
-                        );
+                        let evidence =
+                            staged
+                                .evidence
+                                .entry(ordered(id, other))
+                                .or_insert(PairEvidence {
+                                    count: 0,
+                                    last_observed: sequence,
+                                });
                         evidence.count = evidence.count.saturating_add(1);
                         evidence.last_observed = sequence;
                     }
@@ -355,7 +359,11 @@ impl MatchedAssociativeLearner {
         let mut rising = Vec::new();
         let mut falling = Vec::new();
         for pair in &evicted {
-            if staged.candidate.remove(pair).is_some_and(|edge| edge.active) {
+            if staged
+                .candidate
+                .remove(pair)
+                .is_some_and(|edge| edge.active)
+            {
                 falling.push(*pair);
             }
             staged.ordinary.remove(pair);
@@ -401,9 +409,20 @@ impl MatchedAssociativeLearner {
         if target_link_active != control_target {
             return Err(LearningError::ControlMismatch);
         }
-        record(&mut staged.candidate_metrics, target_link_active, independent_target)?;
-        record(&mut staged.ordinary_metrics, control_target, independent_target)?;
-        staged.events = staged.events.checked_add(1).ok_or(LearningError::CounterOverflow)?;
+        record(
+            &mut staged.candidate_metrics,
+            target_link_active,
+            independent_target,
+        )?;
+        record(
+            &mut staged.ordinary_metrics,
+            control_target,
+            independent_target,
+        )?;
+        staged.events = staged
+            .events
+            .checked_add(1)
+            .ok_or(LearningError::CounterOverflow)?;
         staged.last_sequence = Some(sequence);
 
         let report = LearningStep {
@@ -423,8 +442,8 @@ impl MatchedAssociativeLearner {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::tdi22_torsor::{Torsor3, Vec3};
+    use super::*;
 
     fn v(value: f64) -> Vec3 {
         Vec3::new(value, 0.0, 0.0).unwrap()
@@ -460,7 +479,12 @@ mod tests {
     ) {
         for i in 0..count {
             learner
-                .push(*sequence, source(if i % 2 == 0 { a } else { b }, 0.5), (a, b), true)
+                .push(
+                    *sequence,
+                    source(if i % 2 == 0 { a } else { b }, 0.5),
+                    (a, b),
+                    true,
+                )
                 .unwrap();
             *sequence += 1;
         }
@@ -528,8 +552,12 @@ mod tests {
         let mut a = learner(2);
         let mut b = learner(2);
         for (sequence, id) in [1, 2, 1, 2, 3, 2, 3].into_iter().enumerate() {
-            let left = a.push(sequence as u64, source(id, 0.5), (1, 2), true).unwrap();
-            let right = b.push(sequence as u64, source(id, 0.5), (8, 9), false).unwrap();
+            let left = a
+                .push(sequence as u64, source(id, 0.5), (1, 2), true)
+                .unwrap();
+            let right = b
+                .push(sequence as u64, source(id, 0.5), (8, 9), false)
+                .unwrap();
             assert_eq!(left.admitted, right.admitted);
             assert_eq!(left.evicted, right.evicted);
             assert_eq!(left.selected_links, right.selected_links);
@@ -545,7 +573,9 @@ mod tests {
     fn zero_signal_still_learns_topology_but_cannot_activate_a_link() {
         let mut learner = learner(2);
         for (seq, id) in [1, 2, 1].into_iter().enumerate() {
-            learner.push(seq as u64, source(id, 0.0), (1, 2), true).unwrap();
+            learner
+                .push(seq as u64, source(id, 0.0), (1, 2), true)
+                .unwrap();
         }
         assert_eq!(learner.learned_links(), vec![(1, 2)]);
         assert_eq!(learner.edge(1, 2).unwrap().score, 0.0);
@@ -567,7 +597,9 @@ mod tests {
         )
         .unwrap();
         for (seq, id) in [1, 2, 3, 4].into_iter().enumerate() {
-            learner.push(seq as u64, source(id, 0.5), (1, 2), false).unwrap();
+            learner
+                .push(seq as u64, source(id, 0.5), (1, 2), false)
+                .unwrap();
         }
         assert!(learner.learned_links().len() <= 2);
         let mut degrees: BTreeMap<u64, usize> = BTreeMap::new();
@@ -585,7 +617,10 @@ mod tests {
         let baseline = learner.clone();
         assert_eq!(
             learner.push(0, source(2, 0.5), (1, 2), true),
-            Err(LearningError::StaleSequence { previous: 0, received: 0 })
+            Err(LearningError::StaleSequence {
+                previous: 0,
+                received: 0
+            })
         );
         assert_eq!(learner, baseline);
         assert_eq!(
@@ -597,12 +632,17 @@ mod tests {
         // Force pair overflow on link admission and ensure none of the
         // candidate-support or source mutations leak.
         let mut overflow = MatchedAssociativeLearner::new(
-            LearningConfig { min_support: 1, ..config(2) },
+            LearningConfig {
+                min_support: 1,
+                ..config(2)
+            },
             0.0,
             1.0,
         )
         .unwrap();
-        overflow.push(0, source(1, f64::MAX), (1, 2), false).unwrap();
+        overflow
+            .push(0, source(1, f64::MAX), (1, 2), false)
+            .unwrap();
         let snapshot = overflow.clone();
         assert_eq!(
             overflow.push(
@@ -624,7 +664,9 @@ mod tests {
     fn no_edges_is_a_valid_predeclared_negative_control() {
         let mut learner = learner(0);
         for (seq, id) in [1, 2, 1, 2].into_iter().enumerate() {
-            let step = learner.push(seq as u64, source(id, 0.5), (1, 2), true).unwrap();
+            let step = learner
+                .push(seq as u64, source(id, 0.5), (1, 2), true)
+                .unwrap();
             assert!(step.selected_links.is_empty());
             assert!(!step.target_link_active);
         }
