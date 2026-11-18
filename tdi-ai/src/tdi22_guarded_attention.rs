@@ -15,7 +15,7 @@ use super::tdi22_hierarchical_attention::{
     AlgebraicErrorBounds, HierarchicalTorsorBank, HierarchyError, HierarchyWork,
 };
 use super::tdi22_streaming_attention::{
-    prepare_keys, stream_torsor_row, PreparedTorsorKey, StreamedTorsorRow,
+    PreparedTorsorKey, StreamedTorsorRow, prepare_keys, stream_torsor_row,
 };
 use super::tdi22_torsor::{Torsor3, Twist3, Vec3};
 use super::tdi24_attention::MaskPolicy;
@@ -61,7 +61,10 @@ impl GuardedTorsorBank {
         let hierarchy = HierarchicalTorsorBank::build(keys)?;
         let prepared = prepare_keys(keys).map_err(HierarchyError::from)?;
         debug_assert_eq!(prepared.len(), hierarchy.key_count());
-        Ok(Self { prepared, hierarchy })
+        Ok(Self {
+            prepared,
+            hierarchy,
+        })
     }
 
     pub fn key_count(&self) -> usize {
@@ -174,9 +177,10 @@ mod tests {
             (MaskPolicy::Causal, 6),
             (MaskPolicy::Causal, 18),
         ] {
-            let row = guarded.row(q, point, position, policy, 0.5, 0.4, 0).unwrap();
-            let exact = stream_torsor_row(q, point, &prepared, position, policy, 0.5)
+            let row = guarded
+                .row(q, point, position, policy, 0.5, 0.4, 0)
                 .unwrap();
+            let exact = stream_torsor_row(q, point, &prepared, position, policy, 0.5).unwrap();
             assert_eq!(row.path, GuardedPath::ExactStreamingFallback);
             assert_eq!(row.row, exact);
             assert_eq!(row.hierarchy_work, None);
@@ -203,11 +207,12 @@ mod tests {
 
     #[test]
     fn one_node_can_be_accepted_at_budget_one_when_homogeneous() {
-        let key = Torsor3::new(v(1.0, -2.0, 3.0), v(0.3, 0.4, -0.2), v(0.2, 0.1, -0.1))
-            .unwrap();
+        let key = Torsor3::new(v(1.0, -2.0, 3.0), v(0.3, 0.4, -0.2), v(0.2, 0.1, -0.1)).unwrap();
         let bank = GuardedTorsorBank::build(&vec![key; 32]).unwrap();
         let (q, point) = query();
-        let r = bank.row(q, point, 0, MaskPolicy::Full, 1.0, 0.0, 1).unwrap();
+        let r = bank
+            .row(q, point, 0, MaskPolicy::Full, 1.0, 0.0, 1)
+            .unwrap();
         assert_eq!(r.path, GuardedPath::Hierarchical);
         assert_eq!(r.hierarchy_work.unwrap().scored_nodes, 1);
         assert_eq!(r.row.visible_keys, 32);
@@ -219,18 +224,22 @@ mod tests {
         let keys: Vec<_> = (0..64)
             .map(|i| {
                 let sign = if i % 2 == 0 { 1.0 } else { -1.0 };
-                Torsor3::new(v(18.0 * sign, 0.0, 0.0), Vec3::zero(), Vec3::zero())
-                    .unwrap()
+                Torsor3::new(v(18.0 * sign, 0.0, 0.0), Vec3::zero(), Vec3::zero()).unwrap()
             })
             .collect();
         let bank = GuardedTorsorBank::build(&keys).unwrap();
         let q = Twist3::new(v(1.0, 0.0, 0.0), Vec3::zero()).unwrap();
-        let output = bank.row(q, Vec3::zero(), 0, MaskPolicy::Full, 0.25, 0.5, 8)
+        let output = bank
+            .row(q, Vec3::zero(), 0, MaskPolicy::Full, 0.25, 0.5, 8)
             .unwrap();
         assert_eq!(output.path, GuardedPath::ExactStreamingFallback);
         let expected = stream_torsor_row(
-            q, Vec3::zero(), &prepare_keys(&keys).unwrap(), 0,
-            MaskPolicy::Full, 0.25,
+            q,
+            Vec3::zero(),
+            &prepare_keys(&keys).unwrap(),
+            0,
+            MaskPolicy::Full,
+            0.25,
         )
         .unwrap();
         assert_eq!(output.row, expected);
