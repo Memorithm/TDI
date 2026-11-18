@@ -158,3 +158,7 @@ required-features = ["experimental"]
 [[example]]
 name = "tdi22_event_tasks"
 required-features = ["experimental"]
+
+[[example]]
+name = "tdi22_hierarchical_sweep"
+required-features = ["experimental"]
