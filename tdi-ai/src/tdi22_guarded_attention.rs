@@ -12,7 +12,8 @@
 //! frozen stage and FLAT's default routing remain untouched.
 
 use super::tdi22_hierarchical_attention::{
-    AlgebraicErrorBounds, HierarchicalTorsorBank, HierarchyError, HierarchyWork,
+    AlgebraicErrorBounds, HierarchicalRowRequest, HierarchicalTorsorBank, HierarchyError,
+    HierarchyWork,
 };
 use super::tdi22_streaming_attention::{
     PreparedTorsorKey, StreamedTorsorRow, prepare_keys, stream_torsor_row,
@@ -84,23 +85,13 @@ impl GuardedTorsorBank {
     /// max_visited_nodes=0 deliberately forces streaming.
     pub fn row(
         &self,
-        query: Twist3,
-        query_position: Vec3,
-        query_index: usize,
-        policy: MaskPolicy,
-        score_scale: f64,
-        max_score_deviation: f64,
+        request: HierarchicalRowRequest,
         max_visited_nodes: usize,
     ) -> Result<GuardedTorsorRow, HierarchyError> {
-        match self.hierarchy.row_with_visit_budget(
-            query,
-            query_position,
-            query_index,
-            policy,
-            score_scale,
-            max_score_deviation,
-            max_visited_nodes,
-        ) {
+        match self
+            .hierarchy
+            .row_with_visit_budget(request, max_visited_nodes)
+        {
             Ok(complete) => Ok(GuardedTorsorRow {
                 row: complete.row,
                 path: GuardedPath::Hierarchical,
@@ -112,12 +103,12 @@ impl GuardedTorsorBank {
                 // No partial hierarchy weights are reused. The second
                 // computation has exact normalizer semantics.
                 let exact = stream_torsor_row(
-                    query,
-                    query_position,
+                    request.query,
+                    request.query_position,
                     &self.prepared,
-                    query_index,
-                    policy,
-                    score_scale,
+                    request.query_index,
+                    request.policy,
+                    request.score_scale,
                 )
                 .map_err(HierarchyError::from)?;
                 Ok(GuardedTorsorRow {
@@ -162,6 +153,24 @@ mod tests {
         )
     }
 
+    fn request(
+        query: Twist3,
+        query_position: Vec3,
+        query_index: usize,
+        policy: MaskPolicy,
+        score_scale: f64,
+        max_score_deviation: f64,
+    ) -> HierarchicalRowRequest {
+        HierarchicalRowRequest {
+            query,
+            query_position,
+            query_index,
+            policy,
+            score_scale,
+            max_score_deviation,
+        }
+    }
+
     #[test]
     fn zero_budget_is_exact_streaming_full_and_causal() {
         let input = keys(19);
@@ -178,7 +187,7 @@ mod tests {
             (MaskPolicy::Causal, 18),
         ] {
             let row = guarded
-                .row(q, point, position, policy, 0.5, 0.4, 0)
+                .row(request(q, point, position, policy, 0.5, 0.4), 0)
                 .unwrap();
             let exact = stream_torsor_row(q, point, &prepared, position, policy, 0.5).unwrap();
             assert_eq!(row.path, GuardedPath::ExactStreamingFallback);
@@ -197,7 +206,7 @@ mod tests {
         let (q, point) = query();
         for policy in [MaskPolicy::Full, MaskPolicy::Causal] {
             let expected = original.row(q, point, 12, policy, 0.5, 0.4).unwrap();
-            let observed = guarded.row(q, point, 12, policy, 0.5, 0.4, 64).unwrap();
+            let observed = guarded.row(request(q, point, 12, policy, 0.5, 0.4), 64).unwrap();
             assert_eq!(observed.path, GuardedPath::Hierarchical);
             assert_eq!(observed.row, expected.row);
             assert_eq!(observed.hierarchy_work, Some(expected.work));
@@ -211,7 +220,7 @@ mod tests {
         let bank = GuardedTorsorBank::build(&vec![key; 32]).unwrap();
         let (q, point) = query();
         let r = bank
-            .row(q, point, 0, MaskPolicy::Full, 1.0, 0.0, 1)
+            .row(request(q, point, 0, MaskPolicy::Full, 1.0, 0.0), 1)
             .unwrap();
         assert_eq!(r.path, GuardedPath::Hierarchical);
         assert_eq!(r.hierarchy_work.unwrap().scored_nodes, 1);
@@ -230,7 +239,7 @@ mod tests {
         let bank = GuardedTorsorBank::build(&keys).unwrap();
         let q = Twist3::new(v(1.0, 0.0, 0.0), Vec3::zero()).unwrap();
         let output = bank
-            .row(q, Vec3::zero(), 0, MaskPolicy::Full, 0.25, 0.5, 8)
+            .row(request(q, Vec3::zero(), 0, MaskPolicy::Full, 0.25, 0.5), 8)
             .unwrap();
         assert_eq!(output.path, GuardedPath::ExactStreamingFallback);
         let expected = stream_torsor_row(
@@ -251,13 +260,13 @@ mod tests {
         let (q, point) = query();
         for invalid_scale in [0.0, f64::NAN, f64::INFINITY] {
             assert_eq!(
-                bank.row(q, point, 0, MaskPolicy::Full, invalid_scale, 0.5, 0)
+                bank.row(request(q, point, 0, MaskPolicy::Full, invalid_scale, 0.5), 0)
                     .unwrap_err(),
                 HierarchyError::InvalidScale,
             );
         }
         assert_eq!(
-            bank.row(q, point, 0, MaskPolicy::Full, 0.5, -0.5, 0)
+            bank.row(request(q, point, 0, MaskPolicy::Full, 0.5, -0.5), 0)
                 .unwrap_err(),
             HierarchyError::InvalidTolerance,
         );
