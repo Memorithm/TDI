@@ -203,7 +203,11 @@ impl EventRoutingMemory {
                     source_b: pair.1,
                     score: if now_active { 1.0 } else { 0.0 },
                     active: now_active,
-                    edge: if now_active { Edge::Rising } else { Edge::Falling },
+                    edge: if now_active {
+                        Edge::Rising
+                    } else {
+                        Edge::Falling
+                    },
                 });
             }
         }
