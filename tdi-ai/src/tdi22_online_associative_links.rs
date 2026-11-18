@@ -324,7 +324,8 @@ impl MatchedAssociativeLearner {
         let mut priorities: Vec<_> = staged
             .evidence
             .iter()
-            .filter(|(&pair, e)| {
+            .filter(|entry| {
+                let (pair, e) = *entry;
                 e.count >= staged.config.min_support
                     && staged.sources.contains_key(&pair.0)
                     && staged.sources.contains_key(&pair.1)
