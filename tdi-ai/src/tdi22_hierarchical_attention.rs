@@ -668,22 +668,16 @@ mod tests {
 
         // The full-bank x-range is infinite in binary64. It is irrelevant
         // to the exact one-key causal row and its zero error envelope.
-        let exact = bank
-            .row(q, zero, 0, MaskPolicy::Causal, 1.0, 0.0)
-            .unwrap();
-        let oracle = stream_torsor_row(q, zero, &prepared, 0, MaskPolicy::Causal, 1.0)
-            .unwrap();
+        let exact = bank.row(q, zero, 0, MaskPolicy::Causal, 1.0, 0.0).unwrap();
+        let oracle = stream_torsor_row(q, zero, &prepared, 0, MaskPolicy::Causal, 1.0).unwrap();
         assert_eq!(exact.row, oracle);
         assert_eq!(exact.bounds.resultant, zero);
         assert_eq!(exact.bounds.moment_at_query, zero);
 
         // The first two visible keys may be summarized with nonzero error.
         // Future extreme values still must not enter the error-range bound.
-        let grouped = bank
-            .row(q, zero, 1, MaskPolicy::Causal, 1.0, 1.0)
-            .unwrap();
-        let dense = stream_torsor_row(q, zero, &prepared, 1, MaskPolicy::Causal, 1.0)
-            .unwrap();
+        let grouped = bank.row(q, zero, 1, MaskPolicy::Causal, 1.0, 1.0).unwrap();
+        let dense = stream_torsor_row(q, zero, &prepared, 1, MaskPolicy::Causal, 1.0).unwrap();
         assert_eq!(grouped.row.visible_keys, 2);
         assert_eq!(grouped.work.collapsed_blocks, 1);
         assert!(grouped.bounds.resultant.x.is_finite());
