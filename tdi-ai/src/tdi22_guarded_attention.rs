@@ -125,9 +125,9 @@ impl GuardedTorsorBank {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::tdi22_torsor::{Twist3, Vec3};
     use super::super::tdi24_attention::MaskPolicy;
+    use super::*;
 
     fn v(x: f64, y: f64, z: f64) -> Vec3 {
         Vec3::new(x, y, z).unwrap()
