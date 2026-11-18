@@ -12,7 +12,7 @@
 //! Nothing here changes the frozen TDI-22 evaluator or FLAT routing.
 
 use super::tdi22_torsor::{
-    FactorizedTorsorKey, Torsor3, TorsorError, Twist3, Vec3, direct_pairing,
+    FactorizedTorsorKey, Torsor3, TorsorError, Twist3, Vec3,
 };
 use super::tdi24_attention::MaskPolicy;
 
@@ -154,10 +154,11 @@ pub fn stream_torsor_row(
     let inv = 1.0 / denominator;
     let resultant = checked_scale(sum_r, inv)?;
     let origin_moment = checked_scale(sum_c, inv)?;
+    let offset = query_position.cross(resultant);
     let moment_at_query = Vec3::new(
-        origin_moment.x - query_position.cross(resultant).x,
-        origin_moment.y - query_position.cross(resultant).y,
-        origin_moment.z - query_position.cross(resultant).z,
+        origin_moment.x - offset.x,
+        origin_moment.y - offset.y,
+        origin_moment.z - offset.z,
     )?;
     let log_sum_exp = maximum + denominator.ln();
     if !log_sum_exp.is_finite() {
@@ -174,6 +175,7 @@ pub fn stream_torsor_row(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::tdi22_torsor::direct_pairing;
 
     fn v(x: f64, y: f64, z: f64) -> Vec3 {
         Vec3::new(x, y, z).unwrap()
