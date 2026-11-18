@@ -84,6 +84,8 @@ pub mod tdi22_event_tasks;
 pub mod tdi22_generator;
 #[path = "tdi22_hierarchical_attention.rs"]
 pub mod tdi22_hierarchical_attention;
+#[path = "tdi22_guarded_attention.rs"]
+pub mod tdi22_guarded_attention;
 #[path = "tdi22_learned_pulse_network.rs"]
 pub mod tdi22_learned_pulse_network;
 #[path = "tdi22_online_associative_links.rs"]
