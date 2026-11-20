@@ -13,6 +13,7 @@
 //! interpretation, or hypothesis-specific normalization. TDI-12 Stage-0 does
 //! not authorize confirmatory execution.
 
+pub mod block_schur;
 pub mod cavity;
 pub mod chain;
 pub mod factorization;
@@ -23,6 +24,9 @@ pub mod ordinal;
 pub mod resolvent;
 pub mod transport;
 
+pub use block_schur::{
+    BlockSchurError, BlockSchurVerdict, ConditionalBlockSchurMargin, conditional_block_schur_margin,
+};
 pub use cavity::SchurCavities;
 pub use chain::{CavityChainError, CavityTransportChain};
 pub use factorization::{CavityDriftFactorization, CavityFactorizationError};

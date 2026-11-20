@@ -102,8 +102,8 @@ impl TimedCell {
         fields.push(self.pairwise_token_comparisons.to_string());
         fields.extend(self.p4_work.map(|x| x.to_string()));
         fields.extend(self.p4_deltas.map(|x| x.to_string()));
-        for arm in 0..3 {
-            fields.extend(self.raw_ns[arm].map(|x| x.to_string()));
+        for samples in self.raw_ns {
+            fields.extend(samples.map(|x| x.to_string()));
         }
         fields.extend(self.median_ns.map(|x| x.to_string()));
         fields.extend(self.delta_ns.map(|x| x.to_string()));
@@ -259,9 +259,9 @@ fn evaluate_bank(bank: &Bank, assignment: usize) -> u8 {
 fn pascal_table(bank: &Bank) -> Vec<u8> {
     let mut table = vec![0u8; bank.k];
     table[0] = bank.constants;
-    for gate in 0..GATES {
+    for (gate, masks) in bank.terms.iter().enumerate().take(GATES) {
         let lane = 1u8 << gate;
-        for &mask in &bank.terms[gate] {
+        for &mask in masks {
             table[mask] ^= lane;
         }
     }
