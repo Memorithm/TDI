@@ -34,6 +34,13 @@ numerical resolutions do not establish certified bounds. All arithmetic in
 the helper is binary64 without directed rounding. It returns a
 computational diagnostic, not a machine-checked certificate.
 
+To prevent a known sign-changing floating-point failure, the helper rejects
+a nonzero coupling norm when its computed square is zero or subnormal, with
+UnderflowedCouplingSquare. For example, alpha=1e-300, delta=1e-150,
+beta=1e-200 would otherwise wrongly appear positive when beta squared
+underflows, although beta^2/alpha is about 1e-100 and exceeds delta.
+This guard is necessary but does not replace certified interval arithmetic.
+
 ## Cross-project application
 
 This generic inequality is reusable in the Riemann-specific
