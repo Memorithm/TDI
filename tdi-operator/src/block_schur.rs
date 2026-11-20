@@ -54,6 +54,7 @@ impl ConditionalBlockSchurMargin {
 pub enum BlockSchurError {
     NonFiniteInput { index: usize, value: f64 },
     NegativeCouplingNorm { value: f64 },
+    UnderflowedCouplingSquare,
     NonFiniteDerivedMargin,
 }
 
@@ -97,6 +98,12 @@ pub fn conditional_block_schur_margin(
         let square = coupling_norm_upper_bound * coupling_norm_upper_bound;
         if !square.is_finite() {
             return Err(BlockSchurError::NonFiniteDerivedMargin);
+        }
+        // A nonzero beta can square to zero or a subnormal number. Dividing
+        // that rounded value by tiny alpha can change the strict sign.
+        // Refuse this range rather than silently certifying positivity.
+        if coupling_norm_upper_bound != 0.0 && square < f64::MIN_POSITIVE {
+            return Err(BlockSchurError::UnderflowedCouplingSquare);
         }
         let reduction = square / head_lower_bound;
         if !reduction.is_finite() {
@@ -155,6 +162,28 @@ mod tests {
         assert_eq!(
             margin.verdict(),
             BlockSchurVerdict::StrictlyPositiveConditional
+        );
+    }
+
+    #[test]
+    fn underflowed_square_cannot_produce_false_schur_positivity() {
+        // beta² = 1e-400 underflows f64, but beta²/alpha = 1e-100
+        // exceeds delta = 1e-150: the exact margin is NEGATIVE.
+        assert!(matches!(
+            conditional_block_schur_margin(1e-300, 1e-150, 1e-200),
+            Err(BlockSchurError::UnderflowedCouplingSquare)
+        ));
+        // A subnormal, nonzero square also has unacceptable relative error.
+        assert!(matches!(
+            conditional_block_schur_margin(1e-200, 1e-120, 1e-160),
+            Err(BlockSchurError::UnderflowedCouplingSquare)
+        ));
+        // Exactly zero coupling remains legitimate.
+        assert_eq!(
+            conditional_block_schur_margin(1e-300, 1e-150, 0.0)
+                .unwrap()
+                .schur_tail_lower_bound(),
+            Some(1e-150)
         );
     }
 
