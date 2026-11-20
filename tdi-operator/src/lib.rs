@@ -25,8 +25,7 @@ pub mod resolvent;
 pub mod transport;
 
 pub use block_schur::{
-    BlockSchurError, BlockSchurVerdict, ConditionalBlockSchurMargin,
-    conditional_block_schur_margin,
+    BlockSchurError, BlockSchurVerdict, ConditionalBlockSchurMargin, conditional_block_schur_margin,
 };
 pub use cavity::SchurCavities;
 pub use chain::{CavityChainError, CavityTransportChain};
