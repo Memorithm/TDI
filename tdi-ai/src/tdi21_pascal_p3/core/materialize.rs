@@ -6,9 +6,9 @@ use super::measure::checked_add;
 pub(crate) fn pascal(bank: &Bank) -> Result<(Vec<u8>, u64), Error> {
     let mut table = vec![0u8; bank.k];
     table[0] = bank.constants;
-    for gate in 0..GATES {
+    for (gate, masks) in bank.terms.iter().enumerate().take(GATES) {
         let lane = 1u8 << gate;
-        for &mask in &bank.terms[gate] {
+        for &mask in masks {
             table[mask] ^= lane;
         }
     }
